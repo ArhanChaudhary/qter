@@ -11,17 +11,17 @@ moves := [U, L, F, R, B, D, U^-1, L^-1, F^-1, R^-1, B^-1, D^-1, U^2, L^2, F^2, R
 len_moves := Length(moves);
 moveStrings := ["U", "L", "F", "R", "B", "D", "U'", "L'", "F'", "R'", "B'", "D'", "U2", "L2", "F2", "R2", "B2", "D2"];
 FindSequenceWithCycleStructure := function(moves, target_cycle_structure)
-    local queue, current_seq, perm, cycle_structure, prev_depth, move,
+    local queue, current_seq, perm, cycle_structure, prev_depth,
           current_depth, seen_perms, found_at_current_depth, last_move_index_mod, i;
     queue := PlistDeque();
     seen_perms := HashSet();
-    PushBack(queue, [ moves[1] ]);
+    PushBack(queue, [ 1 ]);
     prev_depth := 0;
     found_at_current_depth := false;
     while not IsEmpty(queue) do
         current_seq := PlistDequePopFront(queue);
         current_depth := Length(current_seq);
-        perm := Product(current_seq);
+        perm := Product(current_seq, i -> moves[i]);
 
         if perm in seen_perms then
             continue;
@@ -38,8 +38,8 @@ FindSequenceWithCycleStructure := function(moves, target_cycle_structure)
         fi;
         if cycle_structure = target_cycle_structure then
             Print("Found sequence: ");
-            for move in current_seq do
-                Print(moveStrings[Position(moves, move)], " ");
+            for i in current_seq do
+                Print(moveStrings[i], " ");
             od;
             Print(" at depth ", current_depth, "\n");
             found_at_current_depth := true;
@@ -51,7 +51,7 @@ FindSequenceWithCycleStructure := function(moves, target_cycle_structure)
             #     fi;
             #     PlistDequePushBack(queue, Concatenation(current_seq, [move]));
             # od;
-            last_move_index_mod := Position(moves, current_seq[current_depth]) mod 6;
+            last_move_index_mod := current_seq[current_depth] mod 6;
             for i in [1..len_moves] do
                 if (last_move_index_mod = 2 and i mod 6 = 4) or
                     (last_move_index_mod = 1 and i mod 6 = 0) or
@@ -60,13 +60,13 @@ FindSequenceWithCycleStructure := function(moves, target_cycle_structure)
                 then
                     continue;
                 fi;
-                PlistDequePushBack(queue, Concatenation(current_seq, [moves[i]]));
+                PlistDequePushBack(queue, Concatenation(current_seq, [i]));
             od;
         fi;
     od;
 end;
 
-FindSequenceWithCycleStructure(moves, [1, 1,,, 1,, 1]);
+FindSequenceWithCycleStructure(moves, [ , 1,,, 1,, 1, 1, 1 ]);
 
 # ( 6,43,46, 8,38,17,24,40,25,48,11,30,14,19,32)( 7,18)(12,21,23,39,20,45,44,37,28,42,47,13,31,15)
 # for repr in conj_classes do
