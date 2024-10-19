@@ -90,6 +90,8 @@ def all_cycle_pairings():
             second_cycle["structures"] = all_cycle_structures(second_cycle)
             cycle_pairings.append(
                 {
+                    "shared_edge": share_edge,
+                    "shared_corner": share_corner,
                     "order_product": first_cycle["order"] * second_cycle["order"],
                     "first_cycle": first_cycle,
                     "second_cycle": second_cycle,
@@ -178,21 +180,21 @@ def highest_order_cycle_from_partitions(edge_partitions, corner_partitions):
             highest_order_edge_partition = edge_partition
             highest_order_corner_partition = corner_partition
             if orient_edges:
-                always_orient_edge_index, _ = max(
+                always_orient_edge_index = max(
                     (
                         (i, p_adic_valuation(cycle_order, 2))
                         for i, cycle_order in enumerate(highest_order_edge_partition)
                     ),
                     key=operator.itemgetter(1),
-                )
+                )[0]
             if orient_corners:
-                always_orient_corner_index, _ = max(
+                always_orient_corner_index = max(
                     (
                         (i, p_adic_valuation(cycle_order, 3))
                         for i, cycle_order in enumerate(highest_order_corner_partition)
                     ),
                     key=operator.itemgetter(1),
-                )
+                )[0]
     return {
         "order": highest_order,
         "edge_partition": highest_order_edge_partition,
@@ -256,7 +258,7 @@ def main():
     all_cycle_pairings_result = all_cycle_pairings()
     filtered_cycle_pairings = filter_redundant_cycle_pairings(all_cycle_pairings_result)
     grouped_cycle_pairings = group_cycle_pairings(filtered_cycle_pairings)
-    with open("output.txt", "w") as f:
+    with open("./output.txt", "w") as f:
         f.write(str(grouped_cycle_pairings) + "\n")
 
 
