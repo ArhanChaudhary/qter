@@ -19,8 +19,8 @@ def integer_partitions(n):
     return answer
 
 
-def share_partitions(partition):
-    return {(1,) + i for i in partition}
+def share_partitions(partitions):
+    return {(1,) + i for i in partitions}
 
 
 def p_adic_valuation(n, p):
@@ -47,31 +47,55 @@ def orientation_masks(masks, mask_length):
     return [] if mask_length == 0 else itertools.product(masks, repeat=mask_length)
 
 
-def redundant_order_pairing(not_redundant, maybe_redundant):
-    a = not_redundant["first_cycle"]["order"]
-    b = not_redundant["second_cycle"]["order"]
-    c = maybe_redundant["first_cycle"]["order"]
-    d = maybe_redundant["second_cycle"]["order"]
-    return (
-        (c <= a and d < b)
-        or (c < a and d <= b)
-        or (d <= a and c < b)
-        or (d < a and c <= b)
+def redundant_cycle_pairing(not_redundant, maybe_redundant):
+    nfo = not_redundant["first_cycle"]["order"]
+    nso = not_redundant["second_cycle"]["order"]
+    mfo = maybe_redundant["first_cycle"]["order"]
+    mso = maybe_redundant["second_cycle"]["order"]
+    redundant_order_pairing = (
+        (mfo <= nfo and mso < nso)
+        or (mfo < nfo and mso <= nso)
+        or (mso <= nfo and mfo < nso)
+        or (mso < nfo and mfo <= nso)
     )
+    if redundant_order_pairing:
+        return True
+
+    mfe = maybe_redundant["first_cycle"]["edge_partition"]
+    mfc = maybe_redundant["first_cycle"]["corner_partition"]
+    mse = maybe_redundant["second_cycle"]["edge_partition"]
+    msc = maybe_redundant["second_cycle"]["corner_partition"]
+    nfe = not_redundant["first_cycle"]["edge_partition"]
+    nfc = not_redundant["first_cycle"]["corner_partition"]
+    nse = not_redundant["second_cycle"]["edge_partition"]
+    nsc = not_redundant["second_cycle"]["corner_partition"]
+    redundant_partition_pairing = (
+        maybe_redundant["share_edge"] == not_redundant["share_edge"]
+        and maybe_redundant["share_corner"] == not_redundant["share_corner"]
+        and (
+            mfe == nfe
+            and mfc == nfc
+            and mse == nse
+            and msc == nsc
+            or mfe == nse
+            and mfc == nsc
+            and mse == nfe
+            and msc == nfc
+        )
+    )
+    return redundant_partition_pairing
 
 
 def all_cycle_pairings():
     cycle_pairings = []
-    for edges in range(4, EDGES + 1):
-        # 2 because integer_partitions(1) returns {(1,)} and any cubie of permutation
-        # order 1 doesnt orient and therefore is not a cycle
-        for first_edge_count in range(2, edges - 1):
+    for edges in range(2, EDGES + 1):
+        for first_edge_count in range(1, edges):
             second_edge_count = edges - first_edge_count
             first_edge_partitions = integer_partitions(first_edge_count)
             second_edge_partitions = integer_partitions(second_edge_count)
 
-            for corners in range(4, CORNERS + 1):
-                for first_corner_count in range(2, corners - 1):
+            for corners in range(2, CORNERS + 1):
+                for first_corner_count in range(1, corners):
                     second_corner_count = corners - first_corner_count
                     first_corner_partitions = integer_partitions(first_corner_count)
                     second_corner_partitions = integer_partitions(second_corner_count)
@@ -113,22 +137,20 @@ def all_cycle_pairings():
                                 if second_cycle["structures"] == set():
                                     continue
 
-                                cycle_pairings.append(
-                                    {
-                                        "counts": (
-                                            first_edge_count,
-                                            first_corner_count,
-                                            second_edge_count,
-                                            second_corner_count,
-                                        ),
-                                        "dim": (edges, corners),
-                                        "share": (share_edge, share_corner),
-                                        "order_product": first_cycle["order"]
-                                        * second_cycle["order"],
-                                        "first_cycle": first_cycle,
-                                        "second_cycle": second_cycle,
-                                    }
-                                )
+                                cycle_pairing = {
+                                    "dim": (edges, corners),
+                                    "share_edge": share_edge,
+                                    "share_corner": share_corner,
+                                    "order_product": first_cycle["order"]
+                                    * second_cycle["order"],
+                                }
+                                if first_cycle["order"] < second_cycle["order"]:
+                                    cycle_pairing["first_cycle"] = second_cycle
+                                    cycle_pairing["second_cycle"] = first_cycle
+                                else:
+                                    cycle_pairing["first_cycle"] = first_cycle
+                                    cycle_pairing["second_cycle"] = second_cycle
+                                cycle_pairings.append(cycle_pairing)
     return cycle_pairings
 
 
@@ -274,7 +296,7 @@ def filter_redundant_cycle_pairings(cycle_pairings):
         reverse=True,
     ):
         if any(
-            redundant_order_pairing(not_redundant, maybe_redundant)
+            redundant_cycle_pairing(not_redundant, maybe_redundant)
             for not_redundant in filtered_cycle_pairings
         ):
             continue
@@ -282,44 +304,9 @@ def filter_redundant_cycle_pairings(cycle_pairings):
     return filtered_cycle_pairings
 
 
-def group_cycle_pairings(cycle_pairings):
-    grouped_cycle_pairings = []
-    for cycle_pairing in cycle_pairings:
-        for grouped_cycle_pairing in (
-            {
-                "first_cycle_order": cycle_pairing["first_cycle"]["order"],
-                "first_cycle_structure": cycle_pairing["first_cycle"]["structures"],
-                "second_cycle_order": cycle_pairing["second_cycle"]["order"],
-            },
-            {
-                "first_cycle_order": cycle_pairing["second_cycle"]["order"],
-                "first_cycle_structure": cycle_pairing["second_cycle"]["structures"],
-                "second_cycle_order": cycle_pairing["first_cycle"]["order"],
-            },
-        ):
-            if existing := next(
-                (
-                    grouped_cycle_pairing_iter
-                    for grouped_cycle_pairing_iter in grouped_cycle_pairings
-                    if grouped_cycle_pairing_iter["first_cycle_order"]
-                    == grouped_cycle_pairing["first_cycle_order"]
-                    and grouped_cycle_pairing_iter["second_cycle_order"]
-                    == grouped_cycle_pairing["second_cycle_order"]
-                ),
-                None,
-            ):
-                existing["first_cycle_structure"].update(
-                    grouped_cycle_pairing["first_cycle_structure"]
-                )
-            else:
-                grouped_cycle_pairings.append(grouped_cycle_pairing)
-    return grouped_cycle_pairings
-
-
 def main():
     all_cycle_pairings_result = all_cycle_pairings()
     filtered_cycle_pairings = filter_redundant_cycle_pairings(all_cycle_pairings_result)
-    # grouped_cycle_pairings = group_cycle_pairings(filtered_cycle_pairings)
     with open("./output.txt", "w") as f:
         f.write(str(filtered_cycle_pairings) + "\n")
 
