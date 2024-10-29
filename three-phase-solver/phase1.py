@@ -31,7 +31,7 @@ def p_adic_valuation(n, p):
     return exponent
 
 
-def signature(partition):
+def sign(partition):
     return (-1) ** sum(k - 1 for k in partition)
 
 
@@ -88,15 +88,15 @@ def redundant_cycle_pairing(not_redundant, maybe_redundant):
 
 def all_cycle_pairings():
     cycle_pairings = []
-    for edges in range(2, EDGES + 1):
-        for first_edge_count in range(1, edges):
-            second_edge_count = edges - first_edge_count
+    for used_edge_count in range(2, EDGES + 1):
+        for first_edge_count in range(1, used_edge_count):
+            second_edge_count = used_edge_count - first_edge_count
             first_edge_partitions = integer_partitions(first_edge_count)
             second_edge_partitions = integer_partitions(second_edge_count)
 
-            for corners in range(2, CORNERS + 1):
-                for first_corner_count in range(1, corners):
-                    second_corner_count = corners - first_corner_count
+            for used_corner_count in range(2, CORNERS + 1):
+                for first_corner_count in range(1, used_corner_count):
+                    second_corner_count = used_corner_count - first_corner_count
                     first_corner_partitions = integer_partitions(first_corner_count)
                     second_corner_partitions = integer_partitions(second_corner_count)
 
@@ -104,8 +104,6 @@ def all_cycle_pairings():
                         first_edge_partitions, first_corner_partitions
                     ):
                         first_cycle["structures"] = all_cycle_structures(first_cycle)
-                        if first_cycle["structures"] == set():
-                            continue
 
                         share_mat = []
                         if (
@@ -134,11 +132,10 @@ def all_cycle_pairings():
                                 second_cycle["structures"] = all_cycle_structures(
                                     second_cycle
                                 )
-                                if second_cycle["structures"] == set():
-                                    continue
 
                                 cycle_pairing = {
-                                    "dim": (edges, corners),
+                                    "used_edge_count": used_edge_count,
+                                    "used_corner_count": used_corner_count,
                                     "share_edge": share_edge,
                                     "share_corner": share_corner,
                                     "order_product": first_cycle["order"]
@@ -156,30 +153,23 @@ def all_cycle_pairings():
 
 def all_cycle_structures(cycle):
     cycle_structures = set()
-    always_orient_edges = [
-        i
-        for i, permutation_order in enumerate(cycle["edge_partition"])
-        if permutation_order == 1
-    ]
-    always_orient_corners = [
-        i
-        for i, permutation_order in enumerate(cycle["corner_partition"])
-        if permutation_order == 1
-    ]
     for edge_orientation_mask in orientation_masks(
         [ORIENT, NO_ORIENT], len(cycle["edge_partition"])
     ):
         if (
-            any(edge_orientation_mask[i] == NO_ORIENT for i in always_orient_edges)
+            any(
+                edge_orientation_mask[i] == NO_ORIENT
+                for i in cycle["always_orient_edges"]
+            )
             # cannot flip an odd number of edges
             or edge_orientation_mask.count(ORIENT) % 2 == 1
-            or (
-                cycle["critical_orient_edge_indicies"] is not None
+            or not (
+                cycle["critical_orient_edges"] is None
                 # at least one cycle with the highest p-adic valuation has oriented
                 # so the LCM doesn't lessen
-                and all(
-                    edge_orientation_mask[i] == NO_ORIENT
-                    for i in cycle["critical_orient_edge_indicies"]
+                or any(
+                    edge_orientation_mask[i] == ORIENT
+                    for i in cycle["critical_orient_edges"]
                 )
             )
         ):
@@ -190,16 +180,16 @@ def all_cycle_structures(cycle):
             if (
                 any(
                     corner_orientation_mask[i] == NO_ORIENT
-                    for i in always_orient_corners
+                    for i in cycle["always_orient_corners"]
                 )
                 # cannot flip exactly one corner
                 or corner_orientation_mask.count(ORIENT) == 1
-                or (
-                    cycle["critical_orient_corner_indicies"] is not None
+                or not (
+                    cycle["critical_orient_corners"] is None
                     # read above
-                    and all(
-                        corner_orientation_mask[i] == NO_ORIENT
-                        for i in cycle["critical_orient_corner_indicies"]
+                    or any(
+                        corner_orientation_mask[i] == ORIENT
+                        for i in cycle["critical_orient_corners"]
                     )
                 )
             ):
@@ -228,64 +218,96 @@ def all_cycle_structures(cycle):
                     corner_orientation_mask[i] == NO_ORIENT
                 )
             cycle_structures.add(tuple(cycle_structure))
+    assert cycle_structures != set(), cycle
     return cycle_structures
 
 
 def highest_order_cycles_from_partitions(edge_partitions, corner_partitions):
     highest_order = 1
-    ret = []
+    cycles = []
     for edge_partition in edge_partitions:
-        orient_edges = len(edge_partition) > 1
         for corner_partition in corner_partitions:
-            if signature(corner_partition) != signature(edge_partition):
+            if sign(corner_partition) != sign(edge_partition):
                 continue
-            orient_corners = len(corner_partition) > 1
-            # k * lcm(a, b, c ...) = lcm(ka, kb, kc ...) (best case that is valid)
+
+            always_orient_edges = []
+            max_two_adic_valuation = -1
+            for i, permutation_order in enumerate(edge_partition):
+                curr_two_adic_valuation = p_adic_valuation(permutation_order, 2)
+                if curr_two_adic_valuation > max_two_adic_valuation:
+                    max_two_adic_valuation = curr_two_adic_valuation
+                    critical_orient_edges = [i]
+                elif curr_two_adic_valuation == max_two_adic_valuation:
+                    critical_orient_edges.append(i)
+                if permutation_order == 1:
+                    always_orient_edges.append(i)
+            orient_edge_count = len(always_orient_edges)
+            critical_is_disjoint = critical_orient_edges is not None and all(
+                i not in always_orient_edges for i in critical_orient_edges
+            )
+            if critical_is_disjoint:
+                orient_edge_count += 1
+            invalid_orient_edge_count = (
+                orient_edge_count == len(edge_partition) and orient_edge_count % 2 == 1
+            )
+            if invalid_orient_edge_count:
+                if not critical_is_disjoint:
+                    continue
+                assert len(critical_orient_edges) == 1, critical_orient_edges
+                orient_edge_count -= 1
+                critical_orient_edges = None
+
+            always_orient_corners = []
+            max_three_adic_valuation = -1
+            for i, permutation_order in enumerate(corner_partition):
+                curr_three_adic_valuation = p_adic_valuation(permutation_order, 3)
+                if curr_three_adic_valuation > max_three_adic_valuation:
+                    max_three_adic_valuation = curr_three_adic_valuation
+                    critical_orient_corners = [i]
+                elif curr_three_adic_valuation == max_three_adic_valuation:
+                    critical_orient_corners.append(i)
+                if permutation_order == 1:
+                    always_orient_corners.append(i)
+            orient_corner_count = len(always_orient_corners)
+            critical_is_disjoint = critical_orient_corners is not None and all(
+                i not in always_orient_corners for i in critical_orient_corners
+            )
+            if critical_is_disjoint:
+                orient_corner_count += 1
+            invalid_orient_corner_count = (
+                orient_corner_count == len(corner_partition)
+                and orient_corner_count == 1
+            )
+            if invalid_orient_corner_count:
+                if not critical_is_disjoint:
+                    continue
+                assert len(critical_orient_corners) == 1, critical_orient_corners
+                orient_corner_count -= 1
+                critical_orient_corners = None
+
             order = math.lcm(
-                conditional_edge_factor(orient_edges) * math.lcm(*edge_partition),
-                conditional_corner_factor(orient_corners) * math.lcm(*corner_partition),
+                conditional_edge_factor(not invalid_orient_edge_count)
+                * math.lcm(*edge_partition),
+                conditional_corner_factor(not invalid_orient_corner_count)
+                * math.lcm(*corner_partition),
             )
             if order < highest_order:
                 continue
             if order > highest_order:
-                ret = []
+                cycles = []
             highest_order = order
-            if orient_edges:
-                max_p_adic_valuation = max(
-                    p_adic_valuation(permutation_order, 2)
-                    for permutation_order in edge_partition
-                )
-                critical_orient_edge_indicies = [
-                    i
-                    for i, permutation_order in enumerate(edge_partition)
-                    if p_adic_valuation(permutation_order, 2) == max_p_adic_valuation
-                ]
-            else:
-                critical_orient_edge_indicies = None
-
-            if orient_corners:
-                max_p_adic_valuation = max(
-                    p_adic_valuation(permutation_order, 3)
-                    for permutation_order in corner_partition
-                )
-                critical_orient_corner_indicies = [
-                    i
-                    for i, permutation_order in enumerate(corner_partition)
-                    if p_adic_valuation(permutation_order, 3) == max_p_adic_valuation
-                ]
-            else:
-                critical_orient_corner_indicies = None
-
-            ret.append(
+            cycles.append(
                 {
                     "order": highest_order,
                     "edge_partition": edge_partition,
                     "corner_partition": corner_partition,
-                    "critical_orient_edge_indicies": critical_orient_edge_indicies,
-                    "critical_orient_corner_indicies": critical_orient_corner_indicies,
+                    "critical_orient_edges": critical_orient_edges,
+                    "critical_orient_corners": critical_orient_corners,
+                    "always_orient_edges": always_orient_edges,
+                    "always_orient_corners": always_orient_corners,
                 }
             )
-    return ret
+    return cycles
 
 
 def filter_redundant_cycle_pairings(cycle_pairings):
@@ -295,21 +317,21 @@ def filter_redundant_cycle_pairings(cycle_pairings):
         key=operator.itemgetter("order_product"),
         reverse=True,
     ):
-        if any(
-            redundant_cycle_pairing(not_redundant, maybe_redundant)
+        if all(
+            not redundant_cycle_pairing(not_redundant, maybe_redundant)
             for not_redundant in filtered_cycle_pairings
         ):
-            continue
-        filtered_cycle_pairings.append(maybe_redundant)
+            filtered_cycle_pairings.append(maybe_redundant)
     return filtered_cycle_pairings
 
 
 def main():
     all_cycle_pairings_result = all_cycle_pairings()
     filtered_cycle_pairings = filter_redundant_cycle_pairings(all_cycle_pairings_result)
-    with open("./output.txt", "w") as f:
-        f.write(str(filtered_cycle_pairings) + "\n")
+    return filtered_cycle_pairings
 
 
 if __name__ == "__main__":
     main()
+    with open("./output.txt", "w") as f:
+        f.write(str(main()) + "\n")
