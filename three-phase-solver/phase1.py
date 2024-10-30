@@ -505,12 +505,26 @@ def highest_order_cycles_from_partitions(edge_partitions, corner_partitions):
                 orient_corner_count -= 1
                 critical_orient_corners = None
 
+            # Let's consider the case for edges to simplify the explanation.
+            # We have a bunch of permutation cycle orders, which I will name
+            # letters a through z, and some of these orient, meaning their
+            # orders double from flipping. So, lcm(2a, 2b, ... 2z) is the edge
+            # order. We can extract out the 2s to get 2 * lcm(a, b, ... z), and
+            # this is almost the full story. Remember in the case of an invalid
+            # cycle orientation count, we nullify the critical cycle to make the
+            # cycle possible. The critical cycle was defined as the cycle with
+            # the most 2s in its prime factorization, so if we remove a factor
+            # of two from the critical cycle then we must also remove a factor
+            # of two from the full edge order. Conveniently, this can be
+            # made simple by changing the leading 2 to a 1 in this case, to get
+            # 1 * lcm(a, b, ... z). The corners follow the same logic.
             order = math.lcm(
                 conditional_edge_factor(not invalid_orient_edge_count)
                 * math.lcm(*edge_partition),
                 conditional_corner_factor(not invalid_orient_corner_count)
                 * math.lcm(*corner_partition),
             )
+            # We only care about the highest order partition pairings.
             if order > highest_order:
                 cycles = []
             if order < highest_order:
