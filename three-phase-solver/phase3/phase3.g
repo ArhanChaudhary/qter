@@ -62,91 +62,10 @@ corners := [
 ];
 flat_edges := Flat(edges);
 flat_corners := Flat(corners);
-top_face := [1..8];
-bottom_face := [41..48];
 edge_buf := 42;
 corner_buf := 1;
-facelet_to_speffz := "aabdbdcceefhfhggiijljlkkmmnpnpooqqrtrtssuuvxvxww";
 
-PermutationSpeffz := function(perm)
-    local cycles, edge_cycles, corner_cycles, ret, corners_or_edges, buf, i,
-        cycle, cycle_facelet, visited_facelets, buf_pos, orient_facelet_index,
-        before_orient_facelet_index, starting_cubie;
-    cycles := Filtered(Cycles(perm, [1..48]), c -> Length(c) <> 1);
-    edge_cycles := Filtered(cycles, c -> ForAny(c, f -> f in flat_edges));
-    corner_cycles := Filtered(cycles, c -> ForAny(c, f -> f in flat_corners));
-    ret := "";
-    for corners_then_edges in [1..2] do
-        if corners_then_edges = 1 then
-            corners_or_edges := corners;
-            cycles := corner_cycles;
-            buf := 1;
-        else
-            Add(ret, '.');
-            corners_or_edges := edges;
-            cycles := edge_cycles;
-            buf := 42;
-        fi;
-        cycle := First(cycles, c -> buf in c);
-        if cycle = fail then
-            visited_facelets := [];
-        else
-            buf_pos := PositionProperty(cycle, c -> c = buf);
-            visited_facelets := ShallowCopy(First(
-                corners_or_edges,
-                c -> buf in c
-            ));
-            i := 1;
-            while true do
-                cycle_facelet := cycle[
-                    (buf_pos + i - 1) mod Length(cycle) + 1
-                ];
-                if cycle_facelet in visited_facelets then
-                    break;
-                fi;
-                Add(ret, facelet_to_speffz[cycle_facelet]);
-                i := i + 1;
-            od;
-        fi;
-        for cycle in cycles do
-            if ForAny(cycle, c -> Position(visited_facelets, c) <> fail) then
-                continue;
-            fi;
-            starting_cubie := ShallowCopy(First(
-                corners_or_edges,
-                c -> cycle[1] in c
-            ));
-            if ForAny(corners_or_edges, c -> IsEqualSet(c, cycle)) then
-                if corners_then_edges = 1 then
-                    orient_facelet_index := PositionProperty(cycle,
-                        c -> c in top_face or c in bottom_face
-                    );
-                    before_orient_facelet_index := (
-                        orient_facelet_index - 2
-                    ) mod 3 + 1;
-                else
-                    before_orient_facelet_index := 1;
-                fi;
-                Add(ret, UppercaseChar(facelet_to_speffz[cycle[
-                    before_orient_facelet_index
-                ]]));
-            else
-                Add(ret, facelet_to_speffz[cycle[1]]);
-                i := 2;
-                while true do
-                    cycle_facelet := cycle[(i - 1) mod Length(cycle) + 1];
-                    Add(ret, facelet_to_speffz[cycle_facelet]);
-                    if cycle_facelet in starting_cubie then
-                        break;
-                    fi;
-                    i := i + 1;
-                od;
-            fi;
-            Append(visited_facelets, starting_cubie);
-        od;
-    od;
-    return ret;
-end;
+Read("./util.g");
 
 for i in [1..Length(first_cycles)] do
     first_cycle := first_cycles[i];
