@@ -235,10 +235,20 @@ def all_cycle_pairings():
                                     "order_product": first_cycle["order"]
                                     * second_cycle["order"],
                                 }
-                                # Always make the first cycle order greater than
-                                # or equal to the second cycle order for
-                                # consistency
-                                if first_cycle["order"] < second_cycle["order"]:
+                                if (
+                                    # Always make the first cycle order greater than
+                                    # or equal to the second cycle order to
+                                    # maintain a total ordering
+                                    first_cycle["order"] < second_cycle["order"]
+                                    # TODO: figure out a better total ordering
+                                    # for cycle structures that minimizes the
+                                    # final output. > manually tested against
+                                    # < and found to be better.
+                                    or first_cycle["order"] == second_cycle["order"]
+                                    and tuple(first_cycle["structures"])
+                                    > tuple(second_cycle["structures"])
+                                ):
+                                    # if first_cycle["order"] < second_cycle["order"]:
                                     cycle_pairing["first_cycle"] = second_cycle
                                     cycle_pairing["second_cycle"] = first_cycle
                                 else:
@@ -369,7 +379,7 @@ def all_cycle_structures(cycle):
     # impossible to form, and other possible high-order candidates from the same
     # partitions are not considered.
     assert cycle_structures != set(), cycle
-    return cycle_structures
+    return frozenset(cycle_structures)
 
 
 def highest_order_cycles_from_partitions(edge_partitions, corner_partitions):
@@ -446,7 +456,8 @@ def highest_order_cycles_from_partitions(edge_partitions, corner_partitions):
                 # least one two must orient. Although the total number of cycle
                 # orientations is odd, the partition is still possible if
                 # everything orients. This is not the case with (1, 1, 2).
-                orient_edge_count == len(edge_partition) and
+                orient_edge_count == len(edge_partition)
+                and
                 # Same condition as explained some time earlier.
                 orient_edge_count % 2 == 1
             )
@@ -563,10 +574,36 @@ def filter_redundant_cycle_pairings(cycle_pairings):
     return filtered_cycle_pairings
 
 
+def group_cycle_pairings(cycle_pairings):
+    grouped_cycle_pairings = {}
+    for cycle_pairing in cycle_pairings:
+        key = (
+            cycle_pairing["first_cycle"]["order"],
+            cycle_pairing["first_cycle"]["structures"],
+            cycle_pairing["second_cycle"]["order"],
+        )
+        value = (cycle_pairing["share_edge"], cycle_pairing["share_corner"])
+        if key not in grouped_cycle_pairings or value > grouped_cycle_pairings[key]:
+            grouped_cycle_pairings[key] = value
+    ret = []
+    for key, value in grouped_cycle_pairings.items():
+        ret.append(
+            {
+                "share_edge": value[0],
+                "share_corner": value[1],
+                "first_cycle_order": key[0],
+                "first_cycle_structures": key[1],
+                "second_cycle_order": key[2],
+            }
+        )
+    return ret
+
+
 def main():
     all_cycle_pairings_result = all_cycle_pairings()
     filtered_cycle_pairings = filter_redundant_cycle_pairings(all_cycle_pairings_result)
-    return filtered_cycle_pairings
+    grouped_cycle_pairings = group_cycle_pairings(filtered_cycle_pairings)
+    return grouped_cycle_pairings
 
 
 if __name__ == "__main__":
