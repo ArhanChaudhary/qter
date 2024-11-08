@@ -138,12 +138,12 @@ def redundant_cycle_pairing(not_redundant, maybe_redundant):
 
 def all_cycle_pairings():
     """
-    Finds all cycle pairings on a Rubik's cube.
+    Finds all cycle structure pairings on the Rubik's cube.
     """
     cycle_pairings = []
-    # Even the end goal is to find the most optimal cycle pairings, there exist
-    # optimal pairings whose generators leave some cubies intact. We perform the
-    # described computation for all edge and corner counts.
+    # Even though the end goal is to find the most optimal cycle pairings, there
+    # exists optimal pairings whose generators leave some cubies intact. We
+    # perform the described computation for all edge and corner counts.
     for used_edge_count in range(2, EDGES + 1):
         for first_edge_count in range(1, used_edge_count):
             # Since first_edge_count and second_edge_count sum to used_edge_count,
@@ -236,19 +236,13 @@ def all_cycle_pairings():
                                     * second_cycle["order"],
                                 }
                                 if (
-                                    # Always make the first cycle order greater than
-                                    # or equal to the second cycle order to
-                                    # maintain a total ordering
+                                    # Always make the first cycle order greater
+                                    # than or equal to the second cycle order to
+                                    # maintain a total ordering. If the orders
+                                    # are equal, we process both cycle pairings
+                                    # (see group_cycle_pairings).
                                     first_cycle["order"] < second_cycle["order"]
-                                    # TODO: figure out a better total ordering
-                                    # for cycle structures that minimizes the
-                                    # final output. > manually tested against
-                                    # < and found to be better.
-                                    or first_cycle["order"] == second_cycle["order"]
-                                    and tuple(first_cycle["structures"])
-                                    > tuple(second_cycle["structures"])
                                 ):
-                                    # if first_cycle["order"] < second_cycle["order"]:
                                     cycle_pairing["first_cycle"] = second_cycle
                                     cycle_pairing["second_cycle"] = first_cycle
                                 else:
@@ -373,11 +367,19 @@ def all_cycle_structures(cycle):
                 cycle_structure[cycle_order - 2] += conditional_corner_factor(
                     corner_orientation_mask[i] == NO_ORIENT
                 )
-            cycle_structures.add(tuple(cycle_structure))
+            cycle_structures.add(
+                # (
+                tuple(cycle_structure),
+                #     cycle["edge_partition"],
+                #     edge_orientation_mask,
+                #     cycle["corner_partition"],
+                #     corner_orientation_mask,
+                # )
+            )
     # Sanity check, guarantees in highest_order_cycles_from_partitions ensure
     # that a cycle structure exists for every cycle. Else, the cycle is
     # impossible to form, and other possible high-order candidates from the same
-    # partitions are not considered.
+    # partitions were never considered.
     assert cycle_structures != set(), cycle
     return frozenset(cycle_structures)
 
@@ -575,7 +577,22 @@ def filter_redundant_cycle_pairings(cycle_pairings):
 
 
 def group_cycle_pairings(cycle_pairings):
-    grouped_cycle_pairings = {}
+    """
+    Organizes the final structure and removes redundant cycle pairings that are
+    phase 3 specific.
+    """
+    # It's a bit difficult to understand how this works from the code itself,
+    # so I'll give a high-level overview of the problem this function solves.
+    # Suppose we have two cycle pairings that are the same except the first
+    # shares an edge and the second does not. If we advance the cycle pairings
+    # to phase 3 where we stabilize the (equivalent) output from phase 2, add
+    # the generator sharing the edge for the first cycle pairing, notice that
+    # the elements of the second cycle pairing's stabilizer are a subset of the
+    # elements of the first cycle pairing's stabilizer. That is, the generator
+    # doesn't *have* to be used to produce elements of a group. We don't want
+    # to double count, so this function just considers the cycle pairing that
+    # share the most cubies.
+    cycle_to_share_info = {}
     for cycle_pairing in cycle_pairings:
         key = (
             cycle_pairing["first_cycle"]["order"],
@@ -583,11 +600,26 @@ def group_cycle_pairings(cycle_pairings):
             cycle_pairing["second_cycle"]["order"],
         )
         value = (cycle_pairing["share_edge"], cycle_pairing["share_corner"])
-        if key not in grouped_cycle_pairings or value > grouped_cycle_pairings[key]:
-            grouped_cycle_pairings[key] = value
-    ret = []
-    for key, value in grouped_cycle_pairings.items():
-        ret.append(
+        # For every cycle pairing, we keep track of which has the most number
+        # of shared cubies. The > operator for tuples helps us achieve this.
+        if key not in cycle_to_share_info or value > cycle_to_share_info[key]:
+            cycle_to_share_info[key] = value
+        # If the cycle pairings have the same order we must re-run the
+        # computation for the second cycle pairing as well.
+        if (
+            cycle_pairing["first_cycle"]["order"]
+            == cycle_pairing["second_cycle"]["order"]
+        ):
+            key = (
+                cycle_pairing["second_cycle"]["order"],
+                cycle_pairing["second_cycle"]["structures"],
+                cycle_pairing["first_cycle"]["order"],
+            )
+            if key not in cycle_to_share_info or value > cycle_to_share_info[key]:
+                cycle_to_share_info[key] = value
+    grouped_cycle_pairings = []
+    for key, value in cycle_to_share_info.items():
+        grouped_cycle_pairings.append(
             {
                 "share_edge": value[0],
                 "share_corner": value[1],
@@ -596,7 +628,17 @@ def group_cycle_pairings(cycle_pairings):
                 "second_cycle_order": key[2],
             }
         )
-    return ret
+    # for cycle_pairing in cycle_pairings:
+    #     grouped_cycle_pairings.append(
+    #         {
+    #             "share_edge": cycle_pairing["share_edge"],
+    #             "share_corner": cycle_pairing["share_corner"],
+    #             "first_cycle_order": cycle_pairing["first_cycle"]["order"],
+    #             "first_cycle_structures": cycle_pairing["first_cycle"]["structures"],
+    #             "second_cycle_order": cycle_pairing["second_cycle"]["order"],
+    #         }
+    #     )
+    return grouped_cycle_pairings
 
 
 def main():
