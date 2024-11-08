@@ -531,6 +531,8 @@ def highest_order_cycles_from_partitions(edge_partitions, corner_partitions):
             # of two from the full edge order. Conveniently, this can be
             # made simple by changing the leading 2 to a 1 in this case, to get
             # 1 * lcm(a, b, ... z). The corners follow the same logic.
+            # TODO: figure out similarities with this approach to
+            # [Landau's function](https://en.wikipedia.org/wiki/Landau's_function)
             order = math.lcm(
                 conditional_edge_factor(not invalid_orient_edge_count)
                 * math.lcm(*edge_partition),
@@ -598,6 +600,7 @@ def group_cycle_pairings(cycle_pairings):
             cycle_pairing["first_cycle"]["order"],
             cycle_pairing["first_cycle"]["structures"],
             cycle_pairing["second_cycle"]["order"],
+            # cycle_pairing["second_cycle"]["structures"],
         )
         value = (cycle_pairing["share_edge"], cycle_pairing["share_corner"])
         # For every cycle pairing, we keep track of which has the most number
@@ -614,6 +617,7 @@ def group_cycle_pairings(cycle_pairings):
                 cycle_pairing["second_cycle"]["order"],
                 cycle_pairing["second_cycle"]["structures"],
                 cycle_pairing["first_cycle"]["order"],
+                # cycle_pairing["first_cycle"]["structures"],
             )
             if key not in cycle_to_share_info or value > cycle_to_share_info[key]:
                 cycle_to_share_info[key] = value
@@ -626,6 +630,7 @@ def group_cycle_pairings(cycle_pairings):
                 "first_cycle_order": key[0],
                 "first_cycle_structures": key[1],
                 "second_cycle_order": key[2],
+                # "second_cycle_structures": key[3],
             }
         )
     # for cycle_pairing in cycle_pairings:
