@@ -9,6 +9,7 @@ Adapted with permission from ScriptRaccon's
 <https://gist.github.com/ScriptRaccoon/c12c4884c116dead62a15a3d09732d5d>
 """
 
+import collections
 import itertools
 import math
 import operator
@@ -94,162 +95,98 @@ def redundant_cycle_pairing(not_redundant, maybe_redundant):
     # (90, 45) is redundant compared to (90, 90)
     # (18, 180) is redundant compared to (24, 210)
     # (12, 360) is NOT redundant compared to (24, 210)
-    nfo = not_redundant["first_cycle"]["order"]
-    nso = not_redundant["second_cycle"]["order"]
-    mfo = maybe_redundant["first_cycle"]["order"]
-    mso = maybe_redundant["second_cycle"]["order"]
-    redundant_order_pairing = (
-        (mfo <= nfo and mso < nso)
-        or (mfo < nfo and mso <= nso)
-        or (mso <= nfo and mfo < nso)
-        or (mso < nfo and mfo <= nso)
-    )
-    if redundant_order_pairing:
+    redundant_order_pairing = True
+    same_orders = True
+    for maybe_redundant_cycle, not_redundant_cycle in zip(
+        maybe_redundant["cycles"],
+        not_redundant["cycles"],
+    ):
+        if maybe_redundant_cycle["order"] != not_redundant_cycle["order"]:
+            same_orders = False
+        if maybe_redundant_cycle["order"] > not_redundant_cycle["order"]:
+            redundant_order_pairing = False
+            break
+    if redundant_order_pairing and not same_orders:
         return True
 
     # A cycle pairing is redundant if first_cycle and second_cycle share the
     # same edge and corner partitions as a non redundant cycle pairing,
-    # optionally swapped. We also need to check if they both share the same
+    # optionally swapped. !!! We also need to check if they both share the same
     # cubies because those differentiate two cycle structures.
-    mfe = maybe_redundant["first_cycle"]["edge_partition"]
-    mfc = maybe_redundant["first_cycle"]["corner_partition"]
-    mse = maybe_redundant["second_cycle"]["edge_partition"]
-    msc = maybe_redundant["second_cycle"]["corner_partition"]
-    nfe = not_redundant["first_cycle"]["edge_partition"]
-    nfc = not_redundant["first_cycle"]["corner_partition"]
-    nse = not_redundant["second_cycle"]["edge_partition"]
-    nsc = not_redundant["second_cycle"]["corner_partition"]
-    redundant_partition_pairing = (
-        maybe_redundant["share_edge"] == not_redundant["share_edge"]
-        and maybe_redundant["share_corner"] == not_redundant["share_corner"]
-        and (
-            mfe == nfe
-            and mfc == nfc
-            and mse == nse
-            and msc == nsc
-            or mfe == nse
-            and mfc == nsc
-            and mse == nfe
-            and msc == nfc
+    maybe_redundant_counter = collections.Counter(
+        (
+            maybe_redundant_cycle["edge_partition"],
+            maybe_redundant_cycle["corner_partition"],
         )
+        for maybe_redundant_cycle in maybe_redundant["cycles"]
     )
+    not_redundant_counter = collections.Counter(
+        (not_redundant_cycle["edge_partition"], not_redundant_cycle["corner_partition"])
+        for not_redundant_cycle in not_redundant["cycles"]
+    )
+    redundant_partition_pairing = maybe_redundant_counter == not_redundant_counter
     return redundant_partition_pairing
 
 
-def all_cycle_pairings():
+def all_cycle_pairings(num_cycles=2):
     """
     Finds all cycle structure pairings on the Rubik's cube.
     """
-    cycle_pairings = []
+    cycle_combinations = []
     # Even though the end goal is to find the most optimal cycle pairings, there
     # exists optimal pairings whose generators leave some cubies intact. We
     # perform the described computation for all edge and corner counts.
-    for used_edge_count in range(2, EDGES + 1):
-        for first_edge_count in range(1, used_edge_count):
-            # Since first_edge_count and second_edge_count sum to used_edge_count,
-            # you may have noticed that counting until used_edge_count double
-            # counts the same cycle pairing. We do this anyways for a complicated
-            # but important reason, so let me explain.
-            #
-            # It is a well known truism that the orientation state of the
-            # Rubik's cube is determined by seven corners and eleven edges, not
-            # all of them. In other words, the orientation of the last
-            # edge/corner cubie is determined by the orientations of all other
-            # edge/corner cubies. I realized that two cycles may share an
-            # edge/corner cubie that only ever orients in place to allow more
-            # flexibility in the cycle structure while maintaining their
-            # commutativity.
-            #
-            # Logic for sharing a cycle can only be performed after the other
-            # cycle is already known, so we perform said logic on the second
-            # cycle and count until used_edge_count to ensure the original first
-            # cycle is also shared when we encounter the same cycle pairing.
-            # Hence the double counting.
-            second_edge_count = used_edge_count - first_edge_count
-            # As a reminder, partitions serve as a set of permutation orders for
-            # all possible cycles that use n cubies.
-            first_edge_partitions = integer_partitions(first_edge_count)
-            second_edge_partitions = integer_partitions(second_edge_count)
-
-            for used_corner_count in range(2, CORNERS + 1):
-                for first_corner_count in range(1, used_corner_count):
-                    second_corner_count = used_corner_count - first_corner_count
-                    first_corner_partitions = integer_partitions(first_corner_count)
-                    second_corner_partitions = integer_partitions(second_corner_count)
-
-                    for first_cycle in highest_order_cycles_from_partitions(
-                        first_edge_partitions, first_corner_partitions
-                    ):
-                        first_cycle["structures"] = all_cycle_structures(first_cycle)
-                        # We compute the cycle pairing of every possible
-                        # combination of sharing an edge and sharing a corner
-                        # for this first cycle.
-                        share_mat = []
-                        # We consider computing a completely unshared cycle
-                        # pairing. Remember from the explanation above that
-                        # we count until used_edge_count for both corners and
-                        # edges? This time, since there's no sharing logic, this
-                        # computation actually does double count the same cycle
-                        # pairing, four times over (twice for edges times twice
-                        # for corners). These if statements ensure we only count
-                        # this cycle pairing once.
-                        if (
-                            second_edge_count >= first_edge_count
-                            and second_corner_count >= first_corner_count
-                        ):
-                            share_mat.append((False, False))
-                        # If the first cycle's edge partition orients an edge in
-                        # place, then the second cycle can share an edge.
-                        if share_edge := 1 in first_cycle["edge_partition"]:
-                            share_mat.append((True, False))
-                        # If the first cycle's corner partition orients an
-                        # corner in place, then the second cycle can share an
-                        # corner.
-                        if share_corner := 1 in first_cycle["corner_partition"]:
-                            share_mat.append((False, True))
-                        # If we can share both an edge and corner cubie
-                        # individually, we can share both at the same time.
-                        if share_edge and share_corner:
-                            share_mat.append((True, True))
-                        for (
-                            share_edge,
-                            share_corner,
-                        ) in share_mat:
-                            for second_cycle in highest_order_cycles_from_partitions(
-                                share_partitions(second_edge_partitions)
-                                if share_edge
-                                else second_edge_partitions,
-                                share_partitions(second_corner_partitions)
-                                if share_corner
-                                else second_corner_partitions,
-                            ):
-                                second_cycle["structures"] = all_cycle_structures(
-                                    second_cycle
+    for used_edge_count, used_corner_count in itertools.product(
+        range(2, EDGES + 1), range(2, CORNERS + 1)
+    ):
+        # - 1 for sharing an edge and corner
+        for parition_edge_counts, partition_corner_counts in itertools.product(
+            integer_partitions(used_edge_count - 1),
+            integer_partitions(used_corner_count - 1),
+        ):
+            if (
+                len(parition_edge_counts) != num_cycles
+                or len(partition_corner_counts) != num_cycles
+            ):
+                continue
+            # TODO: this is GROSSLY inefficient in that it overcounts the same
+            # thing num_cycles! times, can be made more efficient with some more
+            # work
+            for (
+                parition_edge_counts,
+                partition_corner_counts,
+            ) in itertools.product(
+                set(itertools.permutations(parition_edge_counts)),
+                set(itertools.permutations(partition_corner_counts)),
+            ):
+                cycle_generators = []
+                for edge_count, corner_count in zip(
+                    parition_edge_counts, partition_corner_counts
+                ):
+                    cycle_generators.append(
+                        highest_order_cycles_from_partitions(
+                            share_partitions(integer_partitions(edge_count)),
+                            share_partitions(integer_partitions(corner_count)),
+                        )
+                    )
+                for cycle_combination in itertools.product(*cycle_generators):
+                    cycle_combinations.append(
+                        {
+                            "used_edge_count": used_edge_count,
+                            "used_corner_count": used_corner_count,
+                            "cycles": list(
+                                sorted(
+                                    cycle_combination,
+                                    key=operator.itemgetter("order"),
+                                    reverse=True,
                                 )
-
-                                cycle_pairing = {
-                                    "used_edge_count": used_edge_count,
-                                    "used_corner_count": used_corner_count,
-                                    "share_edge": share_edge,
-                                    "share_corner": share_corner,
-                                    "order_product": first_cycle["order"]
-                                    * second_cycle["order"],
-                                }
-                                if (
-                                    # Always make the first cycle order greater
-                                    # than or equal to the second cycle order to
-                                    # maintain a total ordering. If the orders
-                                    # are equal, we process both cycle pairings
-                                    # (see group_cycle_pairings).
-                                    first_cycle["order"] < second_cycle["order"]
-                                ):
-                                    cycle_pairing["first_cycle"] = second_cycle
-                                    cycle_pairing["second_cycle"] = first_cycle
-                                else:
-                                    cycle_pairing["first_cycle"] = first_cycle
-                                    cycle_pairing["second_cycle"] = second_cycle
-                                cycle_pairings.append(cycle_pairing)
-    return cycle_pairings
+                            ),
+                            "order_product": math.prod(
+                                cycle["order"] for cycle in cycle_combination
+                            ),
+                        }
+                    )
+    return cycle_combinations
 
 
 def all_cycle_structures(cycle):
@@ -545,17 +482,17 @@ def highest_order_cycles_from_partitions(edge_partitions, corner_partitions):
             if order < highest_order:
                 continue
             highest_order = order
-            cycles.append(
-                {
-                    "order": highest_order,
-                    "edge_partition": edge_partition,
-                    "corner_partition": corner_partition,
-                    "critical_orient_edges": critical_orient_edges,
-                    "critical_orient_corners": critical_orient_corners,
-                    "always_orient_edges": always_orient_edges,
-                    "always_orient_corners": always_orient_corners,
-                }
-            )
+            cycle = {
+                "order": highest_order,
+                "edge_partition": edge_partition,
+                "corner_partition": corner_partition,
+                "always_orient_edges": always_orient_edges,
+                "always_orient_corners": always_orient_corners,
+                "critical_orient_edges": critical_orient_edges,
+                "critical_orient_corners": critical_orient_corners,
+            }
+            cycle["structures"] = all_cycle_structures(cycle)
+            cycles.append(cycle)
     return cycles
 
 
@@ -647,10 +584,10 @@ def group_cycle_pairings(cycle_pairings):
 
 
 def main():
-    all_cycle_pairings_result = all_cycle_pairings()
+    all_cycle_pairings_result = all_cycle_pairings(3)
     filtered_cycle_pairings = filter_redundant_cycle_pairings(all_cycle_pairings_result)
-    grouped_cycle_pairings = group_cycle_pairings(filtered_cycle_pairings)
-    return grouped_cycle_pairings
+    # grouped_cycle_pairings = group_cycle_pairings(filtered_cycle_pairings)
+    return filtered_cycle_pairings
 
 
 if __name__ == "__main__":
