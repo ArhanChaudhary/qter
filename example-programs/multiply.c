@@ -1,7 +1,26 @@
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <time.h>
 #include <assert.h>
+
+int count = 0;
+int count2 = 0;
+
+void move_const(int n, int *to)
+{
+move_const_loop:
+    if (*to == 0)
+    {
+        goto after_move_const_loop;
+    }
+    *to -= 1;
+    goto move_const_loop;
+after_move_const_loop:
+    if (n != 0) {
+    }
+    *to += n;
+}
 
 void move(int *from, int *to)
 {
@@ -19,7 +38,7 @@ void reduce_problem(int *a, int *b, int *c, const int k)
 {
     if (*b == 0)
     {
-        *a = 0;
+        move_const(0, a);
         return;
     }
     *b -= 1;
@@ -53,28 +72,14 @@ void multiply(int *a, int *b, int *c)
 {
     if (*b == 0)
     {
-        goto guard_1;
+        move_const(0, a);
+        return;
     }
-    goto after_guard_1;
-guard_1:
     if (*a == 0)
     {
         return;
     }
-    *a -= 1;
-    goto guard_1;
-after_guard_1:
-    if (*a == 0)
-    {
-        return;
-    }
-nullify_c:
-    if (*c == 0)
-    {
-        goto reduce_by_2;
-    }
-    *c -= 1;
-    goto nullify_c;
+    move_const(0, c);
 reduce_by_2:
     if (*b == 0)
     {
@@ -166,8 +171,16 @@ reduce_until_1:
     goto reduce_until_1;
 }
 
+typedef struct result {
+    char *comp;
+    int count;
+    int count2;
+} result_t;
+
 int main()
 {
+    result_t results[8100];
+    char buf[100];
     srand(time(NULL));
     for (int i = 0; i < 90; i++)
     {
@@ -176,12 +189,32 @@ int main()
             int a = i;
             int b = j;
             int c = rand() % 90;
-            printf("%d * %d = ", i, j);
+            count = 0;
+            count2 = 0;
             multiply(&a, &b, &c);
-            printf("%d\n", a);
-
+            snprintf(buf, sizeof(buf), "%d * %d = %d", i, j, a);
+            results[i * 90 + j].comp = strdup(buf);
+            results[i * 90 + j].count = count;
+            results[i * 90 + j].count2 = count2;
             assert(((long long)i * (long long)j) % 90 == a);
         }
+    }
+
+    // insertion sort by count
+    for (int i = 1; i < 8100; i++)
+    {
+        result_t key = results[i];
+        int j = i - 1;
+        while (j >= 0 && results[j].count > key.count)
+        {
+            results[j + 1] = results[j];
+            j--;
+        }
+        results[j + 1] = key;
+    }
+    for (int i = 0; i < 8100; i++)
+    {
+        printf("%s: %d additions, %d comparisons\n", results[i].comp, results[i].count, results[i].count2);
     }
     return 0;
 }
