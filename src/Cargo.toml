@@ -12,6 +12,10 @@ rusty-rubik = "0.1.2"
 name = "cli"
 path = "cli/src/main.rs"
 
+[lib]
+name = "qter_core"
+path = "qter_core/src/lib.rs"
+
 [workspace]
 
 members = [
