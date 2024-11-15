@@ -7,3 +7,17 @@ edition = "2021"
 
 [dependencies]
 rusty-rubik = "0.1.2"
+
+[[bin]]
+name = "cli"
+path = "cli/src/main.rs"
+
+[workspace]
+
+members = [
+  "qter_core",
+  "parser",
+  "interpreter",
+  "compiler",
+  "cli",
+]

@@ -68,6 +68,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cli"
+version = "0.1.0"
+
+[[package]]
+name = "compiler"
+version = "0.1.0"
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -102,6 +110,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "interpreter"
+version = "0.1.0"
+
+[[package]]
 name = "libc"
 version = "0.2.158"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -118,6 +130,10 @@ name = "os_str_bytes"
 version = "6.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2355d85b9a3786f481747ced0e0ff2ba35213a1f9bd406ed906554d7af805a1"
+
+[[package]]
+name = "parser"
+version = "0.1.0"
 
 [[package]]
 name = "priority-queue"
@@ -144,6 +160,10 @@ version = "0.1.0"
 dependencies = [
  "rusty-rubik",
 ]
+
+[[package]]
+name = "qter_core"
+version = "0.1.0"
 
 [[package]]
 name = "quote"
