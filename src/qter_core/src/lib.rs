@@ -1,8 +1,11 @@
 use std::ops::{Deref, DerefMut};
 
-use bnum::types::U512;
 // Use a huge integers for orders to allow crazy things like examinx
+use bnum::types::U512;
 
+/// A value with information about where in the source code the value came from.
+///
+/// Currently only contains line number information.
 pub struct WithSpan<T> {
     pub value: T,
     line_num: usize,
@@ -32,6 +35,9 @@ impl<T> WithSpan<T> {
     }
 }
 
+/// Represents a collection of registers, each represented in a particular group structuree
+///
+/// Corresponds to a line of the `.registers` declaration
 pub enum RegisterRepresentation {
     Theoretical { name: String, order: U512 },
     // TODO: Registers based on a permutation group
@@ -64,6 +70,7 @@ pub enum Instruction {
     // TODO: Addition to registers based on a permutation group
 }
 
+/// Represents a qter program
 pub struct Program {
     pub groups: Vec<WithSpan<RegisterRepresentation>>,
     pub instructions: Vec<WithSpan<Instruction>>,

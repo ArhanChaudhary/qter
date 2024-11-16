@@ -21,12 +21,14 @@ pub enum StateTy<'s> {
     Paused(PausedState<'s>),
 }
 
+///  The current execution state of the interpreter
 pub struct State<'s> {
     line: usize,
     instruction: usize,
     state_ty: StateTy<'s>,
 }
 
+/// Interprets a decoded qter program
 pub struct Interpreter {
     group_states: Vec<GroupState>,
     messages: VecDeque<String>,
@@ -36,6 +38,9 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
+    /// Create a new interpreter from a program and initial states for registers
+    ///
+    /// If an initial state isn't specified, it defaults to zero.
     pub fn new(program: Program, mut initial_states: HashMap<String, U512>) -> Interpreter {
         let mut group_states = Vec::with_capacity(program.groups.len());
 
@@ -51,6 +56,8 @@ impl Interpreter {
             }
         }
 
+        assert_eq!(initial_states.len(), 0);
+
         Interpreter {
             group_states,
             program,
@@ -60,6 +67,7 @@ impl Interpreter {
         }
     }
 
+    /// Get the current state of the interpreter
     pub fn state(&self) -> State<'_> {
         let instruction = &self.program.instructions[self.instruction_counter];
 
@@ -80,7 +88,7 @@ impl Interpreter {
         }
     }
 
-    fn register_solved(group_states: &[GroupState], reg: &str) -> bool {
+    fn is_register_solved(group_states: &[GroupState], reg: &str) -> bool {
         for group_state in group_states {
             match group_state {
                 GroupState::Theoretical {
@@ -138,6 +146,7 @@ impl Interpreter {
         panic!("Failed to find register {reg}!");
     }
 
+    /// Execute one instruction
     pub fn step(&mut self) {
         let instruction = &self.program.instructions[self.instruction_counter];
 
@@ -149,7 +158,7 @@ impl Interpreter {
                 instruction_idx,
                 register,
             } => {
-                if Self::register_solved(&self.group_states, register) {
+                if Self::is_register_solved(&self.group_states, register) {
                     self.instruction_counter = *instruction_idx;
                 } else {
                     self.instruction_counter += 1;
@@ -182,12 +191,15 @@ impl Interpreter {
                 self.instruction_counter += 1;
             }
             Instruction::AddTheoretical { register, amount } => {
-                Self::add_num_to(&mut self.group_states, &register, *amount);
+                Self::add_num_to(&mut self.group_states, register, *amount);
                 self.instruction_counter += 1;
             }
         }
     }
 
+    /// Execute instructions until an input or halt instruction is reached
+    ///
+    /// Returns details of the paused state reached
     pub fn step_until_halt(&mut self) -> PausedState<'_> {
         while !self.paused {
             self.step();
@@ -199,6 +211,9 @@ impl Interpreter {
         }
     }
 
+    /// Give an input to the interpreter
+    ///
+    /// Panics if the interpreter is not executing an `input` instruction
     pub fn give_input(&mut self, value: U512) {
         let reg = match self.state().state_ty {
             StateTy::Paused(PausedState::Input {
@@ -247,6 +262,7 @@ mod tests {
             halt The modulus is A
         */
 
+        // Define the registers
         let groups = vec![
             WithSpan::new(
                 RegisterRepresentation::Theoretical {
@@ -265,6 +281,7 @@ mod tests {
         ];
 
         let to_modulus = U512::from_digit(13);
+        // Negative numbers by overflowing
         let a_minus_1 = U512::from_digit(209);
         let b_minus_1 = U512::from_digit(23);
 
