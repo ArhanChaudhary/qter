@@ -89,12 +89,11 @@ def redundant_cycle_pairing(not_redundant, maybe_redundant):
     # A cycle pairing is redundant if it is pointless to include its order
     # compared to a non redundant cycle pairing. A lower order cycle pairing
     # can be perfectly described by a higher order cycle pairing.
-    # e.g.
-    # (60, 72) is redundant compared to (90, 90)
-    # (45, 90) is redundant compared to (90, 90)
-    # (90, 45) is redundant compared to (90, 90)
-    # (18, 180) is redundant compared to (24, 210)
-    # (12, 360) is NOT redundant compared to (24, 210)
+    # e.g. (TGC: noting that the sets are sorted)
+    # (60, 72) is redundant compared to (90, 90) because 60 < 90 and 72 <= 90
+    # (45, 90) is redundant compared to (90, 90) because 45 < 90 and 72 <= 90
+    # (18, 180) is redundant compared to (24, 210) because 18 < 24 and 180 <= 210
+    # (12, 360) is NOT redundant compared to (24, 210) because 360 > 210
     redundant_order_pairing = True
     same_orders = True
     for maybe_redundant_cycle, not_redundant_cycle in zip(
@@ -386,6 +385,9 @@ def highest_order_cycles_from_partitions(edge_partitions, corner_partitions):
             )
             if critical_is_disjoint:
                 orient_edge_count += 1
+                
+            # TGC: it may be useful to rename this to 'non-critical' or similiar
+            # they may still be 'valid' to use, just not using a critical flip
             invalid_orient_edge_count = (
                 # Before determining if a cycle is possible, first ensure that
                 # every permutation cycle must orient.
@@ -395,6 +397,12 @@ def highest_order_cycles_from_partitions(edge_partitions, corner_partitions):
                 # least one two must orient. Although the total number of cycle
                 # orientations is odd, the partition is still possible if
                 # everything orients. This is not the case with (1, 1, 2).
+                # TGC: if orientation is even, we're fine.
+                # If it's not, but there is an extra cycle, We'll be able
+                # to orient it to make total orientation even.
+                # The issue comes when we've already used all cycles 
+                # and still have odd orientation. This means we have to
+                # unorient a critical cycle to make orientation even.
                 orient_edge_count == len(edge_partition)
                 and
                 # Same condition as explained some time earlier.
@@ -420,6 +428,9 @@ def highest_order_cycles_from_partitions(edge_partitions, corner_partitions):
                 # assertion never fails, implying that the critical cycle is the
                 # only cycle with the maximum 2-adic valuation.
                 # TODO: Figure out why this assertion never fails.
+                # TGC: This is the case where we have odd orientation and
+                # no extra cycles to use to fix it, so we must fix by 
+                # unorienting a critical cycle.
                 assert len(critical_orient_edges) == 1, critical_orient_edges
                 orient_edge_count -= 1
                 critical_orient_edges = None
