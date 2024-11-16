@@ -1,0 +1,18 @@
+WHITESPACE = _{ " " }
+
+special_char = { "{" | "}" | "." | ":" | "$" | "--" | "," | "<-" | "\n" | "(" | ")" | WHITESPACE }
+
+ident = @{ (!special_char ~ ANY)+ }
+
+number = { ASCII_DIGIT+ }
+
+algorithm = { ident+ }
+
+registers = { ".registers" ~ "{" ~ "\n"? ~ register_declaration ~ ("\n"+ ~ register_declaration)* ~ "\n"* ~ "}" ~ "\n"*}
+
+register_declaration = { ident ~ ("," ~ ident)* ~ "<-" ~ register_architecture }
+
+builtin_architecture = { ident ~ "builtin" ~ (number | ("(" ~ "\n"* ~ number ~ ("," ~ "\n"* ~ number)* ~ "\n"* ~ ")")) }
+custom_architecture = { ident ~ (ident+ | ("(" ~ "\n"* ~ algorithm ~ ("," ~ "\n"* ~ algorithm)* ~ "\n"* ~ ")")) }
+theoretical_architecture = { "theoretical" ~ number }
+register_architecture = { builtin_architecture | custom_architecture | theoretical_architecture }
