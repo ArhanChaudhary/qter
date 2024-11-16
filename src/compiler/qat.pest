@@ -1,7 +1,7 @@
 WHITESPACE = _{ " " }
-COMMENT = _{ ("--[[" ~ (!"]]--" ~ ANY)* ~ "]]--") | ("--" ~ (!"\n" ~ ANY)* ~ "\n")}
+COMMENT    = _{ ("--[[" ~ (!"]]--" ~ ANY)* ~ "]]--") | ("--" ~ (!"\n" ~ ANY)* ~ "\n") }
 
-program = { registers ~ "\n"* ~ statement ~ ("\n"+ ~ statement)* ~ "\n"* ~ EOI}
+program = { registers ~ "\n"* ~ statement ~ ("\n"+ ~ statement)* ~ "\n"* ~ EOI }
 
 special_char = { "lua" | "{" | "}" | "." | ":" | "$" | "--" | "," | "<-" | "\n" | "(" | ")" | WHITESPACE }
 
@@ -11,34 +11,34 @@ number = { ASCII_DIGIT+ }
 
 algorithm = { ident+ }
 
-registers = { ".registers" ~ ident? ~ "{" ~ "\n"? ~ register_declaration ~ ("\n"+ ~ register_declaration)* ~ "\n"* ~ "}" ~ "\n"*}
+registers = { ".registers" ~ ident? ~ "{" ~ "\n"? ~ register_declaration ~ ("\n"+ ~ register_declaration)* ~ "\n"* ~ "}" ~ "\n"* }
 
 register_declaration = { ident ~ ("," ~ ident)* ~ "<-" ~ register_architecture }
 
-builtin_architecture = { (!"builtin" ~ ident)? ~ "builtin" ~ (number | ("(" ~ "\n"* ~ number ~ ("," ~ "\n"* ~ number)* ~ ","? ~ "\n"* ~ ")")) }
-custom_architecture = { ident? ~ (ident+ | ("(" ~ "\n"* ~ algorithm ~ ("," ~ "\n"* ~ algorithm)* ~ ","? ~ "\n"* ~ ")")) }
+builtin_architecture     = { (!"builtin" ~ ident)? ~ "builtin" ~ (number | ("(" ~ "\n"* ~ number ~ ("," ~ "\n"* ~ number)* ~ ","? ~ "\n"* ~ ")")) }
+custom_architecture      = { ident? ~ (ident+ | ("(" ~ "\n"* ~ algorithm ~ ("," ~ "\n"* ~ algorithm)* ~ ","? ~ "\n"* ~ ")")) }
 theoretical_architecture = { "theoretical" ~ number }
-register_architecture = { builtin_architecture | custom_architecture | theoretical_architecture }
-
+register_architecture    = { builtin_architecture | custom_architecture | theoretical_architecture }
 
 statement = { macro | define | instruction | lua_block }
 
-constant = { "$" ~ ident }
-value = { number | constant | ident | block }
-label = { ident ~ ":" }
-code = { ident ~ value* }
-lua_call = { "lua" ~ ident ~ "(" ~ "\n"? ~ value? ~ ("," ~ "\n"? ~ value)* ~ ","? ~ "\n"? ~ ")" }
+constant    = { "$" ~ ident }
+value       = { number | constant | ident | block }
+label       = { ident ~ ":" }
+code        = { ident ~ value* }
+lua_call    = { "lua" ~ ident ~ "(" ~ "\n"? ~ value? ~ ("," ~ "\n"? ~ value)* ~ ","? ~ "\n"? ~ ")" }
 instruction = { label | code | constant | lua_call }
 
 type = { "block" | "reg" | "int" | "label" }
 
-macro = { ".macro" ~ ident ~ "{" ~ ("\n"* ~ macro_branch)+ ~ "\n"* ~ "}" }
-macro_arg = ${ ident | (constant ~ ":" ~ type) }
-macro_branch = { "(" ~ macro_arg* ~ ")" ~ "=>" ~ (block | statement) }
+macro        =  { ".macro" ~ ident ~ "{" ~ ("\n"* ~ macro_branch)+ ~ "\n"* ~ "}" }
+macro_arg    = ${ ident | (constant ~ ":" ~ type) }
+macro_branch =  { "(" ~ macro_arg* ~ ")" ~ "=>" ~ (block | statement) }
 
-block = { "{" ~ "\n"* ~ statement? ~ ( "\n"+ ~ statement )* ~ "\n"* ~ "}" }
+block = { "{" ~ "\n"* ~ statement? ~ ("\n"+ ~ statement)* ~ "\n"* ~ "}" }
 
 define = { ".define" ~ ident ~ (lua_call | value) }
 
-lua_code = { (!"end-lua" ~ ANY)* }
+lua_code  = { (!"end-lua" ~ ANY)* }
 lua_block = { ".start-lua" ~ lua_code ~ "end-lua" }
+
