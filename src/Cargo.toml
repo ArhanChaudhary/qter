@@ -17,10 +17,9 @@ name = "qter_core"
 path = "qter_core/src/lib.rs"
 
 [workspace]
-
+resolver="2"
 members = [
   "qter_core",
-  "parser",
   "interpreter",
   "compiler",
   "cli",
