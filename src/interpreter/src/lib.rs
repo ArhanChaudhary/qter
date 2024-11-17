@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use bnum::types::U512;
-use qter_core::{Instruction, Program};
+use qter_core::{Instruction, Program, Span};
 
 enum GroupState {
     Theoretical {
@@ -23,7 +23,7 @@ pub enum StateTy<'s> {
 
 ///  The current execution state of the interpreter
 pub struct State<'s> {
-    line: usize,
+    span: Span,
     instruction: usize,
     state_ty: StateTy<'s>,
 }
@@ -82,7 +82,7 @@ impl Interpreter {
         };
 
         State {
-            line: instruction.line_num(),
+            span: instruction.span().to_owned(),
             instruction: self.instruction_counter,
             state_ty,
         }
@@ -232,10 +232,10 @@ impl Interpreter {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, sync::Arc};
 
     use bnum::types::U512;
-    use qter_core::{Instruction, Program, RegisterRepresentation, WithSpan};
+    use qter_core::{Instruction, Program, RegisterRepresentation, Span, WithSpan};
 
     use crate::{Interpreter, PausedState};
 
@@ -262,6 +262,8 @@ mod tests {
             halt The modulus is A
         */
 
+        let random_span = Span::new(Arc::from("bruh"), 0, 0);
+
         // Define the registers
         let groups = vec![
             WithSpan::new(
@@ -269,14 +271,14 @@ mod tests {
                     name: "A".to_owned(),
                     order: U512::from_digit(210),
                 },
-                0,
+                random_span.to_owned(),
             ),
             WithSpan::new(
                 RegisterRepresentation::Theoretical {
                     name: "B".to_owned(),
                     order: U512::from_digit(24),
                 },
-                0,
+                random_span.to_owned(),
             ),
         ];
 
@@ -356,7 +358,7 @@ mod tests {
             groups,
             instructions: instructions
                 .into_iter()
-                .map(|v| WithSpan::new(v, 0))
+                .map(|v| WithSpan::new(v, random_span.to_owned()))
                 .collect(),
         };
 

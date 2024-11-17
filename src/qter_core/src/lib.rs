@@ -1,14 +1,70 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::{Arc, OnceLock},
+};
 
 // Use a huge integers for orders to allow crazy things like examinx
 use bnum::types::U512;
+
+#[derive(Clone)]
+pub struct Span {
+    source: Arc<str>,
+    start: usize,
+    end: usize,
+    line_and_col: OnceLock<(usize, usize)>,
+}
+
+impl Span {
+    pub fn new(source: Arc<str>, start: usize, end: usize) -> Span {
+        assert!(start <= end);
+        assert!(start < source.len());
+        assert!(end < source.len());
+
+        Span {
+            source,
+            start,
+            end,
+            line_and_col: OnceLock::new(),
+        }
+    }
+
+    pub fn slice(&self) -> &str {
+        &self.source[self.start..self.end]
+    }
+
+    pub fn line_and_col(&self) -> (usize, usize) {
+        *self.line_and_col.get_or_init(|| {
+            let mut current_line = 1;
+            let mut current_col = 1;
+
+            for c in self.source.chars().take(self.start) {
+                if c == '\n' {
+                    current_line += 1;
+                    current_col = 1;
+                } else {
+                    current_col += 1;
+                }
+            }
+
+            (current_line, current_col)
+        })
+    }
+
+    pub fn line(&self) -> usize {
+        self.line_and_col().0
+    }
+
+    pub fn col(&self) -> usize {
+        self.line_and_col().1
+    }
+}
 
 /// A value with information about where in the source code the value came from.
 ///
 /// Currently only contains line number information.
 pub struct WithSpan<T> {
     pub value: T,
-    line_num: usize,
+    span: Span,
 }
 
 impl<T> Deref for WithSpan<T> {
@@ -26,12 +82,16 @@ impl<T> DerefMut for WithSpan<T> {
 }
 
 impl<T> WithSpan<T> {
-    pub fn new(value: T, line_num: usize) -> WithSpan<T> {
-        WithSpan { value, line_num }
+    pub fn new(value: T, span: Span) -> WithSpan<T> {
+        WithSpan { value, span }
     }
 
-    pub fn line_num(&self) -> usize {
-        self.line_num
+    pub fn span(&self) -> &Span {
+        &self.span
+    }
+
+    pub fn line(&self) -> usize {
+        self.span().line()
     }
 }
 
