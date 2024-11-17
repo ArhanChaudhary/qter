@@ -37,6 +37,16 @@ pub struct Interpreter {
     paused: bool,
 }
 
+pub enum ActionPerformed {
+    None,
+    Paused,
+    Goto { location: usize },
+    FailedSolvedGoto { register: String },
+    SucceededSolvedGoto { register: String, location: usize },
+    AddToTheoretical { register: String, amt: U512 },
+    // TODO: ExecutedAlgorithm
+}
+
 impl Interpreter {
     /// Create a new interpreter from a program and initial states for registers
     ///
@@ -147,12 +157,16 @@ impl Interpreter {
     }
 
     /// Execute one instruction
-    pub fn step(&mut self) {
+    pub fn step(&mut self) -> ActionPerformed {
         let instruction = &self.program.instructions[self.instruction_counter];
 
         match &**instruction {
             Instruction::Goto { instruction_idx } => {
                 self.instruction_counter = *instruction_idx;
+
+                ActionPerformed::Goto {
+                    location: *instruction_idx,
+                }
             }
             Instruction::SolvedGoto {
                 instruction_idx,
@@ -160,8 +174,17 @@ impl Interpreter {
             } => {
                 if Self::is_register_solved(&self.group_states, register) {
                     self.instruction_counter = *instruction_idx;
+
+                    ActionPerformed::SucceededSolvedGoto {
+                        register: register.to_owned(),
+                        location: *instruction_idx,
+                    }
                 } else {
                     self.instruction_counter += 1;
+
+                    ActionPerformed::FailedSolvedGoto {
+                        register: register.to_owned(),
+                    }
                 }
             }
             Instruction::Input {
@@ -172,6 +195,8 @@ impl Interpreter {
                     self.paused = true;
                     self.messages.push_back(message.to_owned());
                 }
+
+                ActionPerformed::Paused
             }
             Instruction::Halt { message, register } => {
                 if !self.paused {
@@ -181,6 +206,8 @@ impl Interpreter {
                         Self::decode_register(&self.group_states, register)
                     ));
                 }
+
+                ActionPerformed::Paused
             }
             Instruction::Print { message, register } => {
                 self.messages.push_back(format!(
@@ -189,10 +216,17 @@ impl Interpreter {
                 ));
 
                 self.instruction_counter += 1;
+
+                ActionPerformed::None
             }
             Instruction::AddTheoretical { register, amount } => {
                 Self::add_num_to(&mut self.group_states, register, *amount);
                 self.instruction_counter += 1;
+
+                ActionPerformed::AddToTheoretical {
+                    register: register.to_owned(),
+                    amt: *amount,
+                }
             }
         }
     }
