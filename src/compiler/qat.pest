@@ -20,7 +20,7 @@ custom_architecture      = { ident? ~ (ident+ | ("(" ~ "\n"* ~ algorithm ~ ("," 
 theoretical_architecture = { "theoretical" ~ number }
 register_architecture    = { builtin_architecture | custom_architecture | theoretical_architecture }
 
-statement = { macro | define | instruction | lua_block }
+statement = { macro | define | instruction | lua_block | import }
 
 constant    = { "$" ~ ident }
 value       = { number | constant | ident | block }
@@ -38,6 +38,9 @@ macro_branch =  { "(" ~ macro_arg* ~ ")" ~ "=>" ~ (block | statement) }
 block = { "{" ~ "\n"* ~ statement? ~ ("\n"+ ~ statement)* ~ "\n"* ~ "}" }
 
 define = { ".define" ~ ident ~ (lua_call | value) }
+
+import_filename = @{ident ~ ".qat"}
+import = { ".import" ~ import_filename }
 
 lua_code  = { (!"end-lua" ~ ANY)* }
 lua_block = { ".start-lua" ~ lua_code ~ "end-lua" }
