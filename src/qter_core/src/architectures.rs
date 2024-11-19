@@ -86,22 +86,24 @@ impl Permutation {
         })
     }
 
-    pub fn compose(&self, other: &Permutation) -> Permutation {
+    fn mapping_mut(&mut self) -> &mut [usize] {
+        self.mapping();
+
+        return self.mapping.get_mut().unwrap();
+    }
+
+    pub fn compose(&mut self, other: &Permutation) {
         assert_eq!(self.facelet_count, other.facelet_count);
 
-        let my_mapping = self.mapping();
+        let my_mapping = self.mapping_mut();
         let other_mapping = other.mapping();
 
-        let new_mapping = my_mapping
-            .iter()
-            .map(|my_maps_to| other_mapping[*my_maps_to])
-            .collect::<Vec<_>>();
-
-        Permutation {
-            facelet_count: self.facelet_count,
-            mapping: OnceCell::from(new_mapping),
-            cycles: OnceCell::new(),
+        for value in my_mapping.iter_mut() {
+            *value = other_mapping[*value];
         }
+
+        // Invalidate `cycles`
+        self.cycles = OnceCell::new();
     }
 }
 
