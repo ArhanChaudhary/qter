@@ -266,7 +266,7 @@ impl Interpreter {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, sync::Arc};
+    use std::{collections::HashMap, rc::Rc};
 
     use bnum::types::U512;
     use qter_core::{Instruction, Program, RegisterRepresentation, Span, WithSpan};
@@ -296,7 +296,7 @@ mod tests {
             halt The modulus is A
         */
 
-        let random_span = Span::new(Arc::from("bruh"), 0, 0);
+        let random_span = Span::new(Rc::from("bruh"), 0, 0);
 
         // Define the registers
         let groups = vec![

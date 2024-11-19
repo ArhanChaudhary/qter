@@ -1,21 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{cell::OnceCell, collections::HashMap, rc::Rc};
 
 use bnum::types::U512;
 use itertools::Itertools;
-use once_cell::race::OnceBox;
-
-fn oncebox_new_with<T>(v: T) -> OnceBox<T> {
-    let oncebox = OnceBox::new();
-    oncebox.set(Box::new(v));
-    oncebox
-}
-
-fn oncebox_clone<T: Clone>(v: &OnceBox<T>) -> OnceBox<T> {
-    match v.get() {
-        Some(v) => oncebox_new_with(v.clone()),
-        None => OnceBox::new(),
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct PermutationGroup {
@@ -28,29 +14,19 @@ impl PermutationGroup {
     pub fn identity(&self) -> Permutation {
         Permutation {
             // Map every value to itself
-            mapping: oncebox_new_with((0..self.facelet_count).collect::<Vec<_>>()),
-            cycles: OnceBox::new(),
+            mapping: OnceCell::from((0..self.facelet_count).collect::<Vec<_>>()),
+            cycles: OnceCell::new(),
             facelet_count: self.facelet_count,
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Permutation {
     facelet_count: usize,
     // One of these two must be defined
-    mapping: OnceBox<Vec<usize>>,
-    cycles: OnceBox<Vec<Vec<usize>>>,
-}
-
-impl Clone for Permutation {
-    fn clone(&self) -> Self {
-        Permutation {
-            facelet_count: self.facelet_count,
-            mapping: oncebox_clone(&self.mapping),
-            cycles: oncebox_clone(&self.cycles),
-        }
-    }
+    mapping: OnceCell<Vec<usize>>,
+    cycles: OnceCell<Vec<Vec<usize>>>,
 }
 
 impl Permutation {
@@ -70,7 +46,7 @@ impl Permutation {
                 }
             }
 
-            Box::new(mapping)
+            mapping
         })
     }
 
@@ -106,7 +82,7 @@ impl Permutation {
                 cycles.push(cycle);
             }
 
-            Box::new(cycles)
+            cycles
         })
     }
 
@@ -123,8 +99,8 @@ impl Permutation {
 
         Permutation {
             facelet_count: self.facelet_count,
-            mapping: oncebox_new_with(new_mapping),
-            cycles: OnceBox::new(),
+            mapping: OnceCell::from(new_mapping),
+            cycles: OnceCell::new(),
         }
     }
 }
@@ -137,12 +113,12 @@ struct CycleGenerator {
 }
 
 pub struct Architecture {
-    group: Arc<PermutationGroup>,
+    group: Rc<PermutationGroup>,
     cycle_generators: Vec<CycleGenerator>,
     shared_facelets: Vec<usize>,
 }
 
 pub struct Cube {
-    architecture: Arc<Architecture>,
+    architecture: Rc<Architecture>,
     state: Permutation,
 }

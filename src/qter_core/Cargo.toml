@@ -6,4 +6,3 @@ edition = "2021"
 [dependencies]
 bnum = "0.12"
 itertools = "0.13"
-once_cell = "1.20"

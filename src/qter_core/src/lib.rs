@@ -1,6 +1,7 @@
 use std::{
     ops::{Deref, DerefMut},
-    sync::{Arc, OnceLock},
+    rc::Rc,
+    sync::OnceLock,
 };
 
 pub mod architectures;
@@ -10,14 +11,14 @@ use bnum::types::U512;
 
 #[derive(Clone)]
 pub struct Span {
-    source: Arc<str>,
+    source: Rc<str>,
     start: usize,
     end: usize,
     line_and_col: OnceLock<(usize, usize)>,
 }
 
 impl Span {
-    pub fn new(source: Arc<str>, start: usize, end: usize) -> Span {
+    pub fn new(source: Rc<str>, start: usize, end: usize) -> Span {
         assert!(start <= end);
         assert!(start < source.len());
         assert!(end < source.len());
