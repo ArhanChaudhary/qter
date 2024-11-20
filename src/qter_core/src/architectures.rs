@@ -19,6 +19,36 @@ impl PermutationGroup {
             facelet_count: self.facelet_count,
         }
     }
+
+    pub fn generator_names(&self) -> impl Iterator<Item = &str> {
+        self.generator_names.keys().map(|v| v.as_str())
+    }
+
+    pub fn facelet_count(&self) -> usize {
+        self.facelet_count
+    }
+
+    pub fn get_generator(&self, name: &str) -> Option<&Permutation> {
+        Some(&self.generators[*self.generator_names.get(name)?])
+    }
+
+    /// If any of the generator names don't exist, it will compose all of the generators before it and return the name of the generator that doesn't exist.
+    pub fn compose_generators_into<'a, S: AsRef<str>>(
+        &self,
+        permutation: &mut Permutation,
+        generators: &'a [S],
+    ) -> Result<(), &'a S> {
+        for generator in generators {
+            let idx = match self.generator_names.get(generator.as_ref()) {
+                Some(idx) => idx,
+                None => return Err(generator),
+            };
+
+            permutation.compose(&self.generators[*idx]);
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]
