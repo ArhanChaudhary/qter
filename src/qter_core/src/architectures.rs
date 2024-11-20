@@ -3,11 +3,12 @@ use std::{cell::OnceCell, collections::HashMap, rc::Rc};
 use bnum::types::U512;
 use itertools::Itertools;
 
+use crate::shared_facelet_detection::algorithms_to_cycle_generators;
+
 #[derive(Clone, Debug)]
 pub struct PermutationGroup {
     facelet_count: usize,
-    generator_names: HashMap<String, usize>,
-    generators: Vec<Permutation>,
+    generators: HashMap<String, Permutation>,
 }
 
 impl PermutationGroup {
@@ -20,8 +21,8 @@ impl PermutationGroup {
         }
     }
 
-    pub fn generator_names(&self) -> impl Iterator<Item = &str> {
-        self.generator_names.keys().map(|v| v.as_str())
+    pub fn generators(&self) -> impl Iterator<Item = (&str, &Permutation)> {
+        self.generators.iter().map(|(k, v)| (&**k, v))
     }
 
     pub fn facelet_count(&self) -> usize {
@@ -29,7 +30,7 @@ impl PermutationGroup {
     }
 
     pub fn get_generator(&self, name: &str) -> Option<&Permutation> {
-        Some(&self.generators[*self.generator_names.get(name)?])
+        self.generators.get(name)
     }
 
     /// If any of the generator names don't exist, it will compose all of the generators before it and return the name of the generator that doesn't exist.
@@ -39,12 +40,12 @@ impl PermutationGroup {
         generators: &'a [S],
     ) -> Result<(), &'a S> {
         for generator in generators {
-            let idx = match self.generator_names.get(generator.as_ref()) {
+            let generator = match self.generators.get(generator.as_ref()) {
                 Some(idx) => idx,
                 None => return Err(generator),
             };
 
-            permutation.compose(&self.generators[*idx]);
+            permutation.compose(generator);
         }
 
         Ok(())
@@ -137,11 +138,29 @@ impl Permutation {
     }
 }
 
-struct CycleGenerator {
-    generator_sequence: Vec<usize>,
-    permutation: Permutation,
-    unshared_facelets: Vec<usize>,
-    order: U512,
+pub struct CycleGenerator {
+    pub(crate) generator_sequence: Vec<String>,
+    pub(crate) permutation: Permutation,
+    pub(crate) unshared_cycles: Vec<Vec<usize>>,
+    pub(crate) order: U512,
+}
+
+impl CycleGenerator {
+    pub fn generator_sequence(&self) -> &[String] {
+        &self.generator_sequence
+    }
+
+    pub fn permutation(&self) -> &Permutation {
+        &self.permutation
+    }
+
+    pub fn unshared_cycles(&self) -> &[Vec<usize>] {
+        &self.unshared_cycles
+    }
+
+    pub fn order(&self) -> U512 {
+        self.order
+    }
 }
 
 pub struct Architecture {
@@ -150,7 +169,44 @@ pub struct Architecture {
     shared_facelets: Vec<usize>,
 }
 
+impl Architecture {
+    pub fn new(
+        group: Rc<PermutationGroup>,
+        algorithms: Vec<Vec<String>>,
+    ) -> Result<Architecture, String> {
+        let processed = algorithms_to_cycle_generators(&group, &algorithms)?;
+
+        Ok(Architecture {
+            group,
+            cycle_generators: processed.0,
+            shared_facelets: processed.1,
+        })
+    }
+
+    pub fn group(&self) -> &PermutationGroup {
+        &self.group
+    }
+
+    pub fn registers(&self) -> &[CycleGenerator] {
+        &self.cycle_generators
+    }
+
+    pub fn shared_facelets(&self) -> &[usize] {
+        &self.shared_facelets
+    }
+}
+
 pub struct Cube {
     architecture: Rc<Architecture>,
     state: Permutation,
+}
+
+impl Cube {
+    pub fn architecture(&self) -> &Architecture {
+        &self.architecture
+    }
+
+    pub fn state(&self) -> &Permutation {
+        &self.state
+    }
 }

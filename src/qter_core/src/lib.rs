@@ -5,6 +5,7 @@ use std::{
 };
 
 pub mod architectures;
+mod shared_facelet_detection;
 
 // Use a huge integers for orders to allow crazy things like examinx
 use bnum::types::U512;
