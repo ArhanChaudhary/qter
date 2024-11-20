@@ -12,6 +12,21 @@ pub struct PermutationGroup {
 }
 
 impl PermutationGroup {
+    pub fn new(mut generators: HashMap<String, Permutation>) -> PermutationGroup {
+        assert!(!generators.is_empty());
+
+        let facelet_count = generators.iter().map(|v| v.1.facelet_count).max().unwrap() + 1;
+
+        for generator in generators.iter_mut() {
+            generator.1.facelet_count = facelet_count;
+        }
+
+        PermutationGroup {
+            facelet_count,
+            generators,
+        }
+    }
+
     pub fn identity(&self) -> Permutation {
         Permutation {
             // Map every value to itself
@@ -61,6 +76,20 @@ pub struct Permutation {
 }
 
 impl Permutation {
+    pub fn from_cycles(mut cycles: Vec<Vec<usize>>) -> Permutation {
+        cycles.retain(|v| v.len() > 1);
+
+        assert!(!cycles.is_empty());
+
+        let facelet_count = *cycles.iter().flatten().max().unwrap() + 1;
+
+        Permutation {
+            facelet_count,
+            mapping: OnceCell::new(),
+            cycles: OnceCell::from(cycles),
+        }
+    }
+
     pub fn mapping(&self) -> &[usize] {
         self.mapping.get_or_init(|| {
             let cycles = self
@@ -110,7 +139,9 @@ impl Permutation {
                     cycle.push(next);
                 }
 
-                cycles.push(cycle);
+                if cycle.len() > 1 {
+                    cycles.push(cycle);
+                }
             }
 
             cycles

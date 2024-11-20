@@ -4,6 +4,7 @@ use bnum::types::U512;
 
 use crate::architectures::{CycleGenerator, Permutation, PermutationGroup};
 
+#[derive(Debug)]
 enum UnionFindEntry {
     RootOfSet {
         // For weighted union-find
@@ -14,6 +15,7 @@ enum UnionFindEntry {
     OwnedBy(RefCell<usize>),
 }
 
+#[derive(Debug)]
 struct UnionFindOfCycles {
     sets: Vec<UnionFindEntry>,
 }
@@ -110,7 +112,7 @@ impl UnionFindOfCycles {
 
 fn gcd(mut a: U512, mut b: U512) -> U512 {
     loop {
-        if b == U512::ONE {
+        if b == U512::ZERO {
             return a;
         }
 
@@ -121,7 +123,10 @@ fn gcd(mut a: U512, mut b: U512) -> U512 {
 }
 
 fn lcm(a: U512, b: U512) -> U512 {
-    a / gcd(a, b) * b
+    assert_ne!(a, U512::ZERO);
+    assert_ne!(b, U512::ZERO);
+
+    b / gcd(a, b) * a
 }
 
 pub fn algorithms_to_cycle_generators(
@@ -168,4 +173,69 @@ pub fn algorithms_to_cycle_generators(
             .collect(),
         shared_facelets,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use bnum::types::U512;
+
+    use crate::{
+        architectures::{Permutation, PermutationGroup},
+        shared_facelet_detection::{gcd, lcm},
+    };
+
+    use super::algorithms_to_cycle_generators;
+
+    #[test]
+    fn lcm_and_gcd() {
+        let _lcm = |a, b| lcm(U512::from_digit(a), U512::from_digit(b)).digits()[0];
+        let _gcd = |a, b| gcd(U512::from_digit(a), U512::from_digit(b)).digits()[0];
+
+        assert_eq!(_gcd(3, 5), 1);
+        assert_eq!(_gcd(3, 6), 3);
+        assert_eq!(_gcd(4, 6), 2);
+
+        assert_eq!(_lcm(3, 5), 15);
+        assert_eq!(_lcm(3, 6), 6);
+        assert_eq!(_lcm(4, 6), 12);
+    }
+
+    #[test]
+    fn simple() {
+        let permutation_group = PermutationGroup::new(HashMap::from_iter(vec![
+            (
+                "A".to_owned(),
+                Permutation::from_cycles(vec![vec![0, 1, 2]]),
+            ),
+            (
+                "B".to_owned(),
+                Permutation::from_cycles(vec![vec![3, 4, 5]]),
+            ),
+            (
+                "C".to_owned(),
+                Permutation::from_cycles(vec![vec![5, 6, 7]]),
+            ),
+            ("D".to_owned(), Permutation::from_cycles(vec![vec![8, 9]])),
+        ]));
+
+        let (algorithms, shared) = algorithms_to_cycle_generators(
+            &permutation_group,
+            &[
+                vec!["A".to_owned(), "B".to_owned()],
+                vec!["C".to_owned(), "D".to_owned()],
+            ],
+        )
+        .unwrap();
+
+        for i in 3..=7 {
+            assert!(shared.contains(&i));
+        }
+
+        assert_eq!(algorithms[0].order, U512::from_digit(3));
+        assert_eq!(algorithms[0].unshared_cycles, vec![vec![0, 1, 2]]);
+        assert_eq!(algorithms[1].order, U512::from_digit(2));
+        assert_eq!(algorithms[1].unshared_cycles, vec![vec![8, 9]]);
+    }
 }
