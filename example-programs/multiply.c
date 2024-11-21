@@ -4,6 +4,8 @@
 #include <time.h>
 #include <assert.h>
 
+int count = 0;
+
 void move_const(int n, int *to)
 {
 move_const_loop:
@@ -12,9 +14,12 @@ move_const_loop:
         goto after_move_const_loop;
     }
     *to -= 1;
+    count++;
     goto move_const_loop;
 after_move_const_loop:
     *to += n;
+    if (n != 0)
+        count++;
 }
 
 void move(int *from, int *to)
@@ -25,7 +30,9 @@ move_loop:
         return;
     }
     *to += 1;
+    count++;
     *from -= 1;
+    count++;
     goto move_loop;
 }
 
@@ -37,20 +44,26 @@ void reduce_problem(int *a, int *b, int *c, const int k)
         return;
     }
     *b -= 1;
+    count++;
     if (*b == 0)
     {
         *b += 1;
+        count++;
         return;
     }
     *b += 1;
+    count++;
 reduce_b_loop:
     if (*b == 0)
     {
         move(c, b);
         goto reduce_a_loop;
     }
-    *b = (*b - k) % 90;
+    *b -= k;
+    *b = (*b % 90 + 90) % 90;
+    count += 2;
     *c += 1;
+    count++;
     goto reduce_b_loop;
 reduce_a_loop:
     if (*a == 0)
@@ -59,7 +72,9 @@ reduce_a_loop:
         return;
     }
     *a -= 1;
+    count++;
     *c = (*c + k) % 90;
+    count += 2;
     goto reduce_a_loop;
 }
 
@@ -84,13 +99,17 @@ reduce_by_2:
         goto reduce_by_2;
     }
     *b -= 1;
+    count++;
     *c += 1;
+    count++;
     if (*b == 0)
     {
         goto reduce_by_3;
     }
     *b -= 1;
+    count++;
     *c += 1;
+    count++;
     goto reduce_by_2;
 reduce_by_3:
     if (*c == 0)
@@ -100,19 +119,25 @@ reduce_by_3:
         goto reduce_by_3;
     }
     *c -= 1;
+    count++;
     *b += 1;
+    count++;
     if (*c == 0)
     {
         goto reduce_by_5;
     }
     *c -= 1;
+    count++;
     *b += 1;
+    count++;
     if (*c == 0)
     {
         goto reduce_by_5;
     }
     *c -= 1;
+    count++;
     *b += 1;
+    count++;
     goto reduce_by_3;
 reduce_by_5:
     if (*b == 0)
@@ -122,46 +147,66 @@ reduce_by_5:
         goto reduce_by_5;
     }
     *b -= 1;
+    count++;
     *c += 1;
+    count++;
     if (*b == 0)
     {
         goto reduce_until_1;
     }
     *b -= 1;
+    count++;
     *c += 1;
+    count++;
     if (*b == 0)
     {
         goto reduce_until_1;
     }
     *b -= 1;
+    count++;
     *c += 1;
+    count++;
     if (*b == 0)
     {
         goto reduce_until_1;
     }
     *b -= 1;
+    count++;
     *c += 1;
+    count++;
     if (*b == 0)
     {
         goto reduce_until_1;
     }
     *b -= 1;
+    count++;
     *c += 1;
+    count++;
     goto reduce_by_5;
 reduce_until_1:
     *c -= 1;
+    count++;
     if (*c == 0)
     {
         return;
     }
     *c += 1;
+    count++;
     reduce_problem(a, c, b, 7);
     reduce_problem(a, c, b, 11);
     goto reduce_until_1;
 }
 
+typedef struct result {
+    char *comp;
+    int count;
+} result_t;
+
 int main()
 {
+    char buf[100];
+    result_t results[8100];
+    srand(time(NULL));
     for (int i = 0; i < 90; i++)
     {
         for (int j = 0; j < 90; j++)
@@ -169,11 +214,36 @@ int main()
             int a = i;
             int b = j;
             int c = 0;
+            count = 0;
             multiply(&a, &b, &c);
-            printf("%d * %d = %d", i, j, a);
+            snprintf(buf, sizeof(buf), "%d * %d = %d", i, j, a);
+            results[i * 90 + j].comp = strdup(buf);
+            results[i * 90 + j].count = count;
             assert(((long long)i * (long long)j) % 90 == a);
             assert(b == 0);
             assert(c == 0);
         }
     }
+
+    for (int i = 1; i < 8100; i++)
+    {
+        result_t key = results[i];
+        int j = i - 1;
+        while (j >= 0 && results[j].count > key.count)
+        {
+            results[j + 1] = results[j];
+            j--;
+        }
+        results[j + 1] = key;
+    }
+
+    int total = 0;
+    for (int i = 0; i < 8100; i++)
+    {
+        printf("%s: %d additions\n", results[i].comp, results[i].count);
+        total += results[i].count;
+    }
+    // average count per multiplication
+    printf("Average: %f\n", (double)total / 8100);
+    return 0;
 }
