@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashSet};
 
 use bnum::types::U512;
 
-use crate::architectures::{CycleGenerator, Permutation, PermutationGroup};
+use crate::architectures::{CycleGenerator, CycleGeneratorSubcycle, Permutation, PermutationGroup};
 
 #[derive(Debug)]
 enum UnionFindEntry {
@@ -129,6 +129,28 @@ fn lcm(a: U512, b: U512) -> U512 {
     b / gcd(a, b) * a
 }
 
+fn length_of_substring_that_this_string_is_n_repeated_copies_of<'a>(
+    colors: impl Iterator<Item = &'a str>,
+) -> U512 {
+    let mut found = vec![];
+    let mut current_repeat_length = 1;
+
+    for (i, color) in colors.enumerate() {
+        found.push(color);
+
+        if found[i % current_repeat_length] != color {
+            current_repeat_length = i + 1;
+        }
+    }
+
+    // We didn't match the substring a whole number of times; it actually doesn't work
+    if found.len() % current_repeat_length != 0 {
+        current_repeat_length = found.len();
+    }
+
+    U512::from_digit(current_repeat_length as u64)
+}
+
 pub fn algorithms_to_cycle_generators(
     group: &PermutationGroup,
     algorithms: &[Vec<String>],
@@ -158,7 +180,15 @@ pub fn algorithms_to_cycle_generators(
                         continue;
                     }
 
-                    unshared_cycles.push(cycle.to_owned());
+                    let chromatic_order =
+                        length_of_substring_that_this_string_is_n_repeated_copies_of(
+                            cycle.iter().map(|v| &*group.facelet_colors()[*v]),
+                        );
+
+                    unshared_cycles.push(CycleGeneratorSubcycle {
+                        facelet_cycle: cycle.to_owned(),
+                        chromatic_order,
+                    });
                 }
 
                 CycleGenerator {
@@ -166,7 +196,7 @@ pub fn algorithms_to_cycle_generators(
                     permutation,
                     order: unshared_cycles
                         .iter()
-                        .fold(U512::ONE, |a, v| lcm(a, U512::from_digit(v.len() as u64))),
+                        .fold(U512::ONE, |a, v| lcm(a, v.chromatic_order)),
                     unshared_cycles,
                 }
             })
@@ -182,11 +212,14 @@ mod tests {
     use bnum::types::U512;
 
     use crate::{
-        architectures::{Permutation, PermutationGroup},
+        architectures::{CycleGeneratorSubcycle, Permutation, PermutationGroup},
         shared_facelet_detection::{gcd, lcm},
     };
 
-    use super::algorithms_to_cycle_generators;
+    use super::{
+        algorithms_to_cycle_generators,
+        length_of_substring_that_this_string_is_n_repeated_copies_of,
+    };
 
     #[test]
     fn lcm_and_gcd() {
@@ -203,28 +236,75 @@ mod tests {
     }
 
     #[test]
+    fn length_of_substring_whatever() {
+        assert_eq!(
+            length_of_substring_that_this_string_is_n_repeated_copies_of(
+                ["a", "a", "a", "a"].into_iter()
+            )
+            .digits()[0],
+            1
+        );
+
+        assert_eq!(
+            length_of_substring_that_this_string_is_n_repeated_copies_of(
+                ["a", "b", "a", "b"].into_iter()
+            )
+            .digits()[0],
+            2
+        );
+
+        assert_eq!(
+            length_of_substring_that_this_string_is_n_repeated_copies_of(
+                ["a", "b", "a", "b", "a"].into_iter()
+            )
+            .digits()[0],
+            5
+        );
+
+        assert_eq!(
+            length_of_substring_that_this_string_is_n_repeated_copies_of(
+                ["a", "b", "c", "d", "e"].into_iter()
+            )
+            .digits()[0],
+            5
+        );
+    }
+
+    #[test]
     fn simple() {
-        let permutation_group = PermutationGroup::new(HashMap::from_iter(vec![
-            (
-                "A".to_owned(),
-                Permutation::from_cycles(vec![vec![0, 1, 2]]),
-            ),
-            (
-                "B".to_owned(),
-                Permutation::from_cycles(vec![vec![3, 4, 5]]),
-            ),
-            (
-                "C".to_owned(),
-                Permutation::from_cycles(vec![vec![5, 6, 7]]),
-            ),
-            ("D".to_owned(), Permutation::from_cycles(vec![vec![8, 9]])),
-        ]));
+        let permutation_group = PermutationGroup::new(
+            [
+                "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "K", "K",
+            ]
+            .iter()
+            .map(|v| (**v).to_owned())
+            .collect(),
+            HashMap::from_iter(vec![
+                (
+                    "A".to_owned(),
+                    Permutation::from_cycles(vec![vec![0, 1, 2]]),
+                ),
+                (
+                    "B".to_owned(),
+                    Permutation::from_cycles(vec![vec![3, 4, 5]]),
+                ),
+                (
+                    "C".to_owned(),
+                    Permutation::from_cycles(vec![vec![5, 6, 7]]),
+                ),
+                ("D".to_owned(), Permutation::from_cycles(vec![vec![8, 9]])),
+                (
+                    "E".to_owned(),
+                    Permutation::from_cycles(vec![vec![10, 11, 12]]),
+                ),
+            ]),
+        );
 
         let (algorithms, shared) = algorithms_to_cycle_generators(
             &permutation_group,
             &[
                 vec!["A".to_owned(), "B".to_owned()],
-                vec!["C".to_owned(), "D".to_owned()],
+                vec!["C".to_owned(), "D".to_owned(), "E".to_owned()],
             ],
         )
         .unwrap();
@@ -234,8 +314,26 @@ mod tests {
         }
 
         assert_eq!(algorithms[0].order, U512::from_digit(3));
-        assert_eq!(algorithms[0].unshared_cycles, vec![vec![0, 1, 2]]);
+        assert_eq!(
+            algorithms[0].unshared_cycles,
+            vec![CycleGeneratorSubcycle {
+                facelet_cycle: vec![0, 1, 2],
+                chromatic_order: U512::from_digit(3),
+            }]
+        );
         assert_eq!(algorithms[1].order, U512::from_digit(2));
-        assert_eq!(algorithms[1].unshared_cycles, vec![vec![8, 9]]);
+        assert_eq!(
+            algorithms[1].unshared_cycles,
+            vec![
+                CycleGeneratorSubcycle {
+                    facelet_cycle: vec![8, 9],
+                    chromatic_order: U512::from_digit(2)
+                },
+                CycleGeneratorSubcycle {
+                    facelet_cycle: vec![10, 11, 12],
+                    chromatic_order: U512::ONE,
+                }
+            ]
+        );
     }
 }

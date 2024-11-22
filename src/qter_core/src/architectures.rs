@@ -7,41 +7,50 @@ use crate::shared_facelet_detection::algorithms_to_cycle_generators;
 
 #[derive(Clone, Debug)]
 pub struct PermutationGroup {
-    facelet_count: usize,
+    facelet_colors: Vec<String>,
     generators: HashMap<String, Permutation>,
 }
 
 impl PermutationGroup {
-    pub fn new(mut generators: HashMap<String, Permutation>) -> PermutationGroup {
+    pub fn new(
+        facelet_colors: Vec<String>,
+        mut generators: HashMap<String, Permutation>,
+    ) -> PermutationGroup {
         assert!(!generators.is_empty());
 
-        let facelet_count = generators.iter().map(|v| v.1.facelet_count).max().unwrap() + 1;
+        for generator in generators.values() {
+            assert!(generator.facelet_count <= facelet_colors.len());
+        }
 
         for generator in generators.iter_mut() {
-            generator.1.facelet_count = facelet_count;
+            generator.1.facelet_count = facelet_colors.len();
         }
 
         PermutationGroup {
-            facelet_count,
+            facelet_colors,
             generators,
         }
+    }
+
+    pub fn facelet_count(&self) -> usize {
+        self.facelet_colors.len()
+    }
+
+    pub fn facelet_colors(&self) -> &[String] {
+        &self.facelet_colors
     }
 
     pub fn identity(&self) -> Permutation {
         Permutation {
             // Map every value to itself
-            mapping: OnceCell::from((0..self.facelet_count).collect::<Vec<_>>()),
+            mapping: OnceCell::from((0..self.facelet_count()).collect::<Vec<_>>()),
             cycles: OnceCell::new(),
-            facelet_count: self.facelet_count,
+            facelet_count: self.facelet_count(),
         }
     }
 
     pub fn generators(&self) -> impl Iterator<Item = (&str, &Permutation)> {
         self.generators.iter().map(|(k, v)| (&**k, v))
-    }
-
-    pub fn facelet_count(&self) -> usize {
-        self.facelet_count
     }
 
     pub fn get_generator(&self, name: &str) -> Option<&Permutation> {
@@ -169,10 +178,26 @@ impl Permutation {
     }
 }
 
+#[derive(PartialEq, Eq, Debug)]
+pub struct CycleGeneratorSubcycle {
+    pub(crate) facelet_cycle: Vec<usize>,
+    pub(crate) chromatic_order: U512,
+}
+
+impl CycleGeneratorSubcycle {
+    pub fn facelet_cycle(&self) -> &[usize] {
+        &self.facelet_cycle
+    }
+
+    pub fn chromatic_order(&self) -> U512 {
+        self.chromatic_order
+    }
+}
+
 pub struct CycleGenerator {
     pub(crate) generator_sequence: Vec<String>,
     pub(crate) permutation: Permutation,
-    pub(crate) unshared_cycles: Vec<Vec<usize>>,
+    pub(crate) unshared_cycles: Vec<CycleGeneratorSubcycle>,
     pub(crate) order: U512,
 }
 
@@ -185,7 +210,7 @@ impl CycleGenerator {
         &self.permutation
     }
 
-    pub fn unshared_cycles(&self) -> &[Vec<usize>] {
+    pub fn unshared_cycles(&self) -> &[CycleGeneratorSubcycle] {
         &self.unshared_cycles
     }
 
