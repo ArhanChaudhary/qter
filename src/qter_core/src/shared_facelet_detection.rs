@@ -1,8 +1,11 @@
-use std::{cell::RefCell, collections::HashSet};
+use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use bnum::types::U512;
 
-use crate::architectures::{CycleGenerator, CycleGeneratorSubcycle, Permutation, PermutationGroup};
+use crate::{
+    architectures::{CycleGenerator, CycleGeneratorSubcycle, Permutation, PermutationGroup},
+    discrete_math::lcm,
+};
 
 #[derive(Debug)]
 enum UnionFindEntry {
@@ -110,25 +113,6 @@ impl UnionFindOfCycles {
     }
 }
 
-fn gcd(mut a: U512, mut b: U512) -> U512 {
-    loop {
-        if b == U512::ZERO {
-            return a;
-        }
-
-        let rem = a.rem_euclid(b);
-        a = b;
-        b = rem;
-    }
-}
-
-fn lcm(a: U512, b: U512) -> U512 {
-    assert_ne!(a, U512::ZERO);
-    assert_ne!(b, U512::ZERO);
-
-    b / gcd(a, b) * a
-}
-
 fn length_of_substring_that_this_string_is_n_repeated_copies_of<'a>(
     colors: impl Iterator<Item = &'a str>,
 ) -> U512 {
@@ -152,7 +136,7 @@ fn length_of_substring_that_this_string_is_n_repeated_copies_of<'a>(
 }
 
 pub fn algorithms_to_cycle_generators(
-    group: &PermutationGroup,
+    group: Rc<PermutationGroup>,
     algorithms: &[Vec<String>],
 ) -> Result<(Vec<CycleGenerator>, Vec<usize>), String> {
     let mut permutations = vec![];
@@ -198,6 +182,7 @@ pub fn algorithms_to_cycle_generators(
                         .iter()
                         .fold(U512::ONE, |a, v| lcm(a, v.chromatic_order)),
                     unshared_cycles,
+                    group: Rc::clone(&group),
                 }
             })
             .collect(),
@@ -209,26 +194,9 @@ pub fn algorithms_to_cycle_generators(
 mod tests {
     use bnum::types::U512;
 
-    use crate::{
-        architectures::{CycleGeneratorSubcycle, PuzzleDefinition},
-        shared_facelet_detection::{gcd, lcm},
-    };
+    use crate::architectures::{CycleGeneratorSubcycle, PuzzleDefinition};
 
     use super::length_of_substring_that_this_string_is_n_repeated_copies_of;
-
-    #[test]
-    fn lcm_and_gcd() {
-        let _lcm = |a, b| lcm(U512::from_digit(a), U512::from_digit(b)).digits()[0];
-        let _gcd = |a, b| gcd(U512::from_digit(a), U512::from_digit(b)).digits()[0];
-
-        assert_eq!(_gcd(3, 5), 1);
-        assert_eq!(_gcd(3, 6), 3);
-        assert_eq!(_gcd(4, 6), 2);
-
-        assert_eq!(_lcm(3, 5), 15);
-        assert_eq!(_lcm(3, 6), 6);
-        assert_eq!(_lcm(4, 6), 12);
-    }
 
     #[test]
     fn length_of_substring_whatever() {

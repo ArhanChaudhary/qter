@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use bnum::types::U512;
-use qter_core::{Instruction, Program, Span};
+use qter_core::{architectures::Puzzle, Instruction, Program, Span};
 
 enum GroupState {
     Theoretical {
@@ -9,6 +9,7 @@ enum GroupState {
         value: U512,
         order: U512,
     },
+    Puzzle(Puzzle),
 }
 
 pub enum PausedState<'s> {
@@ -62,6 +63,9 @@ impl Interpreter {
                         value: initial_states.remove(name).unwrap_or(U512::from_digit(0)),
                         order: *order,
                     });
+                }
+                qter_core::RegisterRepresentation::Puzzle(architecture) => {
+                    group_states.push(GroupState::Puzzle(Puzzle::initialize(architecture)))
                 }
             }
         }

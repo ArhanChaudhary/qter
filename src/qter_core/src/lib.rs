@@ -5,11 +5,14 @@ use std::{
 };
 
 pub mod architectures;
+pub mod discrete_math;
 mod puzzle_parser;
 mod shared_facelet_detection;
 
+use architectures::{Architecture, Permutation};
 // Use a huge integers for orders to allow crazy things like examinx
 use bnum::types::U512;
+use internment::ArcIntern;
 
 #[derive(Clone)]
 pub struct Span {
@@ -105,7 +108,7 @@ impl<T> WithSpan<T> {
 /// Corresponds to a line of the `.registers` declaration
 pub enum RegisterRepresentation {
     Theoretical { name: String, order: U512 },
-    // TODO: Registers based on a permutation group
+    Puzzle(Rc<Architecture>),
 }
 
 pub enum Instruction {
@@ -132,7 +135,10 @@ pub enum Instruction {
         register: String,
         amount: U512,
     },
-    // TODO: Addition to registers based on a permutation group
+    PermuteCube {
+        permutation: Permutation,
+        effect: Vec<(ArcIntern<String>, U512)>,
+    },
 }
 
 /// Represents a qter program

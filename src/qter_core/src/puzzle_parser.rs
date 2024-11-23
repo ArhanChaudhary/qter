@@ -180,7 +180,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
         }
 
         presets.push(match Architecture::new(Rc::clone(&group), algorithms) {
-            Ok(v) => v,
+            Ok(v) => Rc::new(v),
             Err(e) => {
                 return Err(Box::new(Error::new_from_span(
                     pest::error::ErrorVariant::CustomError { message: e },

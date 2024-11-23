@@ -1,15 +1,18 @@
 use std::{cell::OnceCell, collections::HashMap, rc::Rc};
 
-use bnum::types::U512;
+use bnum::{cast::As, types::U512};
 use internment::ArcIntern;
 use itertools::Itertools;
 
-use crate::{puzzle_parser, shared_facelet_detection::algorithms_to_cycle_generators};
+use crate::{
+    discrete_math::chinese_remainder_theorem, puzzle_parser,
+    shared_facelet_detection::algorithms_to_cycle_generators,
+};
 
 #[derive(Debug)]
 pub struct PuzzleDefinition {
     pub group: Rc<PermutationGroup>,
-    pub presets: Vec<Architecture>,
+    pub presets: Vec<Rc<Architecture>>,
 }
 
 impl PuzzleDefinition {
@@ -173,6 +176,25 @@ impl Permutation {
         })
     }
 
+    pub fn exponentiate(&mut self, power: U512) {
+        self.cycles();
+        let mut mapping = self
+            .mapping
+            .take()
+            .unwrap_or_else(|| (0..self.facelet_count).collect_vec());
+        let cycles = self.cycles();
+
+        for cycle in cycles {
+            let len = U512::from_digit(cycle.len() as u64);
+            for i in 0..cycle.len() {
+                mapping[i] = cycle[(U512::from_digit(i as u64) + power).rem(len).as_::<usize>()];
+            }
+        }
+
+        self.mapping = OnceCell::from(mapping);
+        self.cycles = OnceCell::new();
+    }
+
     fn mapping_mut(&mut self) -> &mut [usize] {
         self.mapping();
 
@@ -216,6 +238,7 @@ pub struct CycleGenerator {
     pub(crate) permutation: Permutation,
     pub(crate) unshared_cycles: Vec<CycleGeneratorSubcycle>,
     pub(crate) order: U512,
+    pub(crate) group: Rc<PermutationGroup>,
 }
 
 impl CycleGenerator {
@@ -234,6 +257,37 @@ impl CycleGenerator {
     pub fn order(&self) -> U512 {
         self.order
     }
+
+    pub fn is_solved(&self, permutation: &Permutation) -> bool {
+        let mapping = permutation.mapping();
+
+        self.unshared_cycles()
+            .iter()
+            .flat_map(|v| v.facelet_cycle())
+            .all(|v| self.group.facelet_colors()[mapping[*v]] == self.group.facelet_colors[*v])
+    }
+
+    pub fn decode(&self, permutation: &Permutation) -> U512 {
+        chinese_remainder_theorem(
+            self.unshared_cycles()
+                .iter()
+                .map(|v| {
+                    let cycle = v.facelet_cycle();
+
+                    let offset = U512::from_digit(
+                        cycle
+                            .iter()
+                            .find_position(|v| **v == permutation.mapping()[cycle[0]])
+                            .unwrap()
+                            .0 as u64,
+                    )
+                    .rem(v.chromatic_order());
+
+                    (offset, v.chromatic_order())
+                })
+                .collect_vec(),
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -248,7 +302,7 @@ impl Architecture {
         group: Rc<PermutationGroup>,
         algorithms: Vec<Vec<String>>,
     ) -> Result<Architecture, String> {
-        let processed = algorithms_to_cycle_generators(&group, &algorithms)?;
+        let processed = algorithms_to_cycle_generators(Rc::clone(&group), &algorithms)?;
 
         Ok(Architecture {
             group,
@@ -270,12 +324,19 @@ impl Architecture {
     }
 }
 
-pub struct Cube {
+pub struct Puzzle {
     architecture: Rc<Architecture>,
     state: Permutation,
 }
 
-impl Cube {
+impl Puzzle {
+    pub fn initialize(architecture: Rc<Architecture>) -> Puzzle {
+        Puzzle {
+            state: architecture.group.identity(),
+            architecture,
+        }
+    }
+
     pub fn architecture(&self) -> &Architecture {
         &self.architecture
     }
