@@ -1,5 +1,6 @@
 use std::{collections::HashMap, rc::Rc};
 
+use internment::ArcIntern;
 use pest::{error::Error, Parser};
 use pest_derive::Parser;
 
@@ -47,15 +48,15 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
         colors_map.insert(color.to_owned(), facelets);
     }
 
-    let empty_string = Rc::new(String::new());
+    let empty_string = ArcIntern::new(String::new());
     let mut colors = vec![empty_string; max_facelet - min_facelet + 1];
 
     // Make facelets zero based
     for (color, facelets) in colors_map {
-        let color = Rc::new(color);
+        let color = ArcIntern::new(color);
 
         for facelet in facelets {
-            colors[facelet - min_facelet] = Rc::clone(&color);
+            colors[facelet - min_facelet] = ArcIntern::clone(&color);
         }
     }
 
@@ -107,7 +108,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
 
         permutation.facelet_count = max_facelet - min_facelet + 1;
 
-        generators.insert(name.to_owned(), permutation);
+        generators.insert(ArcIntern::from_ref(name), permutation);
     }
 
     let derived_pair = parsed.next().unwrap().into_inner();
@@ -118,7 +119,8 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
         let name = pairs.next().unwrap().as_str();
 
         let permutation_name = pairs.next().unwrap();
-        let mut permutation = match generators.get(permutation_name.as_str()) {
+        let mut permutation = match generators.get(&ArcIntern::from_ref(permutation_name.as_str()))
+        {
             Some(v) => v.to_owned(),
             None => {
                 return Err(Box::new(Error::new_from_span(
@@ -134,7 +136,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
         };
 
         for pair in pairs {
-            let next_permutation = match generators.get(pair.as_str()) {
+            let next_permutation = match generators.get(&ArcIntern::from_ref(pair.as_str())) {
                 Some(v) => v,
                 None => {
                     return Err(Box::new(Error::new_from_span(
@@ -152,7 +154,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
             permutation.compose(next_permutation);
         }
 
-        generators.insert(name.to_owned(), permutation);
+        generators.insert(ArcIntern::from_ref(name), permutation);
     }
 
     let group = Rc::new(PermutationGroup::new(colors, generators));

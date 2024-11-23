@@ -8,3 +8,4 @@ bnum = "0.12"
 itertools = "0.13"
 pest = "2.7"
 pest_derive = "2.7"
+internment = { version = "0.8", features = [ "arc" ] }

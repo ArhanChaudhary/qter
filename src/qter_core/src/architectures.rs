@@ -1,6 +1,7 @@
 use std::{cell::OnceCell, collections::HashMap, rc::Rc};
 
 use bnum::types::U512;
+use internment::ArcIntern;
 use itertools::Itertools;
 
 use crate::{puzzle_parser, shared_facelet_detection::algorithms_to_cycle_generators};
@@ -19,14 +20,14 @@ impl PuzzleDefinition {
 
 #[derive(Clone, Debug)]
 pub struct PermutationGroup {
-    facelet_colors: Vec<Rc<String>>,
-    generators: HashMap<String, Permutation>,
+    facelet_colors: Vec<ArcIntern<String>>,
+    generators: HashMap<ArcIntern<String>, Permutation>,
 }
 
 impl PermutationGroup {
     pub fn new(
-        facelet_colors: Vec<Rc<String>>,
-        mut generators: HashMap<String, Permutation>,
+        facelet_colors: Vec<ArcIntern<String>>,
+        mut generators: HashMap<ArcIntern<String>, Permutation>,
     ) -> PermutationGroup {
         assert!(!generators.is_empty());
 
@@ -48,7 +49,7 @@ impl PermutationGroup {
         self.facelet_colors.len()
     }
 
-    pub fn facelet_colors(&self) -> &[Rc<String>] {
+    pub fn facelet_colors(&self) -> &[ArcIntern<String>] {
         &self.facelet_colors
     }
 
@@ -62,11 +63,11 @@ impl PermutationGroup {
     }
 
     pub fn generators(&self) -> impl Iterator<Item = (&str, &Permutation)> {
-        self.generators.iter().map(|(k, v)| (&**k, v))
+        self.generators.iter().map(|(k, v)| (&***k, v))
     }
 
     pub fn get_generator(&self, name: &str) -> Option<&Permutation> {
-        self.generators.get(name)
+        self.generators.get(&ArcIntern::from_ref(name))
     }
 
     /// If any of the generator names don't exist, it will compose all of the generators before it and return the name of the generator that doesn't exist.
@@ -76,7 +77,10 @@ impl PermutationGroup {
         generators: &'a [S],
     ) -> Result<(), &'a S> {
         for generator in generators {
-            let generator = match self.generators.get(generator.as_ref()) {
+            let generator = match self
+                .generators
+                .get(&ArcIntern::from_ref(generator.as_ref()))
+            {
                 Some(idx) => idx,
                 None => return Err(generator),
             };
