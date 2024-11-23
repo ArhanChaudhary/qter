@@ -182,7 +182,7 @@ pub fn algorithms_to_cycle_generators(
 
                     let chromatic_order =
                         length_of_substring_that_this_string_is_n_repeated_copies_of(
-                            cycle.iter().map(|v| &*group.facelet_colors()[*v]),
+                            cycle.iter().map(|v| &**group.facelet_colors()[*v]),
                         );
 
                     unshared_cycles.push(CycleGeneratorSubcycle {
@@ -207,19 +207,14 @@ pub fn algorithms_to_cycle_generators(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use bnum::types::U512;
 
     use crate::{
-        architectures::{CycleGeneratorSubcycle, Permutation, PermutationGroup},
+        architectures::{CycleGeneratorSubcycle, PuzzleDefinition},
         shared_facelet_detection::{gcd, lcm},
     };
 
-    use super::{
-        algorithms_to_cycle_generators,
-        length_of_substring_that_this_string_is_n_repeated_copies_of,
-    };
+    use super::length_of_substring_that_this_string_is_n_repeated_copies_of;
 
     #[test]
     fn lcm_and_gcd() {
@@ -272,58 +267,56 @@ mod tests {
 
     #[test]
     fn simple() {
-        let permutation_group = PermutationGroup::new(
-            [
-                "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "K", "K",
-            ]
-            .iter()
-            .map(|v| (**v).to_owned())
-            .collect(),
-            HashMap::from_iter(vec![
-                (
-                    "A".to_owned(),
-                    Permutation::from_cycles(vec![vec![0, 1, 2]]),
-                ),
-                (
-                    "B".to_owned(),
-                    Permutation::from_cycles(vec![vec![3, 4, 5]]),
-                ),
-                (
-                    "C".to_owned(),
-                    Permutation::from_cycles(vec![vec![5, 6, 7]]),
-                ),
-                ("D".to_owned(), Permutation::from_cycles(vec![vec![8, 9]])),
-                (
-                    "E".to_owned(),
-                    Permutation::from_cycles(vec![vec![10, 11, 12]]),
-                ),
-            ]),
-        );
+        let PuzzleDefinition { group: _, presets } = PuzzleDefinition::parse(
+            "
+                COLORS
 
-        let (algorithms, shared) = algorithms_to_cycle_generators(
-            &permutation_group,
-            &[
-                vec!["A".to_owned(), "B".to_owned()],
-                vec!["C".to_owned(), "D".to_owned(), "E".to_owned()],
-            ],
+                A -> 1
+                B -> 2
+                C -> 3
+                D -> 4
+                E -> 5
+                F -> 6
+                G -> 7
+                H -> 8
+                I -> 9
+                J -> 10
+                K -> 11, 12, 13
+
+                GENERATORS
+
+                A = (1, 2, 3)
+                B = (4, 5, 6)
+                C = (6, 7, 8)
+                D = (9, 10)
+                E = (11, 12, 13)
+
+                DERIVED
+
+                PRESETS
+
+                A B / C D E
+            ",
         )
         .unwrap();
 
+        let preset = &presets[0];
+
         for i in 3..=7 {
-            assert!(shared.contains(&i));
+            assert!(preset.shared_facelets().contains(&i));
         }
 
-        assert_eq!(algorithms[0].order, U512::from_digit(3));
+        assert_eq!(preset.registers()[0].order, U512::from_digit(3));
         assert_eq!(
-            algorithms[0].unshared_cycles,
+            preset.registers()[0].unshared_cycles,
             vec![CycleGeneratorSubcycle {
                 facelet_cycle: vec![0, 1, 2],
                 chromatic_order: U512::from_digit(3),
             }]
         );
-        assert_eq!(algorithms[1].order, U512::from_digit(2));
+        assert_eq!(preset.registers()[1].order, U512::from_digit(2));
         assert_eq!(
-            algorithms[1].unshared_cycles,
+            preset.registers()[1].unshared_cycles,
             vec![
                 CycleGeneratorSubcycle {
                     facelet_cycle: vec![8, 9],

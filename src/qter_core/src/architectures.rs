@@ -3,17 +3,29 @@ use std::{cell::OnceCell, collections::HashMap, rc::Rc};
 use bnum::types::U512;
 use itertools::Itertools;
 
-use crate::shared_facelet_detection::algorithms_to_cycle_generators;
+use crate::{puzzle_parser, shared_facelet_detection::algorithms_to_cycle_generators};
+
+#[derive(Debug)]
+pub struct PuzzleDefinition {
+    pub group: Rc<PermutationGroup>,
+    pub presets: Vec<Architecture>,
+}
+
+impl PuzzleDefinition {
+    pub fn parse(spec: &str) -> Result<PuzzleDefinition, String> {
+        puzzle_parser::parse(spec).map_err(|v| v.to_string())
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct PermutationGroup {
-    facelet_colors: Vec<String>,
+    facelet_colors: Vec<Rc<String>>,
     generators: HashMap<String, Permutation>,
 }
 
 impl PermutationGroup {
     pub fn new(
-        facelet_colors: Vec<String>,
+        facelet_colors: Vec<Rc<String>>,
         mut generators: HashMap<String, Permutation>,
     ) -> PermutationGroup {
         assert!(!generators.is_empty());
@@ -36,7 +48,7 @@ impl PermutationGroup {
         self.facelet_colors.len()
     }
 
-    pub fn facelet_colors(&self) -> &[String] {
+    pub fn facelet_colors(&self) -> &[Rc<String>] {
         &self.facelet_colors
     }
 
@@ -78,7 +90,7 @@ impl PermutationGroup {
 
 #[derive(Clone, Debug)]
 pub struct Permutation {
-    facelet_count: usize,
+    pub(crate) facelet_count: usize,
     // One of these two must be defined
     mapping: OnceCell<Vec<usize>>,
     cycles: OnceCell<Vec<Vec<usize>>>,
@@ -194,6 +206,7 @@ impl CycleGeneratorSubcycle {
     }
 }
 
+#[derive(Debug)]
 pub struct CycleGenerator {
     pub(crate) generator_sequence: Vec<String>,
     pub(crate) permutation: Permutation,
@@ -219,6 +232,7 @@ impl CycleGenerator {
     }
 }
 
+#[derive(Debug)]
 pub struct Architecture {
     group: Rc<PermutationGroup>,
     cycle_generators: Vec<CycleGenerator>,
