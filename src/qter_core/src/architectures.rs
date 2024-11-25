@@ -19,6 +19,64 @@ impl PuzzleDefinition {
     pub fn parse(spec: &str) -> Result<PuzzleDefinition, String> {
         puzzle_parser::parse(spec).map_err(|v| v.to_string())
     }
+
+    // If they want the cycles in a different order, create a new architecture with the cycles shuffled
+    fn adapt_architecture(
+        architecture: &Rc<Architecture>,
+        orders: &[U512],
+    ) -> Option<Rc<Architecture>> {
+        let mut used = vec![false; orders.len()];
+        let mut swizzle = vec![0; orders.len()];
+
+        for (i, order) in orders.iter().enumerate() {
+            let mut found_one = false;
+
+            for (j, cycle) in architecture.cycle_generators.iter().enumerate() {
+                if !used[j] && cycle.order() == *order {
+                    used[j] = true;
+                    found_one = true;
+                    swizzle[i] = j;
+                }
+            }
+
+            if !found_one {
+                return None;
+            }
+        }
+
+        if swizzle.iter().enumerate().all(|(v, i)| v == *i) {
+            return Some(Rc::clone(architecture));
+        }
+
+        let mut new_arch = Architecture::clone(architecture);
+
+        for i in 0..swizzle.len() {
+            new_arch.cycle_generators.swap(i, swizzle[i]);
+
+            for j in i..swizzle.len() {
+                if i == swizzle[j] {
+                    swizzle[j] = swizzle[i];
+                    break;
+                }
+            }
+        }
+
+        Some(Rc::new(new_arch))
+    }
+
+    pub fn get_preset(&self, orders: &[U512]) -> Option<Rc<Architecture>> {
+        for preset in &self.presets {
+            if preset.cycle_generators.len() != orders.len() {
+                continue;
+            }
+
+            if let Some(arch) = Self::adapt_architecture(preset, orders) {
+                return Some(arch);
+            }
+        }
+
+        None
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -216,7 +274,7 @@ impl Permutation {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct CycleGeneratorSubcycle {
     pub(crate) facelet_cycle: Vec<usize>,
     pub(crate) chromatic_order: U512,
@@ -232,7 +290,7 @@ impl CycleGeneratorSubcycle {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CycleGenerator {
     pub(crate) generator_sequence: Vec<String>,
     pub(crate) permutation: Permutation,
@@ -290,7 +348,7 @@ impl CycleGenerator {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Architecture {
     group: Rc<PermutationGroup>,
     cycle_generators: Vec<CycleGenerator>,
@@ -326,20 +384,47 @@ impl Architecture {
 
 #[cfg(test)]
 mod tests {
-    use bnum::types::U512;
+    use std::rc::Rc;
 
-    use super::PuzzleDefinition;
+    use bnum::types::U512;
+    use itertools::Itertools;
+
+    use super::{Architecture, PuzzleDefinition};
 
     #[test]
     fn three_by_three() {
         let cube = PuzzleDefinition::parse(include_str!("../puzzles/3x3.txt")).unwrap();
 
-        for (preset, expected) in cube
-            .presets
-            .iter()
-            .zip([[4, 4], [90, 90], [210, 24]].iter())
+        for (arch, expected) in [
+            (&["U", "D"][..], &[4, 4][..]),
+            (
+                &["R' F' L U' L U L F U' R", "U F R' D' R2 F R' U' D"],
+                &[90, 90],
+            ),
+            (
+                &["U R U' D2 B", "B U2 B' L' U2 B U L' B L B2 L"],
+                &[210, 24],
+            ),
+            (
+                &[
+                    "U L2 B' L U' B' U2 R B' R' B L",
+                    "R2 L U' R' L2 F' D R' D L B2 D2",
+                    "L2 F2 U L' F D' F' U' L' F U D L' U'",
+                ],
+                &[30, 30, 30],
+            ),
+        ]
+        .iter()
         {
-            for (register, expected) in preset.cycle_generators.iter().zip(expected.iter()) {
+            let arch = Architecture::new(
+                Rc::clone(&cube.group),
+                arch.iter()
+                    .map(|v| v.split(" ").map(|v| v.to_owned()).collect_vec())
+                    .collect_vec(),
+            )
+            .unwrap();
+
+            for (register, expected) in arch.cycle_generators.iter().zip(expected.iter()) {
                 assert_eq!(register.order(), U512::from_digit(*expected as u64));
             }
         }
