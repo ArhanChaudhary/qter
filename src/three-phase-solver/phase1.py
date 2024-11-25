@@ -41,6 +41,7 @@ CycleCombination = collections.namedtuple(
         "used_edge_count",
         "used_corner_count",
         "order_product",
+        "share_order",
         "cycles",
     ],
 )
@@ -63,6 +64,8 @@ def integer_partitions(n):
 
     Taken from <https://stackoverflow.com/a/10036764/12230735>.
     """
+    if n == 0:
+        return {()}
     answer = {(n,)}
     for x in range(1, n):
         for y in integer_partitions(n - x):
@@ -133,7 +136,6 @@ def redundant_cycle_pairing(not_redundant, maybe_redundant):
             break
     if not same_orders:
         return redundant_order_pairing
-    return False
     # A cycle pairing is redundant if first_cycle and second_cycle share the
     # same edge and corner partitions as a non redundant cycle pairing,
     # optionally swapped. We also need to check if they both share the same
@@ -148,23 +150,17 @@ def redundant_cycle_pairing(not_redundant, maybe_redundant):
         )
     ):
         return False
-    maybe_redundant_counter = collections.Counter(
-        maybe_redundant_cycle.share for maybe_redundant_cycle in maybe_redundant.cycles
-    )
-    not_redundant_counter = collections.Counter(
-        not_redundant_cycle.share for not_redundant_cycle in not_redundant.cycles
-    )
-    redundant_partition_pairing = maybe_redundant_counter == not_redundant_counter
-    return redundant_partition_pairing
+    same_share_order = maybe_redundant.share_order == not_redundant.share_order
+    return same_share_order
 
 
-def all_cycle_combinations(num_cycles=2):
+def all_cycle_combinations(num_cycles):
     """
     Finds all cycle structure pairings on the Rubik's cube.
     """
     cycle_combinations = []
     for used_edge_count, used_corner_count in itertools.product(
-        range(2, EDGES + 1), range(2, CORNERS + 1)
+        range(EDGES + 1), range(CORNERS + 1)
     ):
         for partition_edge_counts, partition_corner_counts in itertools.product(
             integer_partitions(used_edge_count),
@@ -204,7 +200,8 @@ def all_cycle_combinations(num_cycles=2):
                         order_product=math.prod(
                             map(operator.attrgetter("order"), shared_cycle_combination)
                         ),
-                        cycles=valid_share_order(
+                        share_order=valid_share_order(shared_cycle_combination),
+                        cycles=tuple(
                             sorted(
                                 shared_cycle_combination,
                                 key=lambda cycle: (
@@ -237,10 +234,6 @@ def all_cycle_combinations(num_cycles=2):
                 #     if len(x) != 0 and x[0].share == (False, False)
                 # )
                 cycle_combinations.extend(shared_cycle_combinations)
-    cycle_combinations.sort(
-        key=operator.attrgetter("order_product"),
-        reverse=True,
-    )
     return cycle_combinations
 
 
@@ -305,29 +298,18 @@ def recursive_shared_cycle_combinations(cycle_cubie_counts, share_edge, share_co
     )
 
 
-# TODO: use this
 def valid_share_order(shared_cycle_combination):
-    return tuple(shared_cycle_combination)
-    share_edge = False
-    share_corner = False
-    share_order = list(range(len(shared_cycle_combination)))
-    for i in range(len(shared_cycle_combination)):
-        for j in range(i, len(shared_cycle_combination)):
-            if shared_cycle_combination[share_order[j]].share <= (
-                share_edge,
-                share_corner,
-            ):
-                share_edge |= (
-                    1 in shared_cycle_combination[share_order[i]].edge_partition
+    # TODO: make this fix in place
+    return tuple(
+        zip(
+            *(
+                sorted(i)
+                for i in zip(
+                    *map(operator.attrgetter("share"), shared_cycle_combination)
                 )
-                share_corner |= (
-                    1 in shared_cycle_combination[share_order[i]].corner_partition
-                )
-                share_order[i], share_order[j] = share_order[j], share_order[i]
-                break
-        if share_edge and share_corner:
-            break
-    return tuple(share_order)
+            )
+        )
+    )
 
 
 def all_cycle_structures(cycle):
@@ -475,14 +457,14 @@ def highest_order_cycles_from_cubie_counts(
     cycles = []
     if edge_count == 0:
         assert corner_count != 0
-        edge_partitions = ((),)
-    elif share_edge:
+        assert not share_edge
+    if share_edge:
         edge_partitions = shared_integer_partitions(edge_count)
     else:
         edge_partitions = integer_partitions(edge_count)
     if corner_count == 0:
-        corner_partitions = ((),)
-    elif share_corner:
+        assert not share_corner
+    if share_corner:
         corner_partitions = shared_integer_partitions(corner_count)
     else:
         corner_partitions = integer_partitions(corner_count)
@@ -674,6 +656,14 @@ def filter_redundant_cycle_combinations(cycle_combinations):
     """
     Removes all cycle pairings that fail the redundant_cycle_pairing test.
     """
+    # TODO: Could you sort the cycles by the order of the first cycle, iterate through and only keep the ones with the highest second cycle, and then do the same thing for the second cycle only keeping the ones with the highest first cycle?
+    cycle_combinations.sort(
+        key=lambda cycle_combination: (
+            cycle_combination.order_product,
+            *map(operator.attrgetter("order"), cycle_combination.cycles),
+        ),
+        reverse=True,
+    )
     filtered_cycle_combinations = []
     for maybe_redundant in cycle_combinations:
         if all(
@@ -758,11 +748,11 @@ def group_cycle_combinations(cycle_combinations):
     return grouped_cycle_combinations
 
 
-def main():
+def main(num_cycles):
     from timeit import default_timer as timer
 
     a = timer()
-    all_cycle_combinations_result = all_cycle_combinations(2)
+    all_cycle_combinations_result = all_cycle_combinations(num_cycles)
     b = timer()
     print(b - a)
     filtered_cycle_combinations = filter_redundant_cycle_combinations(
@@ -774,4 +764,4 @@ def main():
 
 if __name__ == "__main__":
     with open("./output.txt", "w") as f:
-        f.write(f"Cycle = 1\nCycleCombination = 1\n{main()}")
+        f.write(f"Cycle = 1\nCycleCombination = 1\n{main(4)}")
