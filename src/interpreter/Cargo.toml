@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 qter_core = { path = "../qter_core" }
 bnum = "0.12"
+internment = { version = "0.8", features = [ "arc" ] }

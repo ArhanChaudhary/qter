@@ -180,6 +180,7 @@ name = "interpreter"
 version = "0.1.0"
 dependencies = [
  "bnum",
+ "internment",
  "qter_core",
 ]
 

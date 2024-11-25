@@ -323,25 +323,3 @@ impl Architecture {
         &self.shared_facelets
     }
 }
-
-pub struct Puzzle {
-    architecture: Rc<Architecture>,
-    state: Permutation,
-}
-
-impl Puzzle {
-    pub fn initialize(architecture: Rc<Architecture>) -> Puzzle {
-        Puzzle {
-            state: architecture.group.identity(),
-            architecture,
-        }
-    }
-
-    pub fn architecture(&self) -> &Architecture {
-        &self.architecture
-    }
-
-    pub fn state(&self) -> &Permutation {
-        &self.state
-    }
-}

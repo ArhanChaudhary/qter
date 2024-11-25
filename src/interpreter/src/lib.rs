@@ -1,7 +1,38 @@
-use std::collections::{HashMap, VecDeque};
+use std::{
+    collections::{HashMap, VecDeque},
+    rc::Rc,
+};
 
 use bnum::types::U512;
-use qter_core::{architectures::Puzzle, Instruction, Program, Span};
+use internment::ArcIntern;
+use qter_core::{
+    architectures::{Architecture, Permutation},
+    Instruction, Program, Span,
+};
+
+pub struct Puzzle {
+    architecture: Rc<Architecture>,
+    register_names: Vec<String>,
+    state: Permutation,
+}
+
+impl Puzzle {
+    pub fn initialize(architecture: Rc<Architecture>, register_names: Vec<String>) -> Puzzle {
+        Puzzle {
+            state: architecture.group().identity(),
+            architecture,
+            register_names,
+        }
+    }
+
+    pub fn architecture(&self) -> &Architecture {
+        &self.architecture
+    }
+
+    pub fn state(&self) -> &Permutation {
+        &self.state
+    }
+}
 
 enum GroupState {
     Theoretical {
@@ -41,11 +72,24 @@ pub struct Interpreter {
 pub enum ActionPerformed {
     None,
     Paused,
-    Goto { location: usize },
-    FailedSolvedGoto { register: String },
-    SucceededSolvedGoto { register: String, location: usize },
-    AddToTheoretical { register: String, amt: U512 },
-    // TODO: ExecutedAlgorithm
+    Goto {
+        location: usize,
+    },
+    FailedSolvedGoto {
+        register: String,
+    },
+    SucceededSolvedGoto {
+        register: String,
+        location: usize,
+    },
+    AddToTheoretical {
+        register: String,
+        amt: U512,
+    },
+    ExecutedAlgorithm {
+        permutation: Permutation,
+        effect: Vec<(ArcIntern<String>, U512)>,
+    }, // TODO: ExecutedAlgorithm
 }
 
 impl Interpreter {
@@ -64,9 +108,13 @@ impl Interpreter {
                         order: *order,
                     });
                 }
-                qter_core::RegisterRepresentation::Puzzle(architecture) => {
-                    group_states.push(GroupState::Puzzle(Puzzle::initialize(architecture)))
-                }
+                qter_core::RegisterRepresentation::Puzzle {
+                    architecture,
+                    register_names,
+                } => group_states.push(GroupState::Puzzle(Puzzle::initialize(
+                    Rc::clone(architecture),
+                    register_names.to_owned(),
+                ))),
             }
         }
 
@@ -102,7 +150,7 @@ impl Interpreter {
         }
     }
 
-    fn is_register_solved(group_states: &[GroupState], reg: &str) -> bool {
+    fn is_register_solved(group_states: &[GroupState], which_reg: &str) -> bool {
         for group_state in group_states {
             match group_state {
                 GroupState::Theoretical {
@@ -110,17 +158,24 @@ impl Interpreter {
                     value,
                     order: _,
                 } => {
-                    if name == reg {
+                    if name == which_reg {
                         return value.is_zero();
                     }
                 }
+                GroupState::Puzzle(puzzle) => {
+                    for (i, name) in puzzle.register_names.iter().enumerate() {
+                        if name == which_reg {
+                            return puzzle.architecture.registers()[i].is_solved(&puzzle.state);
+                        }
+                    }
+                }
             }
         }
 
-        panic!("Failed to find register {reg}!");
+        panic!("Failed to find register {which_reg}!");
     }
 
-    fn decode_register(group_states: &[GroupState], reg: &str) -> U512 {
+    fn decode_register(group_states: &[GroupState], which_reg: &str) -> U512 {
         for group_state in group_states {
             match group_state {
                 GroupState::Theoretical {
@@ -128,21 +183,28 @@ impl Interpreter {
                     value,
                     order: _,
                 } => {
-                    if name == reg {
+                    if name == which_reg {
                         return *value;
+                    }
+                }
+                GroupState::Puzzle(puzzle) => {
+                    for (i, name) in puzzle.register_names.iter().enumerate() {
+                        if name == which_reg {
+                            return puzzle.architecture.registers()[i].decode(&puzzle.state);
+                        }
                     }
                 }
             }
         }
 
-        panic!("Failed to find register {reg}!");
+        panic!("Failed to find register {which_reg}!");
     }
 
-    fn add_num_to(group_states: &mut [GroupState], reg: &str, amt: U512) {
+    fn add_num_to(group_states: &mut [GroupState], which_reg: &str, amt: U512) {
         for group_state in group_states {
             match group_state {
                 GroupState::Theoretical { name, value, order } => {
-                    if name == reg {
+                    if name == which_reg {
                         assert!(amt < *order);
 
                         *value += amt;
@@ -154,10 +216,47 @@ impl Interpreter {
                         return;
                     }
                 }
+                GroupState::Puzzle(puzzle) => {
+                    for (i, name) in puzzle.register_names.iter().enumerate() {
+                        if name == which_reg {
+                            let mut perm =
+                                puzzle.architecture.registers()[i].permutation().to_owned();
+
+                            perm.exponentiate(amt);
+
+                            puzzle.state.compose(&perm);
+
+                            return;
+                        }
+                    }
+                }
             }
         }
 
-        panic!("Failed to find register {reg}!");
+        panic!("Failed to find register {which_reg}!");
+    }
+
+    fn compose_into(group_states: &mut [GroupState], which_reg: &str, permutation: &Permutation) {
+        for group_state in group_states {
+            match group_state {
+                GroupState::Theoretical {
+                    name: _,
+                    value: _,
+                    order: _,
+                } => continue,
+                GroupState::Puzzle(puzzle) => {
+                    for name in &puzzle.register_names {
+                        if name == which_reg {
+                            puzzle.state.compose(permutation);
+
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        panic!("Failed to find register {which_reg}!");
     }
 
     /// Execute one instruction
@@ -230,6 +329,19 @@ impl Interpreter {
                 ActionPerformed::AddToTheoretical {
                     register: register.to_owned(),
                     amt: *amount,
+                }
+            }
+            Instruction::PermuteCube {
+                permutation,
+                effect,
+            } => {
+                let name = &effect[0].0;
+
+                Self::compose_into(&mut self.group_states, name, permutation);
+
+                ActionPerformed::ExecutedAlgorithm {
+                    permutation: permutation.to_owned(),
+                    effect: effect.to_owned(),
                 }
             }
         }

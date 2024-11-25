@@ -107,8 +107,14 @@ impl<T> WithSpan<T> {
 ///
 /// Corresponds to a line of the `.registers` declaration
 pub enum RegisterRepresentation {
-    Theoretical { name: String, order: U512 },
-    Puzzle(Rc<Architecture>),
+    Theoretical {
+        name: String,
+        order: U512,
+    },
+    Puzzle {
+        architecture: Rc<Architecture>,
+        register_names: Vec<String>,
+    },
 }
 
 pub enum Instruction {
@@ -137,6 +143,7 @@ pub enum Instruction {
     },
     PermuteCube {
         permutation: Permutation,
+        /// Composing the algorithms for each of the registers must give the same result as applying `permutation`
         effect: Vec<(ArcIntern<String>, U512)>,
     },
 }
