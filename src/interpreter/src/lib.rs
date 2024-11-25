@@ -89,7 +89,7 @@ pub enum ActionPerformed {
     ExecutedAlgorithm {
         permutation: Permutation,
         effect: Vec<(ArcIntern<String>, U512)>,
-    }, // TODO: ExecutedAlgorithm
+    },
 }
 
 impl Interpreter {

@@ -36,3 +36,4 @@ PRESETS
 
 U / D
 R' F' L U' L U L F U' R / U F R' D' R2 F R' U' D
+U R U' D2 B / B U2 B' L' U2 B U L' B L B2 L

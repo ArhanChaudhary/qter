@@ -323,3 +323,25 @@ impl Architecture {
         &self.shared_facelets
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use bnum::types::U512;
+
+    use super::PuzzleDefinition;
+
+    #[test]
+    fn three_by_three() {
+        let cube = PuzzleDefinition::parse(include_str!("../puzzles/3x3.txt")).unwrap();
+
+        for (preset, expected) in cube
+            .presets
+            .iter()
+            .zip([[4, 4], [90, 90], [210, 24]].iter())
+        {
+            for (register, expected) in preset.cycle_generators.iter().zip(expected.iter()) {
+                assert_eq!(register.order(), U512::from_digit(*expected as u64));
+            }
+        }
+    }
+}

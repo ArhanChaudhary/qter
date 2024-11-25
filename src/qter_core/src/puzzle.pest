@@ -1,6 +1,6 @@
 WHITESPACE = _{ " " }
 
-description = { lb ~ colors ~ generators ~ derived ~ presets }
+description = { lb? ~ colors ~ generators ~ derived ~ presets }
 
 lb = _{ "\n"+ }
 ident = @{ ( !(WHITESPACE | "\n") ~ ANY )+ }
