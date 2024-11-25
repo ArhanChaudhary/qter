@@ -12,7 +12,6 @@ mod shared_facelet_detection;
 use architectures::{Architecture, Permutation};
 // Use a huge integers for orders to allow crazy things like examinx
 use bnum::types::U512;
-use internment::ArcIntern;
 
 #[derive(Clone)]
 pub struct Span {
@@ -103,18 +102,46 @@ impl<T> WithSpan<T> {
     }
 }
 
-/// Represents a collection of registers, each represented in a particular group structuree
-///
-/// Corresponds to a line of the `.registers` declaration
-pub enum RegisterRepresentation {
-    Theoretical {
-        name: String,
-        order: U512,
-    },
-    Puzzle {
-        architecture: Rc<Architecture>,
-        register_names: Vec<String>,
-    },
+#[derive(Clone, Debug)]
+pub struct PermuteCube {
+    cube_idx: usize,
+    permutation: Permutation,
+    /// Composing the algorithms for each of the registers must give the same result as applying `permutation`
+    pub effect: Vec<(usize, U512)>,
+}
+
+impl PermuteCube {
+    pub fn new(arch: &Architecture, cube_idx: usize, effect: Vec<(usize, U512)>) -> PermuteCube {
+        let mut permutation = arch.group().identity();
+
+        for (register, amt) in &effect {
+            let mut perm = arch.registers()[*register].permutation.to_owned();
+
+            perm.exponentiate(*amt);
+
+            permutation.compose(&perm);
+        }
+
+        PermuteCube {
+            permutation,
+            effect,
+            cube_idx,
+        }
+    }
+
+    pub fn permutation(&self) -> &Permutation {
+        &self.permutation
+    }
+
+    pub fn cube_idx(&self) -> usize {
+        self.cube_idx
+    }
+}
+
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+pub enum RegisterReference {
+    Theoretical { idx: usize },
+    Puzzle { idx: usize, which_register: usize },
 }
 
 pub enum Instruction {
@@ -123,33 +150,30 @@ pub enum Instruction {
     },
     SolvedGoto {
         instruction_idx: usize,
-        register: String,
+        register: RegisterReference,
     },
     Input {
         message: String,
-        register: String,
+        register: RegisterReference,
     },
     Halt {
         message: String,
-        register: String,
+        register: RegisterReference,
     },
     Print {
         message: String,
-        register: String,
+        register: RegisterReference,
     },
     AddTheoretical {
-        register: String,
+        register: usize,
         amount: U512,
     },
-    PermuteCube {
-        permutation: Permutation,
-        /// Composing the algorithms for each of the registers must give the same result as applying `permutation`
-        effect: Vec<(ArcIntern<String>, U512)>,
-    },
+    PermuteCube(PermuteCube),
 }
 
 /// Represents a qter program
 pub struct Program {
-    pub groups: Vec<WithSpan<RegisterRepresentation>>,
+    pub theoretical: Vec<WithSpan<U512>>,
+    pub puzzles: Vec<WithSpan<Rc<Architecture>>>,
     pub instructions: Vec<WithSpan<Instruction>>,
 }

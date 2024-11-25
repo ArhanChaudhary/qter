@@ -4,24 +4,21 @@ use std::{
 };
 
 use bnum::types::U512;
-use internment::ArcIntern;
 use qter_core::{
     architectures::{Architecture, Permutation},
-    Instruction, Program, Span,
+    Instruction, PermuteCube, Program, RegisterReference, Span,
 };
 
 pub struct Puzzle {
     architecture: Rc<Architecture>,
-    register_names: Vec<String>,
     state: Permutation,
 }
 
 impl Puzzle {
-    pub fn initialize(architecture: Rc<Architecture>, register_names: Vec<String>) -> Puzzle {
+    pub fn initialize(architecture: Rc<Architecture>) -> Puzzle {
         Puzzle {
             state: architecture.group().identity(),
             architecture,
-            register_names,
         }
     }
 
@@ -34,18 +31,15 @@ impl Puzzle {
     }
 }
 
-enum GroupState {
-    Theoretical {
-        name: String,
-        value: U512,
-        order: U512,
-    },
-    Puzzle(Puzzle),
-}
-
 pub enum PausedState<'s> {
-    Halt { message: &'s str, register: &'s str },
-    Input { message: &'s str, register: &'s str },
+    Halt {
+        message: &'s str,
+        register: RegisterReference,
+    },
+    Input {
+        message: &'s str,
+        register: RegisterReference,
+    },
 }
 
 pub enum StateTy<'s> {
@@ -60,9 +54,19 @@ pub struct State<'s> {
     state_ty: StateTy<'s>,
 }
 
+struct TheoreticalState {
+    state: U512,
+    order: U512,
+}
+
+struct GroupStates {
+    theoretical_states: Vec<TheoreticalState>,
+    puzzle_states: Vec<Puzzle>,
+}
+
 /// Interprets a decoded qter program
 pub struct Interpreter {
-    group_states: Vec<GroupState>,
+    group_state: GroupStates,
     messages: VecDeque<String>,
     instruction_counter: usize,
     program: Program,
@@ -76,52 +80,113 @@ pub enum ActionPerformed {
         location: usize,
     },
     FailedSolvedGoto {
-        register: String,
+        register: RegisterReference,
     },
     SucceededSolvedGoto {
-        register: String,
+        register: RegisterReference,
         location: usize,
     },
     AddToTheoretical {
-        register: String,
+        register: usize,
         amt: U512,
     },
-    ExecutedAlgorithm {
-        permutation: Permutation,
-        effect: Vec<(ArcIntern<String>, U512)>,
-    },
+    ExecutedAlgorithm(PermuteCube),
+}
+
+impl GroupStates {
+    fn is_register_solved(&self, which_reg: RegisterReference) -> bool {
+        match which_reg {
+            RegisterReference::Theoretical { idx } => self.theoretical_states[idx].state.is_zero(),
+            RegisterReference::Puzzle {
+                idx,
+                which_register,
+            } => {
+                let puzzle = &self.puzzle_states[idx];
+                puzzle.architecture.registers()[which_register].is_solved(&puzzle.state)
+            }
+        }
+    }
+
+    fn decode_register(&self, which_reg: RegisterReference) -> U512 {
+        match which_reg {
+            RegisterReference::Theoretical { idx } => self.theoretical_states[idx].state,
+            RegisterReference::Puzzle {
+                idx,
+                which_register,
+            } => {
+                let puzzle = &self.puzzle_states[idx];
+                puzzle.architecture.registers()[which_register].decode(&puzzle.state)
+            }
+        }
+    }
+
+    fn add_num_to(&mut self, which_reg: RegisterReference, amt: U512) {
+        match which_reg {
+            RegisterReference::Theoretical { idx } => {
+                let TheoreticalState { state, order } = &mut self.theoretical_states[idx];
+
+                assert!(amt < *order);
+
+                *state += amt;
+
+                if *state >= *order {
+                    *state -= *order;
+                }
+            }
+            RegisterReference::Puzzle {
+                idx,
+                which_register,
+            } => {
+                let puzzle = &mut self.puzzle_states[idx];
+                let mut perm = puzzle.architecture.registers()[which_register]
+                    .permutation()
+                    .to_owned();
+
+                perm.exponentiate(amt);
+
+                puzzle.state.compose(&perm);
+            }
+        }
+    }
+
+    fn compose_into(&mut self, puzzle_idx: usize, permutation: &Permutation) {
+        self.puzzle_states[puzzle_idx].state.compose(permutation);
+    }
 }
 
 impl Interpreter {
     /// Create a new interpreter from a program and initial states for registers
     ///
     /// If an initial state isn't specified, it defaults to zero.
-    pub fn new(program: Program, mut initial_states: HashMap<String, U512>) -> Interpreter {
-        let mut group_states = Vec::with_capacity(program.groups.len());
+    pub fn new(
+        program: Program,
+        mut initial_states: HashMap<RegisterReference, U512>,
+    ) -> Interpreter {
+        let theoretical_states = program
+            .theoretical
+            .iter()
+            .enumerate()
+            .map(|(i, order)| TheoreticalState {
+                state: initial_states
+                    .remove(&RegisterReference::Theoretical { idx: i })
+                    .unwrap_or(U512::ZERO),
+                order: **order,
+            })
+            .collect();
 
-        for group in &program.groups {
-            match &**group {
-                qter_core::RegisterRepresentation::Theoretical { name, order } => {
-                    group_states.push(GroupState::Theoretical {
-                        name: name.to_owned(),
-                        value: initial_states.remove(name).unwrap_or(U512::from_digit(0)),
-                        order: *order,
-                    });
-                }
-                qter_core::RegisterRepresentation::Puzzle {
-                    architecture,
-                    register_names,
-                } => group_states.push(GroupState::Puzzle(Puzzle::initialize(
-                    Rc::clone(architecture),
-                    register_names.to_owned(),
-                ))),
-            }
-        }
+        let puzzle_states = program
+            .puzzles
+            .iter()
+            .map(|arch| Puzzle::initialize(Rc::clone(arch)))
+            .collect();
 
         assert_eq!(initial_states.len(), 0);
 
         Interpreter {
-            group_states,
+            group_state: GroupStates {
+                theoretical_states,
+                puzzle_states,
+            },
             program,
             instruction_counter: 0,
             paused: false,
@@ -134,12 +199,14 @@ impl Interpreter {
         let instruction = &self.program.instructions[self.instruction_counter];
 
         let state_ty = match &**instruction {
-            Instruction::Halt { message, register } => {
-                StateTy::Paused(PausedState::Halt { message, register })
-            }
-            Instruction::Input { message, register } => {
-                StateTy::Paused(PausedState::Input { message, register })
-            }
+            Instruction::Halt { message, register } => StateTy::Paused(PausedState::Halt {
+                message,
+                register: *register,
+            }),
+            Instruction::Input { message, register } => StateTy::Paused(PausedState::Input {
+                message,
+                register: *register,
+            }),
             _ => StateTy::Running,
         };
 
@@ -150,117 +217,10 @@ impl Interpreter {
         }
     }
 
-    fn is_register_solved(group_states: &[GroupState], which_reg: &str) -> bool {
-        for group_state in group_states {
-            match group_state {
-                GroupState::Theoretical {
-                    name,
-                    value,
-                    order: _,
-                } => {
-                    if name == which_reg {
-                        return value.is_zero();
-                    }
-                }
-                GroupState::Puzzle(puzzle) => {
-                    for (i, name) in puzzle.register_names.iter().enumerate() {
-                        if name == which_reg {
-                            return puzzle.architecture.registers()[i].is_solved(&puzzle.state);
-                        }
-                    }
-                }
-            }
-        }
-
-        panic!("Failed to find register {which_reg}!");
-    }
-
-    fn decode_register(group_states: &[GroupState], which_reg: &str) -> U512 {
-        for group_state in group_states {
-            match group_state {
-                GroupState::Theoretical {
-                    name,
-                    value,
-                    order: _,
-                } => {
-                    if name == which_reg {
-                        return *value;
-                    }
-                }
-                GroupState::Puzzle(puzzle) => {
-                    for (i, name) in puzzle.register_names.iter().enumerate() {
-                        if name == which_reg {
-                            return puzzle.architecture.registers()[i].decode(&puzzle.state);
-                        }
-                    }
-                }
-            }
-        }
-
-        panic!("Failed to find register {which_reg}!");
-    }
-
-    fn add_num_to(group_states: &mut [GroupState], which_reg: &str, amt: U512) {
-        for group_state in group_states {
-            match group_state {
-                GroupState::Theoretical { name, value, order } => {
-                    if name == which_reg {
-                        assert!(amt < *order);
-
-                        *value += amt;
-
-                        if value >= order {
-                            *value -= *order;
-                        }
-
-                        return;
-                    }
-                }
-                GroupState::Puzzle(puzzle) => {
-                    for (i, name) in puzzle.register_names.iter().enumerate() {
-                        if name == which_reg {
-                            let mut perm =
-                                puzzle.architecture.registers()[i].permutation().to_owned();
-
-                            perm.exponentiate(amt);
-
-                            puzzle.state.compose(&perm);
-
-                            return;
-                        }
-                    }
-                }
-            }
-        }
-
-        panic!("Failed to find register {which_reg}!");
-    }
-
-    fn compose_into(group_states: &mut [GroupState], which_reg: &str, permutation: &Permutation) {
-        for group_state in group_states {
-            match group_state {
-                GroupState::Theoretical {
-                    name: _,
-                    value: _,
-                    order: _,
-                } => continue,
-                GroupState::Puzzle(puzzle) => {
-                    for name in &puzzle.register_names {
-                        if name == which_reg {
-                            puzzle.state.compose(permutation);
-
-                            return;
-                        }
-                    }
-                }
-            }
-        }
-
-        panic!("Failed to find register {which_reg}!");
-    }
-
     /// Execute one instruction
     pub fn step(&mut self) -> ActionPerformed {
+        println!("PC: {}", self.instruction_counter);
+
         let instruction = &self.program.instructions[self.instruction_counter];
 
         match &**instruction {
@@ -275,7 +235,7 @@ impl Interpreter {
                 instruction_idx,
                 register,
             } => {
-                if Self::is_register_solved(&self.group_states, register) {
+                if self.group_state.is_register_solved(*register) {
                     self.instruction_counter = *instruction_idx;
 
                     ActionPerformed::SucceededSolvedGoto {
@@ -306,7 +266,7 @@ impl Interpreter {
                     self.paused = true;
                     self.messages.push_back(format!(
                         "{message} {}",
-                        Self::decode_register(&self.group_states, register)
+                        self.group_state.decode_register(*register)
                     ));
                 }
 
@@ -315,7 +275,7 @@ impl Interpreter {
             Instruction::Print { message, register } => {
                 self.messages.push_back(format!(
                     "{message} {}",
-                    Self::decode_register(&self.group_states, register)
+                    self.group_state.decode_register(*register)
                 ));
 
                 self.instruction_counter += 1;
@@ -323,26 +283,23 @@ impl Interpreter {
                 ActionPerformed::None
             }
             Instruction::AddTheoretical { register, amount } => {
-                Self::add_num_to(&mut self.group_states, register, *amount);
+                let reg = RegisterReference::Theoretical { idx: *register };
+
+                self.group_state.add_num_to(reg, *amount);
                 self.instruction_counter += 1;
 
                 ActionPerformed::AddToTheoretical {
-                    register: register.to_owned(),
+                    register: *register,
                     amt: *amount,
                 }
             }
-            Instruction::PermuteCube {
-                permutation,
-                effect,
-            } => {
-                let name = &effect[0].0;
+            Instruction::PermuteCube(permute_cube) => {
+                self.group_state
+                    .compose_into(permute_cube.cube_idx(), permute_cube.permutation());
 
-                Self::compose_into(&mut self.group_states, name, permutation);
+                self.instruction_counter += 1;
 
-                ActionPerformed::ExecutedAlgorithm {
-                    permutation: permutation.to_owned(),
-                    effect: effect.to_owned(),
-                }
+                ActionPerformed::ExecutedAlgorithm(permute_cube.to_owned())
             }
         }
     }
@@ -373,7 +330,7 @@ impl Interpreter {
             _ => panic!("The interpreter isn't in an input state"),
         };
 
-        Self::add_num_to(&mut self.group_states, &reg, value);
+        self.group_state.add_num_to(reg, value);
 
         self.paused = false;
         self.instruction_counter += 1;
@@ -385,7 +342,10 @@ mod tests {
     use std::{collections::HashMap, rc::Rc};
 
     use bnum::types::U512;
-    use qter_core::{Instruction, Program, RegisterRepresentation, Span, WithSpan};
+    use qter_core::{
+        architectures::PuzzleDefinition, Instruction, PermuteCube, Program, RegisterReference,
+        Span, WithSpan,
+    };
 
     use crate::{Interpreter, PausedState};
 
@@ -414,23 +374,27 @@ mod tests {
 
         let random_span = Span::new(Rc::from("bruh"), 0, 0);
 
+        let cube =
+            PuzzleDefinition::parse(include_str!("../../qter_core/puzzles/3x3.txt")).unwrap();
+
+        let arch = cube
+            .get_preset(&[U512::from_digit(24), U512::from_digit(210)])
+            .unwrap();
+
         // Define the registers
-        let groups = vec![
-            WithSpan::new(
-                RegisterRepresentation::Theoretical {
-                    name: "A".to_owned(),
-                    order: U512::from_digit(210),
-                },
-                random_span.to_owned(),
-            ),
-            WithSpan::new(
-                RegisterRepresentation::Theoretical {
-                    name: "B".to_owned(),
-                    order: U512::from_digit(24),
-                },
-                random_span.to_owned(),
-            ),
-        ];
+        let puzzles = vec![WithSpan::new(Rc::clone(&arch), random_span.to_owned())];
+
+        let a = RegisterReference::Puzzle {
+            idx: 0,
+            which_register: 1,
+        };
+        let b = RegisterReference::Puzzle {
+            idx: 0,
+            which_register: 0,
+        };
+
+        let a_idx = 1;
+        let b_idx = 0;
 
         let to_modulus = U512::from_digit(13);
         // Negative numbers by overflowing
@@ -441,75 +405,62 @@ mod tests {
             // 0
             Instruction::Input {
                 message: "Number to modulus:".to_owned(),
-                register: "A".to_owned(),
+                register: a,
             },
             // 1; loop:
             Instruction::Print {
                 message: "A is now".to_owned(),
-                register: "A".to_owned(),
+                register: a,
             },
             // 2
-            Instruction::AddTheoretical {
-                register: "B".to_owned(),
-                amount: to_modulus,
-            },
+            Instruction::PermuteCube(PermuteCube::new(&arch, 0, vec![(b_idx, to_modulus)])),
             // 3; decrement:
             Instruction::SolvedGoto {
                 instruction_idx: 1, // loop
-                register: "B".to_owned(),
+                register: b,
             },
             // 4
             Instruction::SolvedGoto {
-                instruction_idx: 8, // fix
-                register: "A".to_owned(),
+                instruction_idx: 7, // fix
+                register: a,
             },
             // 5
-            Instruction::AddTheoretical {
-                register: "A".to_owned(),
-                amount: a_minus_1,
-            },
+            Instruction::PermuteCube(PermuteCube::new(
+                &arch,
+                0,
+                vec![(a_idx, a_minus_1), (b_idx, b_minus_1)],
+            )),
             // 6
-            Instruction::AddTheoretical {
-                register: "B".to_owned(),
-                amount: b_minus_1,
-            },
-            // 7
             Instruction::Goto { instruction_idx: 3 }, // decrement
-            // 8; fix:
+            // 7; fix:
             Instruction::SolvedGoto {
-                instruction_idx: 12, // finalize
-                register: "B".to_owned(),
+                instruction_idx: 10, // finalize
+                register: b,
             },
+            // 8
+            Instruction::PermuteCube(PermuteCube::new(
+                &arch,
+                0,
+                vec![(a_idx, a_minus_1), (b_idx, b_minus_1)],
+            )),
             // 9
-            Instruction::AddTheoretical {
-                register: "A".to_owned(),
-                amount: a_minus_1,
-            },
-            // 10
-            Instruction::AddTheoretical {
-                register: "B".to_owned(),
-                amount: b_minus_1,
-            },
+            Instruction::Goto { instruction_idx: 7 }, // fix
+            // 10; finalize:
+            Instruction::PermuteCube(PermuteCube::new(&arch, 0, vec![(a_idx, to_modulus)])),
             // 11
-            Instruction::Goto { instruction_idx: 8 }, // fix
-            // 12; finalize:
-            Instruction::AddTheoretical {
-                register: "A".to_owned(),
-                amount: to_modulus,
-            },
-            // 13
             Instruction::Halt {
                 message: "The modulus is".to_owned(),
-                register: "A".to_owned(),
+                register: a,
             },
         ];
 
         let program = Program {
-            groups,
             instructions: instructions
                 .into_iter()
                 .map(|v| WithSpan::new(v, random_span.to_owned()))
                 .collect(),
+            theoretical: vec![],
+            puzzles,
         };
 
         let mut interpreter = Interpreter::new(program, HashMap::new());
@@ -518,7 +469,10 @@ mod tests {
             interpreter.step_until_halt(),
             PausedState::Input {
                 message: "Number to modulus:",
-                register: "A"
+                register: RegisterReference::Puzzle {
+                    idx: 0,
+                    which_register: 1
+                },
             }
         ));
 
@@ -528,7 +482,10 @@ mod tests {
             interpreter.step_until_halt(),
             PausedState::Halt {
                 message: "The modulus is",
-                register: "A"
+                register: RegisterReference::Puzzle {
+                    idx: 0,
+                    which_register: 1
+                },
             }
         ));
 

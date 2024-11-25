@@ -245,7 +245,8 @@ impl Permutation {
         for cycle in cycles {
             let len = U512::from_digit(cycle.len() as u64);
             for i in 0..cycle.len() {
-                mapping[i] = cycle[(U512::from_digit(i as u64) + power).rem(len).as_::<usize>()];
+                mapping[cycle[i]] =
+                    cycle[(U512::from_digit(i as u64) + power).rem(len).as_::<usize>()];
             }
         }
 
@@ -271,6 +272,12 @@ impl Permutation {
 
         // Invalidate `cycles`
         self.cycles = OnceCell::new();
+    }
+}
+
+impl PartialEq for Permutation {
+    fn eq(&self, other: &Self) -> bool {
+        self.mapping() == other.mapping()
     }
 }
 
@@ -428,5 +435,31 @@ mod tests {
                 assert_eq!(register.order(), U512::from_digit(*expected as u64));
             }
         }
+    }
+
+    #[test]
+    fn exponentiation() {
+        let cube = PuzzleDefinition::parse(include_str!("../puzzles/3x3.txt")).unwrap();
+
+        let mut perm = cube.group.identity();
+
+        cube.group
+            .compose_generators_into(&mut perm, &["U", "L"])
+            .unwrap();
+
+        let mut exp_perm = perm.clone();
+        exp_perm.exponentiate(U512::from_digit(7));
+
+        let mut repeat_compose_perm = cube.group.identity();
+
+        repeat_compose_perm.compose(&perm);
+        repeat_compose_perm.compose(&perm);
+        repeat_compose_perm.compose(&perm);
+        repeat_compose_perm.compose(&perm);
+        repeat_compose_perm.compose(&perm);
+        repeat_compose_perm.compose(&perm);
+        repeat_compose_perm.compose(&perm);
+
+        assert_eq!(exp_perm, repeat_compose_perm);
     }
 }
