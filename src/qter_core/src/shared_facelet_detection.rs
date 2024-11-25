@@ -263,7 +263,7 @@ mod tests {
 
                 PRESETS
 
-                A B / C D E
+                (3, 2) A B / C D E
             ",
         )
         .unwrap();

@@ -1,5 +1,6 @@
 use std::{collections::HashMap, rc::Rc};
 
+use bnum::types::U512;
 use internment::ArcIntern;
 use pest::{error::Error, Parser};
 use pest_derive::Parser;
@@ -165,7 +166,14 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
 
     for preset_pair in presets_pairs {
         let algorithm_span = preset_pair.as_span();
-        let preset_pairs = preset_pair.into_inner();
+        let mut preset_pairs = preset_pair.into_inner();
+
+        let orders_pair = preset_pairs.next().unwrap();
+        let mut orders = vec![];
+
+        for order in orders_pair.into_inner() {
+            orders.push(order.as_str().parse::<U512>().unwrap());
+        }
 
         let mut algorithms = vec![];
 
@@ -179,7 +187,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
             algorithms.push(moves);
         }
 
-        presets.push(match Architecture::new(Rc::clone(&group), algorithms) {
+        let architecture = match Architecture::new(Rc::clone(&group), algorithms) {
             Ok(v) => Rc::new(v),
             Err(e) => {
                 return Err(Box::new(Error::new_from_span(
@@ -187,7 +195,18 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
                     algorithm_span,
                 )))
             }
-        });
+        };
+
+        for (register, order) in architecture.registers().iter().zip(orders.into_iter()) {
+            if register.order() != order {
+                return Err(Box::new(Error::new_from_span(
+                    pest::error::ErrorVariant::CustomError { message: format!("The algorithm {} has an incorrect order. Expected order {order} but found order {}.", register.generator_sequence.join(" "), register.order()) },
+                    algorithm_span,
+                )));
+            }
+        }
+
+        presets.push(architecture);
     }
 
     Ok(PuzzleDefinition { group, presets })
