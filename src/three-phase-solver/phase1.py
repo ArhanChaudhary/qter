@@ -15,8 +15,6 @@ import math
 import operator
 import functools
 
-EDGES = 12
-CORNERS = 8
 NO_ORIENT = 0
 ORIENT = 1
 
@@ -41,7 +39,7 @@ CycleCombination = collections.namedtuple(
         "used_edge_count",
         "used_corner_count",
         "order_product",
-        "share_order",
+        # "share_order",
         "cycles",
     ],
 )
@@ -136,32 +134,32 @@ def redundant_cycle_pairing(not_redundant, maybe_redundant):
             break
     if not same_orders:
         return redundant_order_pairing
-    # A cycle pairing is redundant if first_cycle and second_cycle share the
-    # same edge and corner partitions as a non redundant cycle pairing,
-    # optionally swapped. We also need to check if they both share the same
-    # cubies because those differentiate two cycle structures.
-    if any(
-        maybe_redundant_cycle.edge_partition != not_redundant_cycle.edge_partition
-        or maybe_redundant_cycle.corner_partition
-        != not_redundant_cycle.corner_partition
-        for maybe_redundant_cycle, not_redundant_cycle in zip(
-            maybe_redundant.cycles,
-            not_redundant.cycles,
-        )
-    ):
-        return False
-    same_share_order = maybe_redundant.share_order == not_redundant.share_order
-    return same_share_order
+    else:
+        return maybe_redundant == not_redundant
+    # if any(
+    #     maybe_redundant_cycle.edge_partition != not_redundant_cycle.edge_partition
+    #     or maybe_redundant_cycle.corner_partition
+    #     != not_redundant_cycle.corner_partition
+    #     for maybe_redundant_cycle, not_redundant_cycle in zip(
+    #         maybe_redundant.cycles,
+    #         not_redundant.cycles,
+    #     )
+    # ):
+    #     return False
+    # # same_share_order = maybe_redundant.share_order == not_redundant.share_order
+    # same_share_order =
+    # return same_share_order
 
 
-def all_cycle_combinations(num_cycles):
+def all_cycle_combinations(num_cycles, edges, corners):
     """
     Finds all cycle structure pairings on the Rubik's cube.
     """
     cycle_combinations = []
     for used_edge_count, used_corner_count in itertools.product(
-        range(EDGES + 1), range(CORNERS + 1)
+        range(edges + 1), range(corners + 1)
     ):
+        print(used_edge_count, used_corner_count)
         for partition_edge_counts, partition_corner_counts in itertools.product(
             integer_partitions(used_edge_count),
             integer_partitions(used_corner_count),
@@ -175,6 +173,7 @@ def all_cycle_combinations(num_cycles):
             partition_corner_counts += (0,) * (
                 num_cycles - len(partition_corner_counts)
             )
+            seen_cycle_cubie_counts = set()
             for (
                 permuted_parition_edge_counts,
                 permuted_partition_corner_counts,
@@ -193,97 +192,125 @@ def all_cycle_combinations(num_cycles):
                     all_cycles_with_cubie_counts.append((edge_count, corner_count))
                 if continue_outer:
                     continue
-                shared_cycle_combinations = [
-                    CycleCombination(
-                        used_edge_count=used_edge_count,
-                        used_corner_count=used_corner_count,
-                        order_product=math.prod(
-                            map(operator.attrgetter("order"), shared_cycle_combination)
+
+                all_cycles_with_cubie_counts = tuple(
+                    sorted(all_cycles_with_cubie_counts, reverse=True)
+                )
+                if all_cycles_with_cubie_counts in seen_cycle_cubie_counts:
+                    continue
+
+                seen_cycle_cubie_counts.add(all_cycles_with_cubie_counts)
+                for shared_cycle_combination in recursive_shared_cycle_combinations(
+                    all_cycles_with_cubie_counts
+                ):
+                    # just because we sort the parititons earlier doesnt mean the
+                    # orders will be sorted
+                    descending_order_cycle_combination = sorted(
+                        shared_cycle_combination,
+                        key=lambda cycle: (
+                            cycle.order,
+                            cycle.edge_partition,
+                            cycle.corner_partition,
                         ),
-                        share_order=valid_share_order(shared_cycle_combination),
-                        cycles=tuple(
-                            sorted(
-                                shared_cycle_combination,
-                                key=lambda cycle: (
-                                    cycle.order,
-                                    cycle.edge_partition,
-                                    cycle.corner_partition,
+                        reverse=True,
+                    )
+                    descending_order_cycle_combinations = [
+                        descending_order_cycle_combination
+                    ]
+                    # TODO: order permutating (last thing that needs to be done
+                    # before MVP)
+                    for (
+                        descending_order_cycle_combination
+                    ) in descending_order_cycle_combinations:
+                        edge_can_share_exists = False
+                        corner_can_share_exists = False
+                        share_edge_count = 0
+                        share_corner_count = 0
+                        share_edge_candidates = []
+                        share_corner_candidates = []
+                        order_product = 1
+
+                        for i, cycle in enumerate(descending_order_cycle_combination):
+                            order_product *= cycle.order
+                            if edge_can_share_exists and 1 in cycle.edge_partition:
+                                share_edge_candidates.append(i)
+                            if corner_can_share_exists and 1 in cycle.corner_partition:
+                                share_corner_candidates.append(i)
+                            edge_can_share_exists |= 1 in cycle.edge_partition
+                            corner_can_share_exists |= 1 in cycle.corner_partition
+                            share_edge_count += cycle.share[0]
+                            share_corner_count += cycle.share[1]
+
+                        if (
+                            share_edge_count == 0
+                            and len(share_edge_candidates) > 0
+                            or share_corner_count == 0
+                            and len(share_corner_candidates) > 0
+                        ):
+                            continue
+
+                        # TODO: it might be possible that the tree search covers *every*
+                        # possible way to distribute shares when the number of unshared
+                        # cycles is greater than one. I am skeptical this is the case.
+                        # consider 180/24 vs 126/36. 126/36
+                        # is only found when 36 is first because the same partition
+                        # produces 180/24 and 180 has the higher order as determined by
+                        # >>> highest_order_cycles_from_cubie_counts(8, 5, False, False)
+                        # [Cycle(order=180, share=(False, False), edge_partition=(1, 2, 5), corner_partition=(2, 3), always_orient_edges=[0], always_orient_corners=[], critical_orient_edges=[1], critical_orient_corners=[1])]
+                        # >>> highest_order_cycles_from_cubie_counts(4, 3, True, False)
+                        # [Cycle(order=24, share=(True, False), edge_partition=(1, 4), corner_partition=(1, 2), always_orient_edges=[0], always_orient_corners=[0], critical_orient_edges=[1], critical_orient_corners=[0, 1])]
+                        # If I can show this tautology, then we can remove this
+                        # part almost entirely which should significantly improve performance.
+                        for (
+                            share_edges_indicies,
+                            share_corners_indicies,
+                        ) in itertools.product(
+                            # given a list "share_edge_candidates", what are all ways to
+                            # pick "share_edge_count" numbers from the list
+                            itertools.combinations(
+                                share_edge_candidates, share_edge_count
+                            ),
+                            itertools.combinations(
+                                share_corner_candidates, share_corner_count
+                            ),
+                        ):
+                            cycle_combination = CycleCombination(
+                                used_edge_count=used_edge_count,
+                                used_corner_count=used_corner_count,
+                                order_product=order_product,
+                                cycles=tuple(
+                                    cycle._replace(
+                                        share=(
+                                            i in share_edges_indicies,
+                                            i in share_corners_indicies,
+                                        )
+                                    )
+                                    for i, cycle in enumerate(
+                                        descending_order_cycle_combination
+                                    )
                                 ),
-                                reverse=True,
                             )
-                        ),
-                    )
-                    for shared_cycle_combination in recursive_shared_cycle_combinations(
-                        tuple(all_cycles_with_cubie_counts), False, False
-                    )
-                ]
-                # print(shared_cycle_combinations)
-                # for i in shared_cycle_combinations:
-                #     rearrange_share_info(i)
-                # We cannot do this because consider 180/24 vs 126/36. 126/36
-                # is only found when 36 is first because the same partition
-                # produces 180/24 and 180 has the higher order as determined by
-                # >>> highest_order_cycles_from_cubie_counts(8, 5, False, False)
-                # [Cycle(order=180, share=(False, False), edge_partition=(1, 2, 5), corner_partition=(2, 3), always_orient_edges=[0], always_orient_corners=[], critical_orient_edges=[1], critical_orient_corners=[1])]
-                # >>> highest_order_cycles_from_cubie_counts(4, 3, True, False)
-                # [Cycle(order=24, share=(True, False), edge_partition=(1, 4), corner_partition=(1, 2), always_orient_edges=[0], always_orient_corners=[0], critical_orient_edges=[1], critical_orient_corners=[0, 1])]
-                # >>>
-                # cycle_combinations.extend(
-                #     x
-                #     for x in all_shared_cycle_combinations
-                #     if len(x) != 0 and x[0].share == (False, False)
-                # )
-                cycle_combinations.extend(shared_cycle_combinations)
+                            cycle_combinations.append(cycle_combination)
+                # TODO: is it worth removing redundant cycles intermediately?
+                # this would require sorting by orders then re-sorting by order
+                # product, so its performance vs memory
     return cycle_combinations
 
 
-# def shared_cycle_combinations(
-#     cycle_cubie_counts, share_edge, share_corner, shared_cycle_combination
-# ):
-#     if len(cycle_cubie_counts) == 0:
-#         yield sorted(
-#             shared_cycle_combination,
-#             key=lambda cycle: (
-#                 cycle.order,
-#                 cycle.edge_partition,
-#                 cycle.corner_partition,
-#             ),
-#             reverse=True,
-#         )
-#         return
-#     share_mat = [(False, False)]
-#     if share_edge:
-#         share_mat.append((True, False))
-#     if share_corner:
-#         share_mat.append((False, True))
-#     if share_edge and share_corner:
-#         share_mat.append((True, True))
-#     for share in share_mat:
-#         for shared_cycle in highest_order_cycles_from_cubie_counts(
-#             *cycle_cubie_counts[0],
-#             *share,
-#         ):
-#             yield from shared_cycle_combinations(
-#                 cycle_cubie_counts[1:],
-#                 share_edge or 1 in shared_cycle.edge_partition,
-#                 share_corner or 1 in shared_cycle.corner_partition,
-#                 shared_cycle_combination + [shared_cycle],
-#             )
-
-
+# do not flush cache it is used across used cubie counts
 @functools.cache
-def recursive_shared_cycle_combinations(cycle_cubie_counts, share_edge, share_corner):
+def recursive_shared_cycle_combinations(cycle_cubie_counts):
     if len(cycle_cubie_counts) == 0:
         return ((),)
     share_mat = [(False, False)]
-    # TODO: needed?
-    if share_edge and cycle_cubie_counts[0][0] != 0:
+    # needed because when a cubie count is zero its partition is always the
+    # empty tuple which logically cannot share a partition
+    if cycle_cubie_counts[0][0] != 0:
         share_mat.append((True, False))
-    if share_corner and cycle_cubie_counts[0][1] != 0:
+    if cycle_cubie_counts[0][1] != 0:
         share_mat.append((False, True))
-    if len(share_mat) == 3:
+    if cycle_cubie_counts[0][0] != 0 and cycle_cubie_counts[0][1] != 0:
         share_mat.append((True, True))
-
     return tuple(
         (shared_cycle,) + rest_combination
         for share in share_mat
@@ -292,22 +319,6 @@ def recursive_shared_cycle_combinations(cycle_cubie_counts, share_edge, share_co
         )
         for rest_combination in recursive_shared_cycle_combinations(
             cycle_cubie_counts[1:],
-            share_edge or 1 in shared_cycle.edge_partition,
-            share_corner or 1 in shared_cycle.corner_partition,
-        )
-    )
-
-
-def valid_share_order(shared_cycle_combination):
-    # TODO: make this fix in place
-    return tuple(
-        zip(
-            *(
-                sorted(i)
-                for i in zip(
-                    *map(operator.attrgetter("share"), shared_cycle_combination)
-                )
-            )
         )
     )
 
@@ -533,18 +544,15 @@ def highest_order_cycles_from_cubie_counts(
         invalid_orient_edge_count = (
             # Before determining if a cycle is possible, first ensure that
             # every permutation cycle must orient.
-            # TODO: I'm not entirely sure of this condition's correctness,
-            # but I can provide an example. Given the partition
-            # (1, 1, 2, 2) for edges all the ones must orient and at
-            # least one two must orient. Although the total number of cycle
-            # orientations is odd, the partition is still possible if
-            # everything orients. This is not the case with (1, 1, 2).
-            # TGC: if orientation is even, we're fine.
-            # If it's not, but there is an extra cycle, We'll be able
-            # to orient it to make total orientation even.
-            # The issue comes when we've already used all cycles
-            # and still have odd orientation. This means we have to
-            # unorient a critical cycle to make orientation even.
+            # If orientation is even, we're fine. If it's not, but there is an
+            # extra cycle, We'll be able to orient it to make total orientation
+            # even. The issue comes when we've already used all cycles and still
+            # have odd orientation. This means we have to unorient a critical
+            # cycle to make orientation even. Example: Given the partition
+            # (1, 1, 2, 2) for edges all the ones must orient and at least one
+            # two must orient. Although the total number of cycle orientations
+            # is odd, the partition is still possible if everything orients.
+            # This is not the case with (1, 1, 2).
             orient_edge_count == len(edge_partition)
             and
             # Same condition as explained some time earlier.
@@ -569,10 +577,9 @@ def highest_order_cycles_from_cubie_counts(
             # the case, and I don't need to worry about it. The following
             # assertion never fails, implying that the critical cycle is the
             # only cycle with the maximum 2-adic valuation.
-            # TODO: Figure out why this assertion never fails.
-            # TGC: This is the case where we have odd orientation and
-            # no extra cycles to use to fix it, so we must fix by
-            # unorienting a critical cycle.
+            # TGC: This assertion never fails because this is the case where we
+            # have odd orientation and no extra cycles to use to fix it, so we
+            # must fix by unorienting a critical cycle.
             assert len(critical_orient_edges) == 1, critical_orient_edges
             orient_edge_count -= 1
             critical_orient_edges = None
@@ -752,9 +759,10 @@ def main(num_cycles):
     from timeit import default_timer as timer
 
     a = timer()
-    all_cycle_combinations_result = all_cycle_combinations(num_cycles)
+    all_cycle_combinations_result = all_cycle_combinations(num_cycles, 12, 8)
     b = timer()
     print(b - a)
+    print(recursive_shared_cycle_combinations.cache_info())
     filtered_cycle_combinations = filter_redundant_cycle_combinations(
         all_cycle_combinations_result
     )
@@ -763,5 +771,5 @@ def main(num_cycles):
 
 
 if __name__ == "__main__":
-    with open("./output.txt", "w") as f:
-        f.write(f"Cycle = 1\nCycleCombination = 1\n{main(4)}")
+    with open("./output.py", "w") as f:
+        f.write(f"Cycle = 1\nCycleCombination = 1\n{main(3)}")
