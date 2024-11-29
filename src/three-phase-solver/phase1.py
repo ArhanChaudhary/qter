@@ -240,13 +240,10 @@ def all_cycle_combinations(num_cycles, edges, corners):
                             corner_can_share_exists |= 1 in cycle.corner_partition
                             share_edge_count += cycle.share[0]
                             share_corner_count += cycle.share[1]
-
-                        if (
-                            share_edge_count == 0
-                            and len(share_edge_candidates) > 0
-                            or share_corner_count == 0
-                            and len(share_corner_candidates) > 0
-                        ):
+                        valid = (share_edge_count == 0 or len(share_edge_candidates) > 0) and (
+                            share_corner_count == 0 or len(share_corner_candidates) > 0
+                        )
+                        if not valid:
                             continue
 
                         # TODO: it might be possible that the tree search covers *every*
