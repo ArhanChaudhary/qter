@@ -1,0 +1,3 @@
+[submodule "src/three_phase_solver/phase3/vcube"]
+	path = src/three_phase_solver/phase3/vcube
+	url = https://github.com/ArhanChaudhary/vcube
