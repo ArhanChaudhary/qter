@@ -1,0 +1,220 @@
+.macro inc {
+    ($R:reg) => {
+        add $R 1
+    }
+}
+
+.macro dec {
+    ($R:reg) => {
+        sub $R 1
+    }
+}
+
+.macro move {
+    ($R1:reg to $R2:reg) => {
+        zero_loop:
+            solved-goto $R1 move_done
+            dec $R1
+            inc $R2
+            goto zero_loop
+        move_done:
+    }
+}
+
+.macro set {
+    ($R1:reg to $R2:reg) => {
+        set $R1 to 0
+        move $R2 to $R1
+    }
+
+    ($R:reg to $N:int) => {
+        zero_loop:
+            solved-goto $R move_done
+            dec $R
+            goto zero_loop
+        move_done:
+            add $R $N
+    }
+}
+
+.macro if {
+    (solved $R:reg $code:block) => {
+            solved-goto $R do_if
+            goto after_if
+        do_if:
+            $code
+        after_if:
+    }
+    (not-solved $R:reg $code:block) => {
+            solved-goto $R after_if
+            $code
+        after_if:
+    }
+    (solved $R:reg $code1:code else $code2:block) => {
+            solved-goto $R do_if
+        do_else:
+            $code2
+            goto after_if
+        do_if:
+            $code1
+        after_if:
+    }
+    (not-solved $R:reg $code1:code else $code2:block) => {
+        if solved $R {
+            $code2
+        } else {
+            $code1
+        }
+    }
+    (equals $R:reg $N:int $code:block) => {
+        -- TODO
+    }
+    (not-equals $R:reg $N:int $code:block) => {
+        -- TODO
+    }
+    (equals $R:reg $N:int $code1:code else $code2:block) => {
+        -- TODO
+    }
+    (not-equals $R:reg $N:int $code1:code else $code2:block) => {
+        if equals $R $N {
+            $code2
+        } else {
+            $code1
+        }
+    }
+    (equals $R1:reg $R2:reg using $R3:reg $code:block) => {
+            lua validate_equals_order($R1, $R2, $R3)
+            set $R3 to 0
+        equals_loop:
+            solved-goto $R1 first_zero
+            solved-goto $R2 fail_loop
+            dec $R1
+            dec $R2
+            inc $R3
+            goto equals_loop
+        first_zero:
+            solved-goto $R2 success_loop
+        fail_loop:
+            solved-goto $R3 fail
+            inc $R1
+            inc $R2
+            dec $R3
+            goto fail_loop
+        success_loop:
+            solved-goto $R3 success
+            inc $R1
+            inc $R2
+            dec $R3
+            goto success_loop
+        success:
+            $code
+        fail:
+    }
+    (not-equals $R1:reg $R2:reg using $R3:reg $code:block) => {
+        -- TODO
+    }
+    (equals $R1:reg $R2:reg using $R3:reg $code1:code else $code2:block) => {
+        -- TODO
+    }
+    (not-equals $R1:reg $R2:reg using $R3:reg $code1:code else $code2:block) => {
+        if equals $R1 $R2 using $R3 {
+            $code2
+        } else {
+            $code1
+        }
+    }
+}
+
+.macro while {
+    (solved $R:reg $code:block) => {
+            goto continue
+        do_iteration:
+            $code
+        !continue:
+            solved-goto $R do_iteration
+        !break:
+    }
+    (not-solved $R:reg $code:block) => {
+        !continue:
+            solved-goto $R break
+            $code
+            goto continue
+        !break:
+    }
+    (equals $R:reg $N:int $code:block) => {
+        -- TODO
+    }
+    (not-equals $R:reg $N:int $code:block) => {
+        -- TODO
+    }
+    (equals $R1:reg $R2:reg using $R3:reg $code:block) => {
+        -- TODO
+    }
+    (not-equals $R1:reg $R2:reg using $R3:reg $code:block) => {
+        -- TODO
+    }
+}
+
+.macro repeat {
+    ($times:int $code:block) => {
+        lua repeat($code, 1, $times)
+    }
+    ($times:int $var:ident $code:block) => {
+        lua repeat($code, 1, $times, $var)
+    }
+    -- should parse nested for loops such as `repeat j from $i to 10 { ... }`
+    -- because the outer $i should be evaluated first
+    ($times:int $var:ident from $start:int to $end:int $code:block) => {
+        lua repeat($code, $start, $end, $var)
+    }
+}
+
+.macro multiply {
+    ($R1:reg $R2:reg using $R3:reg) => {
+        lua multiply($R1, $R2, $R3)
+    }
+}
+
+.start-lua
+    local function validate_equals_order(r1, r2, r3)
+        if order_of_reg(r3) < order_of_reg(r1) or
+            order_of_reg(r3) < order_of_reg(r2) then
+            error("Register 3 must not be the minimum order (" ..
+                order_of_reg(r3) .. " < min(" .. order_of_reg(r1) .. ", " ..
+                order_of_reg(r2) .. ")"
+            )
+        end
+    end
+
+    function repeat(code, start, end_, var)
+        local output = {}
+
+        for i = start, end_ do
+            if var == nil then
+                output[i] = code
+            else
+                output[i] = ".define $" .. var .. " " .. i .. "\n" .. code
+            end
+        end
+
+        return output
+    end
+
+    function validate_same_orders(...)
+        local args = {...}
+        local first = order_of_reg(args[1])
+        for i = 2, #args do
+            if order_of_reg(args[i]) ~= first then
+                error("Arguments are not all the same value")
+            end
+        end
+        return nil
+    end
+
+    function multiply(r1, r2, r3)
+        validate_same_orders(r1, r2, r3)
+        local output = {}
+        -- TODO: Implement multiplication. Result in register r1, nullify r2/r3
+        return output
+    end
+end-lua
