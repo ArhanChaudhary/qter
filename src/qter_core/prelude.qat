@@ -82,14 +82,14 @@ end-lua
             $code
         after_if:
     }
-    (solved $R:reg $code1:code else $code2:block) => {
+    (solved $R:reg $code1:block else $code2:block) => {
         if not-solved $R {
             $code2
         } else {
             $code1
         }
     }
-    (not-solved $R:reg $code1:code else $code2:block) => {
+    (not-solved $R:reg $code1:block else $code2:block) => {
             if not-solved $R {
                 $code1
                 goto over_else
@@ -107,14 +107,14 @@ end-lua
             $code
         } else {}
     }
-    (equals $R:reg $N:int $code1:code else $code2:block) => {
+    (equals $R:reg $N:int $code1:block else $code2:block) => {
         if not-equals $R $N {
             $code2
         } else {
             $code1
         }
     }
-    (not-equals $R:reg $N:int $code1:code else $code2:block) => {
+    (not-equals $R:reg $N:int $code1:block else $code2:block) => {
         sub $R $N
         if not-solved $R {
             add $R $N
@@ -181,7 +181,7 @@ end-lua
             $code
         success:
     }
-    (equals $R1:reg $R2:reg using $R3:reg $code1:code else $code2:block) => {
+    (equals $R1:reg $R2:reg using $R3:reg $code1:block else $code2:block) => {
         if equals $R1 $R2 using $R3 {
             $code1
             goto over_else
@@ -189,7 +189,7 @@ end-lua
         $code2
         over_else:
     }
-    (not-equals $R1:reg $R2:reg using $R3:reg $code1:code else $code2:block) => {
+    (not-equals $R1:reg $R2:reg using $R3:reg $code1:block else $code2:block) => {
         if equals $R1 $R2 using $R3 {
             $code2
         } else {
