@@ -12,7 +12,7 @@ do_if_1:
 zero_loop_1:
     solved-goto A move_done_1
     sub A 1
-    add B 1
+    add C 1
     goto zero_loop_1
 move_done_1:
     halt "The number is: " C
