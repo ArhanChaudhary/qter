@@ -93,12 +93,12 @@ end-lua
         over_else:
     }
     (equals $R:reg $N:int $code:block) => {
-        if equals $R {
+        if equals $R $N {
             $code
         } else {}
     }
     (not-equals $R:reg $N:int $code:block) => {
-        if not-equals $R {
+        if not-equals $R $N {
             $code
         } else {}
     }
