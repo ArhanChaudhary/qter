@@ -22,6 +22,10 @@ pub fn lcm(a: U512, b: U512) -> U512 {
     b / gcd(a, b) * a
 }
 
+pub fn lcm_iter(values: impl Iterator<Item = U512>) -> U512 {
+    values.fold(U512::ONE, lcm)
+}
+
 pub fn extended_euclid(mut a: U512, mut b: U512) -> ((I512, I512), U512) {
     let mut a_coeffs = (I512::ONE, I512::ZERO);
     let mut b_coeffs = (I512::ZERO, I512::ONE);
@@ -83,12 +87,36 @@ pub fn chinese_remainder_theorem(values: Vec<(U512, U512)>) -> U512 {
     initial.0
 }
 
+pub fn length_of_substring_that_this_string_is_n_repeated_copies_of<'a>(
+    colors: impl Iterator<Item = &'a str>,
+) -> U512 {
+    let mut found = vec![];
+    let mut current_repeat_length = 1;
+
+    for (i, color) in colors.enumerate() {
+        found.push(color);
+
+        if found[i % current_repeat_length] != color {
+            current_repeat_length = i + 1;
+        }
+    }
+
+    // We didn't match the substring a whole number of times; it actually doesn't work
+    if found.len() % current_repeat_length != 0 {
+        current_repeat_length = found.len();
+    }
+
+    U512::from_digit(current_repeat_length as u64)
+}
+
 #[cfg(test)]
 mod tests {
     use bnum::{cast::As, types::U512};
     use itertools::Itertools;
 
-    use crate::discrete_math::{extended_euclid, gcd, lcm};
+    use crate::discrete_math::{
+        extended_euclid, gcd, lcm, length_of_substring_that_this_string_is_n_repeated_copies_of,
+    };
 
     use super::chinese_remainder_theorem;
 
@@ -138,5 +166,40 @@ mod tests {
     #[should_panic(expected = "Inconsistent remainders!")]
     fn crt_evil() {
         _crt([(2, 4), (1, 2)]);
+    }
+
+    #[test]
+    fn length_of_substring_whatever() {
+        assert_eq!(
+            length_of_substring_that_this_string_is_n_repeated_copies_of(
+                ["a", "a", "a", "a"].into_iter()
+            )
+            .digits()[0],
+            1
+        );
+
+        assert_eq!(
+            length_of_substring_that_this_string_is_n_repeated_copies_of(
+                ["a", "b", "a", "b"].into_iter()
+            )
+            .digits()[0],
+            2
+        );
+
+        assert_eq!(
+            length_of_substring_that_this_string_is_n_repeated_copies_of(
+                ["a", "b", "a", "b", "a"].into_iter()
+            )
+            .digits()[0],
+            5
+        );
+
+        assert_eq!(
+            length_of_substring_that_this_string_is_n_repeated_copies_of(
+                ["a", "b", "c", "d", "e"].into_iter()
+            )
+            .digits()[0],
+            5
+        );
     }
 }

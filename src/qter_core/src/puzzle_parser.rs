@@ -2,6 +2,7 @@ use std::{collections::HashMap, rc::Rc};
 
 use bnum::types::U512;
 use internment::ArcIntern;
+use itertools::Itertools;
 use pest::{error::Error, Parser};
 use pest_derive::Parser;
 
@@ -181,7 +182,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
             let mut moves = vec![];
 
             for action in algorithm_pair.into_inner() {
-                moves.push(action.as_str().to_owned());
+                moves.push(ArcIntern::from_ref(action.as_str()));
             }
 
             algorithms.push(moves);
@@ -191,7 +192,9 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
             Ok(v) => Rc::new(v),
             Err(e) => {
                 return Err(Box::new(Error::new_from_span(
-                    pest::error::ErrorVariant::CustomError { message: e },
+                    pest::error::ErrorVariant::CustomError {
+                        message: format!("Generator doesn't exist: {e}"),
+                    },
                     algorithm_span,
                 )))
             }
@@ -200,7 +203,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
         for (register, order) in architecture.registers().iter().zip(orders.into_iter()) {
             if register.order() != order {
                 return Err(Box::new(Error::new_from_span(
-                    pest::error::ErrorVariant::CustomError { message: format!("The algorithm {} has an incorrect order. Expected order {order} but found order {}.", register.generator_sequence.join(" "), register.order()) },
+                    pest::error::ErrorVariant::CustomError { message: format!("The algorithm {} has an incorrect order. Expected order {order} but found order {}.", register.generator_sequence.iter().join(" "), register.order()) },
                     algorithm_span,
                 )));
             }

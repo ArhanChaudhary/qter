@@ -1,10 +1,11 @@
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use bnum::types::U512;
+use internment::ArcIntern;
 
 use crate::{
     architectures::{CycleGenerator, CycleGeneratorSubcycle, Permutation, PermutationGroup},
-    discrete_math::lcm,
+    discrete_math::{lcm, length_of_substring_that_this_string_is_n_repeated_copies_of},
 };
 
 #[derive(Debug)]
@@ -113,37 +114,15 @@ impl UnionFindOfCycles {
     }
 }
 
-fn length_of_substring_that_this_string_is_n_repeated_copies_of<'a>(
-    colors: impl Iterator<Item = &'a str>,
-) -> U512 {
-    let mut found = vec![];
-    let mut current_repeat_length = 1;
-
-    for (i, color) in colors.enumerate() {
-        found.push(color);
-
-        if found[i % current_repeat_length] != color {
-            current_repeat_length = i + 1;
-        }
-    }
-
-    // We didn't match the substring a whole number of times; it actually doesn't work
-    if found.len() % current_repeat_length != 0 {
-        current_repeat_length = found.len();
-    }
-
-    U512::from_digit(current_repeat_length as u64)
-}
-
 pub fn algorithms_to_cycle_generators(
     group: Rc<PermutationGroup>,
-    algorithms: &[Vec<String>],
-) -> Result<(Vec<CycleGenerator>, Vec<usize>), String> {
+    algorithms: &[Vec<ArcIntern<String>>],
+) -> Result<(Vec<CycleGenerator>, Vec<usize>), ArcIntern<String>> {
     let mut permutations = vec![];
 
     for algorithm in algorithms {
         let mut permutation = group.identity();
-        group.compose_generators_into(&mut permutation, algorithm)?;
+        group.compose_generators_into(&mut permutation, algorithm.iter())?;
         permutations.push(permutation);
     }
 
@@ -195,43 +174,6 @@ mod tests {
     use bnum::types::U512;
 
     use crate::architectures::{CycleGeneratorSubcycle, PuzzleDefinition};
-
-    use super::length_of_substring_that_this_string_is_n_repeated_copies_of;
-
-    #[test]
-    fn length_of_substring_whatever() {
-        assert_eq!(
-            length_of_substring_that_this_string_is_n_repeated_copies_of(
-                ["a", "a", "a", "a"].into_iter()
-            )
-            .digits()[0],
-            1
-        );
-
-        assert_eq!(
-            length_of_substring_that_this_string_is_n_repeated_copies_of(
-                ["a", "b", "a", "b"].into_iter()
-            )
-            .digits()[0],
-            2
-        );
-
-        assert_eq!(
-            length_of_substring_that_this_string_is_n_repeated_copies_of(
-                ["a", "b", "a", "b", "a"].into_iter()
-            )
-            .digits()[0],
-            5
-        );
-
-        assert_eq!(
-            length_of_substring_that_this_string_is_n_repeated_copies_of(
-                ["a", "b", "c", "d", "e"].into_iter()
-            )
-            .digits()[0],
-            5
-        );
-    }
 
     #[test]
     fn simple() {

@@ -1,11 +1,15 @@
-use std::{cell::OnceCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::OnceCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 use bnum::{cast::As, types::U512};
 use internment::ArcIntern;
 use itertools::Itertools;
 
 use crate::{
-    discrete_math::chinese_remainder_theorem, puzzle_parser,
+    discrete_math::lcm_iter, puzzle_parser,
     shared_facelet_detection::algorithms_to_cycle_generators,
 };
 
@@ -132,18 +136,18 @@ impl PermutationGroup {
     }
 
     /// If any of the generator names don't exist, it will compose all of the generators before it and return the name of the generator that doesn't exist.
-    pub fn compose_generators_into<'a, S: AsRef<str>>(
+    pub fn compose_generators_into<'a>(
         &self,
         permutation: &mut Permutation,
-        generators: &'a [S],
-    ) -> Result<(), &'a S> {
+        generators: impl Iterator<Item = &'a ArcIntern<String>>,
+    ) -> Result<(), ArcIntern<String>> {
         for generator in generators {
             let generator = match self
                 .generators
                 .get(&ArcIntern::from_ref(generator.as_ref()))
             {
                 Some(idx) => idx,
-                None => return Err(generator),
+                None => return Err(ArcIntern::clone(generator)),
             };
 
             permutation.compose(generator);
@@ -299,7 +303,7 @@ impl CycleGeneratorSubcycle {
 
 #[derive(Debug, Clone)]
 pub struct CycleGenerator {
-    pub(crate) generator_sequence: Vec<String>,
+    pub(crate) generator_sequence: Vec<ArcIntern<String>>,
     pub(crate) permutation: Permutation,
     pub(crate) unshared_cycles: Vec<CycleGeneratorSubcycle>,
     pub(crate) order: U512,
@@ -307,7 +311,7 @@ pub struct CycleGenerator {
 }
 
 impl CycleGenerator {
-    pub fn generator_sequence(&self) -> &[String] {
+    pub fn generator_sequence(&self) -> &[ArcIntern<String>] {
         &self.generator_sequence
     }
 
@@ -323,35 +327,63 @@ impl CycleGenerator {
         self.order
     }
 
-    pub fn is_solved(&self, permutation: &Permutation) -> bool {
-        let mapping = permutation.mapping();
+    pub fn signature_facelets(&self) -> Vec<usize> {
+        let mut cycles_with_extras = vec![];
 
-        self.unshared_cycles()
-            .iter()
-            .flat_map(|v| v.facelet_cycle())
-            .all(|v| self.group.facelet_colors()[mapping[*v]] == self.group.facelet_colors[*v])
-    }
+        for (i, cycle) in self.unshared_cycles().iter().enumerate() {
+            if cycle.chromatic_order() != U512::ONE {
+                cycles_with_extras.push((cycle.chromatic_order(), i));
+            }
+        }
 
-    pub fn decode(&self, permutation: &Permutation) -> U512 {
-        chinese_remainder_theorem(
-            self.unshared_cycles()
-                .iter()
-                .map(|v| {
-                    let cycle = v.facelet_cycle();
+        cycles_with_extras.sort_unstable_by(|a, b| a.0.cmp(&b.0));
 
-                    let offset = U512::from_digit(
-                        cycle
-                            .iter()
-                            .find_position(|v| **v == permutation.mapping()[cycle[0]])
-                            .unwrap()
-                            .0 as u64,
-                    )
-                    .rem(v.chromatic_order());
+        let mut cycles = Vec::<(U512, usize)>::new();
 
-                    (offset, v.chromatic_order())
-                })
-                .collect_vec(),
-        )
+        for (i, (cycle_order, cycle_idx)) in cycles_with_extras.iter().enumerate() {
+            if self.order()
+                != lcm_iter(
+                    cycles.iter().map(|v| v.0).chain(
+                        (i + 1..cycles_with_extras.len()).map(|idx| cycles_with_extras[idx].0),
+                    ),
+                )
+            {
+                cycles.push((*cycle_order, *cycle_idx));
+            }
+        }
+
+        let mut facelets = vec![];
+
+        for (_, idx) in cycles {
+            let cycle = &self.unshared_cycles()[idx];
+            let chromatic_order = cycle.chromatic_order().digits()[0] as usize;
+
+            let mut uncovered = HashSet::<usize>::from_iter(1..chromatic_order);
+
+            let mut facelet_idx = 0;
+            while !uncovered.is_empty() {
+                let facelet = cycle.facelet_cycle()[facelet_idx];
+                let mut still_uncovered = HashSet::new();
+
+                for i in 1..chromatic_order {
+                    if self.group.facelet_colors()
+                        [cycle.facelet_cycle()[(i + facelet_idx) % chromatic_order]]
+                        == self.group.facelet_colors()[facelet]
+                    {
+                        still_uncovered.insert(i);
+                    }
+                }
+
+                if !uncovered.is_subset(&still_uncovered) {
+                    uncovered.retain(|v| still_uncovered.contains(v));
+                    facelets.push(facelet);
+                }
+
+                facelet_idx += 1;
+            }
+        }
+
+        facelets
     }
 }
 
@@ -365,8 +397,8 @@ pub struct Architecture {
 impl Architecture {
     pub fn new(
         group: Rc<PermutationGroup>,
-        algorithms: Vec<Vec<String>>,
-    ) -> Result<Architecture, String> {
+        algorithms: Vec<Vec<ArcIntern<String>>>,
+    ) -> Result<Architecture, ArcIntern<String>> {
         let processed = algorithms_to_cycle_generators(Rc::clone(&group), &algorithms)?;
 
         Ok(Architecture {
@@ -378,6 +410,10 @@ impl Architecture {
 
     pub fn group(&self) -> &PermutationGroup {
         &self.group
+    }
+
+    pub fn group_rc(&self) -> Rc<PermutationGroup> {
+        Rc::clone(&self.group)
     }
 
     pub fn registers(&self) -> &[CycleGenerator] {
@@ -394,6 +430,7 @@ mod tests {
     use std::rc::Rc;
 
     use bnum::types::U512;
+    use internment::ArcIntern;
     use itertools::Itertools;
 
     use super::{Architecture, PuzzleDefinition};
@@ -426,7 +463,7 @@ mod tests {
             let arch = Architecture::new(
                 Rc::clone(&cube.group),
                 arch.iter()
-                    .map(|v| v.split(" ").map(|v| v.to_owned()).collect_vec())
+                    .map(|v| v.split(" ").map(ArcIntern::from_ref).collect_vec())
                     .collect_vec(),
             )
             .unwrap();
@@ -444,7 +481,10 @@ mod tests {
         let mut perm = cube.group.identity();
 
         cube.group
-            .compose_generators_into(&mut perm, &["U", "L"])
+            .compose_generators_into(
+                &mut perm,
+                [ArcIntern::from_ref("U"), ArcIntern::from_ref("L")].iter(),
+            )
             .unwrap();
 
         let mut exp_perm = perm.clone();

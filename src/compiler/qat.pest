@@ -11,7 +11,7 @@ number = { ASCII_DIGIT+ }
 
 algorithm = { ident+ }
 
-registers = { ".registers" ~ ident? ~ "{" ~ "\n"? ~ register_declaration ~ ("\n"+ ~ register_declaration)* ~ "\n"* ~ "}" ~ "\n"* }
+registers = { ".registers" ~ "{" ~ "\n"? ~ register_declaration ~ ("\n"+ ~ register_declaration)* ~ "\n"* ~ "}" ~ "\n"* }
 
 register_declaration = { ident ~ ("," ~ ident)* ~ "<-" ~ register_architecture }
 
@@ -29,7 +29,7 @@ code        = { ident ~ value* }
 lua_call    = { "lua" ~ ident ~ "(" ~ "\n"? ~ value? ~ ("," ~ "\n"? ~ value)* ~ ","? ~ "\n"? ~ ")" }
 instruction = { label | code | constant | lua_call }
 
-type = { "block" | "reg" | "int" | "label" }
+type = { "block" | "reg" | "int" }
 
 macro        =  { ".macro" ~ ident ~ "{" ~ ("\n"* ~ macro_branch)+ ~ "\n"* ~ "}" }
 macro_arg    = ${ ident | (constant ~ ":" ~ type) }
@@ -44,4 +44,5 @@ import = { ".import" ~ import_filename }
 
 lua_code  = { (!"end-lua" ~ ANY)* }
 lua_block = { ".start-lua" ~ lua_code ~ "end-lua" }
+
 
