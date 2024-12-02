@@ -7,26 +7,31 @@
                 order_of_reg(r2) .. ")"
             )
         end
+
+        -- functions that do not output qat must otherwise return nil
+        return nil
     end
 
     function validate_same_orders(...)
         local args = {...}
         local first = order_of_reg(args[1])
+
         for i = 2, #args do
             if order_of_reg(args[i]) ~= first then
                 error("Arguments are not all the same value")
             end
         end
+
         return nil
     end
 
-    function sub(r1, n)
+    function subtract_order_relative(r1, n)
         return { { "add", r1, order_of_reg(r1) - n } }
     end
 end-lua
 
 .macro sub {
-    ($R:reg $N:int) => lua sub($R, $N)
+    ($R:reg $N:int) => lua subtract_order_relative($R, $N)
 }
 
 .macro inc {
@@ -85,11 +90,11 @@ end-lua
         }
     }
     (not-solved $R:reg $code1:code else $code2:block) => {
-        if not-solved $R {
-            $code1
-            goto over_else
-        }
-        $code2
+            if not-solved $R {
+                $code1
+                goto over_else
+            }
+            $code2
         over_else:
     }
     (equals $R:reg $N:int $code:block) => {
@@ -196,8 +201,8 @@ end-lua
 .macro loop {
     ($code:block) => {
         !continue:
-        $code
-        goto continue
+            $code
+            goto continue
         !break:
     }
 }
@@ -223,7 +228,6 @@ end-lua
             if not-equals $R $N {
                 goto break
             }
-
             $code
         }
     }
@@ -232,7 +236,6 @@ end-lua
             if equals $R $N {
                 goto break
             }
-
             $code
         }
     }
@@ -241,7 +244,6 @@ end-lua
             if not-equals $R1 $R2 using $R3 {
                 goto break
             }
-
             $code
         }
     }
@@ -250,7 +252,6 @@ end-lua
             if equals $R1 $R2 using $R3 {
                 goto break
             }
-
             $code
         }
     }
@@ -261,12 +262,10 @@ end-lua
         local output = {}
 
         for i = start, end_ do
-            if var == nil then
-                output[#output + 1] = { code }
-            else
-                output[#output + 1] = { ".define", var, i }
-                output[#output + 1] = { code }
+            if var ~= nil then
+                output[#output + 1] = { ".define", "$" .. var, i }
             end
+            output[#output + 1] = { code }
         end
 
         return output
@@ -275,9 +274,9 @@ end-lua
 
 .macro repeat {
     ($times:int $code:block) => lua repeat($code, 1, $times)
-    
+
     ($times:int $var:ident $code:block) => lua repeat($code, 1, $times, $var)
-    
+
     -- should parse nested for loops such as `repeat j from $i to 10 { ... }`
     -- because the outer $i should be evaluated first
     ($times:int $var:ident from $start:int to $end:int $code:block) => {
