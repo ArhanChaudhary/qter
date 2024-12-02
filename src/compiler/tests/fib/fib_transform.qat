@@ -1,0 +1,61 @@
+    input "Which Fibonacci number to calculate: " C
+    add A 1
+loop_1:
+    print A
+continue_1:
+    solved-goto A break_1
+    sub A 1
+    add B 1
+    solved-goto B do_if_1
+    goto after_if_1
+do_if_1:
+zero_loop_1:
+    solved-goto A move_done_1
+    sub A 1
+    add B 1
+    goto zero_loop_1
+move_done_1:
+    halt "The number is: " C
+after_if_1:
+    add C 1
+    goto continue_1
+break_1:
+    print B
+continue_2:
+    solved-goto B break_2
+    sub B 1
+    add C 1
+    solved-goto C do_if_2
+    goto after_if_2
+do_if_2:
+zero_loop_2:
+    solved-goto B move_done_2
+    sub B 1
+    add A 1
+    goto zero_loop_2
+move_done_2:
+    halt "The number is: " A
+after_if_2:
+    add A 1
+    goto continue_2
+break_2:
+    print C
+continue_3:
+    solved-goto C break_3
+    sub C 1
+    add A 1
+    solved-goto A do_if_3
+    goto after_if_3
+do_if_3:
+zero_loop_3:
+    solved-goto C move_done_3
+    sub C 1
+    add B 1
+    goto zero_loop_3
+move_done_3:
+    halt "The number is: " B
+after_if_3:
+    add B 1
+    goto continue_3
+break_3:
+    goto loop_1

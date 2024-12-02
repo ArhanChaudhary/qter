@@ -1,0 +1,22 @@
+.macro fib-shuffle {
+    ($R1:reg $R2:reg $R3:reg) => {
+        print $R1
+        while not-solved $R1 {
+            sub $R1 1
+            add $R2 1
+            if solved $R2 {
+                move $R1 to $R3
+                halt "The number is: " $R3
+            }
+            add $R3 1
+        }
+    }
+}
+
+input "Which Fibonacci number to calculate: " C
+add A 1
+loop {
+    fib-shuffle A B C
+    fib-shuffle B C A
+    fib-shuffle C A B
+}

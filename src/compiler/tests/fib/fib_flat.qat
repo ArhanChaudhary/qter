@@ -1,0 +1,34 @@
+input "Which Fibonacci number to calculate: " C
+add A 1
+loop {
+    print A
+    while not-solved A {
+        sub A 1
+        add B 1
+        if solved B {
+            move A to C
+            halt "The number is: " C
+        }
+        add C 1
+    }
+    print B
+    while not-solved B {
+        sub B 1
+        add C 1
+        if solved C {
+            move B to A
+            halt "The number is: " A
+        }
+        add A 1
+    }
+    print C
+    while not-solved C {
+        sub C 1
+        add A 1
+        if solved A {
+            move C to B
+            halt "The number is: " B
+        }
+        add B 1
+    }
+}
