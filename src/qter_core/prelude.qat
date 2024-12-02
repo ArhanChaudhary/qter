@@ -1,13 +1,40 @@
+.start-lua
+    local function validate_equals_order(r1, r2, r3)
+        if order_of_reg(r3) < order_of_reg(r1) or
+            order_of_reg(r3) < order_of_reg(r2) then
+            error("Register 3 must not be the minimum order (" ..
+                order_of_reg(r3) .. " < min(" .. order_of_reg(r1) .. ", " ..
+                order_of_reg(r2) .. ")"
+            )
+        end
+    end
+
+    function validate_same_orders(...)
+        local args = {...}
+        local first = order_of_reg(args[1])
+        for i = 2, #args do
+            if order_of_reg(args[i]) ~= first then
+                error("Arguments are not all the same value")
+            end
+        end
+        return nil
+    end
+
+    function sub(r1, n)
+        return { { "add", r1, order_of_reg(r1) - n } }
+    end
+end-lua
+
+.macro sub {
+    ($R:reg $N:int) => lua sub($R, $N)
+}
+
 .macro inc {
-    ($R:reg) => {
-        add $R 1
-    }
+    ($R:reg) => add $R 1
 }
 
 .macro dec {
-    ($R:reg) => {
-        sub $R 1
-    }
+    ($R:reg) => sub $R 1
 }
 
 .macro move {
@@ -51,20 +78,19 @@
         after_if:
     }
     (solved $R:reg $code1:code else $code2:block) => {
-            solved-goto $R do_if
-        do_else:
-            $code2
-            goto after_if
-        do_if:
-            $code1
-        after_if:
-    }
-    (not-solved $R:reg $code1:code else $code2:block) => {
-        if solved $R {
+        if not-solved $R {
             $code2
         } else {
             $code1
         }
+    }
+    (not-solved $R:reg $code1:code else $code2:block) => {
+        if not-solved $R {
+            $code1
+            goto over_else
+        }
+        $code2
+        over_else:
     }
     (equals $R:reg $N:int $code:block) => {
         -- TODO
@@ -73,7 +99,12 @@
         -- TODO
     }
     (equals $R:reg $N:int $code1:code else $code2:block) => {
-        -- TODO
+        if equals $R $N {
+            $code1
+            goto over_else
+        }
+        $code2
+        over_else:
     }
     (not-equals $R:reg $N:int $code1:code else $code2:block) => {
         if equals $R $N {
@@ -111,10 +142,41 @@
         fail:
     }
     (not-equals $R1:reg $R2:reg using $R3:reg $code:block) => {
-        -- TODO
+            lua validate_equals_order($R1, $R2, $R3)
+            set $R3 to 0
+        equals_loop:
+            solved-goto $R1 first_zero
+            solved-goto $R2 fail_loop
+            dec $R1
+            dec $R2
+            inc $R3
+            goto equals_loop
+        first_zero:
+            solved-goto $R2 success_loop
+        fail_loop:
+            solved-goto $R3 fail
+            inc $R1
+            inc $R2
+            dec $R3
+            goto fail_loop
+        success_loop:
+            solved-goto $R3 success
+            inc $R1
+            inc $R2
+            dec $R3
+            goto success_loop
+            -- Only change is to swap these two labels
+        fail:
+            $code
+        success:
     }
     (equals $R1:reg $R2:reg using $R3:reg $code1:code else $code2:block) => {
-        -- TODO
+        if equals $R1 $R2 using $R3 {
+            $code1
+            goto over_else
+        }
+        $code2
+        over_else:
     }
     (not-equals $R1:reg $R2:reg using $R3:reg $code1:code else $code2:block) => {
         if equals $R1 $R2 using $R3 {
@@ -122,6 +184,15 @@
         } else {
             $code1
         }
+    }
+}
+
+.macro loop {
+    ($code:block) => {
+        !continue:
+        $code
+        goto continue
+        !break:
     }
 }
 
@@ -142,26 +213,65 @@
         !break:
     }
     (equals $R:reg $N:int $code:block) => {
-        -- TODO
+        loop {
+            if not-equals $R $N {
+                goto break
+            }
+
+            $code
+        }
     }
     (not-equals $R:reg $N:int $code:block) => {
-        -- TODO
+        loop {
+            if equals $R $N {
+                goto break
+            }
+
+            $code
+        }
     }
     (equals $R1:reg $R2:reg using $R3:reg $code:block) => {
-        -- TODO
+        loop {
+            if not-equals $R1 $R2 using $R3 {
+                goto break
+            }
+
+            $code
+        }
     }
     (not-equals $R1:reg $R2:reg using $R3:reg $code:block) => {
-        -- TODO
+        loop {
+            if equals $R1 $R2 using $R3 {
+                goto break
+            }
+
+            $code
+        }
     }
 }
 
+.start-lua
+    function repeat(code, start, end_, var)
+        local output = {}
+
+        for i = start, end_ do
+            if var == nil then
+                output[#output + 1] = { code }
+            else
+                output[#output + 1] = { ".define", var, i }
+                output[#output + 1] = { code }
+            end
+        end
+
+        return output
+    end
+end-lua
+
 .macro repeat {
-    ($times:int $code:block) => {
-        lua repeat($code, 1, $times)
-    }
-    ($times:int $var:ident $code:block) => {
-        lua repeat($code, 1, $times, $var)
-    }
+    ($times:int $code:block) => lua repeat($code, 1, $times)
+    
+    ($times:int $var:ident $code:block) => lua repeat($code, 1, $times, $var)
+    
     -- should parse nested for loops such as `repeat j from $i to 10 { ... }`
     -- because the outer $i should be evaluated first
     ($times:int $var:ident from $start:int to $end:int $code:block) => {
@@ -169,48 +279,7 @@
     }
 }
 
-.macro multiply {
-    ($R1:reg $R2:reg using $R3:reg) => {
-        lua multiply($R1, $R2, $R3)
-    }
-}
-
 .start-lua
-    local function validate_equals_order(r1, r2, r3)
-        if order_of_reg(r3) < order_of_reg(r1) or
-            order_of_reg(r3) < order_of_reg(r2) then
-            error("Register 3 must not be the minimum order (" ..
-                order_of_reg(r3) .. " < min(" .. order_of_reg(r1) .. ", " ..
-                order_of_reg(r2) .. ")"
-            )
-        end
-    end
-
-    function repeat(code, start, end_, var)
-        local output = {}
-
-        for i = start, end_ do
-            if var == nil then
-                output[i] = code
-            else
-                output[i] = ".define $" .. var .. " " .. i .. "\n" .. code
-            end
-        end
-
-        return output
-    end
-
-    function validate_same_orders(...)
-        local args = {...}
-        local first = order_of_reg(args[1])
-        for i = 2, #args do
-            if order_of_reg(args[i]) ~= first then
-                error("Arguments are not all the same value")
-            end
-        end
-        return nil
-    end
-
     function multiply(r1, r2, r3)
         validate_same_orders(r1, r2, r3)
         local output = {}
@@ -218,3 +287,10 @@
         return output
     end
 end-lua
+
+.macro multiply {
+    ($R1:reg $R2:reg using $R3:reg) => {
+        lua multiply($R1, $R2, $R3)
+    }
+}
+
