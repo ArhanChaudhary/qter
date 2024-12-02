@@ -93,23 +93,29 @@ end-lua
         over_else:
     }
     (equals $R:reg $N:int $code:block) => {
-        -- TODO
+        if equals $R {
+            $code
+        } else {}
     }
     (not-equals $R:reg $N:int $code:block) => {
-        -- TODO
+        if not-equals $R {
+            $code
+        } else {}
     }
     (equals $R:reg $N:int $code1:code else $code2:block) => {
-        if equals $R $N {
-            $code1
-            goto over_else
-        }
-        $code2
-        over_else:
-    }
-    (not-equals $R:reg $N:int $code1:code else $code2:block) => {
-        if equals $R $N {
+        if not-equals $R $N {
             $code2
         } else {
+            $code1
+        }
+    }
+    (not-equals $R:reg $N:int $code1:code else $code2:block) => {
+        sub $R $N
+        if not-solved $R {
+            add $R $N
+            $code2
+        } else {
+            add $R $N
             $code1
         }
     }
