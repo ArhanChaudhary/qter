@@ -176,7 +176,7 @@ end-lua
             inc $R2
             dec $R3
             goto success_loop
-            -- Only change is to swap these two labels
+        -- Only change is to swap these two labels
         fail:
             $code
         success:
