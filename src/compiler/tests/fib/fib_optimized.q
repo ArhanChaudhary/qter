@@ -2,44 +2,39 @@ Puzzles
 1: 3x3
 
     input "Which Fibonacci number to calculate: " B2 U2 L F' R B L2 D2 B R' F L
-    solved-goto UFR do_if_1
-    goto after_if_1
-do_if_1:
+    solved-goto UFR label_1
+    goto label_2
+label_1:
     halt "The number is: 0"
-after_if_1:
+label_2:
     D L' F L2 B L' F' L B' D' L'
-loop_1:
+label_3:
     L' F' R B' D2 L2 B' R' F L' U2 B2
-    solved-goto UFR do_if_2
-    goto after_if_2
-do_if_2:
+    solved-goto UFR label_4
+    goto label_5
+label_4:
     halt "The number is: " L D B L' F L B' L2 F' L D' counting-until DL DFL
-after_if_2:
-continue_1:
-    solved-goto DL DFL break_1
+label_5:
+    solved-goto DL DFL label_6
     L U' B R' L B' L' U' L U R2 B R2 D2 R2 D'
-    goto continue_1
-break_1:
+    goto label_5
+label_6:
     L' F' R B' D2 L2 B' R' F L' U2 B2
-    solved-goto UFR do_if_3
-    goto after_if_3
-do_if_3:
+    solved-goto UFR label_7
+    goto label_8
+label_7:
     halt "The number is: " F2 L2 U2 D' R U' B L' B L' U' counting-until FR DRF
-after_if_3:
-continue_2:
-    solved-goto FR DRF break_2
+label_8:
+    solved-goto FR DRF label_9
     D' B' U2 B D' F' D L' D2 F' R' D2 F2 R F2 R2 U' R'
-    goto continue_2
-break_2:
+    goto label_8
+label_9:
     L' F' R B' D2 L2 B' R' F L' U2 B2
-    solved-goto UFR do_if_4
-    goto after_if_4
-do_if_4:
+    solved-goto UFR label_10
+    goto label_11
+label_10:
     halt "The number is: " U L' R' F' U' F' L' F2 L U R counting-until UF
-after_if_4:
-continue_3:
-    solved-goto UF break_3
+label_11:
+    solved-goto UF label_3
     B R2 D' R B D F2 U2 D' F' L2 F D2 F B2 D' L' U'
-    goto continue_3
-break_3:
-    goto loop_1
+    goto label_11
