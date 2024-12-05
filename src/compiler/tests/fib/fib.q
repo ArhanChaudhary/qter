@@ -3,6 +3,7 @@ A: 3x3
 
 1  | input "Which Fibonacci number to calculate: "
            B2 U2 L F' R B L2 D2 B R' F L
+           max-repeat 8
 2  | solved-goto UFR 4
 3  | goto 5
 4  | halt "The number is: 0"

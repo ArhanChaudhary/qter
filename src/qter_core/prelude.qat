@@ -182,11 +182,11 @@ end-lua
         success:
     }
     (equals $R1:reg $R2:reg using $R3:reg $code1:block else $code2:block) => {
-        if equals $R1 $R2 using $R3 {
-            $code1
-            goto over_else
-        }
-        $code2
+            if equals $R1 $R2 using $R3 {
+                $code1
+                goto over_else
+            }
+            $code2
         over_else:
     }
     (not-equals $R1:reg $R2:reg using $R3:reg $code1:block else $code2:block) => {
