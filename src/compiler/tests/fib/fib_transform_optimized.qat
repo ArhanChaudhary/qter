@@ -43,11 +43,9 @@ do_if_4:
     halt "The number is: " C
 after_if_4:
 continue_4:
-    solved-goto C break_4
+    solved-goto C continue_1
     add C 9
     add B 1
     add A 1
     goto continue_4
-break_4:
-    goto continue_1
 break_1:

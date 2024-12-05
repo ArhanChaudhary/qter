@@ -9,9 +9,9 @@
             halt "The number is: " $R1
         }
         while not-solved $R1 {
-            sub $R1 1
-            add $R2 1
-            add $R3 1
+            dec $R1
+            inc $R2
+            inc $R3
         }
     }
 }
@@ -37,5 +37,4 @@ A  B  C  D
 0  5  8  3
 8  13 0  2
 21 0  3  1
-halt 21
 --]]
