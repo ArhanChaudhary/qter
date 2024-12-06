@@ -71,6 +71,15 @@ def integer_partitions(n):
     return answer
 
 
+# https://stackoverflow.com/a/6285330/12230735
+def unique_permutations(iterable, r=None):
+    previous = ()
+    for p in itertools.permutations(sorted(iterable), r):
+        if p > previous:
+            previous = p
+            yield p
+
+
 @functools.cache
 def shared_integer_partitions(n):
     """
@@ -173,13 +182,13 @@ def all_cycle_combinations(num_cycles, edges, corners):
                 num_cycles - len(partition_corner_counts)
             )
             seen_cycle_cubie_counts = set()
+
             for (
                 permuted_parition_edge_counts,
                 permuted_partition_corner_counts,
             ) in itertools.product(
-                # TODO: not efficient
-                set(itertools.permutations(partition_edge_counts)),
-                set(itertools.permutations(partition_corner_counts)),
+                unique_permutations(partition_edge_counts),
+                unique_permutations(partition_corner_counts),
             ):
                 all_cycles_with_cubie_counts = []
                 continue_outer = False
@@ -192,17 +201,42 @@ def all_cycle_combinations(num_cycles, edges, corners):
                     all_cycles_with_cubie_counts.append((edge_count, corner_count))
                 if continue_outer:
                     continue
-
                 all_cycles_with_cubie_counts = tuple(
                     sorted(all_cycles_with_cubie_counts, reverse=True)
                 )
                 if all_cycles_with_cubie_counts in seen_cycle_cubie_counts:
                     continue
-
                 seen_cycle_cubie_counts.add(all_cycles_with_cubie_counts)
+
                 for shared_cycle_combination in recursive_shared_cycle_combinations(
                     all_cycles_with_cubie_counts
                 ):
+                    unshared_edge_can_share_exists = False
+                    unshared_corner_can_share_exists = False
+                    share_edge_exists = False
+                    share_corner_exists = False
+
+                    for cycle in shared_cycle_combination:
+                        if not unshared_edge_can_share_exists:
+                            share_edge_exists |= cycle.share[0]
+                            unshared_edge_can_share_exists |= (
+                                cycle.share[0] is False and 1 in cycle.edge_partition
+                            )
+                        if not unshared_corner_can_share_exists:
+                            share_corner_exists |= cycle.share[1]
+                            unshared_corner_can_share_exists |= (
+                                cycle.share[1] is False and 1 in cycle.corner_partition
+                            )
+                        if (
+                            unshared_edge_can_share_exists
+                            and unshared_corner_can_share_exists
+                        ):
+                            break
+
+                    if (share_edge_exists and not unshared_edge_can_share_exists) or (
+                        share_corner_exists and not unshared_corner_can_share_exists
+                    ):
+                        continue
                     # just because we sort the parititons earlier doesnt mean the
                     # orders will be sorted
                     descending_order_cycle_combination = sorted(
@@ -214,78 +248,68 @@ def all_cycle_combinations(num_cycles, edges, corners):
                         ),
                         reverse=True,
                     )
-
-                    all_permuted_same_order_cycles = []
-                    same_order_cycles = []
-                    current_order = descending_order_cycle_combination[0].order
-                    for i in range(len(descending_order_cycle_combination) + 1):
-                        if (
-                            i == len(descending_order_cycle_combination)
-                            or descending_order_cycle_combination[i].order
-                            != current_order
-                        ):
-                            permuted_same_order_cycles = []
-                            # TODO: not efficient
-                            seen_partitions = set()
-                            for permuted_cycle in itertools.permutations(
-                                same_order_cycles
-                            ):
-                                seen_key = tuple(
-                                    (cycle.edge_partition, cycle.corner_partition)
-                                    for cycle in permuted_cycle
-                                )
-                                if seen_key in seen_partitions:
-                                    continue
-                                seen_partitions.add(seen_key)
-                                permuted_same_order_cycles.append(permuted_cycle)
-                            all_permuted_same_order_cycles.append(
-                                permuted_same_order_cycles
-                            )
-                            if i != len(descending_order_cycle_combination):
-                                same_order_cycles = [
-                                    descending_order_cycle_combination[i]
-                                ]
-                                current_order = descending_order_cycle_combination[
-                                    i
-                                ].order
-                        else:
-                            same_order_cycles.append(
-                                descending_order_cycle_combination[i]
-                            )
-
-                    for descending_order_cycle_combination in map(
-                        itertools.chain.from_iterable,
-                        itertools.product(*all_permuted_same_order_cycles),
+                    for i, start_cycle_to_permute in enumerate(
+                        descending_order_cycle_combination
                     ):
-                        descending_order_cycle_combination = list(
-                            descending_order_cycle_combination
+                        # We only permute the cycles that have the same maximum
+                        # order because the partition permutation for same order
+                        # cycles matters for phase 2. Don't permute the rest
+                        # because that logic is implemented in phase 3 (more
+                        # efficient to do this in phase 3 vs here).
+                        if (
+                            start_cycle_to_permute.order
+                            != descending_order_cycle_combination[0].order
+                        ):
+                            break
+                        if i != 0 and (
+                            descending_order_cycle_combination[i - 1].edge_partition
+                            == start_cycle_to_permute.edge_partition
+                            and descending_order_cycle_combination[
+                                i - 1
+                            ].corner_partition
+                            == start_cycle_to_permute.corner_partition
+                        ):
+                            continue
+                        start_permuted_descending_order_cycle_combination = (
+                            descending_order_cycle_combination.copy()
                         )
+                        (
+                            start_permuted_descending_order_cycle_combination[0],
+                            start_permuted_descending_order_cycle_combination[i],
+                        ) = (
+                            start_permuted_descending_order_cycle_combination[i],
+                            start_permuted_descending_order_cycle_combination[0],
+                        )
+
                         edge_can_share_exists = False
                         corner_can_share_exists = False
                         share_edge_count = 0
                         share_corner_count = 0
-                        share_edge_candidates = []
-                        share_corner_candidates = []
+                        share_edge_cycle_candidates = []
+                        share_corner_cycle_candidates = []
                         order_product = 1
 
-                        for i, cycle in enumerate(descending_order_cycle_combination):
-                            order_product *= cycle.order
+                        for j, cycle in enumerate(
+                            start_permuted_descending_order_cycle_combination
+                        ):
                             if edge_can_share_exists and 1 in cycle.edge_partition:
-                                share_edge_candidates.append(i)
+                                share_edge_cycle_candidates.append(j)
                             if corner_can_share_exists and 1 in cycle.corner_partition:
-                                share_corner_candidates.append(i)
+                                share_corner_cycle_candidates.append(j)
+
                             edge_can_share_exists |= 1 in cycle.edge_partition
                             corner_can_share_exists |= 1 in cycle.corner_partition
                             share_edge_count += cycle.share[0]
                             share_corner_count += cycle.share[1]
-                        # TODO: move this condition higher
-                        if (
-                            len(share_edge_candidates) == 0 and share_edge_count != 0
-                        ) or (
-                            len(share_corner_candidates) == 0
-                            and share_corner_count != 0
-                        ):
-                            continue
+                            order_product *= cycle.order
+
+                        assert (
+                            share_edge_count == 0
+                            or len(share_edge_cycle_candidates) != 0
+                        ) and (
+                            share_corner_count == 0
+                            or len(share_corner_cycle_candidates) != 0
+                        )
 
                         # TODO: it might be possible that the tree search covers *every*
                         # possible way to distribute shares when the number of unshared
@@ -300,16 +324,16 @@ def all_cycle_combinations(num_cycles, edges, corners):
                         # If I can show this tautology, then we can remove this
                         # part almost entirely which should significantly improve performance.
                         for (
-                            share_edges_indicies,
-                            share_corners_indicies,
+                            share_edge_indicies,
+                            share_corner_indicies,
                         ) in itertools.product(
                             # given a list "share_edge_candidates", what are all ways to
                             # pick "share_edge_count" numbers from the list
                             itertools.combinations(
-                                share_edge_candidates, share_edge_count
+                                share_edge_cycle_candidates, share_edge_count
                             ),
                             itertools.combinations(
-                                share_corner_candidates, share_corner_count
+                                share_corner_cycle_candidates, share_corner_count
                             ),
                         ):
                             cycle_combination = CycleCombination(
@@ -319,12 +343,12 @@ def all_cycle_combinations(num_cycles, edges, corners):
                                 cycles=tuple(
                                     cycle._replace(
                                         share=(
-                                            i in share_edges_indicies,
-                                            i in share_corners_indicies,
+                                            j in share_edge_indicies,
+                                            j in share_corner_indicies,
                                         )
                                     )
-                                    for i, cycle in enumerate(
-                                        descending_order_cycle_combination
+                                    for j, cycle in enumerate(
+                                        start_permuted_descending_order_cycle_combination
                                     )
                                 ),
                             )
@@ -342,7 +366,7 @@ def recursive_shared_cycle_combinations(cycle_cubie_counts):
         return ((),)
     share_mat = [(False, False)]
     # needed because when a cubie count is zero its partition is always the
-    # empty tuple which logically cannot share a partition
+    # empty tuple which logically cannot used a shared cubie
     if cycle_cubie_counts[0][0] != 0:
         share_mat.append((True, False))
     if cycle_cubie_counts[0][1] != 0:
@@ -374,6 +398,7 @@ def highest_order_cycles_from_cubie_counts(
     highest_order = 1
     cycles = []
     if edge_count == 0:
+        # we guarantee 0,0 doesnt happen somewhere
         assert corner_count != 0
         assert not share_edge
     if share_edge:
@@ -742,4 +767,4 @@ def main(num_cycles):
 
 if __name__ == "__main__":
     with open("./output.py", "w") as f:
-        f.write(f"Cycle = 1\nCycleCombination = 1\n{main(4)}")
+        f.write(f"Cycle = 1\nCycleCombination = 1\n{main(3)}")
