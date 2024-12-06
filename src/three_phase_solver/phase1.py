@@ -283,76 +283,35 @@ def all_cycle_combinations(num_cycles, edges, corners):
 
                         edge_can_share_exists = False
                         corner_can_share_exists = False
-                        share_edge_count = 0
-                        share_corner_count = 0
-                        share_edge_cycle_candidates = []
-                        share_corner_cycle_candidates = []
                         order_product = 1
 
+                        # TODO: which method is faster is unclear, but it may be
+                        # worth combining the share validatation loop with this
+                        # loop and using a reference as the cycle candidate.
+                        continue_outer = False
                         for j, cycle in enumerate(
                             start_permuted_descending_order_cycle_combination
                         ):
-                            if edge_can_share_exists and 1 in cycle.edge_partition:
-                                share_edge_cycle_candidates.append(j)
-                            if corner_can_share_exists and 1 in cycle.corner_partition:
-                                share_corner_cycle_candidates.append(j)
+                            if not edge_can_share_exists and cycle.share[0]:
+                                continue_outer = True
+                                break
+                            if not corner_can_share_exists and cycle.share[1]:
+                                continue_outer = True
+                                break
 
                             edge_can_share_exists |= 1 in cycle.edge_partition
                             corner_can_share_exists |= 1 in cycle.corner_partition
-                            share_edge_count += cycle.share[0]
-                            share_corner_count += cycle.share[1]
                             order_product *= cycle.order
-
-                        assert (
-                            share_edge_count == 0
-                            or len(share_edge_cycle_candidates) != 0
-                        ) and (
-                            share_corner_count == 0
-                            or len(share_corner_cycle_candidates) != 0
-                        )
-
-                        # TODO: it might be possible that the tree search covers *every*
-                        # possible way to distribute shares when the number of unshared
-                        # cycles is greater than one. I am skeptical this is the case.
-                        # consider 180/24 vs 126/36. 126/36
-                        # is only found when 36 is first because the same partition
-                        # produces 180/24 and 180 has the higher order as determined by
-                        # >>> highest_order_cycles_from_cubie_counts(8, 5, False, False)
-                        # [Cycle(order=180, share=(False, False), edge_partition=(1, 2, 5), corner_partition=(2, 3), always_orient_edges=[0], always_orient_corners=[], critical_orient_edges=[1], critical_orient_corners=[1])]
-                        # >>> highest_order_cycles_from_cubie_counts(4, 3, True, False)
-                        # [Cycle(order=24, share=(True, False), edge_partition=(1, 4), corner_partition=(1, 2), always_orient_edges=[0], always_orient_corners=[0], critical_orient_edges=[1], critical_orient_corners=[0, 1])]
-                        # If I can show this tautology, then we can remove this
-                        # part almost entirely which should significantly improve performance.
-                        for (
-                            share_edge_indicies,
-                            share_corner_indicies,
-                        ) in itertools.product(
-                            # given a list "share_edge_candidates", what are all ways to
-                            # pick "share_edge_count" numbers from the list
-                            itertools.combinations(
-                                share_edge_cycle_candidates, share_edge_count
-                            ),
-                            itertools.combinations(
-                                share_corner_cycle_candidates, share_corner_count
-                            ),
-                        ):
-                            cycle_combination = CycleCombination(
+                        if continue_outer:
+                            continue
+                        cycle_combinations.append(
+                            CycleCombination(
                                 used_edge_count=used_edge_count,
                                 used_corner_count=used_corner_count,
                                 order_product=order_product,
-                                cycles=tuple(
-                                    cycle._replace(
-                                        share=(
-                                            j in share_edge_indicies,
-                                            j in share_corner_indicies,
-                                        )
-                                    )
-                                    for j, cycle in enumerate(
-                                        start_permuted_descending_order_cycle_combination
-                                    )
-                                ),
+                                cycles=tuple(start_permuted_descending_order_cycle_combination),
                             )
-                            cycle_combinations.append(cycle_combination)
+                        )
                 # TODO: is it worth removing redundant cycles intermediately?
                 # this would require sorting by orders then re-sorting by order
                 # product, so its performance vs memory
@@ -767,4 +726,4 @@ def main(num_cycles):
 
 if __name__ == "__main__":
     with open("./output.py", "w") as f:
-        f.write(f"Cycle = 1\nCycleCombination = 1\n{main(3)}")
+        f.write(f"Cycle = 1\nCycleCombination = 1\n{main(4)}")
