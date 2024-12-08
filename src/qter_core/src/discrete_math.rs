@@ -3,6 +3,7 @@ use bnum::{
     types::{I512, U512},
 };
 
+/// Calculate the GCD of two numbers
 pub fn gcd(mut a: U512, mut b: U512) -> U512 {
     loop {
         if b == U512::ZERO {
@@ -15,6 +16,7 @@ pub fn gcd(mut a: U512, mut b: U512) -> U512 {
     }
 }
 
+/// Calculate the LCM of two numbers
 pub fn lcm(a: U512, b: U512) -> U512 {
     assert_ne!(a, U512::ZERO);
     assert_ne!(b, U512::ZERO);
@@ -22,10 +24,12 @@ pub fn lcm(a: U512, b: U512) -> U512 {
     b / gcd(a, b) * a
 }
 
+/// Calculate the LCM of a list of numbers
 pub fn lcm_iter(values: impl Iterator<Item = U512>) -> U512 {
     values.fold(U512::ONE, lcm)
 }
 
+/// Calculate the GCD of two numbers as well as the coefficients of Bézout's identity
 pub fn extended_euclid(mut a: U512, mut b: U512) -> ((I512, I512), U512) {
     let mut a_coeffs = (I512::ONE, I512::ZERO);
     let mut b_coeffs = (I512::ZERO, I512::ONE);
@@ -50,43 +54,64 @@ pub fn extended_euclid(mut a: U512, mut b: U512) -> ((I512, I512), U512) {
 }
 
 // Implementation based on https://math.stackexchange.com/questions/1644677/what-to-do-if-the-modulus-is-not-coprime-in-the-chinese-remainder-theorem
-pub fn chinese_remainder_theorem(values: Vec<(U512, U512)>) -> U512 {
-    let mut conditions = values.into_iter();
-
-    let mut initial = match conditions.next() {
-        Some(condition) => condition,
-        None => return U512::ZERO,
+/// Calculate the chinese remainder theorem over a list of tuples of remainders with moduli. The return value is bounded by the LCM of the moduli.
+///
+/// For each `(k, m) ∈ conditions`, the return value is congruent to `k mod m`.
+///
+/// This is a generalization of the CRT that supports moduli that aren't coprime. Because of this, a value that satifies all of the conditions is not guaranteed. If the conditions contradict each other, the function will return `None`.
+///
+/// If any of the conditions give `None`, the function will stop and return `None`.
+pub fn chinese_remainder_theorem(
+    mut conditions: impl Iterator<Item = Option<(U512, U512)>>,
+) -> Option<U512> {
+    let (mut prev_remainder, mut prev_modulus) = match conditions.next() {
+        Some(Some(condition)) => condition,
+        Some(None) => return None,
+        None => return Some(U512::ZERO),
     };
 
-    for condition in conditions {
-        let (coeffs, gcd) = extended_euclid(initial.1, condition.1);
+    for cond in conditions {
+        let (remainder, modulus) = cond?;
 
-        let diff = if condition.0 > initial.0 {
-            condition.0 - initial.0
+        let (coeffs, gcd) = extended_euclid(prev_modulus, modulus);
+
+        let diff = if remainder > prev_remainder {
+            remainder - prev_remainder
         } else {
-            initial.0 - condition.0
+            prev_remainder - remainder
         };
 
         if diff.rem_euclid(gcd) != U512::ZERO {
-            panic!("Inconsistent remainders!");
+            return None;
         }
 
         let λ = diff / gcd;
 
-        let x = if condition.0 > initial.0 {
-            condition.0.as_::<I512>() - condition.1.as_::<I512>() * coeffs.1 * λ.as_::<I512>()
+        let x = if remainder > prev_remainder {
+            remainder.as_::<I512>() - modulus.as_::<I512>() * coeffs.1 * λ.as_::<I512>()
         } else {
-            initial.0.as_::<I512>() - initial.1.as_::<I512>() * coeffs.0 * λ.as_::<I512>()
+            prev_remainder.as_::<I512>() - prev_modulus.as_::<I512>() * coeffs.0 * λ.as_::<I512>()
         };
 
-        let new_modulus = lcm(initial.1, condition.1);
+        let new_modulus = lcm(prev_modulus, modulus);
 
-        initial = (x.rem_euclid(new_modulus.as_()).as_(), new_modulus);
+        prev_remainder = x.rem_euclid(new_modulus.as_()).as_();
+        prev_modulus = new_modulus;
     }
 
-    initial.0
+    Some(prev_remainder)
 }
 
+/// This function does what it says on the tin.
+///
+/// "AAAA"  → 1
+/// "ABAB"  → 2
+/// "ABCA"  → 4
+/// "ABABA" → 5
+///
+/// Every string given by the iterator is treated as a unit rather than split apart, so `["Yellow", "Green", "Yellow", "Green"]` would return `2`.
+///
+/// This function is important for computing the chromatic order of cycles.
 pub fn length_of_substring_that_this_string_is_n_repeated_copies_of<'a>(
     colors: impl Iterator<Item = &'a str>,
 ) -> U512 {
@@ -112,7 +137,6 @@ pub fn length_of_substring_that_this_string_is_n_repeated_copies_of<'a>(
 #[cfg(test)]
 mod tests {
     use bnum::{cast::As, types::U512};
-    use itertools::Itertools;
 
     use crate::discrete_math::{
         extended_euclid, gcd, lcm, length_of_substring_that_this_string_is_n_repeated_copies_of,
@@ -146,26 +170,20 @@ mod tests {
         assert_eq!(_lcm(4, 6), 12);
     }
 
-    fn _crt(v: impl IntoIterator<Item = (u64, u64)>) -> u64 {
+    fn _crt(v: impl IntoIterator<Item = (u64, u64)>) -> Option<u64> {
         chinese_remainder_theorem(
             v.into_iter()
-                .map(|(a, b)| (U512::from_digit(a), U512::from_digit(b)))
-                .collect_vec(),
+                .map(|(a, b)| Some((U512::from_digit(a), U512::from_digit(b)))),
         )
-        .digits()[0]
+        .map(|v| v.digits()[0])
     }
 
     #[test]
     fn crt() {
-        assert_eq!(_crt([(2, 3), (1, 2)]), 5);
-        assert_eq!(_crt([(3, 4), (1, 2)]), 3);
-        assert_eq!(_crt([(3, 4), (1, 2), (3, 5), (4, 7)]), 123);
-    }
-
-    #[test]
-    #[should_panic(expected = "Inconsistent remainders!")]
-    fn crt_evil() {
-        _crt([(2, 4), (1, 2)]);
+        assert_eq!(_crt([(2, 3), (1, 2)]), Some(5));
+        assert_eq!(_crt([(3, 4), (1, 2)]), Some(3));
+        assert_eq!(_crt([(3, 4), (1, 2), (3, 5), (4, 7)]), Some(123));
+        assert_eq!(_crt([(2, 4), (1, 2)]), None);
     }
 
     #[test]

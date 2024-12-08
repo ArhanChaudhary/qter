@@ -13,13 +13,17 @@ use crate::{
     shared_facelet_detection::algorithms_to_cycle_generators,
 };
 
+/// The definition of a puzzle parsed from the custom format
 #[derive(Debug)]
 pub struct PuzzleDefinition {
+    /// The permutation group of the puzzle
     pub group: Rc<PermutationGroup>,
+    /// A list of preset architectures
     pub presets: Vec<Rc<Architecture>>,
 }
 
 impl PuzzleDefinition {
+    /// Parse a puzzle from the spec
     pub fn parse(spec: &str) -> Result<PuzzleDefinition, String> {
         puzzle_parser::parse(spec).map_err(|v| v.to_string())
     }
@@ -68,6 +72,7 @@ impl PuzzleDefinition {
         Some(Rc::new(new_arch))
     }
 
+    /// Find a preset with the specified cycle orders
     pub fn get_preset(&self, orders: &[U512]) -> Option<Rc<Architecture>> {
         for preset in &self.presets {
             if preset.cycle_generators.len() != orders.len() {
@@ -83,6 +88,9 @@ impl PuzzleDefinition {
     }
 }
 
+/// A permutation subgroup defined by a set of generators along with the color of each facelet
+///
+/// TODO: Is there a clean way to represent the quotient group by permutations of same-color facelets?
 #[derive(Clone, Debug)]
 pub struct PermutationGroup {
     facelet_colors: Vec<ArcIntern<String>>,
@@ -90,6 +98,7 @@ pub struct PermutationGroup {
 }
 
 impl PermutationGroup {
+    /// Construct a new `PermutationGroup` from a list of facelet colors and generator permutations
     pub fn new(
         facelet_colors: Vec<ArcIntern<String>>,
         mut generators: HashMap<ArcIntern<String>, Permutation>,
@@ -110,14 +119,17 @@ impl PermutationGroup {
         }
     }
 
+    /// The number of facelets in the permutation group
     pub fn facelet_count(&self) -> usize {
         self.facelet_colors.len()
     }
 
+    /// The colors of every facelet
     pub fn facelet_colors(&self) -> &[ArcIntern<String>] {
         &self.facelet_colors
     }
 
+    /// The identity/solved permutation of the group
     pub fn identity(&self) -> Permutation {
         Permutation {
             // Map every value to itself
@@ -127,14 +139,13 @@ impl PermutationGroup {
         }
     }
 
-    pub fn generators(&self) -> impl Iterator<Item = (&str, &Permutation)> {
-        self.generators.iter().map(|(k, v)| (&***k, v))
-    }
-
+    /// Get a generator by it's name
     pub fn get_generator(&self, name: &str) -> Option<&Permutation> {
         self.generators.get(&ArcIntern::from_ref(name))
     }
 
+    /// Compose a list of generators into an existing permutation
+    ///
     /// If any of the generator names don't exist, it will compose all of the generators before it and return the name of the generator that doesn't exist.
     pub fn compose_generators_into<'a>(
         &self,
@@ -157,6 +168,7 @@ impl PermutationGroup {
     }
 }
 
+/// An element of a permutation group
 #[derive(Clone, Debug)]
 pub struct Permutation {
     pub(crate) facelet_count: usize,
@@ -166,12 +178,13 @@ pub struct Permutation {
 }
 
 impl Permutation {
+    /// Create a permutation using cycles notation. `cycles` is a list of cycles where each cycle is a list of facelet indices.
     pub fn from_cycles(mut cycles: Vec<Vec<usize>>) -> Permutation {
         cycles.retain(|v| v.len() > 1);
 
-        assert!(!cycles.is_empty());
+        assert!(cycles.iter().all_unique());
 
-        let facelet_count = *cycles.iter().flatten().max().unwrap() + 1;
+        let facelet_count = cycles.iter().flatten().max().map(|v| v + 1).unwrap_or(0);
 
         Permutation {
             facelet_count,
@@ -180,6 +193,7 @@ impl Permutation {
         }
     }
 
+    /// Get the permutation in mapping notation where `.mapping()[facelet]` gives where the facelet permutes to
     pub fn mapping(&self) -> &[usize] {
         self.mapping.get_or_init(|| {
             let cycles = self
@@ -200,6 +214,7 @@ impl Permutation {
         })
     }
 
+    /// Get the permutation in cycles notation
     pub fn cycles(&self) -> &[Vec<usize>] {
         self.cycles.get_or_init(|| {
             let mapping = self
@@ -238,6 +253,9 @@ impl Permutation {
         })
     }
 
+    /// Find the result of applying the permutation to the identity `power` times.
+    ///
+    /// This calculates the value in O(1) time with respect to `power`.
     pub fn exponentiate(&mut self, power: U512) {
         self.cycles();
         let mut mapping = self
@@ -264,6 +282,7 @@ impl Permutation {
         return self.mapping.get_mut().unwrap();
     }
 
+    /// Compose another permutation into this permutation
     pub fn compose(&mut self, other: &Permutation) {
         assert_eq!(self.facelet_count, other.facelet_count);
 
@@ -285,6 +304,7 @@ impl PartialEq for Permutation {
     }
 }
 
+/// A cycle of facelets that is part of the generator of a register
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct CycleGeneratorSubcycle {
     pub(crate) facelet_cycle: Vec<usize>,
@@ -292,15 +312,18 @@ pub struct CycleGeneratorSubcycle {
 }
 
 impl CycleGeneratorSubcycle {
+    /// Get the cycle of facelets
     pub fn facelet_cycle(&self) -> &[usize] {
         &self.facelet_cycle
     }
 
+    /// Get the order of the cycle after accounting for colors
     pub fn chromatic_order(&self) -> U512 {
         self.chromatic_order
     }
 }
 
+/// A generator for a register in an architecture
 #[derive(Debug, Clone)]
 pub struct CycleGenerator {
     pub(crate) generator_sequence: Vec<ArcIntern<String>>,
@@ -311,31 +334,38 @@ pub struct CycleGenerator {
 }
 
 impl CycleGenerator {
+    /// Get the sequence of group generators that compose the cycle generator
     pub fn generator_sequence(&self) -> &[ArcIntern<String>] {
         &self.generator_sequence
     }
 
+    /// Get the underlying permutation of the cycle generator
     pub fn permutation(&self) -> &Permutation {
         &self.permutation
     }
 
+    /// Get the cycles of the permutation that are unshared by other cycles in the architecture
     pub fn unshared_cycles(&self) -> &[CycleGeneratorSubcycle] {
         &self.unshared_cycles
     }
 
+    /// Get the order of the register
     pub fn order(&self) -> U512 {
         self.order
     }
 
+    /// Find a collection of facelets that allow decoding the register and that allow determining whether the register is solved
     pub fn signature_facelets(&self) -> Vec<usize> {
         let mut cycles_with_extras = vec![];
 
+        // Create a list of all cycles
         for (i, cycle) in self.unshared_cycles().iter().enumerate() {
             if cycle.chromatic_order() != U512::ONE {
                 cycles_with_extras.push((cycle.chromatic_order(), i));
             }
         }
 
+        // Remove all of the cycles that don't contribute to the order of the register, removing the smallest ones first
         cycles_with_extras.sort_unstable_by(|a, b| a.0.cmp(&b.0));
 
         let mut cycles = Vec::<(U512, usize)>::new();
@@ -355,7 +385,11 @@ impl CycleGenerator {
         let mut facelets = vec![];
 
         for (_, idx) in cycles {
+            // Find a list of facelets such that for every index in the cycle, at least one facelet is unsolved.
+            // On a 3x3, there are only 6 colors, so a subcycle of length 15 will necessarily repeat colors, so if we only include one facelet, the subcycle will appear solved early.
+            // TODO: This code doesn't take into account cubies
             let cycle = &self.unshared_cycles()[idx];
+            // The chromatic order of a single cycle is bounded by the number of facelets in the permutation group, so this is OK even for big cubes
             let chromatic_order = cycle.chromatic_order().digits()[0] as usize;
 
             let mut uncovered = HashSet::<usize>::from_iter(1..chromatic_order);
@@ -387,6 +421,7 @@ impl CycleGenerator {
     }
 }
 
+/// An architecture of a `PermutationGroup`
 #[derive(Debug, Clone)]
 pub struct Architecture {
     group: Rc<PermutationGroup>,
@@ -395,6 +430,7 @@ pub struct Architecture {
 }
 
 impl Architecture {
+    /// Create a new architecture from a permutation group and a list of algorithms.
     pub fn new(
         group: Rc<PermutationGroup>,
         algorithms: Vec<Vec<ArcIntern<String>>>,
@@ -408,18 +444,22 @@ impl Architecture {
         })
     }
 
+    /// Get the underlying permutation group
     pub fn group(&self) -> &PermutationGroup {
         &self.group
     }
 
+    /// Get the underlying permutation group as an owned Rc
     pub fn group_rc(&self) -> Rc<PermutationGroup> {
         Rc::clone(&self.group)
     }
 
+    /// Get all of the registers of the architecture
     pub fn registers(&self) -> &[CycleGenerator] {
         &self.cycle_generators
     }
 
+    /// Get all of the facelets that are shared in the architecture
     pub fn shared_facelets(&self) -> &[usize] {
         &self.shared_facelets
     }

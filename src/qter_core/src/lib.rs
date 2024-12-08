@@ -16,6 +16,7 @@ use bnum::types::U512;
 use discrete_math::length_of_substring_that_this_string_is_n_repeated_copies_of;
 use internment::ArcIntern;
 
+/// A slice of the original source code; to be attached to pieces of data for error reporting
 #[derive(Debug, Clone)]
 pub struct Span {
     source: Rc<str>,
@@ -69,9 +70,7 @@ impl Span {
     }
 }
 
-/// A value with information about where in the source code the value came from.
-///
-/// Currently only contains line number information.
+/// A value attached to a `Span`
 #[derive(Debug)]
 pub struct WithSpan<T> {
     pub value: T,
@@ -106,17 +105,20 @@ impl<T> WithSpan<T> {
     }
 }
 
+/// Represents a sequence of moves to apply to a cube in the `Program`
 #[derive(Clone, Debug)]
 pub struct PermuteCube {
     cube_idx: usize,
     group: Rc<PermutationGroup>,
     permutation: Permutation,
-    /// Composing the algorithms for each of the registers must give the same result as applying `permutation`
-    pub effect: Vec<ArcIntern<String>>,
+    generators: Vec<ArcIntern<String>>,
     chromatic_orders: OnceCell<Vec<U512>>,
 }
 
 impl PermuteCube {
+    /// Create a `PermuteCube` from what values it should add to which registers.
+    ///
+    /// `effect` is a list of tuples of register indices and how much to add to add to them.
     pub fn new_from_effect(
         arch: &Architecture,
         cube_idx: usize,
@@ -144,14 +146,15 @@ impl PermuteCube {
 
         PermuteCube {
             permutation,
-            effect: generators,
+            generators,
             cube_idx,
             group: arch.group_rc(),
             chromatic_orders: OnceCell::new(),
         }
     }
 
-    pub fn new_from_generators<'a>(
+    /// Create a `PermuteCube` instance from a list of generators
+    pub fn new_from_generators(
         group: Rc<PermutationGroup>,
         cube_idx: usize,
         generators: Vec<ArcIntern<String>>,
@@ -164,19 +167,29 @@ impl PermuteCube {
             cube_idx,
             group,
             permutation,
-            effect: generators,
+            generators,
             chromatic_orders: OnceCell::new(),
         })
     }
 
+    /// Get the underlying permutation of the `PermuteCube` instance
     pub fn permutation(&self) -> &Permutation {
         &self.permutation
     }
 
+    /// Get the index of the cube that this is intented to be applied to
     pub fn cube_idx(&self) -> usize {
         self.cube_idx
     }
 
+    /// Returns a list of generators that when composed, give the same result as applying `.permutation()`
+    pub fn generators(&self) -> &[ArcIntern<String>] {
+        &self.generators
+    }
+
+    /// Calculate the order of every cycle of facelets created by seeing this `PermuteCube` instance as a register generator.
+    ///
+    /// Returns a list of chromatic orders where the index is the facelet.
     pub fn chromatic_orders_by_facelets(&self) -> &[U512] {
         self.chromatic_orders.get_or_init(|| {
             let mut out = vec![U512::ONE; self.group.facelet_count()];
@@ -196,12 +209,14 @@ impl PermuteCube {
     }
 }
 
+/// The facelets needed for `solved-goto`
 #[derive(Debug, Clone)]
 pub enum Facelets {
     Theoretical,
     Puzzle { facelets: Vec<usize> },
 }
 
+/// The generator of a register along with the facelets needed to decode it
 #[derive(Debug, Clone)]
 pub enum RegisterGenerator {
     Theoretical,
@@ -211,6 +226,7 @@ pub enum RegisterGenerator {
     },
 }
 
+/// A qter instruction
 #[derive(Debug)]
 pub enum Instruction {
     Goto {
@@ -236,6 +252,7 @@ pub enum Instruction {
         register_idx: usize,
         register: RegisterGenerator,
     },
+    /// Add to a theoretical register; has no representation in .Q
     AddTheoretical {
         register_idx: usize,
         amount: U512,
@@ -243,9 +260,12 @@ pub enum Instruction {
     PermuteCube(PermuteCube),
 }
 
-/// Represents a qter program
+/// A qter program
 pub struct Program {
+    /// A list of theoretical registers along with their orders
     pub theoretical: Vec<WithSpan<U512>>,
+    /// A list of puzzles to be used for registers
     pub puzzles: Vec<WithSpan<Rc<PermutationGroup>>>,
+    /// The program itself
     pub instructions: Vec<WithSpan<Instruction>>,
 }

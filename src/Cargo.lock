@@ -62,7 +62,11 @@ version = "0.1.0"
 name = "compiler"
 version = "0.1.0"
 dependencies = [
+ "bnum",
+ "internment",
  "pest",
+ "pest_derive",
+ "qter_core",
 ]
 
 [[package]]
