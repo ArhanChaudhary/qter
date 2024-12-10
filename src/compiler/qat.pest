@@ -3,22 +3,25 @@ COMMENT    = _{ ("--[[" ~ (!"--]]" ~ ANY)* ~ "--]]") | ("--" ~ (!"\n" ~ ANY)* ~ 
 
 program = { registers ~ "\n"* ~ statement ~ ("\n"+ ~ statement)* ~ "\n"* ~ EOI }
 
-special_char = { "lua" | "{" | "}" | "." | ":" | "$" | "--" | "," | "<-" | "\n" | "(" | ")" | WHITESPACE }
+special_char = { "lua" | "{" | "}" | "." | ":" | "$" | "--" | "," | "<-" | "←" | "\n" | "(" | ")" | WHITESPACE }
 
-ident = @{ !ASCII_DIGIT ~ (!special_char ~ ANY)+ }
+ident = @{ !(number ~ WHITESPACE) ~ (!special_char ~ ANY)+ }
 
 number = { ASCII_DIGIT+ }
 
 algorithm = { ident+ }
 
 registers = { ".registers" ~ "{" ~ "\n"? ~ register_declaration ~ ("\n"+ ~ register_declaration)* ~ "\n"* ~ "}" ~ "\n"* }
+register_declaration = { unswitchable | switchable }
 
-register_declaration = { ident ~ ("," ~ ident)* ~ "<-" ~ register_architecture }
+unswitchable = { ident ~ ("," ~ ident)* ~ ("<-" | "←") ~ register_architecture }
+switchable           = { "(" ~ "\n"* ~ unswitchable ~ ( "\n"+ ~ unswitchable )* ~ "\n"* ~ ")" }
 
-builtin_architecture     = { (!"builtin" ~ ident)? ~ "builtin" ~ (number | ("(" ~ "\n"* ~ number ~ ("," ~ "\n"* ~ number)* ~ ","? ~ "\n"* ~ ")")) }
-custom_architecture      = { ident? ~ (ident+ | ("(" ~ "\n"* ~ algorithm ~ ("," ~ "\n"* ~ algorithm)* ~ ","? ~ "\n"* ~ ")")) }
+builtin_architecture     = { (!"builtin" ~ ident) ~ "builtin" ~ (number | ("(" ~ "\n"* ~ number ~ ("," ~ "\n"* ~ number)* ~ ","? ~ "\n"* ~ ")")) }
+custom_architecture      = { ident ~ (ident+ | ("(" ~ "\n"* ~ algorithm ~ ("," ~ "\n"* ~ algorithm)* ~ ","? ~ "\n"* ~ ")")) }
 theoretical_architecture = { "theoretical" ~ number }
-register_architecture    = { builtin_architecture | custom_architecture | theoretical_architecture }
+real_architecture        = { builtin_architecture | custom_architecture }
+register_architecture    = { real_architecture | theoretical_architecture }
 
 statement = { macro | instruction | lua_block | import }
 
@@ -44,5 +47,6 @@ import = { ".import" ~ import_filename }
 
 lua_code  = { (!"end-lua" ~ ANY)* }
 lua_block = { ".start-lua" ~ lua_code ~ "end-lua" }
+
 
 
