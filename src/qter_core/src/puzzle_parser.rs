@@ -1,12 +1,14 @@
 use std::{collections::HashMap, rc::Rc};
 
-use bnum::types::U512;
 use internment::ArcIntern;
 use itertools::Itertools;
 use pest::{error::Error, Parser};
 use pest_derive::Parser;
 
-use crate::architectures::{Architecture, Permutation, PermutationGroup, PuzzleDefinition};
+use crate::{
+    architectures::{Architecture, Permutation, PermutationGroup, PuzzleDefinition},
+    Int, U,
+};
 
 #[derive(Parser)]
 #[grammar = "./puzzle.pest"]
@@ -173,7 +175,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
         let mut orders = vec![];
 
         for order in orders_pair.into_inner() {
-            orders.push(order.as_str().parse::<U512>().unwrap());
+            orders.push(order.as_str().parse::<Int<U>>().unwrap());
         }
 
         let mut algorithms = vec![];

@@ -1,49 +1,45 @@
-use bnum::{
-    cast::As,
-    types::{I512, U512},
-};
+use crate::{Int, I, U};
 
 /// Calculate the GCD of two numbers
-pub fn gcd(mut a: U512, mut b: U512) -> U512 {
+pub fn gcd(mut a: Int<U>, mut b: Int<U>) -> Int<U> {
     loop {
-        if b == U512::ZERO {
+        if b.is_zero() {
             return a;
         }
 
-        let rem = a.rem_euclid(b);
+        let rem = a % b;
         a = b;
         b = rem;
     }
 }
 
 /// Calculate the LCM of two numbers
-pub fn lcm(a: U512, b: U512) -> U512 {
-    assert_ne!(a, U512::ZERO);
-    assert_ne!(b, U512::ZERO);
+pub fn lcm(a: Int<U>, b: Int<U>) -> Int<U> {
+    assert!(!a.is_zero());
+    assert!(!b.is_zero());
 
     b / gcd(a, b) * a
 }
 
 /// Calculate the LCM of a list of numbers
-pub fn lcm_iter(values: impl Iterator<Item = U512>) -> U512 {
-    values.fold(U512::ONE, lcm)
+pub fn lcm_iter(values: impl Iterator<Item = Int<U>>) -> Int<U> {
+    values.fold(Int::one(), lcm)
 }
 
 /// Calculate the GCD of two numbers as well as the coefficients of Bézout's identity
-pub fn extended_euclid(mut a: U512, mut b: U512) -> ((I512, I512), U512) {
-    let mut a_coeffs = (I512::ONE, I512::ZERO);
-    let mut b_coeffs = (I512::ZERO, I512::ONE);
+pub fn extended_euclid(mut a: Int<U>, mut b: Int<U>) -> ((Int<I>, Int<I>), Int<U>) {
+    let mut a_coeffs = (Int::<I>::one(), Int::<I>::zero());
+    let mut b_coeffs = (Int::<I>::zero(), Int::<I>::one());
 
     loop {
-        if b == U512::ZERO {
+        if b.is_zero() {
             return (a_coeffs, a);
         }
 
-        let to_sub = a.div_euclid(b);
-        let to_sub_s = to_sub.as_::<I512>();
+        let to_sub = a / b;
         let new_coeffs = (
-            a_coeffs.0 - b_coeffs.0 * to_sub_s,
-            a_coeffs.1 - b_coeffs.1 * to_sub_s,
+            a_coeffs.0 - b_coeffs.0 * to_sub,
+            a_coeffs.1 - b_coeffs.1 * to_sub,
         );
         let rem = a - b * to_sub;
         a = b;
@@ -62,12 +58,12 @@ pub fn extended_euclid(mut a: U512, mut b: U512) -> ((I512, I512), U512) {
 ///
 /// If any of the conditions give `None`, the function will stop and return `None`.
 pub fn chinese_remainder_theorem(
-    mut conditions: impl Iterator<Item = Option<(U512, U512)>>,
-) -> Option<U512> {
+    mut conditions: impl Iterator<Item = Option<(Int<U>, Int<U>)>>,
+) -> Option<Int<U>> {
     let (mut prev_remainder, mut prev_modulus) = match conditions.next() {
         Some(Some(condition)) => condition,
         Some(None) => return None,
-        None => return Some(U512::ZERO),
+        None => return Some(Int::<U>::zero()),
     };
 
     for cond in conditions {
@@ -81,21 +77,21 @@ pub fn chinese_remainder_theorem(
             prev_remainder - remainder
         };
 
-        if diff.rem_euclid(gcd) != U512::ZERO {
+        if !(diff % gcd).is_zero() {
             return None;
         }
 
         let λ = diff / gcd;
 
         let x = if remainder > prev_remainder {
-            remainder.as_::<I512>() - modulus.as_::<I512>() * coeffs.1 * λ.as_::<I512>()
+            remainder - modulus * coeffs.1 * λ
         } else {
-            prev_remainder.as_::<I512>() - prev_modulus.as_::<I512>() * coeffs.0 * λ.as_::<I512>()
+            prev_remainder - prev_modulus * coeffs.0 * λ
         };
 
         let new_modulus = lcm(prev_modulus, modulus);
 
-        prev_remainder = x.rem_euclid(new_modulus.as_()).as_();
+        prev_remainder = x % new_modulus;
         prev_modulus = new_modulus;
     }
 
@@ -114,7 +110,7 @@ pub fn chinese_remainder_theorem(
 /// This function is important for computing the chromatic order of cycles.
 pub fn length_of_substring_that_this_string_is_n_repeated_copies_of<'a>(
     colors: impl Iterator<Item = &'a str>,
-) -> U512 {
+) -> usize {
     let mut found = vec![];
     let mut current_repeat_length = 1;
 
@@ -131,30 +127,28 @@ pub fn length_of_substring_that_this_string_is_n_repeated_copies_of<'a>(
         current_repeat_length = found.len();
     }
 
-    U512::from_digit(current_repeat_length as u64)
+    current_repeat_length
 }
 
 #[cfg(test)]
 mod tests {
-    use bnum::{cast::As, types::U512};
-
-    use crate::discrete_math::{
-        extended_euclid, gcd, lcm, length_of_substring_that_this_string_is_n_repeated_copies_of,
+    use crate::{
+        discrete_math::{
+            extended_euclid, gcd, lcm, length_of_substring_that_this_string_is_n_repeated_copies_of,
+        },
+        Int, U,
     };
 
     use super::chinese_remainder_theorem;
 
     #[test]
     fn lcm_and_gcd() {
-        let _lcm = |a, b| lcm(U512::from_digit(a), U512::from_digit(b)).digits()[0];
-        let _gcd = |a, b| gcd(U512::from_digit(a), U512::from_digit(b)).digits()[0];
-        let _ext_euc = |a, b| {
-            let ((x, y), z) = extended_euclid(U512::from_digit(a), U512::from_digit(b));
-            assert_eq!(
-                a as i64 * x.as_::<i64>() + b as i64 * y.as_::<i64>(),
-                z.as_::<i64>()
-            );
-            z.as_::<u64>()
+        let _lcm = |a: u64, b: u64| lcm(Int::from(a), Int::from(b)).to_u64();
+        let _gcd = |a: u64, b: u64| gcd(Int::from(a), Int::from(b)).to_u64();
+        let _ext_euc = |a: u64, b: u64| {
+            let ((x, y), z) = extended_euclid(Int::from(a), Int::from(b));
+            assert_eq!(Int::<U>::from(a) * x + Int::<U>::from(b) * y, z);
+            z.to_u64()
         };
 
         assert_eq!(_gcd(3, 5), 1);
@@ -173,9 +167,9 @@ mod tests {
     fn _crt(v: impl IntoIterator<Item = (u64, u64)>) -> Option<u64> {
         chinese_remainder_theorem(
             v.into_iter()
-                .map(|(a, b)| Some((U512::from_digit(a), U512::from_digit(b)))),
+                .map(|(a, b)| Some((Int::from(a), Int::from(b)))),
         )
-        .map(|v| v.digits()[0])
+        .map(|v| v.to_u64())
     }
 
     #[test]
@@ -191,32 +185,28 @@ mod tests {
         assert_eq!(
             length_of_substring_that_this_string_is_n_repeated_copies_of(
                 ["a", "a", "a", "a"].into_iter()
-            )
-            .digits()[0],
+            ),
             1
         );
 
         assert_eq!(
             length_of_substring_that_this_string_is_n_repeated_copies_of(
                 ["a", "b", "a", "b"].into_iter()
-            )
-            .digits()[0],
+            ),
             2
         );
 
         assert_eq!(
             length_of_substring_that_this_string_is_n_repeated_copies_of(
                 ["a", "b", "a", "b", "a"].into_iter()
-            )
-            .digits()[0],
+            ),
             5
         );
 
         assert_eq!(
             length_of_substring_that_this_string_is_n_repeated_copies_of(
                 ["a", "b", "c", "d", "e"].into_iter()
-            )
-            .digits()[0],
+            ),
             5
         );
     }

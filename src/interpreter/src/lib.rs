@@ -1,10 +1,9 @@
 use std::{collections::VecDeque, rc::Rc};
 
-use bnum::types::U512;
 use qter_core::{
     architectures::{Permutation, PermutationGroup},
     discrete_math::chinese_remainder_theorem,
-    Facelets, Instruction, PermuteCube, Program, RegisterGenerator, Span,
+    Facelets, Instruction, Int, PermuteCube, Program, RegisterGenerator, Span, U,
 };
 
 /// Represents an instance of a `PermutationGroup`, in other words this simulates the rubik's cube
@@ -42,17 +41,17 @@ impl Puzzle {
     /// Decode the permutation using the register generator and the given facelets.
     ///
     /// In general, an arbitrary scramble cannot be decoded. If this is the case, the function will return `None`.
-    pub fn decode(&self, facelets: &[usize], generator: &PermuteCube) -> Option<U512> {
+    pub fn decode(&self, facelets: &[usize], generator: &PermuteCube) -> Option<Int<U>> {
         chinese_remainder_theorem(facelets.iter().map(|facelet| {
             let maps_to = self.state().mapping()[*facelet];
 
             let chromatic_order = generator.chromatic_orders_by_facelets()[*facelet];
 
             if maps_to == *facelet {
-                return Some((U512::ZERO, chromatic_order));
+                return Some((Int::zero(), chromatic_order));
             }
 
-            let mut i = U512::ONE;
+            let mut i = Int::<U>::one();
             let mut maps_to_found_at = None;
             let mut facelet_at = generator.permutation().mapping()[*facelet];
 
@@ -63,7 +62,7 @@ impl Puzzle {
                 }
 
                 facelet_at = generator.permutation().mapping()[facelet_at];
-                i += U512::ONE;
+                i += Int::<U>::one();
             }
 
             maps_to_found_at.map(|found_at| (found_at % chromatic_order, chromatic_order))
@@ -111,8 +110,8 @@ pub struct State<'s> {
 
 /// An instance of a theoretical register. Analagous to the `Puzzle` structure.
 struct TheoreticalState {
-    state: U512,
-    order: U512,
+    state: Int<U>,
+    order: Int<U>,
 }
 
 /// A collection of the states of every register
@@ -158,7 +157,7 @@ pub enum ActionPerformed<'s> {
     },
     AddToTheoretical {
         register_idx: usize,
-        amt: U512,
+        amt: Int<U>,
     },
     ExecutedAlgorithm(&'s PermuteCube),
     Panic(&'static str),
@@ -177,7 +176,11 @@ impl GroupStates {
     }
 
     /// Decode a register
-    fn decode_register(&self, register_idx: usize, which_reg: &RegisterGenerator) -> Option<U512> {
+    fn decode_register(
+        &self,
+        register_idx: usize,
+        which_reg: &RegisterGenerator,
+    ) -> Option<Int<U>> {
         match which_reg {
             RegisterGenerator::Theoretical => Some(self.theoretical_states[register_idx].state),
             RegisterGenerator::Puzzle {
@@ -191,7 +194,7 @@ impl GroupStates {
     }
 
     /// Explicitly add a number to a register
-    fn add_num_to(&mut self, register_idx: usize, which_reg: &RegisterGenerator, amt: U512) {
+    fn add_num_to(&mut self, register_idx: usize, which_reg: &RegisterGenerator, amt: Int<U>) {
         match which_reg {
             RegisterGenerator::Theoretical => {
                 let TheoreticalState { state, order } = &mut self.theoretical_states[register_idx];
@@ -242,7 +245,7 @@ impl Interpreter {
             .theoretical
             .iter()
             .map(|order| TheoreticalState {
-                state: U512::ZERO,
+                state: Int::zero(),
                 order: **order,
             })
             .collect();
@@ -444,7 +447,7 @@ impl Interpreter {
     /// Give an input to the interpreter
     ///
     /// Panics if the interpreter is not executing an `input` instruction
-    pub fn give_input(&mut self, value: U512) {
+    pub fn give_input(&mut self, value: Int<U>) {
         let reg = match self.state().state_ty {
             StateTy::Paused(PausedState::Input {
                 message: _,
@@ -465,11 +468,10 @@ impl Interpreter {
 mod tests {
     use std::rc::Rc;
 
-    use bnum::types::U512;
     use internment::ArcIntern;
     use qter_core::{
-        architectures::PuzzleDefinition, Facelets, Instruction, PermuteCube, Program,
-        RegisterGenerator, Span, WithSpan,
+        architectures::PuzzleDefinition, Facelets, Instruction, Int, PermuteCube, Program,
+        RegisterGenerator, Span, WithSpan, U,
     };
 
     use crate::{Interpreter, PausedState, Puzzle};
@@ -510,23 +512,23 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(cube.decode(&[8], &permutation).unwrap(), U512::ZERO);
+        assert_eq!(cube.decode(&[8], &permutation).unwrap(), Int::<U>::zero());
         assert!(cube.facelets_solved(&[8]));
 
         cube.state.compose(permutation.permutation());
-        assert_eq!(cube.decode(&[8], &permutation).unwrap(), U512::ONE);
+        assert_eq!(cube.decode(&[8], &permutation).unwrap(), Int::<U>::one());
         assert!(!cube.facelets_solved(&[8]));
 
         cube.state.compose(permutation.permutation());
-        assert_eq!(cube.decode(&[8], &permutation).unwrap(), U512::TWO);
+        assert_eq!(cube.decode(&[8], &permutation).unwrap(), Int::from(2));
         assert!(!cube.facelets_solved(&[8]));
 
         cube.state.compose(permutation.permutation());
-        assert_eq!(cube.decode(&[8], &permutation).unwrap(), U512::THREE);
+        assert_eq!(cube.decode(&[8], &permutation).unwrap(), Int::from(3));
         assert!(!cube.facelets_solved(&[8]));
 
         cube.state.compose(permutation.permutation());
-        assert_eq!(cube.decode(&[8], &permutation).unwrap(), U512::ZERO);
+        assert_eq!(cube.decode(&[8], &permutation).unwrap(), Int::from(0));
         assert!(cube.facelets_solved(&[8]));
     }
 
@@ -537,7 +539,7 @@ mod tests {
         );
 
         let arch = group
-            .get_preset(&[U512::from_digit(210), U512::from_digit(24)])
+            .get_preset(&[Int::from(210_u64), Int::from(24_u64)])
             .unwrap();
 
         let a_facelets = arch.registers()[0].signature_facelets();
@@ -545,8 +547,8 @@ mod tests {
 
         println!("{b_facelets:?}");
 
-        let a_permutation = PermuteCube::new_from_effect(&arch, 0, vec![(0, U512::ONE)]);
-        let b_permutation = PermuteCube::new_from_effect(&arch, 0, vec![(1, U512::ONE)]);
+        let a_permutation = PermuteCube::new_from_effect(&arch, 0, vec![(0, Int::one())]);
+        let b_permutation = PermuteCube::new_from_effect(&arch, 0, vec![(1, Int::one())]);
 
         let mut cube = Puzzle::initialize(Rc::clone(&group.group));
 
@@ -554,7 +556,7 @@ mod tests {
             cube.state.compose(b_permutation.permutation());
             assert_eq!(
                 cube.decode(&b_facelets, &b_permutation).unwrap(),
-                U512::from_digit(i)
+                Int::from(i)
             );
             assert!(!cube.facelets_solved(&b_facelets));
         }
@@ -563,18 +565,18 @@ mod tests {
         assert!(cube.facelets_solved(&b_facelets));
         assert_eq!(
             cube.decode(&b_facelets, &b_permutation).unwrap(),
-            U512::ZERO
+            Int::<U>::zero()
         );
 
         for i in 0..24 {
             for j in 0..210 {
                 assert_eq!(
                     cube.decode(&b_facelets, &b_permutation).unwrap(),
-                    U512::from_digit(i)
+                    Int::from(i)
                 );
                 assert_eq!(
                     cube.decode(&a_facelets, &a_permutation).unwrap(),
-                    U512::from_digit(j)
+                    Int::from(j)
                 );
 
                 cube.state.compose(a_permutation.permutation());
@@ -613,7 +615,7 @@ mod tests {
             PuzzleDefinition::parse(include_str!("../../qter_core/puzzles/3x3.txt")).unwrap();
 
         let arch = cube
-            .get_preset(&[U512::from_digit(24), U512::from_digit(210)])
+            .get_preset(&[Int::from(24_u64), Int::from(210_u64)])
             .unwrap();
 
         // Define the registers
@@ -623,11 +625,11 @@ mod tests {
         let b_facelets = arch.registers()[0].signature_facelets();
 
         let a_gen = RegisterGenerator::Puzzle {
-            generator: PermuteCube::new_from_effect(&arch, 0, vec![(1, U512::ONE)]),
+            generator: PermuteCube::new_from_effect(&arch, 0, vec![(1, Int::one())]),
             facelets: a_facelets.to_owned(),
         };
         let b_gen = RegisterGenerator::Puzzle {
-            generator: PermuteCube::new_from_effect(&arch, 0, vec![(0, U512::ONE)]),
+            generator: PermuteCube::new_from_effect(&arch, 0, vec![(0, Int::one())]),
             facelets: b_facelets.to_owned(),
         };
 
@@ -641,10 +643,10 @@ mod tests {
         let a_idx = 1;
         let b_idx = 0;
 
-        let to_modulus = U512::from_digit(13);
+        let to_modulus = Int::from(13_u64);
         // Negative numbers by overflowing
-        let a_minus_1 = U512::from_digit(209);
-        let b_minus_1 = U512::from_digit(23);
+        let a_minus_1 = Int::from(209_u64);
+        let b_minus_1 = Int::from(23_u64);
 
         let instructions = vec![
             // 0
@@ -736,7 +738,7 @@ mod tests {
             }
         ));
 
-        interpreter.give_input(U512::from_digit(133));
+        interpreter.give_input(Int::from(133_u64));
 
         // for _ in 0..1000 {
         //     if interpreter.paused {

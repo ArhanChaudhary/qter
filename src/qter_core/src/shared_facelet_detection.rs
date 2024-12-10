@@ -1,12 +1,12 @@
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
-use bnum::types::U512;
 use internment::ArcIntern;
 use itertools::Itertools;
 
 use crate::{
     architectures::{CycleGenerator, CycleGeneratorSubcycle, Permutation, PermutationGroup},
     discrete_math::{lcm, length_of_substring_that_this_string_is_n_repeated_copies_of},
+    Int,
 };
 
 #[derive(Debug)]
@@ -160,7 +160,7 @@ pub fn algorithms_to_cycle_generators(
 
                     unshared_cycles.push(CycleGeneratorSubcycle {
                         facelet_cycle: cycle.to_owned(),
-                        chromatic_order,
+                        chromatic_order: Int::from(chromatic_order),
                     });
                 }
 
@@ -169,7 +169,7 @@ pub fn algorithms_to_cycle_generators(
                     permutation,
                     order: unshared_cycles
                         .iter()
-                        .fold(U512::ONE, |a, v| lcm(a, v.chromatic_order)),
+                        .fold(Int::one(), |a, v| lcm(a, v.chromatic_order)),
                     unshared_cycles,
                     group: Rc::clone(&group),
                 }
@@ -181,9 +181,10 @@ pub fn algorithms_to_cycle_generators(
 
 #[cfg(test)]
 mod tests {
-    use bnum::types::U512;
-
-    use crate::architectures::{CycleGeneratorSubcycle, PuzzleDefinition};
+    use crate::{
+        architectures::{CycleGeneratorSubcycle, PuzzleDefinition},
+        Int,
+    };
 
     #[test]
     fn simple() {
@@ -226,25 +227,25 @@ mod tests {
             assert!(preset.shared_facelets().contains(&i));
         }
 
-        assert_eq!(preset.registers()[0].order, U512::from_digit(3));
+        assert_eq!(preset.registers()[0].order, Int::from(3));
         assert_eq!(
             preset.registers()[0].unshared_cycles,
             vec![CycleGeneratorSubcycle {
                 facelet_cycle: vec![0, 1, 2],
-                chromatic_order: U512::from_digit(3),
+                chromatic_order: Int::from(3_usize),
             }]
         );
-        assert_eq!(preset.registers()[1].order, U512::from_digit(2));
+        assert_eq!(preset.registers()[1].order, Int::from(2));
         assert_eq!(
             preset.registers()[1].unshared_cycles,
             vec![
                 CycleGeneratorSubcycle {
                     facelet_cycle: vec![8, 9],
-                    chromatic_order: U512::from_digit(2)
+                    chromatic_order: Int::from(2_usize)
                 },
                 CycleGeneratorSubcycle {
                     facelet_cycle: vec![10, 11, 12],
-                    chromatic_order: U512::ONE,
+                    chromatic_order: Int::one(),
                 }
             ]
         );

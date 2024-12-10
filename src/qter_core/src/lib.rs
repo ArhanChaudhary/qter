@@ -7,12 +7,14 @@ use std::{
 
 pub mod architectures;
 pub mod discrete_math;
+mod numbers;
 mod puzzle_parser;
 mod shared_facelet_detection;
 
+pub use numbers::*;
+
 use architectures::{Architecture, Permutation, PermutationGroup};
 // Use a huge integers for orders to allow crazy things like examinx
-use bnum::types::U512;
 use discrete_math::length_of_substring_that_this_string_is_n_repeated_copies_of;
 use internment::ArcIntern;
 
@@ -112,7 +114,7 @@ pub struct PermuteCube {
     group: Rc<PermutationGroup>,
     permutation: Permutation,
     generators: Vec<ArcIntern<String>>,
-    chromatic_orders: OnceCell<Vec<U512>>,
+    chromatic_orders: OnceCell<Vec<Int<U>>>,
 }
 
 impl PermuteCube {
@@ -122,7 +124,7 @@ impl PermuteCube {
     pub fn new_from_effect(
         arch: &Architecture,
         cube_idx: usize,
-        effect: Vec<(usize, U512)>,
+        effect: Vec<(usize, Int<U>)>,
     ) -> PermuteCube {
         let mut permutation = arch.group().identity();
 
@@ -137,10 +139,10 @@ impl PermuteCube {
 
             permutation.compose(&perm);
 
-            let mut i = U512::ZERO;
+            let mut i = Int::<U>::zero();
             while i < *amt {
                 generators.extend_from_slice(reg.generator_sequence());
-                i += U512::ONE;
+                i += Int::<U>::one();
             }
         }
 
@@ -190,9 +192,9 @@ impl PermuteCube {
     /// Calculate the order of every cycle of facelets created by seeing this `PermuteCube` instance as a register generator.
     ///
     /// Returns a list of chromatic orders where the index is the facelet.
-    pub fn chromatic_orders_by_facelets(&self) -> &[U512] {
+    pub fn chromatic_orders_by_facelets(&self) -> &[Int<U>] {
         self.chromatic_orders.get_or_init(|| {
-            let mut out = vec![U512::ONE; self.group.facelet_count()];
+            let mut out = vec![Int::one(); self.group.facelet_count()];
 
             self.permutation().cycles().iter().for_each(|cycle| {
                 let chromatic_order = length_of_substring_that_this_string_is_n_repeated_copies_of(
@@ -200,7 +202,7 @@ impl PermuteCube {
                 );
 
                 for facelet in cycle {
-                    out[*facelet] = chromatic_order;
+                    out[*facelet] = Int::from(chromatic_order);
                 }
             });
 
@@ -255,7 +257,7 @@ pub enum Instruction {
     /// Add to a theoretical register; has no representation in .Q
     AddTheoretical {
         register_idx: usize,
-        amount: U512,
+        amount: Int<U>,
     },
     PermuteCube(PermuteCube),
 }
@@ -263,7 +265,7 @@ pub enum Instruction {
 /// A qter program
 pub struct Program {
     /// A list of theoretical registers along with their orders
-    pub theoretical: Vec<WithSpan<U512>>,
+    pub theoretical: Vec<WithSpan<Int<U>>>,
     /// A list of puzzles to be used for registers
     pub puzzles: Vec<WithSpan<Rc<PermutationGroup>>>,
     /// The program itself

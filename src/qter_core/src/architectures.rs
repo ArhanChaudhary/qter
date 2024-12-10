@@ -4,13 +4,12 @@ use std::{
     rc::Rc,
 };
 
-use bnum::{cast::As, types::U512};
 use internment::ArcIntern;
 use itertools::Itertools;
 
 use crate::{
     discrete_math::lcm_iter, puzzle_parser,
-    shared_facelet_detection::algorithms_to_cycle_generators,
+    shared_facelet_detection::algorithms_to_cycle_generators, Int, U,
 };
 
 /// The definition of a puzzle parsed from the custom format
@@ -31,7 +30,7 @@ impl PuzzleDefinition {
     // If they want the cycles in a different order, create a new architecture with the cycles shuffled
     fn adapt_architecture(
         architecture: &Rc<Architecture>,
-        orders: &[U512],
+        orders: &[Int<U>],
     ) -> Option<Rc<Architecture>> {
         let mut used = vec![false; orders.len()];
         let mut swizzle = vec![0; orders.len()];
@@ -73,7 +72,7 @@ impl PuzzleDefinition {
     }
 
     /// Find a preset with the specified cycle orders
-    pub fn get_preset(&self, orders: &[U512]) -> Option<Rc<Architecture>> {
+    pub fn get_preset(&self, orders: &[Int<U>]) -> Option<Rc<Architecture>> {
         for preset in &self.presets {
             if preset.cycle_generators.len() != orders.len() {
                 continue;
@@ -254,7 +253,7 @@ impl Permutation {
     /// Find the result of applying the permutation to the identity `power` times.
     ///
     /// This calculates the value in O(1) time with respect to `power`.
-    pub fn exponentiate(&mut self, power: U512) {
+    pub fn exponentiate(&mut self, power: Int<U>) {
         self.cycles();
         let mut mapping = self
             .mapping
@@ -263,10 +262,10 @@ impl Permutation {
         let cycles = self.cycles();
 
         for cycle in cycles {
-            let len = U512::from_digit(cycle.len() as u64);
+            let len = Int::<U>::from(cycle.len());
             for i in 0..cycle.len() {
                 mapping[cycle[i]] =
-                    cycle[(U512::from_digit(i as u64) + power).rem(len).as_::<usize>()];
+                    cycle[TryInto::<usize>::try_into((Int::<U>::from(i) + power) % len).unwrap()];
             }
         }
 
@@ -306,7 +305,7 @@ impl PartialEq for Permutation {
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct CycleGeneratorSubcycle {
     pub(crate) facelet_cycle: Vec<usize>,
-    pub(crate) chromatic_order: U512,
+    pub(crate) chromatic_order: Int<U>,
 }
 
 impl CycleGeneratorSubcycle {
@@ -316,7 +315,7 @@ impl CycleGeneratorSubcycle {
     }
 
     /// Get the order of the cycle after accounting for colors
-    pub fn chromatic_order(&self) -> U512 {
+    pub fn chromatic_order(&self) -> Int<U> {
         self.chromatic_order
     }
 }
@@ -327,7 +326,7 @@ pub struct CycleGenerator {
     pub(crate) generator_sequence: Vec<ArcIntern<String>>,
     pub(crate) permutation: Permutation,
     pub(crate) unshared_cycles: Vec<CycleGeneratorSubcycle>,
-    pub(crate) order: U512,
+    pub(crate) order: Int<U>,
     pub(crate) group: Rc<PermutationGroup>,
 }
 
@@ -348,7 +347,7 @@ impl CycleGenerator {
     }
 
     /// Get the order of the register
-    pub fn order(&self) -> U512 {
+    pub fn order(&self) -> Int<U> {
         self.order
     }
 
@@ -358,7 +357,7 @@ impl CycleGenerator {
 
         // Create a list of all cycles
         for (i, cycle) in self.unshared_cycles().iter().enumerate() {
-            if cycle.chromatic_order() != U512::ONE {
+            if cycle.chromatic_order() != Int::<U>::one() {
                 cycles_with_extras.push((cycle.chromatic_order(), i));
             }
         }
@@ -366,7 +365,7 @@ impl CycleGenerator {
         // Remove all of the cycles that don't contribute to the order of the register, removing the smallest ones first
         cycles_with_extras.sort_unstable_by(|a, b| a.0.cmp(&b.0));
 
-        let mut cycles = Vec::<(U512, usize)>::new();
+        let mut cycles = Vec::<(Int<U>, usize)>::new();
 
         for (i, (cycle_order, cycle_idx)) in cycles_with_extras.iter().enumerate() {
             if self.order()
@@ -388,7 +387,7 @@ impl CycleGenerator {
             // TODO: This code doesn't take into account cubies
             let cycle = &self.unshared_cycles()[idx];
             // The chromatic order of a single cycle is bounded by the number of facelets in the permutation group, so this is OK even for big cubes
-            let chromatic_order = cycle.chromatic_order().digits()[0] as usize;
+            let chromatic_order = cycle.chromatic_order().try_into().unwrap();
 
             let mut uncovered = HashSet::<usize>::from_iter(1..chromatic_order);
 
@@ -467,9 +466,10 @@ impl Architecture {
 mod tests {
     use std::rc::Rc;
 
-    use bnum::types::U512;
     use internment::ArcIntern;
     use itertools::Itertools;
+
+    use crate::{Int, U};
 
     use super::{Architecture, PuzzleDefinition};
 
@@ -481,7 +481,7 @@ mod tests {
             (&["U", "D"][..], &[4, 4][..]),
             (
                 &["R' F' L U' L U L F U' R", "U F R' D' R2 F R' U' D"],
-                &[90, 90],
+                &[90_u64, 90],
             ),
             (
                 &["U R U' D2 B", "B U2 B' L' U2 B U L' B L B2 L"],
@@ -507,7 +507,7 @@ mod tests {
             .unwrap();
 
             for (register, expected) in arch.cycle_generators.iter().zip(expected.iter()) {
-                assert_eq!(register.order(), U512::from_digit(*expected as u64));
+                assert_eq!(register.order(), Int::<U>::from(*expected));
             }
         }
     }
@@ -526,7 +526,7 @@ mod tests {
             .unwrap();
 
         let mut exp_perm = perm.clone();
-        exp_perm.exponentiate(U512::from_digit(7));
+        exp_perm.exponentiate(Int::<U>::from(7_u64));
 
         let mut repeat_compose_perm = cube.group.identity();
 

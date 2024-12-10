@@ -7,6 +7,5 @@ edition = "2021"
 pest = "2.7"
 pest_derive = "2.7"
 qter_core = { path = "../qter_core" }
-bnum = "0.12"
 internment = { version = "0.8", features = [ "arc" ] }
 mlua = { version = "0.10.2", features = ["lua54", "vendored"] }

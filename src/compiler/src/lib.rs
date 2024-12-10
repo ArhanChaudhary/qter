@@ -1,11 +1,10 @@
 use std::{collections::HashMap, rc::Rc};
 
-use bnum::types::U512;
 use internment::ArcIntern;
 use mlua::Lua;
 use pest::error::Error;
 use pest_derive::Parser;
-use qter_core::{Program, WithSpan};
+use qter_core::{Int, Program, WithSpan, U};
 
 #[derive(Parser)]
 #[grammar = "./qat.pest"]
@@ -26,7 +25,7 @@ struct Label {
 
 enum Primitive {
     Add {
-        amt: WithSpan<U512>,
+        amt: WithSpan<Int<U>>,
         register: WithSpan<ArcIntern<String>>,
     },
     Goto {
@@ -51,7 +50,7 @@ enum Primitive {
 }
 
 enum Value {
-    Int(U512),
+    Int(Int<U>),
     Constant(ArcIntern<String>),
     Word(ArcIntern<String>),
     Block(Vec<WithSpan<Instruction>>),
