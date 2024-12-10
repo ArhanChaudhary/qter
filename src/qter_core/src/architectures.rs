@@ -89,8 +89,6 @@ impl PuzzleDefinition {
 }
 
 /// A permutation subgroup defined by a set of generators along with the color of each facelet
-///
-/// TODO: Is there a clean way to represent the quotient group by permutations of same-color facelets?
 #[derive(Clone, Debug)]
 pub struct PermutationGroup {
     facelet_colors: Vec<ArcIntern<String>>,

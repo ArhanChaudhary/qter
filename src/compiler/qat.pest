@@ -5,7 +5,7 @@ program = { registers ~ "\n"* ~ statement ~ ("\n"+ ~ statement)* ~ "\n"* ~ EOI }
 
 special_char = { "lua" | "{" | "}" | "." | ":" | "$" | "--" | "," | "<-" | "\n" | "(" | ")" | WHITESPACE }
 
-ident = @{ (!special_char ~ ANY)+ }
+ident = @{ !ASCII_DIGIT ~ (!special_char ~ ANY)+ }
 
 number = { ASCII_DIGIT+ }
 
@@ -20,14 +20,14 @@ custom_architecture      = { ident? ~ (ident+ | ("(" ~ "\n"* ~ algorithm ~ ("," 
 theoretical_architecture = { "theoretical" ~ number }
 register_architecture    = { builtin_architecture | custom_architecture | theoretical_architecture }
 
-statement = { macro | define | instruction | lua_block | import }
+statement = { macro | instruction | lua_block | import }
 
 constant    = { "$" ~ ident }
 value       = { number | constant | ident | block }
 label       = { ident ~ ":" }
 code        = { ident ~ value* }
 lua_call    = { "lua" ~ ident ~ "(" ~ "\n"? ~ value? ~ ("," ~ "\n"? ~ value)* ~ ","? ~ "\n"? ~ ")" }
-instruction = { label | code | constant | lua_call }
+instruction = { label | code | constant | lua_call | define }
 
 type = { "block" | "reg" | "int" }
 
