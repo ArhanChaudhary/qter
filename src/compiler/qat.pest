@@ -3,9 +3,10 @@ COMMENT    = _{ ("--[[" ~ (!"--]]" ~ ANY)* ~ "--]]") | ("--" ~ (!"\n" ~ ANY)* ~ 
 
 program = { registers ~ "\n"* ~ statement ~ ("\n"+ ~ statement)* ~ "\n"* ~ EOI }
 
-special_char = { "lua" | "{" | "}" | "." | ":" | "$" | "--" | "," | "<-" | "←" | "\n" | "(" | ")" | WHITESPACE }
+special_char = { "lua" | "{" | "}" | "." | ":" | "$" | "--" | "," | "<-" | "←" | "\n" | "(" | ")" | "!" | WHITESPACE }
 
 ident = @{ !(number ~ WHITESPACE) ~ (!special_char ~ ANY)+ }
+tag_ident = @{ "!"? ~ ident }
 
 number = { ASCII_DIGIT+ }
 
@@ -27,14 +28,14 @@ statement = { macro | instruction | lua_block | import }
 
 constant    = { "$" ~ ident }
 value       = { number | constant | ident | block }
-label       = { ident ~ ":" }
+label       = { tag_ident ~ ":" }
 code        = { ident ~ value* }
 lua_call    = { "lua" ~ ident ~ "(" ~ "\n"? ~ value? ~ ("," ~ "\n"? ~ value)* ~ ","? ~ "\n"? ~ ")" }
 instruction = { label | code | constant | lua_call | define }
 
-type = { "block" | "reg" | "int" }
+type = { "block" | "reg" | "int" | "ident" }
 
-macro        =  { ".macro" ~ ident ~ "{" ~ ("\n"* ~ macro_branch)+ ~ "\n"* ~ "}" }
+macro        =  { ".macro" ~ tag_ident ~ ("after" ~ tag_ident)? ~ "{" ~ ("\n"* ~ macro_branch)+ ~ "\n"* ~ "}" }
 macro_arg    = ${ ident | (constant ~ ":" ~ type) }
 macro_branch =  { "(" ~ macro_arg* ~ ")" ~ "=>" ~ (block | statement) }
 
@@ -47,6 +48,7 @@ import = { ".import" ~ import_filename }
 
 lua_code  = { (!"end-lua" ~ ANY)* }
 lua_block = { ".start-lua" ~ lua_code ~ "end-lua" }
+
 
 
 
