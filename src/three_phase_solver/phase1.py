@@ -121,43 +121,24 @@ def orientation_masks(masks, mask_length):
     return [] if mask_length == 0 else itertools.product(masks, repeat=mask_length)
 
 
-def redundant_cycle_pairing(not_redundant, maybe_redundant):
-    # A cycle pairing is redundant if it is pointless to include its order
-    # compared to a non redundant cycle pairing. A lower order cycle pairing
-    # can be perfectly described by a higher order cycle pairing.
-    # e.g. (TGC: noting that the sets are sorted)
-    # (60, 72) is redundant compared to (90, 90) because 60 < 90 and 72 <= 90
-    # (45, 90) is redundant compared to (90, 90) because 45 < 90 and 72 <= 90
-    # (18, 180) is redundant compared to (24, 210) because 18 < 24 and 180 <= 210
-    # (12, 360) is NOT redundant compared to (24, 210) because 360 > 210
-    redundant_order_pairing = True
-    same_orders = True
-    for maybe_redundant_cycle, not_redundant_cycle in zip(
-        maybe_redundant.cycles,
-        not_redundant.cycles,
-    ):
-        if maybe_redundant_cycle.order != not_redundant_cycle.order:
-            same_orders = False
-        if maybe_redundant_cycle.order > not_redundant_cycle.order:
-            redundant_order_pairing = False
-            break
-    if not same_orders:
-        return redundant_order_pairing
-    else:
-        return maybe_redundant == not_redundant
-    # if any(
-    #     maybe_redundant_cycle.edge_partition != not_redundant_cycle.edge_partition
-    #     or maybe_redundant_cycle.corner_partition
-    #     != not_redundant_cycle.corner_partition
-    #     for maybe_redundant_cycle, not_redundant_cycle in zip(
-    #         maybe_redundant.cycles,
-    #         not_redundant.cycles,
-    #     )
-    # ):
-    #     return False
-    # # same_share_order = maybe_redundant.share_order == not_redundant.share_order
-    # same_share_order =
-    # return same_share_order
+def cycle_combination_dominates(this, other):
+    # A modification of the weakly dominates condition in the pareto efficient
+    # algorithm
+    different_orders = False
+    same_cycle = True
+    for this_cycle, other_cycle in zip(this.cycles, other.cycles):
+        if this_cycle.order < other_cycle.order:
+            return False
+        else:
+            different_orders |= this_cycle.order > other_cycle.order
+            if not different_orders:
+                same_cycle &= (
+                    this_cycle.share == other_cycle.share
+                    and this_cycle.edge_partition == other_cycle.edge_partition
+                    and this_cycle.corner_partition == other_cycle.corner_partition
+                )
+
+    return different_orders or same_cycle
 
 
 def all_cycle_combinations(num_cycles, edges, corners):
@@ -251,25 +232,30 @@ def all_cycle_combinations(num_cycles, edges, corners):
                     for i, start_cycle_to_permute in enumerate(
                         descending_order_cycle_combination
                     ):
-                        # We only permute the cycles that have the same maximum
-                        # order because the partition permutation for same order
-                        # cycles matters for phase 2. Don't permute the rest
-                        # because that logic is implemented in phase 3 (more
-                        # efficient to do this in phase 3 vs here).
-                        if (
-                            start_cycle_to_permute.order
-                            != descending_order_cycle_combination[0].order
-                        ):
-                            break
-                        if i != 0 and (
-                            descending_order_cycle_combination[i - 1].edge_partition
-                            == start_cycle_to_permute.edge_partition
-                            and descending_order_cycle_combination[
-                                i - 1
-                            ].corner_partition
-                            == start_cycle_to_permute.corner_partition
-                        ):
-                            continue
+                        if i == 0:
+                            start_permuted_descending_order_cycle_combination = (
+                                descending_order_cycle_combination
+                            )
+                        else:
+                            # We only permute the cycles that have the same maximum
+                            # order because the partition permutation for same order
+                            # cycles matters for phase 2. Don't permute the rest
+                            # because that logic is implemented in phase 3 (more
+                            # efficient to do this in phase 3 vs here).
+                            if (
+                                start_cycle_to_permute.order
+                                != descending_order_cycle_combination[0].order
+                            ):
+                                break
+                            if (
+                                descending_order_cycle_combination[i - 1].edge_partition
+                                == start_cycle_to_permute.edge_partition
+                                and descending_order_cycle_combination[
+                                    i - 1
+                                ].corner_partition
+                                == start_cycle_to_permute.corner_partition
+                            ):
+                                continue
                         start_permuted_descending_order_cycle_combination = (
                             descending_order_cycle_combination.copy()
                         )
@@ -310,19 +296,6 @@ def all_cycle_combinations(num_cycles, edges, corners):
                             share_corner_count == 0
                             or len(share_corner_cycle_candidates) != 0
                         )
-
-                        # TODO: it might be possible that the tree search covers *every*
-                        # possible way to distribute shares when the number of unshared
-                        # cycles is greater than one. I am skeptical this is the case.
-                        # consider 180/24 vs 126/36. 126/36
-                        # is only found when 36 is first because the same partition
-                        # produces 180/24 and 180 has the higher order as determined by
-                        # >>> highest_order_cycles_from_cubie_counts(8, 5, False, False)
-                        # [Cycle(order=180, share=(False, False), edge_partition=(1, 2, 5), corner_partition=(2, 3), always_orient_edges=[0], always_orient_corners=[], critical_orient_edges=[1], critical_orient_corners=[1])]
-                        # >>> highest_order_cycles_from_cubie_counts(4, 3, True, False)
-                        # [Cycle(order=24, share=(True, False), edge_partition=(1, 4), corner_partition=(1, 2), always_orient_edges=[0], always_orient_corners=[0], critical_orient_edges=[1], critical_orient_corners=[0, 1])]
-                        # If I can show this tautology, then we can remove this
-                        # part almost entirely which should significantly improve performance.
                         for (
                             share_edge_indicies,
                             share_corner_indicies,
@@ -336,6 +309,10 @@ def all_cycle_combinations(num_cycles, edges, corners):
                                 share_corner_cycle_candidates, share_corner_count
                             ),
                         ):
+                            # According to
+                            # https://github.com/nestordemeure/paretoFront/blob/2aea69c371f70de4665f8abf24f6fda4ef0a8a70/src/pareto_front_implementation/pareto_front.rs#L265
+                            # it is not worth removing redundant cycles
+                            # intermediately
                             cycle_combination = CycleCombination(
                                 used_edge_count=used_edge_count,
                                 used_corner_count=used_corner_count,
@@ -353,9 +330,6 @@ def all_cycle_combinations(num_cycles, edges, corners):
                                 ),
                             )
                             cycle_combinations.append(cycle_combination)
-                # TODO: is it worth removing redundant cycles intermediately?
-                # this would require sorting by orders then re-sorting by order
-                # product, so its performance vs memory
     return cycle_combinations
 
 
@@ -421,7 +395,7 @@ def highest_order_cycles_from_cubie_counts(
         # swapping.
         if sign(corner_partition) != sign(edge_partition):
             continue
-
+        # TODO: remove orders that "divides each other" based on jmerry's answer
         always_orient_edges = []
         critical_orient_edges = None
         max_two_adic_valuation = -1
@@ -560,8 +534,6 @@ def highest_order_cycles_from_cubie_counts(
         # of two from the full edge order. Conveniently, this can be
         # made simple by changing the leading 2 to a 1 in this case, to get
         # 1 * lcm(a, b, ... z). The corners follow the same logic.
-        # TODO: figure out similarities with this approach to
-        # [Landau's function](https://en.wikipedia.org/wiki/Landau's_function)
         order = math.lcm(
             conditional_edge_factor(not invalid_orient_edge_count and edge_count != 0)
             * math.lcm(*edge_partition),
@@ -591,11 +563,10 @@ def highest_order_cycles_from_cubie_counts(
     return cycles
 
 
-def filter_redundant_cycle_combinations(cycle_combinations):
-    """
-    Removes all cycle pairings that fail the redundant_cycle_pairing test.
-    """
-    # TODO: Could you sort the cycles by the order of the first cycle, iterate through and only keep the ones with the highest second cycle, and then do the same thing for the second cycle only keeping the ones with the highest first cycle?
+def pareto_efficient_cycle_combinations(cycle_combinations):
+    # This isnt the exact pareto efficient algorithm because I had trouble
+    # getting it to work for some reason. The actual algorithm will be used in
+    # the Rust verison of this code.
     cycle_combinations.sort(
         key=lambda cycle_combination: (
             cycle_combination.order_product,
@@ -603,14 +574,14 @@ def filter_redundant_cycle_combinations(cycle_combinations):
         ),
         reverse=True,
     )
-    filtered_cycle_combinations = []
+    pareto_points = []
     for maybe_redundant in cycle_combinations:
         if all(
-            not redundant_cycle_pairing(not_redundant, maybe_redundant)
-            for not_redundant in filtered_cycle_combinations
+            not cycle_combination_dominates(not_redundant, maybe_redundant)
+            for not_redundant in pareto_points
         ):
-            filtered_cycle_combinations.append(maybe_redundant)
-    return filtered_cycle_combinations
+            pareto_points.append(maybe_redundant)
+    return pareto_points
 
 
 # TODO: change this to only find all possible corner structures because phase 2
@@ -750,19 +721,17 @@ def main(num_cycles):
     from timeit import default_timer as timer
 
     a = timer()
-    all_cycle_combinations_result = all_cycle_combinations(num_cycles, 12, 8)
+    cycle_combinations = all_cycle_combinations(num_cycles, 12, 8)
     b = timer()
     print(b - a)
     print(recursive_shared_cycle_combinations.cache_info())
-    filtered_cycle_combinations = filter_redundant_cycle_combinations(
-        all_cycle_combinations_result
-    )
-    return filtered_cycle_combinations
+    cycle_combinations = pareto_efficient_cycle_combinations(cycle_combinations)
+    return cycle_combinations
     a = {}
-    a = collections.defaultdict(lambda: 0)
-    for cycle_combination in filtered_cycle_combinations:
+    a = collections.defaultdict(int)
+    for cycle_combination in cycle_combinations:
         a[tuple(zip(map(operator.attrgetter("order"), cycle_combination.cycles)))] += 1
-    return a
+    return dict(a)
 
 
 if __name__ == "__main__":
