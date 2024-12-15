@@ -129,14 +129,13 @@ def cycle_combination_dominates(this, other):
     for this_cycle, other_cycle in zip(this.cycles, other.cycles):
         if this_cycle.order < other_cycle.order:
             return False
-        else:
+        elif not different_orders:
             different_orders |= this_cycle.order > other_cycle.order
-            if not different_orders:
-                same_cycle &= (
-                    this_cycle.share == other_cycle.share
-                    and this_cycle.edge_partition == other_cycle.edge_partition
-                    and this_cycle.corner_partition == other_cycle.corner_partition
-                )
+            same_cycle &= (
+                this_cycle.share == other_cycle.share
+                and this_cycle.edge_partition == other_cycle.edge_partition
+                and this_cycle.corner_partition == other_cycle.corner_partition
+            )
 
     return different_orders or same_cycle
 
@@ -395,7 +394,7 @@ def highest_order_cycles_from_cubie_counts(
         # swapping.
         if sign(corner_partition) != sign(edge_partition):
             continue
-        # TODO: remove orders that "divides each other" based on jmerry's answer
+
         always_orient_edges = []
         critical_orient_edges = None
         max_two_adic_valuation = -1
@@ -445,9 +444,7 @@ def highest_order_cycles_from_cubie_counts(
         if critical_is_disjoint:
             orient_edge_count += 1
 
-        # TGC: it may be useful to rename this to 'non-critical' or similiar
-        # they may still be 'valid' to use, just not using a critical flip
-        invalid_orient_edge_count = (
+        ignore_critical_flip_edge = (
             # Before determining if a cycle is possible, first ensure that
             # every permutation cycle must orient.
             # If orientation is even, we're fine. If it's not, but there is an
@@ -464,7 +461,7 @@ def highest_order_cycles_from_cubie_counts(
             # Same condition as explained some time earlier.
             orient_edge_count % 2 == 1
         )
-        if invalid_orient_edge_count:
+        if ignore_critical_flip_edge:
             # If always_orient_edges forces every permutation cycle to
             # orient, and there are an odd number of permutation cycles,
             # then this edge and partition pairing cannot form a cycle.
@@ -511,10 +508,10 @@ def highest_order_cycles_from_cubie_counts(
         )
         if critical_is_disjoint:
             orient_corner_count += 1
-        invalid_orient_corner_count = (
+        ignore_critical_flip_corner = (
             orient_corner_count == len(corner_partition) and orient_corner_count == 1
         )
-        if invalid_orient_corner_count:
+        if ignore_critical_flip_corner:
             if not critical_is_disjoint:
                 continue
             assert len(critical_orient_corners) == 1, critical_orient_corners
@@ -534,11 +531,15 @@ def highest_order_cycles_from_cubie_counts(
         # of two from the full edge order. Conveniently, this can be
         # made simple by changing the leading 2 to a 1 in this case, to get
         # 1 * lcm(a, b, ... z). The corners follow the same logic.
+        # NOTE: based on https://math.stackexchange.com/a/3029900, it might be
+        # worth removing orders that divides one another because the LCM is
+        # guaranteed to not be greater. For now, there does not seem to be much
+        # use in doing this.
         order = math.lcm(
-            conditional_edge_factor(not invalid_orient_edge_count and edge_count != 0)
+            conditional_edge_factor(not ignore_critical_flip_edge and edge_count != 0)
             * math.lcm(*edge_partition),
             conditional_corner_factor(
-                not invalid_orient_corner_count and corner_count != 0
+                not ignore_critical_flip_corner and corner_count != 0
             )
             * math.lcm(*corner_partition),
         )
@@ -726,7 +727,7 @@ def main(num_cycles):
     print(b - a)
     print(recursive_shared_cycle_combinations.cache_info())
     cycle_combinations = pareto_efficient_cycle_combinations(cycle_combinations)
-    return cycle_combinations
+    # return cycle_combinations
     a = {}
     a = collections.defaultdict(int)
     for cycle_combination in cycle_combinations:
