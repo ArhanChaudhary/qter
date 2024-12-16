@@ -15,8 +15,34 @@ import math
 import operator
 import functools
 
-NO_ORIENT = 0
-ORIENT = 1
+
+PuzzleOrbitDefinition = collections.namedtuple(
+    "PuzzleOrbitDefinition",
+    [
+        "orbits",
+        "even_permutation_combinations",
+    ],
+)
+
+
+Orbit = collections.namedtuple(
+    "Orbit",
+    [
+        "name",
+        "cubie_count",
+        "orientation_factor",
+    ],
+)
+
+
+CycleCombination = collections.namedtuple(
+    "CycleCombination",
+    [
+        "used_cubie_counts",
+        "order_product",
+        "cycles",
+    ],
+)
 
 
 Cycle = collections.namedtuple(
@@ -24,23 +50,18 @@ Cycle = collections.namedtuple(
     [
         "order",
         "share",
-        "edge_partition",
-        "corner_partition",
-        "always_orient_edges",
-        "always_orient_corners",
-        "critical_orient_edges",
-        "critical_orient_corners",
+        "cubie_partitions",
     ],
 )
 
-CycleCombination = collections.namedtuple(
-    "CycleCombination",
+
+CubiePartition = collections.namedtuple(
+    "CubiePartition",
     [
-        "used_edge_count",
-        "used_corner_count",
-        "order_product",
-        # "share_order",
-        "cycles",
+        "name",
+        "partition",
+        "always_orient",
+        "critical_orient",
     ],
 )
 
@@ -81,7 +102,7 @@ def unique_permutations(iterable, r=None):
 
 
 @functools.cache
-def shared_integer_partitions(n):
+def share_integer_partitions(n):
     """
     Adds a shared single permutation cycle to a partition to "share" it with
     another cycle. This works because {(1,) + i for i in integer_partitions(n)}
@@ -106,7 +127,7 @@ def sign(partition):
     Calculate the [signature](https://en.wikipedia.org/wiki/Parity_of_a_permutation)
     of a partition, made easy by having all cycle lengths.
     """
-    return (-1) ** sum(k - 1 for k in partition)
+    return (sum(partition) - len(partition)) % 2
 
 
 def conditional_edge_factor(cond):
@@ -140,57 +161,77 @@ def cycle_combination_dominates(this, other):
     return different_orders or same_cycle
 
 
-def all_cycle_combinations(num_cycles, edges, corners):
+def all_cycle_combinations(num_cycles, puzzle_orbit_definition):
     """
     Finds all cycle structure pairings on the Rubik's cube.
     """
+    global puzzle_orbit_definition_global
+    global even_permutation_combinations_indicies_global
+    puzzle_orbit_definition_global = puzzle_orbit_definition
+    even_permutation_combinations_indicies_global = tuple(
+        tuple(
+            next(
+                i
+                for i, orbit in enumerate(puzzle_orbit_definition.orbits)
+                if orbit.name == orbit_name
+            )
+            for orbit_name in even_permutation_combination
+        )
+        for even_permutation_combination in puzzle_orbit_definition.even_permutation_combinations
+    )
+
     cycle_combinations = []
-    for used_edge_count, used_corner_count in itertools.product(
-        range(edges + 1), range(corners + 1)
+    for used_cubie_counts in itertools.product(
+        *(
+            range(orbit.cubie_count, orbit.cubie_count + 1)
+            for orbit in puzzle_orbit_definition.orbits
+        )
     ):
-        for partition_edge_counts, partition_corner_counts in itertools.product(
-            integer_partitions(used_edge_count),
-            integer_partitions(used_corner_count),
+        for all_partition_cubie_counts in itertools.product(
+            *map(integer_partitions, used_cubie_counts),
         ):
-            if (
-                len(partition_edge_counts) > num_cycles
-                or len(partition_corner_counts) > num_cycles
+            all_partition_cubie_counts = list(all_partition_cubie_counts)
+            if any(
+                len(partition_cubie_counts) > num_cycles
+                for partition_cubie_counts in all_partition_cubie_counts
             ):
                 continue
-            partition_edge_counts += (0,) * (num_cycles - len(partition_edge_counts))
-            partition_corner_counts += (0,) * (
-                num_cycles - len(partition_corner_counts)
-            )
+            for i, partition_cubie_counts in enumerate(all_partition_cubie_counts):
+                all_partition_cubie_counts[i] += (0,) * (
+                    num_cycles - len(partition_cubie_counts)
+                )
             seen_cycle_cubie_counts = set()
-
-            for (
-                permuted_parition_edge_counts,
-                permuted_partition_corner_counts,
-            ) in itertools.product(
-                unique_permutations(partition_edge_counts),
-                unique_permutations(partition_corner_counts),
+            for all_permuted_partition_cubie_counts in itertools.product(
+                *map(unique_permutations, all_partition_cubie_counts)
             ):
-                all_cycles_with_cubie_counts = []
+                all_cycle_cubie_counts = []
                 continue_outer = False
-                for edge_count, corner_count in zip(
-                    permuted_parition_edge_counts, permuted_partition_corner_counts
-                ):
-                    if edge_count == 0 and corner_count == 0:
+                for cubie_counts in zip(*all_permuted_partition_cubie_counts):
+                    if any(cubie_count == 0 for cubie_count in cubie_counts):
                         continue_outer = True
                         break
-                    all_cycles_with_cubie_counts.append((edge_count, corner_count))
+                    all_cycle_cubie_counts.append(cubie_counts)
                 if continue_outer:
                     continue
-                all_cycles_with_cubie_counts = tuple(
-                    sorted(all_cycles_with_cubie_counts, reverse=True)
+                # all_cycle_cubie_counts.sort(reverse=True)
+                # all_cycle_cubie_counts_hash = tuple(all_cycle_cubie_counts)
+                all_cycle_cubie_counts = tuple(
+                    sorted(all_cycle_cubie_counts, reverse=True)
                 )
-                if all_cycles_with_cubie_counts in seen_cycle_cubie_counts:
+                if all_cycle_cubie_counts in seen_cycle_cubie_counts:
                     continue
-                seen_cycle_cubie_counts.add(all_cycles_with_cubie_counts)
-
+                seen_cycle_cubie_counts.add(all_cycle_cubie_counts)
                 for shared_cycle_combination in recursive_shared_cycle_combinations(
-                    all_cycles_with_cubie_counts
+                    all_cycle_cubie_counts
                 ):
+                    cycle_combinations.append(
+                        CycleCombination(
+                            used_cubie_counts=used_cubie_counts,
+                            order_product=None,
+                            cycles=shared_cycle_combination,
+                        )
+                    )
+                    continue
                     unshared_edge_can_share_exists = False
                     unshared_corner_can_share_exists = False
                     share_edge_exists = False
@@ -313,8 +354,7 @@ def all_cycle_combinations(num_cycles, edges, corners):
                             # it is not worth removing redundant cycles
                             # intermediately
                             cycle_combination = CycleCombination(
-                                used_edge_count=used_edge_count,
-                                used_corner_count=used_corner_count,
+                                used_cubie_counts=used_cubie_counts,
                                 order_product=order_product,
                                 cycles=tuple(
                                     cycle._replace(
@@ -334,234 +374,221 @@ def all_cycle_combinations(num_cycles, edges, corners):
 
 # do not flush cache it is used across used cubie counts
 @functools.cache
-def recursive_shared_cycle_combinations(cycle_cubie_counts):
-    if len(cycle_cubie_counts) == 0:
+def recursive_shared_cycle_combinations(all_cycle_cubie_counts):
+    if len(all_cycle_cubie_counts) == 0:
         return ((),)
-    share_mat = [(False, False)]
-    # needed because when a cubie count is zero its partition is always the
-    # empty tuple which logically cannot used a shared cubie
-    if cycle_cubie_counts[0][0] != 0:
-        share_mat.append((True, False))
-    if cycle_cubie_counts[0][1] != 0:
-        share_mat.append((False, True))
-    if cycle_cubie_counts[0][0] != 0 and cycle_cubie_counts[0][1] != 0:
-        share_mat.append((True, True))
     return tuple(
         (shared_cycle,) + rest_combination
-        for share in share_mat
-        for shared_cycle in highest_order_cycles_from_cubie_counts(
-            *cycle_cubie_counts[0], *share
-        )
+        for shared_cycle in highest_order_cycles_from_cubie_counts(all_cycle_cubie_counts[0])
         for rest_combination in recursive_shared_cycle_combinations(
-            cycle_cubie_counts[1:],
+            all_cycle_cubie_counts[1:]
         )
     )
 
 
 @functools.cache
-def highest_order_cycles_from_cubie_counts(
-    edge_count, corner_count, share_edge, share_corner
-):
+def highest_order_cycles_from_cubie_counts(cycle_cubie_counts):
     """
     Given a set of edge and corner partitions, find the pairs of edge and corner
     partitions that yield the highest order cycle. Adapted from
     <https://gist.github.com/ScriptRaccoon/c12c4884c116dead62a15a3d09732d5d>
     with permission.
     """
-    highest_order = 1
-    cycles = []
-    if edge_count == 0:
-        # we guarantee 0,0 doesnt happen somewhere
-        assert corner_count != 0
-        assert not share_edge
-    if share_edge:
-        edge_partitions = shared_integer_partitions(edge_count)
-    else:
-        edge_partitions = integer_partitions(edge_count)
-    if corner_count == 0:
-        assert not share_corner
-    if share_corner:
-        corner_partitions = shared_integer_partitions(corner_count)
-    else:
-        corner_partitions = integer_partitions(corner_count)
-    for edge_partition, corner_partition in itertools.product(
-        edge_partitions,
-        corner_partitions,
+    ret = []
+    # TODO: make this a number and the array its bits. get rid of the second
+    # pass as well
+    for partial_share in itertools.product(
+        (False, True),
+        repeat=sum(1 for cubie_count in cycle_cubie_counts if cubie_count != 0),
     ):
-        # Sign of partitions must be equal to ensure the cycle is possible.
-        # Equivalent to checking for parity of edges and corners, as it is
-        # impossible for just two edges to swap without two corners
-        # swapping.
-        if sign(corner_partition) != sign(edge_partition):
-            continue
-
-        always_orient_edges = []
-        critical_orient_edges = None
-        max_two_adic_valuation = -1
-        for i, permutation_order in enumerate(edge_partition):
-            # Given our partition, we want to figure out which permutation
-            # cycles must orient to ensure the order remains the same if
-            # every permuation cycle were to orient. Since the order
-            # calculation is lcm(2a, 2b, ... 2z), the cycle order(s) with
-            # the most 2s in its prime factorization will be the leading
-            # coefficient for the LCM and therefore must orient. It just so
-            # happens that this type of computation is equivalent to finding
-            # the 2-adic valuation of each permutation cycle order, and I
-            # have no idea why. Maybe there's a more fundamental reason.
-
-            # We define the cycles that must orient as "critical" because
-            # at least one of them must orient to ensure the order remains
-            # the same.
-            curr_two_adic_valuation = p_adic_valuation(permutation_order, 2)
-            if curr_two_adic_valuation > max_two_adic_valuation:
-                max_two_adic_valuation = curr_two_adic_valuation
-                critical_orient_edges = [i]
-            elif curr_two_adic_valuation == max_two_adic_valuation:
-                critical_orient_edges.append(i)
-            # We force all order 1 permutation cycles to orient, otherwise
-            # the cubie permutes in place (doesn't move). This voids the
-            # necessity of that cycle and transposes the structure to
-            # something else, constituting a logic error. Keep a mental note
-            # that all one cycles MUST orient in a valid cycle structure.
-            if permutation_order == 1:
-                always_orient_edges.append(i)
-        # Because the edge and corner orientation sum must be 0, we still
-        # need to test whether the number of orientations of permutation
-        # cycles is valid to guarantee that the cycle from the edge and
-        # corner partitions is possible to form. Recall from sometime
-        # earlier, we can treat orientations of permutation cycles as
-        # orientations of cubies.
-        orient_edge_count = len(always_orient_edges)
-        # Remember that at least one critical cycle must orient. If this is
-        # included in the always_orient_edges list, then we don't need to
-        # orient any other critical cycles. However, if none of the critical
-        # cycles are included in the always_orient_edges list, then we add
-        # exactly one to the total orientation count for the oriented
-        # critical cycle.
-        critical_is_disjoint = critical_orient_edges is not None and all(
-            i not in always_orient_edges for i in critical_orient_edges
-        )
-        if critical_is_disjoint:
-            orient_edge_count += 1
-
-        ignore_critical_flip_edge = (
-            # Before determining if a cycle is possible, first ensure that
-            # every permutation cycle must orient.
-            # If orientation is even, we're fine. If it's not, but there is an
-            # extra cycle, We'll be able to orient it to make total orientation
-            # even. The issue comes when we've already used all cycles and still
-            # have odd orientation. This means we have to unorient a critical
-            # cycle to make orientation even. Example: Given the partition
-            # (1, 1, 2, 2) for edges all the ones must orient and at least one
-            # two must orient. Although the total number of cycle orientations
-            # is odd, the partition is still possible if everything orients.
-            # This is not the case with (1, 1, 2).
-            orient_edge_count == len(edge_partition)
-            and
-            # Same condition as explained some time earlier.
-            orient_edge_count % 2 == 1
-        )
-        if ignore_critical_flip_edge:
-            # If always_orient_edges forces every permutation cycle to
-            # orient, and there are an odd number of permutation cycles,
-            # then this edge and partition pairing cannot form a cycle.
-            # Example: (1, 1, 1) for edges
-            if not critical_is_disjoint:
-                continue
-            # If always_orient_edges forces every permutation cycle to
-            # orient except for a critical permutation cycle, we
-            # nullify the critical cycle, accepting the consequence of a
-            # lower highest possible order, to make the cycle possible.
-
-            # Now, there may be mutiple permutation cycles that have the
-            # same maximum 2-adic valuation, meaning that the order wouldn't
-            # actually change if the critical cycle were not to orient.
-            # Strangely, during testing, I found out that this never was
-            # the case, and I don't need to worry about it. The following
-            # assertion never fails, implying that the critical cycle is the
-            # only cycle with the maximum 2-adic valuation.
-            # TGC: This assertion never fails because this is the case where we
-            # have odd orientation and no extra cycles to use to fix it, so we
-            # must fix by unorienting a critical cycle.
-            assert len(critical_orient_edges) == 1, critical_orient_edges
-            orient_edge_count -= 1
-            critical_orient_edges = None
-
-        # We do the same thing for corner partitions. It's conventional to
-        # be DRY, but with how complicated the codebase already is it's most
-        # readable this way.
-        always_orient_corners = []
-        critical_orient_corners = None
-        max_three_adic_valuation = -1
-        for i, permutation_order in enumerate(corner_partition):
-            curr_three_adic_valuation = p_adic_valuation(permutation_order, 3)
-            if curr_three_adic_valuation > max_three_adic_valuation:
-                max_three_adic_valuation = curr_three_adic_valuation
-                critical_orient_corners = [i]
-            elif curr_three_adic_valuation == max_three_adic_valuation:
-                critical_orient_corners.append(i)
-            if permutation_order == 1:
-                always_orient_corners.append(i)
-        orient_corner_count = len(always_orient_corners)
-        critical_is_disjoint = critical_orient_corners is not None and all(
-            i not in always_orient_corners for i in critical_orient_corners
-        )
-        if critical_is_disjoint:
-            orient_corner_count += 1
-        ignore_critical_flip_corner = (
-            orient_corner_count == len(corner_partition) and orient_corner_count == 1
-        )
-        if ignore_critical_flip_corner:
-            if not critical_is_disjoint:
-                continue
-            assert len(critical_orient_corners) == 1, critical_orient_corners
-            orient_corner_count -= 1
-            critical_orient_corners = None
-
-        # Let's consider the case for edges to simplify the explanation.
-        # We have a bunch of permutation cycle orders, which I will name
-        # letters a through z, and some of these orient, meaning their
-        # orders double from flipping. So, lcm(2a, 2b, ... 2z) is the edge
-        # order. We can extract out the 2s to get 2 * lcm(a, b, ... z), and
-        # this is almost the full story. Remember in the case of an invalid
-        # cycle orientation count, we nullify the critical cycle to make the
-        # cycle possible. The critical cycle was defined as the cycle with
-        # the most 2s in its prime factorization, so if we remove a factor
-        # of two from the critical cycle then we must also remove a factor
-        # of two from the full edge order. Conveniently, this can be
-        # made simple by changing the leading 2 to a 1 in this case, to get
-        # 1 * lcm(a, b, ... z). The corners follow the same logic.
-        # NOTE: based on https://math.stackexchange.com/a/3029900, it might be
-        # worth removing orders that divides one another because the LCM is
-        # guaranteed to not be greater. For now, there does not seem to be much
-        # use in doing this.
-        order = math.lcm(
-            conditional_edge_factor(not ignore_critical_flip_edge and edge_count != 0)
-            * math.lcm(*edge_partition),
-            conditional_corner_factor(
-                not ignore_critical_flip_corner and corner_count != 0
+        share = []
+        i = 0
+        for cubie_count in cycle_cubie_counts:
+            if cubie_count == 0:
+                share.append(False)
+            else:
+                share.append(partial_share[i])
+                i += 1
+        assert i == len(partial_share)
+        # TODO: should highest_order be defined in the outer loop?
+        highest_order = 1
+        cycles = []
+        for cubie_partitions in itertools.product(
+            *(
+                share_integer_partitions(cycle_cubie_count)
+                if s
+                else integer_partitions(cycle_cubie_count)
+                for s, cycle_cubie_count in zip(share, cycle_cubie_counts)
             )
-            * math.lcm(*corner_partition),
-        )
-        # We only care about the highest order partition pairings.
-        if order > highest_order:
-            cycles = []
-        if order < highest_order:
-            continue
-        highest_order = order
-        cycles.append(
-            Cycle(
-                order=highest_order,
-                share=(share_edge, share_corner),
-                edge_partition=edge_partition,
-                corner_partition=corner_partition,
-                always_orient_edges=always_orient_edges,
-                always_orient_corners=always_orient_corners,
-                critical_orient_edges=critical_orient_edges,
-                critical_orient_corners=critical_orient_corners,
+        ):
+            if any(
+                sum(
+                    sign(cubie_partitions[i])
+                    for i in even_permutation_combination_indicies
+                )
+                % 2
+                != 0
+                for even_permutation_combination_indicies in even_permutation_combinations_indicies_global
+            ):
+                continue
+
+            continue_outer = False
+            cubie_partitions_obj = []
+            running_order = 1
+            for i, cubie_partition in enumerate(cubie_partitions):
+                # TODO: handle orientation factor 1
+                always_orient = []
+                critical_orient = None
+                max_p_adic_valuation = -1
+                for j, permutation_order in enumerate(cubie_partition):
+                    # Given our partition, we want to figure out which permutation
+                    # cycles must orient to ensure the order remains the same if
+                    # every permuation cycle were to orient. Since the order
+                    # calculation is lcm(2a, 2b, ... 2z), the cycle order(s) with
+                    # the most 2s in its prime factorization will be the leading
+                    # coefficient for the LCM and therefore must orient. It just so
+                    # happens that this type of computation is equivalent to finding
+                    # the 2-adic valuation of each permutation cycle order, and I
+                    # have no idea why. Maybe there's a more fundamental reason.
+
+                    # We define the cycles that must orient as "critical" because
+                    # at least one of them must orient to ensure the order remains
+                    # the same.
+                    curr_p_adic_valuation = p_adic_valuation(
+                        permutation_order,
+                        puzzle_orbit_definition_global.orbits[i].orientation_factor,
+                    )
+                    if curr_p_adic_valuation > max_p_adic_valuation:
+                        max_p_adic_valuation = curr_p_adic_valuation
+                        critical_orient = [j]
+                    elif curr_p_adic_valuation == max_p_adic_valuation:
+                        critical_orient.append(j)
+                    # We force all order 1 permutation cycles to orient, otherwise
+                    # the cubie permutes in place (doesn't move). This voids the
+                    # necessity of that cycle and transposes the structure to
+                    # something else, constituting a logic error. Keep a mental note
+                    # that all one cycles MUST orient in a valid cycle structure.
+                    if permutation_order == 1:
+                        always_orient.append(j)
+                # Because the edge and corner orientation sum must be 0, we still
+                # need to test whether the number of orientations of permutation
+                # cycles is valid to guarantee that the cycle from the edge and
+                # corner partitions is possible to form. Recall from sometime
+                # earlier, we can treat orientations of permutation cycles as
+                # orientations of cubies.
+                orient_count = len(always_orient)
+                # Remember that at least one critical cycle must orient. If this is
+                # included in the always_orient_edges list, then we don't need to
+                # orient any other critical cycles. However, if none of the critical
+                # cycles are included in the always_orient_edges list, then we add
+                # exactly one to the total orientation count for the oriented
+                # critical cycle.
+                critical_is_disjoint = critical_orient is not None and all(
+                    j not in always_orient for j in critical_orient
+                )
+                if critical_is_disjoint:
+                    orient_count += 1
+
+                ignore_critical_orient = (
+                    # Before determining if a cycle is possible, first ensure that
+                    # every permutation cycle must orient.
+                    # If orientation is even, we're fine. If it's not, but there is an
+                    # extra cycle, We'll be able to orient it to make total orientation
+                    # even. The issue comes when we've already used all cycles and still
+                    # have odd orientation. This means we have to unorient a critical
+                    # cycle to make orientation even. Example: Given the partition
+                    # (1, 1, 2, 2) for edges all the ones must orient and at least one
+                    # two must orient. Although the total number of cycle orientations
+                    # is odd, the partition is still possible if everything orients.
+                    # This is not the case with (1, 1, 2).
+                    orient_count == len(cubie_partition)
+                    and (
+                        puzzle_orbit_definition_global.orbits[i].orientation_factor == 2
+                        and orient_count % 2 == 1
+                        or puzzle_orbit_definition_global.orbits[i].orientation_factor
+                        != 2
+                        and orient_count == 1
+                    )
+                )
+                if ignore_critical_orient:
+                    # If always_orient_edges forces every permutation cycle to
+                    # orient, and there are an odd number of permutation cycles,
+                    # then this edge and partition pairing cannot form a cycle.
+                    # Example: (1, 1, 1) for edges
+                    if not critical_is_disjoint:
+                        continue_outer = True
+                        break
+                    # If always_orient_edges forces every permutation cycle to
+                    # orient except for a critical permutation cycle, we
+                    # nullify the critical cycle, accepting the consequence of a
+                    # lower highest possible order, to make the cycle possible.
+
+                    # Now, there may be mutiple permutation cycles that have the
+                    # same maximum 2-adic valuation, meaning that the order wouldn't
+                    # actually change if the critical cycle were not to orient.
+                    # Strangely, during testing, I found out that this never was
+                    # the case, and I don't need to worry about it. The following
+                    # assertion never fails, implying that the critical cycle is the
+                    # only cycle with the maximum 2-adic valuation.
+                    # TGC: This assertion never fails because this is the case where we
+                    # have odd orientation and no extra cycles to use to fix it, so we
+                    # must fix by unorienting a critical cycle.
+                    assert len(critical_orient) == 1, critical_orient
+                    orient_count -= 1
+                    critical_orient = None
+                cubie_partitions_obj.append(
+                    CubiePartition(
+                        name=puzzle_orbit_definition_global.orbits[i].name,
+                        partition=cubie_partition,
+                        always_orient=always_orient,
+                        critical_orient=critical_orient,
+                    )
+                )
+                # TODO: maybe replace with cubie_count == 0
+                if cubie_partition != ():
+                    cycle_order = math.lcm(*cubie_partition)
+                    if not ignore_critical_orient:
+                        cycle_order *= puzzle_orbit_definition_global.orbits[
+                            i
+                        ].orientation_factor
+                    running_order = math.lcm(
+                        running_order,
+                        cycle_order,
+                    )
+            if continue_outer:
+                continue
+
+            # Let's consider the case for edges to simplify the explanation.
+            # We have a bunch of permutation cycle orders, which I will name
+            # letters a through z, and some of these orient, meaning their
+            # orders double from flipping. So, lcm(2a, 2b, ... 2z) is the edge
+            # order. We can extract out the 2s to get 2 * lcm(a, b, ... z), and
+            # this is almost the full story. Remember in the case of an invalid
+            # cycle orientation count, we nullify the critical cycle to make the
+            # cycle possible. The critical cycle was defined as the cycle with
+            # the most 2s in its prime factorization, so if we remove a factor
+            # of two from the critical cycle then we must also remove a factor
+            # of two from the full edge order. Conveniently, this can be
+            # made simple by changing the leading 2 to a 1 in this case, to get
+            # 1 * lcm(a, b, ... z). The corners follow the same logic.
+            # NOTE: based on https://math.stackexchange.com/a/3029900, it might be
+            # worth removing orders that divides one another because the LCM is
+            # guaranteed to not be greater. For now, there does not seem to be much
+            # use in doing this.
+            if running_order > highest_order:
+                cycles = []
+            if running_order < highest_order:
+                continue
+            cycles.append(
+                Cycle(
+                    order=running_order,
+                    share=share,
+                    cubie_partitions=cubie_partitions_obj,
+                )
             )
-        )
-    return cycles
+            highest_order = running_order
+        ret.extend(cycles)
+    return ret
 
 
 def pareto_efficient_cycle_combinations(cycle_combinations):
@@ -585,149 +612,33 @@ def pareto_efficient_cycle_combinations(cycle_combinations):
     return pareto_points
 
 
-# TODO: change this to only find all possible corner structures because phase 2
-# operates on only corners
-def all_cycle_structures(cycle):
-    """
-    Given a cycle, find all possible cycle structures that can be formed from
-    its edge and corner partitions (or permutation orders).
-
-    A cycle structure is a tuple of integers that represents the number of
-    cycles of each order that are present in the cycle. For example, the cycle
-    structure (2, 1, 0, 0, 0, 0) represents two 2-cycles and a 3-cycle. Its
-    encoding mirrors GAP's [CycleStructurePerm](https://docs.gap-system.org/doc/ref/chap42.html#X7944D1447804A69A).
-    """
-    cycle_structures = set()
-    # The edge and corner partitions represent permutation orders, but this
-    # obviously isn't the full story because cubies orient as well. We can
-    # generalize this statement to say that permutations cycles also have an
-    # orientation defined as the sum of each individual cubie's orientation that
-    # make up the cycle. Since the orientation sum of every edge/corner must be
-    # 0 modulo 2/3 (a basic truism), this implies the orientation sum of every
-    # edge/corner permutation cycle must also be 0 modulo 2/3.
-
-    # We consider all possible ways to orient edge and corner permutation
-    # cycles, filtering out the invalid ones, and then compute the cycle
-    # structure.
-    for edge_orientation_mask in orientation_masks(
-        [ORIENT, NO_ORIENT], len(cycle.edge_partition)
-    ):
-        if (
-            # Cannot orient or "flip" an odd number of edge permutation cycles
-            # (recall that we treat permutation cycles as cubies).
-            edge_orientation_mask.count(ORIENT) % 2 == 1
-            # explained later
-            or any(
-                edge_orientation_mask[i] == NO_ORIENT for i in cycle.always_orient_edges
-            )
-            or not (
-                cycle.critical_orient_edges is None
-                or any(
-                    edge_orientation_mask[i] == ORIENT
-                    for i in cycle.critical_orient_edges
-                )
-            )
-        ):
-            continue
-        for corner_orientation_mask in orientation_masks(
-            [ORIENT, NO_ORIENT], len(cycle.corner_partition)
-        ):
-            if (
-                # Figuring out the amount of corner permutation cycles we are
-                # allowed to orient is interesting. We can use a simple proof by
-                # casing to show that we can orient any amount of cycles except
-                # one.
-                #
-                # Case 1: No corner permutation cycles orient
-                # The orientation sum of all corner permutation cycles is 0,
-                # satisfying the 0 modulo 3 condition.
-                # Case 2: One corner permutation cycle orients
-                # The orientation of the oriented cycle isn't 0 by definition,
-                # and the orientation sum of all other cycles is 0, contradicting
-                # the 0 modulo 3 condition making this case invalid.
-                # Case 3: Two corner permutation cycles orient
-                # The orientation sum of the two oriented cycles can easily be
-                # shown to be 0 modulo 3 if the first cycle's orientation is 1
-                # and the second, 2.
-                # Case 4: Three corner permutation cycles orient
-                # The orientation sum of the three oriented cycles can easily be
-                # shown to be 0 modulo 3 if all three cycles' orientations are 1.
-                #
-                # Any subsquent number of oriented cycles is actually just a
-                # composition of the above cases. If the number is odd, we can
-                # apply case 4 to make it even. If the number if even, we can
-                # repeatedly apply case 3 for the remaining cycles.
-                corner_orientation_mask.count(ORIENT) == 1
-                # explained later
-                or any(
-                    corner_orientation_mask[i] == NO_ORIENT
-                    for i in cycle.always_orient_corners
-                )
-                or not (
-                    cycle.critical_orient_corners is None
-                    or any(
-                        corner_orientation_mask[i] == ORIENT
-                        for i in cycle.critical_orient_corners
-                    )
-                )
-            ):
-                continue
-            # We finally take into account orientation to find the true orders
-            # of the cycle. It is then converted to the cycle structure
-            # representation.
-            edge_cycle_orders = [
-                cycle_order
-                * conditional_edge_factor(edge_orientation_mask[i] == ORIENT)
-                for i, cycle_order in enumerate(cycle.edge_partition)
-            ]
-            corner_cycle_orders = [
-                cycle_order
-                * conditional_corner_factor(corner_orientation_mask[i] == ORIENT)
-                for i, cycle_order in enumerate(cycle.corner_partition)
-            ]
-
-            cycle_structure = [0] * (max(*edge_cycle_orders, *corner_cycle_orders) - 1)
-            for i, cycle_order in enumerate(edge_cycle_orders):
-                # Sanity check, 1 cycles are unaffected cubies that should not
-                # be present in the cycle structure, and why is explained later.
-                assert cycle_order != 1
-                # GAP's CycleStructurePerm is 2-indexed!
-                cycle_structure[cycle_order - 2] += conditional_edge_factor(
-                    edge_orientation_mask[i] == NO_ORIENT
-                )
-
-            for i, cycle_order in enumerate(corner_cycle_orders):
-                assert cycle_order != 1
-                cycle_structure[cycle_order - 2] += conditional_corner_factor(
-                    corner_orientation_mask[i] == NO_ORIENT
-                )
-            cycle_structures.add(
-                # (
-                tuple(cycle_structure),
-                #     cycle.edge_partition,
-                #     edge_orientation_mask,
-                #     cycle.corner_partition,
-                #     corner_orientation_mask,
-                # )
-            )
-    # Sanity check, guarantees in highest_order_cycles_from_cubie_counts ensure
-    # that a cycle structure exists for every cycle. Else, the cycle is
-    # impossible to form, and other possible high-order candidates from the same
-    # partitions were never considered.
-    assert cycle_structures != set(), cycle
-    return frozenset(cycle_structures)
-
-
 def main(num_cycles):
     from timeit import default_timer as timer
 
     a = timer()
-    cycle_combinations = all_cycle_combinations(num_cycles, 12, 8)
+    cycle_combinations = all_cycle_combinations(
+        num_cycles,
+        PuzzleOrbitDefinition(
+            orbits=[
+                Orbit(name="edges", cubie_count=12, orientation_factor=2),
+                Orbit(name="corners", cubie_count=8, orientation_factor=3),
+            ],
+            even_permutation_combinations=(("edges", "corners"),),
+        ),
+    )
+    #
     b = timer()
     print(b - a)
     print(recursive_shared_cycle_combinations.cache_info())
-    cycle_combinations = pareto_efficient_cycle_combinations(cycle_combinations)
-    # return cycle_combinations
+    cycle_combinations.sort(
+        key=lambda cycle_combination: (
+            cycle_combination.order_product,
+            *map(operator.attrgetter("order"), cycle_combination.cycles),
+        ),
+        reverse=True,
+    )
+    # cycle_combinations = pareto_efficient_cycle_combinations(cycle_combinations)
+    return cycle_combinations
     a = {}
     a = collections.defaultdict(int)
     for cycle_combination in cycle_combinations:
@@ -737,4 +648,4 @@ def main(num_cycles):
 
 if __name__ == "__main__":
     with open("./output.py", "w") as f:
-        f.write(f"Cycle = 1\nCycleCombination = 1\n{main(3)}")
+        f.write(f"Cycle = 1\nCycleCombination = 1\nCubiePartition = 1\n{main(2)}")
