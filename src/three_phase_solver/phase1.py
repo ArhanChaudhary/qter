@@ -50,7 +50,7 @@ Cycle = collections.namedtuple(
     [
         "order",
         "share",
-        "cubie_partitions",
+        "cubie_partition_objs",
     ],
 )
 
@@ -143,9 +143,16 @@ def cycle_combination_dominates(this, other):
         elif not different_orders:
             different_orders |= this_cycle.order > other_cycle.order
             same_cycle &= this_cycle.share == other_cycle.share and all(
-                this_cubie_partition.partition == other_cubie_partition.partition
+                this_cubie_partition == other_cubie_partition
                 for this_cubie_partition, other_cubie_partition in zip(
-                    this_cycle.cubie_partitions, other_cycle.cubie_partitions
+                    map(
+                        operator.attrgetter("partition"),
+                        this_cycle.cubie_partition_objs,
+                    ),
+                    map(
+                        operator.attrgetter("partition"),
+                        other_cycle.cubie_partition_objs,
+                    ),
                 )
             )
 
@@ -172,10 +179,12 @@ def all_cycle_combinations(puzzle_orbit_definition, num_cycles):
     )
 
     cycle_combinations = []
+    # TODO: upper bound of LCM is math.lcm(*range(1, <max orbit cubie count> + 1))
     for used_cubie_counts in itertools.product(
         *(range(orbit.cubie_count + 1) for orbit in puzzle_orbit_definition.orbits)
     ):
         for all_partition_cubie_counts in itertools.product(
+            # TODO: reduced partitions for this?
             *map(integer_partitions, used_cubie_counts),
         ):
             all_partition_cubie_counts = list(all_partition_cubie_counts)
@@ -228,7 +237,7 @@ def all_cycle_combinations(puzzle_orbit_definition, num_cycles):
                                 share_orbits_exists[i] |= cycle.share[i]
                                 orbits_can_share[i] |= (
                                     cycle.share[i] is False
-                                    and 1 in cycle.cubie_partitions[i].partition
+                                    and 1 in cycle.cubie_partition_objs[i].partition
                                 )
                         if all_orbits_can_share:
                             break
@@ -241,22 +250,9 @@ def all_cycle_combinations(puzzle_orbit_definition, num_cycles):
                     # orders will be sorted
                     descending_order_cycle_combination = sorted(
                         shared_cycle_combination,
-                        key=lambda cycle: (cycle.order, *cycle.cubie_partitions),
+                        key=lambda cycle: (cycle.order, *cycle.cubie_partition_objs),
                         reverse=True,
                     )
-                    cycle_combinations.append(
-                        CycleCombination(
-                            used_cubie_counts=used_cubie_counts,
-                            order_product=math.prod(
-                                map(
-                                    operator.attrgetter("order"),
-                                    descending_order_cycle_combination,
-                                )
-                            ),
-                            cycles=descending_order_cycle_combination,
-                        )
-                    )
-                    continue
                     for i, start_cycle_to_permute in enumerate(
                         descending_order_cycle_combination
                     ):
@@ -275,13 +271,20 @@ def all_cycle_combinations(puzzle_orbit_definition, num_cycles):
                                 != descending_order_cycle_combination[0].order
                             ):
                                 break
-                            if (
-                                descending_order_cycle_combination[i - 1].edge_partition
-                                == start_cycle_to_permute.edge_partition
-                                and descending_order_cycle_combination[
-                                    i - 1
-                                ].corner_partition
-                                == start_cycle_to_permute.corner_partition
+                            if all(
+                                prev_cubie_partition == curr_cubie_partition
+                                for prev_cubie_partition, curr_cubie_partition in zip(
+                                    map(
+                                        operator.attrgetter("partition"),
+                                        descending_order_cycle_combination[
+                                            i - 1
+                                        ].cubie_partition_objs,
+                                    ),
+                                    map(
+                                        operator.attrgetter("partition"),
+                                        start_cycle_to_permute.cubie_partition_objs,
+                                    ),
+                                )
                             ):
                                 continue
                         start_permuted_descending_order_cycle_combination = (
@@ -295,47 +298,47 @@ def all_cycle_combinations(puzzle_orbit_definition, num_cycles):
                             start_permuted_descending_order_cycle_combination[0],
                         )
 
-                        edge_can_share_exists = False
-                        corner_can_share_exists = False
-                        share_edge_count = 0
-                        share_corner_count = 0
-                        share_edge_cycle_candidates = []
-                        share_corner_cycle_candidates = []
+                        orbits_can_share = [False] * len(puzzle_orbit_definition.orbits)
+                        share_orbit_counts = [0] * len(puzzle_orbit_definition.orbits)
+                        all_share_orbit_cycle_candidates = [
+                            [] for _ in range(len(puzzle_orbit_definition.orbits))
+                        ]
                         order_product = 1
 
                         for j, cycle in enumerate(
                             start_permuted_descending_order_cycle_combination
                         ):
-                            if edge_can_share_exists and 1 in cycle.edge_partition:
-                                share_edge_cycle_candidates.append(j)
-                            if corner_can_share_exists and 1 in cycle.corner_partition:
-                                share_corner_cycle_candidates.append(j)
-
-                            edge_can_share_exists |= 1 in cycle.edge_partition
-                            corner_can_share_exists |= 1 in cycle.corner_partition
-                            share_edge_count += cycle.share[0]
-                            share_corner_count += cycle.share[1]
+                            for k in range(len(puzzle_orbit_definition.orbits)):
+                                if (
+                                    orbits_can_share[k]
+                                    and 1 in cycle.cubie_partition_objs[k].partition
+                                ):
+                                    all_share_orbit_cycle_candidates[k].append(j)
+                                orbits_can_share[k] |= (
+                                    1 in cycle.cubie_partition_objs[k].partition
+                                )
+                                share_orbit_counts[k] += cycle.share[k]
                             order_product *= cycle.order
 
-                        assert (
-                            share_edge_count == 0
-                            or len(share_edge_cycle_candidates) != 0
-                        ) and (
-                            share_corner_count == 0
-                            or len(share_corner_cycle_candidates) != 0
+                        assert all(
+                            share_orbit_count == 0
+                            or len(share_orbit_cycle_candidates) != 0
+                            for share_orbit_cycle_candidates, share_orbit_count in zip(
+                                all_share_orbit_cycle_candidates, share_orbit_counts
+                            )
                         )
-                        for (
-                            share_edge_indicies,
-                            share_corner_indicies,
-                        ) in itertools.product(
+
+                        for all_share_orbit_indicies in itertools.product(
                             # given a list "share_edge_candidates", what are all ways to
                             # pick "share_edge_count" numbers from the list
-                            itertools.combinations(
-                                share_edge_cycle_candidates, share_edge_count
-                            ),
-                            itertools.combinations(
-                                share_corner_cycle_candidates, share_corner_count
-                            ),
+                            *(
+                                itertools.combinations(
+                                    share_orbit_cycle_candidates, share_orbit_count
+                                )
+                                for share_orbit_cycle_candidates, share_orbit_count in zip(
+                                    all_share_orbit_cycle_candidates, share_orbit_counts
+                                )
+                            )
                         ):
                             # According to
                             # https://github.com/nestordemeure/paretoFront/blob/2aea69c371f70de4665f8abf24f6fda4ef0a8a70/src/pareto_front_implementation/pareto_front.rs#L265
@@ -346,10 +349,12 @@ def all_cycle_combinations(puzzle_orbit_definition, num_cycles):
                                 order_product=order_product,
                                 cycles=tuple(
                                     cycle._replace(
-                                        share=(
-                                            j in share_edge_indicies,
-                                            j in share_corner_indicies,
-                                        )
+                                        share=tuple(
+                                            j in all_share_orbit_indicies[k]
+                                            for k in range(
+                                                len(puzzle_orbit_definition.orbits)
+                                            )
+                                        ),
                                     )
                                     for j, cycle in enumerate(
                                         start_permuted_descending_order_cycle_combination
@@ -382,6 +387,7 @@ def reduced_integer_partitions(cycle_cubie_count, s):
         # This works because {(1,) + i for i in integer_partitions(n)}
         # == {i for i in integer_partitions(n + 1) if 1 in i}.
         (math.lcm(*partition), (1,) + partition if s else partition)
+        # TODO: reread asher's idea with prime powers, is it really faster?
         for partition in integer_partitions(cycle_cubie_count)
     ]
     partitions.sort(reverse=True, key=operator.itemgetter(0))
@@ -390,17 +396,17 @@ def reduced_integer_partitions(cycle_cubie_count, s):
     for i in range(len(partitions)):
         if dominated[i]:
             continue
-        current = partitions[i]
-        reduced_partitions.append(current)
+        partition = partitions[i]
+        reduced_partitions.append(partition)
         for j in range(i + 1, len(partitions)):
             # TODO: this does not account for the orientation factor. Using 2
             # corners: parition (1,1) admits a 3 cycle but its LCM is 1.
             # Partition (2) admits a 2 cycle
             if (
-                current[0] % partitions[j][0] == 0
-                and current[0] != partitions[j][0]
+                partition[0] % partitions[j][0] == 0
+                and partition[0] != partitions[j][0]
                 # TODO: this does not account for when there is no parity
-                and sign(current[1]) == sign(partitions[j][1])
+                and sign(partition[1]) == sign(partitions[j][1])
             ):
                 dominated[j] = True
     return reduced_partitions
@@ -416,10 +422,10 @@ def highest_order_cycles_from_cubie_counts(cycle_cubie_counts):
     with permission.
     """
     ret = []
-    # TODO: make this a number and the array its bits. get rid of the second
-    # pass as well
+    # TODO: insert 0 indicies for share (avoids second pass)
     for partial_share in itertools.product(
         (False, True),
+        # TODO: orientation factor 1 is another condition for not being able to share! important
         repeat=sum(1 for cubie_count in cycle_cubie_counts if cubie_count != 0),
     ):
         share = []
@@ -434,7 +440,9 @@ def highest_order_cycles_from_cubie_counts(cycle_cubie_counts):
         # TODO: should highest_order be defined in the outer loop?
         highest_order = 1
         cycles = []
-        for lcm_and_cubie_partitions in itertools.product(
+        # TODO: alternate implementation of best LCM. benchmark adding highest
+        # number to stack first and then using a fibonacci heap
+        for lcms_and_partitions in itertools.product(
             *(
                 reduced_integer_partitions(cycle_cubie_count, s)
                 for s, cycle_cubie_count in zip(share, cycle_cubie_counts)
@@ -443,7 +451,7 @@ def highest_order_cycles_from_cubie_counts(cycle_cubie_counts):
             if any(
                 # TODO: all ways to handle parities
                 sum(
-                    sign(lcm_and_cubie_partitions[i][1])
+                    sign(lcms_and_partitions[i][1])
                     for i in even_permutation_combination_indicies
                 )
                 % 2
@@ -453,15 +461,15 @@ def highest_order_cycles_from_cubie_counts(cycle_cubie_counts):
                 continue
 
             continue_outer = False
-            cubie_partitions_obj = []
+            cubie_partition_objs = []
             running_order = 1
-            for i, lcm_and_cubie_partitions in enumerate(lcm_and_cubie_partitions):
-                lcm, cubie_partition = lcm_and_cubie_partitions
+            for i, lcm_and_partition in enumerate(lcms_and_partitions):
+                lcm, partition = lcm_and_partition
                 always_orient = []
                 critical_orient = None
                 if puzzle_orbit_definition_global.orbits[i].orientation_factor != 1:
                     max_p_adic_valuation = -1
-                    for j, permutation_order in enumerate(cubie_partition):
+                    for j, permutation_order in enumerate(partition):
                         # Given our partition, we want to figure out which permutation
                         # cycles must orient to ensure the order remains the same if
                         # every permuation cycle were to orient. Since the order
@@ -522,7 +530,7 @@ def highest_order_cycles_from_cubie_counts(cycle_cubie_counts):
                         # two must orient. Although the total number of cycle orientations
                         # is odd, the partition is still possible if everything orients.
                         # This is not the case with (1, 1, 2).
-                        orient_count == len(cubie_partition)
+                        orient_count == len(partition)
                         and (
                             puzzle_orbit_definition_global.orbits[i].orientation_factor
                             == 2
@@ -560,16 +568,16 @@ def highest_order_cycles_from_cubie_counts(cycle_cubie_counts):
                         assert len(critical_orient) == 1, critical_orient
                         orient_count -= 1
                         critical_orient = None
-                cubie_partitions_obj.append(
+                cubie_partition_objs.append(
                     CubiePartition(
                         name=puzzle_orbit_definition_global.orbits[i].name,
-                        partition=cubie_partition,
+                        partition=partition,
                         always_orient=always_orient,
                         critical_orient=critical_orient,
                     )
                 )
                 # TODO: maybe replace with cubie_count == 0
-                if cubie_partition != ():
+                if partition != ():
                     cycle_order = lcm
                     if (
                         puzzle_orbit_definition_global.orbits[i].orientation_factor != 1
@@ -611,11 +619,12 @@ def highest_order_cycles_from_cubie_counts(cycle_cubie_counts):
             # optimizations that make this faster. 1. only care about creating
             # the highest order from prime powers 2. only find the highest order
             # product cycle
+            # TODO: prioritize not affecting orbits if possible
             cycles.append(
                 Cycle(
                     order=running_order,
                     share=share,
-                    cubie_partitions=cubie_partitions_obj,
+                    cubie_partition_objs=cubie_partition_objs,
                 )
             )
             highest_order = running_order
@@ -651,17 +660,17 @@ def main():
             orbits=[
                 # TODO: Orbit(name="corners", cubie_count=8, orientation_factor=3, orientation_sum_constraint=ZERO),
                 # TODO: Orbit(name="corners", cubie_count=8, orientation_factor=3, orientation_sum_constraint=ANYTHING),
-                # Orbit(name="edges", cubie_count=12, orientation_factor=2),
-                # Orbit(name="corners", cubie_count=8, orientation_factor=3),
-                Orbit(name="centers", cubie_count=24, orientation_factor=1),
-                Orbit(name="wings", cubie_count=24, orientation_factor=1),
+                Orbit(name="edges", cubie_count=12, orientation_factor=2),
                 Orbit(name="corners", cubie_count=8, orientation_factor=3),
+                # Orbit(name="centers", cubie_count=24, orientation_factor=1),
+                # Orbit(name="wings", cubie_count=24, orientation_factor=1),
+                # Orbit(name="corners", cubie_count=8, orientation_factor=3),
             ],
             # TODO: all parities (sent in discord)
-            # even_permutation_combinations=(("edges", "corners"),),
-            even_permutation_combinations=(("centers", "corners"),),
+            even_permutation_combinations=(("edges", "corners"),),
+            # even_permutation_combinations=(("centers", "corners"),),
         ),
-        2,
+        4,
     )
     b = timeit.default_timer()
     print(b - a)
