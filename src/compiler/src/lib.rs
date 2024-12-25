@@ -1,10 +1,13 @@
 use std::{collections::HashMap, rc::Rc};
 
 use internment::ArcIntern;
+use lua::LuaMacros;
 use mlua::Lua;
 use pest::error::Error;
 use pest_derive::Parser;
 use qter_core::{Int, Program, WithSpan, U};
+
+mod lua;
 
 #[derive(Parser)]
 #[grammar = "./qat.pest"]
@@ -110,6 +113,6 @@ struct ParsedSyntax {
     scope_counter: usize,
     macros: HashMap<ArcIntern<String>, WithSpan<Macro>>,
     defines: Vec<Define>,
-    lua_scripts: Lua,
+    lua_macros: LuaMacros,
     code: Vec<WithSpan<(Instruction, ArcIntern<Scope>)>>,
 }

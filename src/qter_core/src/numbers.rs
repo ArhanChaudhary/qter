@@ -113,6 +113,12 @@ impl<Signed> FromStr for Int<Signed> {
     }
 }
 
+impl From<Int<U>> for Int<I> {
+    fn from(value: Int<U>) -> Self {
+        Int::from_inner(value.value)
+    }
+}
+
 macro_rules! from {
     (unsigned $ty: ty) => {
         impl<Signed> From<$ty> for Int<Signed> {
