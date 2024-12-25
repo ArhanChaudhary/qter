@@ -31,7 +31,7 @@ value       = { number | constant | ident | block }
 label       = { tag_ident ~ ":" }
 code        = { ident ~ value* }
 lua_call    = { "lua" ~ ident ~ "(" ~ "\n"? ~ value? ~ ("," ~ "\n"? ~ value)* ~ ","? ~ "\n"? ~ ")" }
-instruction = { label | code | constant | lua_call | define }
+instruction = { label | code | constant | lua_call | define | registers }
 
 type = { "block" | "reg" | "int" | "ident" }
 

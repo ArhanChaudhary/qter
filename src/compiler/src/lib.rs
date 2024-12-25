@@ -79,14 +79,70 @@ enum Instruction {
     },
 }
 
-enum PatternArg {
+#[derive(Clone, Copy, Debug)]
+enum PatternArgTy {
     Int,
     Reg,
     Block,
+    Ident,
+}
+
+enum PatternComponent {
+    Argument {
+        name: WithSpan<ArcIntern<String>>,
+        ty: WithSpan<PatternArgTy>,
+    },
     Word(ArcIntern<String>),
 }
 
-struct Pattern(Vec<WithSpan<PatternArg>>);
+impl PatternComponent {
+    /// Returns `None` if the patterns do not conflict, otherwise returns a counterexample that would match both patterns.
+    fn conflicts_with(&self, other: &PatternComponent) -> Option<ArcIntern<String>> {
+        use PatternArgTy as A;
+        use PatternComponent as P;
+
+        match (self, other) {
+            (P::Argument { name: _, ty: a }, P::Argument { name: _, ty: b }) => match (**a, **b) {
+                (A::Int, A::Int) => Some(ArcIntern::from_ref("123")),
+                (A::Reg, A::Reg)
+                | (A::Ident, A::Reg)
+                | (A::Reg, A::Ident)
+                | (A::Ident, A::Ident) => Some(ArcIntern::from_ref("a")),
+                (A::Block, A::Block) => Some(ArcIntern::from_ref("{ }")),
+                _ => None,
+            },
+            (P::Argument { name: _, ty }, P::Word(word))
+            | (P::Word(word), P::Argument { name: _, ty }) => match **ty {
+                A::Ident | A::Reg => Some(ArcIntern::clone(word)),
+                _ => None,
+            },
+            (P::Word(a), P::Word(b)) => (a == b).then(|| ArcIntern::clone(a)),
+        }
+    }
+}
+
+struct Pattern(Vec<WithSpan<PatternComponent>>);
+
+impl Pattern {
+    /// Returns `None` if the patterns do not conflict, otherwise returns a counterexample that would match both patterns.
+    fn conflicts_with(&self, other: &Pattern) -> Option<String> {
+        if self.0.len() != other.0.len() {
+            return None;
+        }
+
+        self.0
+            .iter()
+            .zip(other.0.iter())
+            .map(|(a, b)| a.conflicts_with(b))
+            .try_fold(String::new(), |mut a, v| {
+                let v = v?;
+
+                a.push(' ');
+                a.push_str(&v);
+                Some(a)
+            })
+    }
+}
 
 struct MacroBranch {
     pattern: WithSpan<Pattern>,
