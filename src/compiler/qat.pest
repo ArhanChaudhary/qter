@@ -24,7 +24,7 @@ theoretical_architecture = { "theoretical" ~ number }
 real_architecture        = { builtin_architecture | custom_architecture }
 register_architecture    = _{ theoretical_architecture | real_architecture }
 
-statement = { macro | instruction | lua_block | import }
+statement = _{ macro | instruction | lua_block | import }
 
 constant    = { "$" ~ ident }
 value       = { number | constant | ident | block }
@@ -47,7 +47,7 @@ import_filename = @{ident ~ ".qat"}
 import = { ".import" ~ import_filename }
 
 lua_code  = { (!"end-lua" ~ ANY)* }
-lua_block = { ".start-lua" ~ lua_code ~ "end-lua" }
+lua_block = _{ ".start-lua" ~ lua_code ~ "end-lua" }
 
 
 

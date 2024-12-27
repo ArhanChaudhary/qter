@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{fmt::Debug, rc::Rc};
 
 use internment::ArcIntern;
 use pest::{
@@ -7,7 +7,7 @@ use pest::{
         ErrorVariant::{self, CustomError},
     },
     iterators::Pair,
-    Parser,
+    Parser, Position,
 };
 use pest_derive::Parser;
 use qter_core::{
@@ -15,23 +15,41 @@ use qter_core::{
     Int, WithSpan, U,
 };
 
-use crate::{Cube, ParsedSyntax, RegisterDecl};
+use crate::{lua::LuaMacros, Cube, ParsedSyntax, RegisterDecl};
 
 #[derive(Parser)]
 #[grammar = "./qat.pest"]
 struct QatParser;
 
 fn parse(qat: Rc<str>) -> Result<ParsedSyntax, Box<Error<Rule>>> {
-    let mut program = QatParser::parse(Rule::program, &qat)?
-        .next()
-        .unwrap()
-        .into_inner();
+    let mut program = QatParser::parse(Rule::program, &qat)?.next().unwrap();
+    let zero_pos = program.as_span().start_pos();
+    let mut program = program        .into_inner();
+
+    let mut lua = match LuaMacros::new() {
+        Ok(v) => v,
+        Err(e) => return Err(Box::new(Error::new_from_pos(ErrorVariant::CustomError { message: e.to_string()}, zero_pos))),
+    };
 
     // println!("{parsed}");
 
     let global_register = parse_registers(program.next().unwrap());
 
-    println!("{global_register:?}");
+    for pair in program {
+        if let Rule::EOI = pair.as_rule() {
+            break;
+        }
+        
+        let span = pair.as_span();
+        match parse_statement(pair)? {
+            Statement::Macro => todo!(),
+            Statement::Instruction(_) => todo!(),
+            Statement::LuaBlock(code) => if let Err(e) = lua.add_chunk(code) {
+                return Err(Box::new(Error::new_from_span(ErrorVariant::CustomError { message: e.to_string() }, span)))
+            },
+            Statement::Import(_) => todo!(),
+        }
+    }
 
     todo!()
 }
@@ -190,6 +208,27 @@ fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Cube, Box<Error<Rule>>> {
     }
 }
 
+enum Statement<'a> {
+    Macro,
+    Instruction(super::Instruction),
+    LuaBlock(&'a str),
+    Import(&'a str),
+}
+
+fn parse_statement(pair: Pair<'_, Rule>) -> Result<Statement<'_>, Box<Error<Rule>>> {
+    let rule = pair.as_rule();
+
+    match rule {
+        Rule::r#macro => todo!(),
+        Rule::instruction => todo!(),
+        Rule::lua_code => {
+            Ok(Statement::LuaBlock(pair.as_str()))
+        },
+        Rule::import => todo!(),
+        _ => unreachable!("{rule:?}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::rc::Rc;
@@ -209,7 +248,11 @@ mod tests {
                 g, h ← 3x3 (U, D)
             }
 
-            add 1 a
+            .start-lua
+                function bruh()
+                    print \"skibidi\"
+                end
+            end-lua
         ";
 
         match parse(Rc::from(code)) {
