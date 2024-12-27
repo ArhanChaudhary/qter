@@ -1,7 +1,7 @@
 WHITESPACE = _{ " " }
 COMMENT    = _{ ("--[[" ~ (!"--]]" ~ ANY)* ~ "--]]") | ("--" ~ (!"\n" ~ ANY)* ~ "\n") }
 
-program = { registers ~ "\n"* ~ statement ~ ("\n"+ ~ statement)* ~ "\n"* ~ EOI }
+program = { "\n"* ~ registers ~ "\n"* ~ statement ~ ("\n"+ ~ statement)* ~ "\n"* ~ EOI }
 
 special_char = { "lua" | "{" | "}" | "." | ":" | "$" | "--" | "," | "<-" | "←" | "\n" | "(" | ")" | "!" | WHITESPACE }
 
@@ -13,7 +13,7 @@ number = { ASCII_DIGIT+ }
 algorithm = { ident+ }
 
 registers = { ".registers" ~ "{" ~ "\n"? ~ register_declaration ~ ("\n"+ ~ register_declaration)* ~ "\n"* ~ "}" ~ "\n"* }
-register_declaration = { unswitchable | switchable }
+register_declaration = _{ unswitchable | switchable }
 
 unswitchable = { ident ~ ("," ~ ident)* ~ ("<-" | "←") ~ register_architecture }
 switchable           = { "(" ~ "\n"* ~ unswitchable ~ ( "\n"+ ~ unswitchable )* ~ "\n"* ~ ")" }
@@ -22,7 +22,7 @@ builtin_architecture     = { (!"builtin" ~ ident) ~ "builtin" ~ (number | ("(" ~
 custom_architecture      = { ident ~ (ident+ | ("(" ~ "\n"* ~ algorithm ~ ("," ~ "\n"* ~ algorithm)* ~ ","? ~ "\n"* ~ ")")) }
 theoretical_architecture = { "theoretical" ~ number }
 real_architecture        = { builtin_architecture | custom_architecture }
-register_architecture    = { real_architecture | theoretical_architecture }
+register_architecture    = _{ theoretical_architecture | real_architecture }
 
 statement = { macro | instruction | lua_block | import }
 

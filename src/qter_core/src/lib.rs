@@ -19,16 +19,24 @@ use discrete_math::length_of_substring_that_this_string_is_n_repeated_copies_of;
 use internment::ArcIntern;
 
 /// A slice of the original source code; to be attached to pieces of data for error reporting
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Span {
-    source: Rc<str>,
+    source: ArcIntern<String>,
     start: usize,
     end: usize,
     line_and_col: OnceLock<(usize, usize)>,
 }
 
 impl Span {
-    pub fn new(source: Rc<str>, start: usize, end: usize) -> Span {
+    pub fn from_span(span: pest::Span) -> Span {
+        Span::new(
+            ArcIntern::from_ref(span.get_input()),
+            span.start(),
+            span.end(),
+        )
+    }
+
+    pub fn new(source: ArcIntern<String>, start: usize, end: usize) -> Span {
         assert!(start <= end);
         assert!(start < source.len());
         assert!(end < source.len());
@@ -72,11 +80,29 @@ impl Span {
     }
 }
 
+impl core::fmt::Debug for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.slice())
+    }
+}
+
+impl From<pest::Span<'_>> for Span {
+    fn from(value: pest::Span) -> Self {
+        Span::from_span(value)
+    }
+}
+
 /// A value attached to a `Span`
-#[derive(Debug)]
+#[derive(Clone)]
 pub struct WithSpan<T> {
     pub value: T,
     span: Span,
+}
+
+impl<T: core::fmt::Debug> core::fmt::Debug for WithSpan<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        core::fmt::Debug::fmt(&self.value, f)
+    }
 }
 
 impl<T> Deref for WithSpan<T> {

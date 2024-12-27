@@ -2,21 +2,16 @@ use std::{collections::HashMap, rc::Rc};
 
 use internment::ArcIntern;
 use lua::LuaMacros;
-use mlua::Lua;
 use pest::error::Error;
-use pest_derive::Parser;
-use qter_core::{Int, Program, WithSpan, U};
+use qter_core::{architectures::Architecture, Int, Program, WithSpan, U};
 
 mod lua;
-
-#[derive(Parser)]
-#[grammar = "./qat.pest"]
-struct Parser;
+mod parsing;
 
 pub fn compile(
     qat: Rc<str>,
     find_import: impl Fn(&str) -> Result<Rc<str>, String>,
-) -> Result<Program, Box<Error<Rule>>> {
+) -> Result<Program, Box<Error<parsing::Rule>>> {
     todo!()
 }
 
@@ -163,6 +158,22 @@ struct Define {
     name: ArcIntern<String>,
     scope: ArcIntern<Scope>,
     value: Value,
+}
+
+#[derive(Clone, Debug)]
+enum Cube {
+    Theoretical {
+        name: WithSpan<ArcIntern<String>>,
+        order: WithSpan<Int<U>>,
+    },
+    Real {
+        architectures: Vec<(Vec<WithSpan<ArcIntern<String>>>, WithSpan<Rc<Architecture>>)>,
+    },
+}
+
+#[derive(Clone, Debug)]
+struct RegisterDecl {
+    cubes: Vec<Cube>,
 }
 
 struct ParsedSyntax {

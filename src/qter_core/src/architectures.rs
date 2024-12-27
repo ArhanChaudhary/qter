@@ -43,6 +43,7 @@ impl PuzzleDefinition {
                     used[j] = true;
                     found_one = true;
                     swizzle[i] = j;
+                    break;
                 }
             }
 
@@ -459,6 +460,14 @@ impl Architecture {
     /// Get all of the facelets that are shared in the architecture
     pub fn shared_facelets(&self) -> &[usize] {
         &self.shared_facelets
+    }
+}
+
+pub fn puzzle_by_name(name: &str) -> Option<PuzzleDefinition> {
+    if name == "3x3" {
+        Some(PuzzleDefinition::parse(include_str!("../puzzles/3x3.txt")).unwrap())
+    } else {
+        None
     }
 }
 
