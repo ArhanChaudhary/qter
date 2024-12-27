@@ -61,6 +61,8 @@ fn parse_registers(pair: Pair<'_, Rule>) -> Result<RegisterDecl, Box<Error<Rule>
                     }
                 }
 
+                // TODO: Verify that the architectures are compatible with each other
+                
                 Cube::Real { architectures: decls }
             }
             rule => unreachable!("{rule:?}"),

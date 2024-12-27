@@ -18,7 +18,7 @@ pub fn compile(
 #[derive(Hash, PartialEq, Eq)]
 struct Label {
     name: String,
-    blocks: Vec<usize>,
+    block: BlockID,
 }
 
 enum Primitive {
@@ -149,14 +149,9 @@ struct Macro {
     imported_from: ArcIntern<String>,
 }
 
-#[derive(Hash, PartialEq, Eq)]
-struct Scope {
-    levels: Vec<usize>,
-}
-
 struct Define {
     name: ArcIntern<String>,
-    scope: ArcIntern<Scope>,
+    block: BlockID,
     value: Value,
 }
 
@@ -171,15 +166,23 @@ enum Cube {
     },
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct BlockID(pub usize);
+
 #[derive(Clone, Debug)]
 struct RegisterDecl {
     cubes: Vec<Cube>,
 }
 
 struct ParsedSyntax {
-    scope_counter: usize,
+    // Each block gets an ID and `block_parent` maps a block ID to it's parent
+    // The global scope is block zero
+    block_counter: usize,
+    block_parent: HashMap<BlockID, BlockID>,
+    global_registers: RegisterDecl,
+    local_registers: HashMap<BlockID, RegisterDecl>,
     macros: HashMap<ArcIntern<String>, WithSpan<Macro>>,
     defines: Vec<Define>,
     lua_macros: LuaMacros,
-    code: Vec<WithSpan<(Instruction, ArcIntern<Scope>)>>,
+    code: Vec<WithSpan<(Instruction, BlockID)>>,
 }
