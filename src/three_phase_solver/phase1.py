@@ -10,15 +10,39 @@ Adapted with permission from ScriptRaccon's
 """
 
 import collections
+import dataclasses
 import itertools
 import math
 import operator
 import functools
 import timeit
+import enum
 
-FREE = 0
-CANNOT_SHARE_ORIENTATION = 1
-MUST_SHARE_ORIENTATION = 2
+
+class ShareState(enum.Enum):
+    FREE = enum.auto()
+    CANNOT_SHARE_ORIENTATION = enum.auto()
+    MUST_SHARE_ORIENTATION = enum.auto()
+
+
+class OrientationSumConstraint(enum.Enum):
+    ZERO = enum.auto()
+    NONE = enum.auto()
+
+
+class OrientationFactor:
+    @dataclasses.dataclass
+    class One:
+        pass
+
+    @dataclasses.dataclass
+    class GtOne:
+        factor: int
+        constraint: OrientationSumConstraint
+
+        def __hash__(self):
+            return hash((self.factor, self.constraint))
+
 
 PuzzleOrbitDefinition = collections.namedtuple(
     "PuzzleOrbitDefinition",
@@ -64,8 +88,8 @@ CubiePartition = collections.namedtuple(
     "CubiePartition",
     [
         "name",
-        "order",
         "partition",
+        "order",
         "always_orient",
         "critical_orient",
     ],
@@ -174,12 +198,12 @@ def all_cycle_combinations(puzzle_orbit_definition, num_cycles):
     )
 
     cycle_combination_objs = []
-    # TODO(pri 1/5): upper bound of LCM is math.lcm(*range(1, <max orbit cubie count> + 1))
+    # TODO(pri 1/5 blocked on all parities): upper bound of LCM is math.lcm(*range(1, <max orbit cubie count> + 1))
     # TODO(pri 4/5): derive all lesser structures from max cubie count usage and fix only 1s
-    # TODO(pri 5/5): share parity
+    # TODO(pri 5/5 blocked on all parities): share parity
     for used_cubie_counts in itertools.product(
         # when 0, the partition is all zeros which is disallowed later
-        *(range(orbit.cubie_count, orbit.cubie_count + 1) for orbit in puzzle_orbit_definition.orbits)
+        *(range(1, orbit.cubie_count + 1) for orbit in puzzle_orbit_definition.orbits)
     ):
         for all_partition_cubie_counts in itertools.product(
             *map(integer_partitions, used_cubie_counts),
@@ -201,10 +225,10 @@ def all_cycle_combinations(puzzle_orbit_definition, num_cycles):
                 all_cycle_cubie_counts = []
                 continue_outer = False
                 for cubie_counts in zip(*all_permuted_partition_cubie_counts):
-                    # TODO(pri 5/5): henry's faster impl
+                    # TODO(pri 5/5 blocked on derive all lesser): henry's faster impl
                     if all(
                         cubie_count == 0
-                        or orbit.orientation_factor == 1
+                        or orbit.orientation_factor == OrientationFactor.One()
                         and cubie_count == 1
                         for orbit, cubie_count in zip(
                             puzzle_orbit_definition.orbits, cubie_counts
@@ -354,7 +378,6 @@ def all_cycle_combinations(puzzle_orbit_definition, num_cycles):
                                 )
                             )
                         ]
-                        if len(share_orders) > 2 and num_cycles == 4: breakpoint()
 
                         # According to
                         # https://github.com/nestordemeure/paretoFront/blob/2aea69c371f70de4665f8abf24f6fda4ef0a8a70/src/pareto_front_implementation/pareto_front.rs#L265
@@ -387,32 +410,27 @@ def recursive_shared_cycle_combinations(all_cycle_cubie_counts):
     )
 
 
-# TODO(pri 3/5): on bigger cubes where phase 2 is not applicable, do special
+# TODO(pri 3/5 blocked on all parities): on bigger cubes where phase 2 is not applicable, do special
 # optimizations that make this faster. only find the highest order
 # product cycle dont care abt duplicates
 @functools.cache
 def highest_order_cycles_from_cubie_counts(cycle_cubie_counts):
-    """
-    Given a set of edge and corner partitions, find the pairs of edge and corner
-    partitions that yield the highest order cycle. Adapted from
-    <https://gist.github.com/ScriptRaccoon/c12c4884c116dead62a15a3d09732d5d>
-    with permission.
-    """
     shared_cycles = []
     highest_order = 1
-    share_skeleton = []
+    share_states = []
     free_count = 0
     for i, cubie_count in enumerate(cycle_cubie_counts):
         if (
             cubie_count == 0
             # TODO(pri 5/5 blocked on deriving lesser): cubie_count == used_cubie_counts[i]
-            or puzzle_orbit_definition_global.orbits[i].orientation_factor == 1
+            or puzzle_orbit_definition_global.orbits[i].orientation_factor
+            == OrientationFactor.One()
         ):
-            share_skeleton.append(CANNOT_SHARE_ORIENTATION)
+            share_states.append(ShareState.CANNOT_SHARE_ORIENTATION)
         elif cubie_count == 1:
-            share_skeleton.append(MUST_SHARE_ORIENTATION)
+            share_states.append(ShareState.MUST_SHARE_ORIENTATION)
         else:
-            share_skeleton.append(FREE)
+            share_states.append(ShareState.FREE)
             free_count += 1
     for free_share in itertools.product(
         (False, True),
@@ -420,14 +438,15 @@ def highest_order_cycles_from_cubie_counts(cycle_cubie_counts):
     ):
         share = []
         free_share_next_index = 0
-        for share_skeleton_index in share_skeleton:
-            if share_skeleton_index == FREE:
-                share.append(free_share[free_share_next_index])
-                free_share_next_index += 1
-            elif share_skeleton_index == CANNOT_SHARE_ORIENTATION:
-                share.append(False)
-            elif share_skeleton_index == MUST_SHARE_ORIENTATION:
-                share.append(True)
+        for share_state in share_states:
+            match share_state:
+                case ShareState.FREE:
+                    share.append(free_share[free_share_next_index])
+                    free_share_next_index += 1
+                case ShareState.CANNOT_SHARE_ORIENTATION:
+                    share.append(False)
+                case ShareState.MUST_SHARE_ORIENTATION:
+                    share.append(True)
         # TODO(pri 1/5): benchmark adding highest
         # number to stack first and then using a fibonacci heap
         all_reduced_integer_partitions = [
@@ -511,12 +530,14 @@ def reduced_integer_partitions(cycle_cubie_count, orbit, s):
 
         always_orient = None
         critical_orient = None
-        if orbit.orientation_factor != 1:
+        if isinstance(orbit.orientation_factor, OrientationFactor.GtOne):
+            factor = orbit.orientation_factor.factor
+            constraint = orbit.orientation_factor.constraint
             max_p_adic_valuation = -1
             for j, permutation_order in enumerate(partition):
                 curr_p_adic_valuation = p_adic_valuation(
                     permutation_order,
-                    orbit.orientation_factor,
+                    factor,
                 )
                 if curr_p_adic_valuation > max_p_adic_valuation:
                     max_p_adic_valuation = curr_p_adic_valuation
@@ -528,31 +549,38 @@ def reduced_integer_partitions(cycle_cubie_count, orbit, s):
                         always_orient = [j]
                     else:
                         always_orient.append(j)
-            orient_count = 0 if always_orient is None else len(always_orient)
-            critical_is_disjoint = critical_orient is not None and (
-                always_orient is None
-                or all(j not in always_orient for j in critical_orient)
-            )
-            if critical_is_disjoint:
-                orient_count += 1
-            ignore_critical_orient = orient_count == len(partition) and (
-                orbit.orientation_factor == 2
-                and orient_count % 2 == 1
-                or orbit.orientation_factor > 2
-                and orient_count == 1
-            )
-            if ignore_critical_orient:
-                if not critical_is_disjoint:
-                    continue
-                assert len(critical_orient) == 1, critical_orient
-                critical_orient = None
-            elif orient_count != 0:
-                order *= orbit.orientation_factor
+            match constraint:
+                case OrientationSumConstraint.NONE:
+                    if critical_orient is not None:
+                        order *= factor
+                case OrientationSumConstraint.ZERO:
+                    orient_count = 0 if always_orient is None else len(always_orient)
+                    critical_is_disjoint = critical_orient is not None and (
+                        always_orient is None
+                        or all(j not in always_orient for j in critical_orient)
+                    )
+                    if critical_is_disjoint:
+                        orient_count += 1
+                    ignore_critical_orient = orient_count == len(partition) and (
+                        factor == 2
+                        and orient_count % 2 == 1
+                        or factor > 2
+                        and orient_count == 1
+                    )
+                    if ignore_critical_orient:
+                        if not critical_is_disjoint:
+                            continue
+                        assert len(critical_orient) == 1, critical_orient
+                        critical_orient = None
+                    # this is equivalent to len(partition) != 0 and the
+                    # reasoning is an exercise left to the reader
+                    elif orient_count != 0:
+                        order *= factor
         partition_objs.append(
             CubiePartition(
                 name=orbit.name,
-                order=order,
                 partition=partition,
+                order=order,
                 always_orient=always_orient,
                 critical_orient=critical_orient,
             )
@@ -620,8 +648,22 @@ def test():
         all_cycle_combinations(
             PuzzleOrbitDefinition(
                 orbits=[
-                    Orbit(name="edges", cubie_count=12, orientation_factor=2),
-                    Orbit(name="corners", cubie_count=8, orientation_factor=3),
+                    Orbit(
+                        name="edges",
+                        cubie_count=12,
+                        orientation_factor=OrientationFactor.GtOne(
+                            factor=2,
+                            constraint=OrientationSumConstraint.ZERO,
+                        ),
+                    ),
+                    Orbit(
+                        name="corners",
+                        cubie_count=8,
+                        orientation_factor=OrientationFactor.GtOne(
+                            factor=3,
+                            constraint=OrientationSumConstraint.ZERO,
+                        ),
+                    ),
                 ],
                 even_permutation_combinations=(("edges", "corners"),),
             ),
@@ -645,8 +687,22 @@ def test():
         all_cycle_combinations(
             PuzzleOrbitDefinition(
                 orbits=[
-                    Orbit(name="edges", cubie_count=12, orientation_factor=2),
-                    Orbit(name="corners", cubie_count=8, orientation_factor=3),
+                    Orbit(
+                        name="edges",
+                        cubie_count=12,
+                        orientation_factor=OrientationFactor.GtOne(
+                            factor=2,
+                            constraint=OrientationSumConstraint.ZERO,
+                        ),
+                    ),
+                    Orbit(
+                        name="corners",
+                        cubie_count=8,
+                        orientation_factor=OrientationFactor.GtOne(
+                            factor=3,
+                            constraint=OrientationSumConstraint.ZERO,
+                        ),
+                    ),
                 ],
                 even_permutation_combinations=(("edges", "corners"),),
             ),
@@ -675,8 +731,22 @@ def test():
         all_cycle_combinations(
             PuzzleOrbitDefinition(
                 orbits=[
-                    Orbit(name="edges", cubie_count=12, orientation_factor=2),
-                    Orbit(name="corners", cubie_count=8, orientation_factor=3),
+                    Orbit(
+                        name="edges",
+                        cubie_count=12,
+                        orientation_factor=OrientationFactor.GtOne(
+                            factor=2,
+                            constraint=OrientationSumConstraint.ZERO,
+                        ),
+                    ),
+                    Orbit(
+                        name="corners",
+                        cubie_count=8,
+                        orientation_factor=OrientationFactor.GtOne(
+                            factor=3,
+                            constraint=OrientationSumConstraint.ZERO,
+                        ),
+                    ),
                 ],
                 even_permutation_combinations=(("edges", "corners"),),
             ),
@@ -734,19 +804,29 @@ def main():
     cycle_combinations = all_cycle_combinations(
         PuzzleOrbitDefinition(
             orbits=[
-                # TODO(pri 5/5): Orbit(name="corners", cubie_count=8, orientation_factor=3, orientation_sum_constraint=ZERO), or ANYTHING
-                Orbit(name="edges", cubie_count=12, orientation_factor=2),
-                Orbit(name="corners", cubie_count=8, orientation_factor=3),
-                # Orbit(name="centers", cubie_count=24, orientation_factor=1),
-                # Orbit(name="wings", cubie_count=24, orientation_factor=1),
-                # Orbit(name="corners", cubie_count=8, orientation_factor=3),
+                Orbit(
+                    name="edges",
+                    cubie_count=12,
+                    orientation_factor=OrientationFactor.GtOne(
+                        factor=2,
+                        constraint=OrientationSumConstraint.NONE,
+                    ),
+                ),
+                Orbit(
+                    name="corners",
+                    cubie_count=8,
+                    orientation_factor=OrientationFactor.GtOne(
+                        factor=3,
+                        constraint=OrientationSumConstraint.NONE,
+                    ),
+                ),
             ],
             # TODO(pri 5/5): all parities (sent in discord)
             even_permutation_combinations=(("edges", "corners"),),
             # even_permutation_combinations=(("centers", "corners"),),
             # even_permutation_combinations=(),
         ),
-        4,
+        2,
     )
     b = timeit.default_timer()
     print(b - a)
@@ -758,7 +838,7 @@ def main():
 
 
 if __name__ == "__main__":
-    test()
+    # test()
     cycle_combination_objs = main()
     with open("./output.py", "w") as f:
         f.write(
