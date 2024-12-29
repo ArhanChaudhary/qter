@@ -104,7 +104,7 @@ PUZZLE_5x5 = PuzzleOrbitDefinition(
             orbit_names=("corners", "xcenters"),
         ),
         EvenParityConstraint(
-            names=("corners", "wings", "+centers"),
+            orbit_names=("corners", "wings", "+centers"),
         ),
     ),
 )
