@@ -1,11 +1,10 @@
-from phase1 import (
+from . import (
     PuzzleOrbitDefinition,
     OrientationFactor,
     OrientationSumConstraint,
     OrientationStatus,
     Orbit,
-    OrbitCombination,
-    EqualParityConstraint,
+    EvenParityConstraint,
 )
 
 PUZZLE_3x3 = PuzzleOrbitDefinition(
@@ -27,17 +26,9 @@ PUZZLE_3x3 = PuzzleOrbitDefinition(
             ),
         ),
     ],
-    equal_parity_constraints=(
-        EqualParityConstraint(
-            only_even=False,
-            equal_orbit_combinations=(
-                OrbitCombination(
-                    names=("edges",),
-                ),
-                OrbitCombination(
-                    names=("corners",),
-                ),
-            ),
+    even_parity_constraints=(
+        EvenParityConstraint(
+            orbit_names=("edges", "corners"),
         ),
     ),
 )
@@ -63,17 +54,9 @@ PUZZLE_4x4 = PuzzleOrbitDefinition(
             orientation_status=OrientationStatus.CannotOrient(),
         ),
     ],
-    equal_parity_constraints=(
-        EqualParityConstraint(
-            only_even=False,
-            equal_orbit_combinations=(
-                OrbitCombination(
-                    names=("corners",),
-                ),
-                OrbitCombination(
-                    names=("centers",),
-                ),
-            ),
+    even_parity_constraints=(
+        EvenParityConstraint(
+            orbit_names=("corners", "centers"),
         ),
     ),
 )
@@ -113,31 +96,15 @@ PUZZLE_5x5 = PuzzleOrbitDefinition(
             orientation_status=OrientationStatus.CannotOrient(),
         ),
     ],
-    equal_parity_constraints=(
-        EqualParityConstraint(
-            only_even=True,
-            equal_orbit_combinations=(
-                OrbitCombination(
-                    names=("edges",),
-                ),
-                OrbitCombination(
-                    names=("corners",),
-                ),
-                OrbitCombination(
-                    names=("xcenters",),
-                ),
-            ),
+    even_parity_constraints=(
+        EvenParityConstraint(
+            orbit_names=("edges", "corners"),
         ),
-        EqualParityConstraint(
-            only_even=False,
-            equal_orbit_combinations=(
-                OrbitCombination(
-                    names=("corners", "wings"),
-                ),
-                OrbitCombination(
-                    names=("+centers",),
-                ),
-            ),
+        EvenParityConstraint(
+            orbit_names=("corners", "xcenters"),
+        ),
+        EvenParityConstraint(
+            names=("corners", "wings", "+centers"),
         ),
     ),
 )
@@ -161,17 +128,12 @@ PUZZLE_MEGAMINX = PuzzleOrbitDefinition(
             ),
         ),
     ],
-    equal_parity_constraints=(
-        EqualParityConstraint(
-            only_even=False,
-            equal_orbit_combinations=(
-                OrbitCombination(
-                    names=("edges",),
-                ),
-                OrbitCombination(
-                    names=("corners",),
-                ),
-            ),
+    even_parity_constraints=(
+        EvenParityConstraint(
+            orbit_names=("edges",),
+        ),
+        EvenParityConstraint(
+            orbit_names=("corners",),
         ),
     ),
 )
