@@ -1,4 +1,4 @@
-{ pkgs ? import <nixpkgs> {} }:
+{ pkgs ? import <nixpkgs> { } }:
 
 let
   rust_overlay = import (builtins.fetchTarball {
@@ -35,7 +35,3 @@ pkgs.mkShell {
   RUSTC_WRAPPER = "sccache";
   SCCACHE_SERVER_PORT = "54226";
 }
-
-
-
-

@@ -1,6 +1,5 @@
-from . import (
+from common_types import (
     PuzzleOrbitDefinition,
-    OrientationFactor,
     OrientationSumConstraint,
     OrientationStatus,
     Orbit,
@@ -12,17 +11,17 @@ PUZZLE_3x3 = PuzzleOrbitDefinition(
         Orbit(
             name="edges",
             cubie_count=12,
-            orientation_status=OrientationFactor.GtOne(
-                factor=2,
-                constraint=OrientationSumConstraint.NONE,
+            orientation_status=OrientationStatus.CanOrient(
+                count=2,
+                sum_constraint=OrientationSumConstraint.ZERO,
             ),
         ),
         Orbit(
             name="corners",
             cubie_count=8,
-            orientation_status=OrientationFactor.GtOne(
-                factor=3,
-                constraint=OrientationSumConstraint.NONE,
+            orientation_status=OrientationStatus.CanOrient(
+                count=3,
+                sum_constraint=OrientationSumConstraint.ZERO,
             ),
         ),
     ],
@@ -114,17 +113,17 @@ PUZZLE_MEGAMINX = PuzzleOrbitDefinition(
         Orbit(
             name="edges",
             cubie_count=30,
-            orientation_status=OrientationFactor.GtOne(
-                factor=2,
-                constraint=OrientationSumConstraint.ZERO,
+            orientation_status=OrientationStatus.CanOrient(
+                count=2,
+                sum_constraint=OrientationSumConstraint.ZERO,
             ),
         ),
         Orbit(
             name="corners",
             cubie_count=20,
-            orientation_status=OrientationFactor.GtOne(
-                factor=3,
-                constraint=OrientationSumConstraint.ZERO,
+            orientation_status=OrientationStatus.CanOrient(
+                count=3,
+                sum_constraint=OrientationSumConstraint.ZERO,
             ),
         ),
     ],
