@@ -1,0 +1,177 @@
+from phase1 import (
+    PuzzleOrbitDefinition,
+    OrientationFactor,
+    OrientationSumConstraint,
+    OrientationStatus,
+    Orbit,
+    OrbitCombination,
+    EqualParityConstraint,
+)
+
+PUZZLE_3x3 = PuzzleOrbitDefinition(
+    orbits=[
+        Orbit(
+            name="edges",
+            cubie_count=12,
+            orientation_status=OrientationFactor.GtOne(
+                factor=2,
+                constraint=OrientationSumConstraint.NONE,
+            ),
+        ),
+        Orbit(
+            name="corners",
+            cubie_count=8,
+            orientation_status=OrientationFactor.GtOne(
+                factor=3,
+                constraint=OrientationSumConstraint.NONE,
+            ),
+        ),
+    ],
+    equal_parity_constraints=(
+        EqualParityConstraint(
+            only_even=False,
+            equal_orbit_combinations=(
+                OrbitCombination(
+                    names=("edges",),
+                ),
+                OrbitCombination(
+                    names=("corners",),
+                ),
+            ),
+        ),
+    ),
+)
+
+PUZZLE_4x4 = PuzzleOrbitDefinition(
+    orbits=[
+        Orbit(
+            name="corners",
+            cubie_count=8,
+            orientation_status=OrientationStatus.CanOrient(
+                count=3,
+                sum_constraint=OrientationSumConstraint.ZERO,
+            ),
+        ),
+        Orbit(
+            name="wings",
+            cubie_count=24,
+            orientation_status=OrientationStatus.CannotOrient(),
+        ),
+        Orbit(
+            name="centers",
+            cubie_count=24,
+            orientation_status=OrientationStatus.CannotOrient(),
+        ),
+    ],
+    equal_parity_constraints=(
+        EqualParityConstraint(
+            only_even=False,
+            equal_orbit_combinations=(
+                OrbitCombination(
+                    names=("corners",),
+                ),
+                OrbitCombination(
+                    names=("centers",),
+                ),
+            ),
+        ),
+    ),
+)
+
+
+PUZZLE_5x5 = PuzzleOrbitDefinition(
+    orbits=[
+        Orbit(
+            name="edges",
+            cubie_count=12,
+            orientation_status=OrientationStatus.CanOrient(
+                count=2,
+                sum_constraint=OrientationSumConstraint.ZERO,
+            ),
+        ),
+        Orbit(
+            name="corners",
+            cubie_count=8,
+            orientation_status=OrientationStatus.CanOrient(
+                count=3,
+                sum_constraint=OrientationSumConstraint.ZERO,
+            ),
+        ),
+        Orbit(
+            name="wings",
+            cubie_count=24,
+            orientation_status=OrientationStatus.CannotOrient(),
+        ),
+        Orbit(
+            name="xcenters",
+            cubie_count=24,
+            orientation_status=OrientationStatus.CannotOrient(),
+        ),
+        Orbit(
+            name="+centers",
+            cubie_count=24,
+            orientation_status=OrientationStatus.CannotOrient(),
+        ),
+    ],
+    equal_parity_constraints=(
+        EqualParityConstraint(
+            only_even=True,
+            equal_orbit_combinations=(
+                OrbitCombination(
+                    names=("edges",),
+                ),
+                OrbitCombination(
+                    names=("corners",),
+                ),
+                OrbitCombination(
+                    names=("xcenters",),
+                ),
+            ),
+        ),
+        EqualParityConstraint(
+            only_even=False,
+            equal_orbit_combinations=(
+                OrbitCombination(
+                    names=("corners", "wings"),
+                ),
+                OrbitCombination(
+                    names=("+centers",),
+                ),
+            ),
+        ),
+    ),
+)
+
+PUZZLE_MEGAMINX = PuzzleOrbitDefinition(
+    orbits=[
+        Orbit(
+            name="edges",
+            cubie_count=30,
+            orientation_status=OrientationFactor.GtOne(
+                factor=2,
+                constraint=OrientationSumConstraint.ZERO,
+            ),
+        ),
+        Orbit(
+            name="corners",
+            cubie_count=20,
+            orientation_status=OrientationFactor.GtOne(
+                factor=3,
+                constraint=OrientationSumConstraint.ZERO,
+            ),
+        ),
+    ],
+    equal_parity_constraints=(
+        EqualParityConstraint(
+            only_even=True,
+            equal_orbit_combinations=(
+                OrbitCombination(
+                    names=("edges",),
+                ),
+                OrbitCombination(
+                    names=("corners",),
+                ),
+            ),
+        ),
+    ),
+)
