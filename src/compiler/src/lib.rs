@@ -17,8 +17,13 @@ pub fn compile(
 
 #[derive(Hash, PartialEq, Eq)]
 struct Label {
-    name: String,
-    block: BlockID,
+    name: ArcIntern<String>,
+    block: Option<BlockID>,
+}
+
+struct Block {
+    code: Vec<WithSpan<Instruction>>,
+    block: Option<BlockID>,
 }
 
 enum Primitive {
@@ -51,7 +56,7 @@ enum Value {
     Int(Int<U>),
     Constant(ArcIntern<String>),
     Word(ArcIntern<String>),
-    Block(Vec<WithSpan<Instruction>>),
+    Block(Block),
 }
 
 struct MacroCall {
@@ -64,14 +69,18 @@ enum Code {
     Macro(MacroCall),
 }
 
+struct LuaCall {
+    function_name: WithSpan<ArcIntern<String>>,
+    args: Vec<WithSpan<Value>>,
+}
+
 enum Instruction {
-    Label(ArcIntern<Label>),
+    Label(Label),
     Code(Code),
     Constant(ArcIntern<String>),
-    LuaCall {
-        function_name: WithSpan<ArcIntern<String>>,
-        args: Vec<WithSpan<Value>>,
-    },
+    LuaCall(LuaCall),
+    Define(Define),
+    Registers(RegisterDecl),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -149,10 +158,15 @@ struct Macro {
     imported_from: ArcIntern<String>,
 }
 
+enum DefinedValue {
+    Value(WithSpan<Value>),
+    LuaCall(WithSpan<LuaCall>),
+}
+
 struct Define {
-    name: ArcIntern<String>,
-    block: BlockID,
-    value: Value,
+    name: WithSpan<ArcIntern<String>>,
+    block: Option<BlockID>,
+    value: DefinedValue,
 }
 
 #[derive(Clone, Debug)]
@@ -166,21 +180,21 @@ enum Cube {
     },
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 struct BlockID(pub usize);
 
 #[derive(Clone, Debug)]
 struct RegisterDecl {
     cubes: Vec<Cube>,
+    block: Option<BlockID>,
 }
 
 struct ParsedSyntax {
     // Each block gets an ID and `block_parent` maps a block ID to it's parent
-    // The global scope is block zero
+    // The global scope is block zero and if the block/label hasn't been expanded its ID is None
     block_counter: usize,
-    block_parent: HashMap<BlockID, BlockID>,
-    global_registers: RegisterDecl,
-    local_registers: HashMap<BlockID, RegisterDecl>,
+    block_parent: HashMap<BlockID, Option<BlockID>>,
+    registers: HashMap<BlockID, RegisterDecl>,
     macros: HashMap<ArcIntern<String>, WithSpan<Macro>>,
     defines: Vec<Define>,
     lua_macros: LuaMacros,

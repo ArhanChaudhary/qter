@@ -109,7 +109,7 @@ impl<Signed> FromStr for Int<Signed> {
     type Err = bnum::errors::ParseIntError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::from_inner(s.parse()?))
+        Ok(Self::from_inner(s.trim().parse()?))
     }
 }
 

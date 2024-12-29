@@ -1,7 +1,7 @@
 WHITESPACE = _{ " " }
 COMMENT    = _{ ("--[[" ~ (!"--]]" ~ ANY)* ~ "--]]") | ("--" ~ (!"\n" ~ ANY)* ~ "\n") }
 
-program = { "\n"* ~ registers ~ "\n"* ~ statement ~ ("\n"+ ~ statement)* ~ "\n"* ~ EOI }
+program = { "\n"* ~ statement ~ ("\n"+ ~ statement)* ~ "\n"* ~ EOI }
 
 special_char = { "lua" | "{" | "}" | "." | ":" | "$" | "--" | "," | "<-" | "←" | "\n" | "(" | ")" | "!" | WHITESPACE }
 
@@ -12,7 +12,7 @@ number = { ASCII_DIGIT+ }
 
 algorithm = { ident+ }
 
-registers = { ".registers" ~ "{" ~ "\n"? ~ register_declaration ~ ("\n"+ ~ register_declaration)* ~ "\n"* ~ "}" ~ "\n"* }
+registers = { ".registers" ~ "{" ~ "\n"? ~ register_declaration ~ ("\n"+ ~ register_declaration)* ~ "\n"* ~ "}" }
 register_declaration = _{ unswitchable | switchable }
 
 unswitchable = { ident ~ ("," ~ ident)* ~ ("<-" | "←") ~ register_architecture }
