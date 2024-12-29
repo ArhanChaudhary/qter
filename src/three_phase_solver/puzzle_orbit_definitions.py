@@ -163,7 +163,7 @@ PUZZLE_MEGAMINX = PuzzleOrbitDefinition(
     ],
     equal_parity_constraints=(
         EqualParityConstraint(
-            only_even=True,
+            only_even=False,
             equal_orbit_combinations=(
                 OrbitCombination(
                     names=("edges",),
