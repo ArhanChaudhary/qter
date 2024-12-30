@@ -10,6 +10,7 @@ Adapted with permission from ScriptRaccon's
 """
 
 import collections
+import dataclasses
 import enum
 import itertools
 import math
@@ -56,14 +57,73 @@ CubiePartition = collections.namedtuple(
 )
 
 
-EvenParityConstraintsHelper = collections.namedtuple(
-    "EvenParityConstraintsHelper",
-    [
-        "first_constraint_indicies",
-        "rest_constraint_flags",
-        "constraint_orbit_flags",
-    ],
-)
+# EvenParityConstraintsHelper = collections.namedtuple(
+#     "EvenParityConstraintsHelper",
+#     [
+#         "first_constraint_indicies",
+#         "rest_constraint_flags",
+#         "constraint_orbit_flags",
+#     ],
+# )
+@dataclasses.dataclass(frozen=True, unsafe_hash=True)
+class EvenParityConstraintsHelper:
+    first_constraint_indicies: tuple[int]
+    rest_constraint_flags: tuple[tuple[bool]]
+    constraint_orbit_flags: tuple[bool]
+
+    @classmethod
+    def from_puzzle_orbit_definition(
+        cls,
+        puzzle_orbit_definition,
+    ):
+        all_first_index_and_rest_constraint_flags = []
+        constraint_orbit_flags = [False] * len(puzzle_orbit_definition.orbits)
+        for even_parity_constraint in puzzle_orbit_definition.even_parity_constraints:
+            add_to_rest = False
+            first_index = None
+            rest_constraint_flags = []
+            constraint_flag_count = 0
+            for i, orbit in enumerate(puzzle_orbit_definition.orbits):
+                constraint_flag = any(
+                    orbit.name == orbit_name
+                    for orbit_name in even_parity_constraint.orbit_names
+                )
+                if constraint_flag:
+                    constraint_orbit_flags[i] = True
+                    constraint_flag_count += 1
+                if add_to_rest:
+                    rest_constraint_flags.append(constraint_flag)
+                elif constraint_flag:
+                    first_index = i
+                    add_to_rest = True
+            if constraint_flag_count != len(even_parity_constraint.orbit_names):
+                raise ValueError(
+                    f"Invalid orbit names {even_parity_constraint.orbit_names}"
+                )
+            all_first_index_and_rest_constraint_flags.append(
+                (
+                    first_index,
+                    tuple(rest_constraint_flags),
+                )
+            )
+        all_first_index_and_rest_constraint_flags.sort(
+            reverse=True, key=operator.itemgetter(0)
+        )
+
+        first_constraint_indicies = []
+        all_rest_constraint_flags = []
+        for (
+            first_index_and_rest_constraint_flags
+        ) in all_first_index_and_rest_constraint_flags:
+            first_index, rest_constraint_flags = first_index_and_rest_constraint_flags
+            first_constraint_indicies.append(first_index)
+            all_rest_constraint_flags.append(rest_constraint_flags)
+
+        return cls(
+            first_constraint_indicies=tuple(first_constraint_indicies),
+            rest_constraint_flags=tuple(all_rest_constraint_flags),
+            constraint_orbit_flags=tuple(constraint_orbit_flags),
+        )
 
 
 class ShareState(enum.Enum):
@@ -155,53 +215,10 @@ def cycle_combination_dominates(this, other):
 
 
 def optimal_cycle_combinations(puzzle_orbit_definition, num_cycles, cache_clear=True):
-    all_first_index_and_rest_constraint_flags = []
-    constraint_orbit_flags = [False] * len(puzzle_orbit_definition.orbits)
-    for even_parity_constraint in puzzle_orbit_definition.even_parity_constraints:
-        add_to_rest = False
-        first_index = None
-        rest_constraint_flags = []
-        constraint_flag_count = 0
-        for i, orbit in enumerate(puzzle_orbit_definition.orbits):
-            constraint_flag = any(
-                orbit.name == orbit_name
-                for orbit_name in even_parity_constraint.orbit_names
-            )
-            if constraint_flag:
-                constraint_orbit_flags[i] = True
-                constraint_flag_count += 1
-            if add_to_rest:
-                rest_constraint_flags.append(constraint_flag)
-            elif constraint_flag:
-                first_index = i
-                add_to_rest = True
-        if constraint_flag_count != len(even_parity_constraint.orbit_names):
-            raise ValueError(
-                f"Invalid orbit names {even_parity_constraint.orbit_names}"
-            )
-        all_first_index_and_rest_constraint_flags.append(
-            (
-                first_index,
-                tuple(rest_constraint_flags),
-            )
+    even_parity_constraints_helper = (
+        EvenParityConstraintsHelper.from_puzzle_orbit_definition(
+            puzzle_orbit_definition
         )
-    all_first_index_and_rest_constraint_flags.sort(
-        reverse=True, key=operator.itemgetter(0)
-    )
-
-    first_constraint_indicies = []
-    all_rest_constraint_flags = []
-    for (
-        first_index_and_rest_constraint_flags
-    ) in all_first_index_and_rest_constraint_flags:
-        first_index, rest_constraint_flags = first_index_and_rest_constraint_flags
-        first_constraint_indicies.append(first_index)
-        all_rest_constraint_flags.append(rest_constraint_flags)
-
-    even_parity_constraints_helper = EvenParityConstraintsHelper(
-        first_constraint_indicies=tuple(first_constraint_indicies),
-        rest_constraint_flags=tuple(all_rest_constraint_flags),
-        constraint_orbit_flags=tuple(constraint_orbit_flags),
     )
 
     cycle_combination_objs = []
@@ -699,9 +716,16 @@ def cycle_combination_objs_stats(cycle_combination_objs):
 
 def main():
     a = timeit.default_timer()
-    cycle_combinations = optimal_cycle_combinations(
-        puzzle_orbit_definition=puzzle_orbit_definitions.PUZZLE_3x3,
-        num_cycles=3,
+    # cycle_combinations = optimal_cycle_combinations(
+    #     puzzle_orbit_definition=puzzle_orbit_definitions.PUZZLE_4x4,
+    #     num_cycles=1,
+    # )
+    cycle_combinations = highest_order_cycles_from_cubie_counts(
+        cycle_cubie_counts=(12, 8, 24, 24, 24),
+        puzzle_orbit_definition=puzzle_orbit_definitions.PUZZLE_5x5,
+        even_parity_constraints_helper=EvenParityConstraintsHelper.from_puzzle_orbit_definition(
+            puzzle_orbit_definitions.PUZZLE_5x5
+        ),
     )
     b = timeit.default_timer()
     print(b - a)
@@ -713,9 +737,11 @@ def main():
 
 if __name__ == "__main__":
     cycle_combination_objs = main()
+    try:
+        stats = cycle_combination_objs_stats(cycle_combination_objs)
+    except Exception:
+        stats = None
     with open("./output.py", "w") as f:
         f.write(
-            f"Cycle = 1\nCycleCombination = 1\nCubiePartition = 1\n{
-                cycle_combination_objs_stats(cycle_combination_objs)
-            }\n{cycle_combination_objs}"
+            f"Cycle = 1\nCycleCombination = 1\nCubiePartition = 1\n{stats}\n{cycle_combination_objs}"
         )
