@@ -78,6 +78,10 @@ impl Span {
     pub fn col(&self) -> usize {
         self.line_and_col().1
     }
+
+    pub fn pest(&self) -> pest::Span<'_> {
+        pest::Span::new(&self.source, self.start, self.end).unwrap()
+    }
 }
 
 impl core::fmt::Debug for Span {
@@ -122,6 +126,10 @@ impl<T> DerefMut for WithSpan<T> {
 impl<T> WithSpan<T> {
     pub fn new(value: T, span: Span) -> WithSpan<T> {
         WithSpan { value, span }
+    }
+
+    pub fn into_inner(self) -> T {
+        self.value
     }
 
     pub fn span(&self) -> &Span {

@@ -15,7 +15,7 @@ use qter_core::{
     Int, WithSpan, U,
 };
 
-use crate::{lua::LuaMacros, Block, BlockID, Code, Cube, Define, DefinedValue, Label, LuaCall, MacroCall, ParsedSyntax, RegisterDecl, Value};
+use crate::{lua::LuaMacros, Block, BlockID, Code, Cube, Define, DefinedValue, Label, LuaCall, Macro, MacroBranch, MacroCall, ParsedSyntax, Pattern, PatternArgTy, PatternComponent, RegisterDecl, Value};
 
 use super::Instruction;
 
@@ -43,7 +43,13 @@ fn parse(qat: Rc<str>) -> Result<ParsedSyntax, Box<Error<Rule>>> {
         
         let span = pair.as_span();
         match parse_statement(pair)? {
-            Statement::Macro => todo!(),
+            Statement::Macro { name, macro_def } => {
+                if macros.contains_key(&*name) {
+                    return Err(Box::new(Error::new_from_span(ErrorVariant::CustomError { message: format!("The macro {} is already defined!", &*name) }, name.span().pest())));
+                }
+                
+                macros.insert(name.into_inner(), macro_def);
+            },
             Statement::Instruction(instruction) => {
                 let span = instruction.span().to_owned();
 
@@ -217,7 +223,7 @@ fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Cube, Box<Error<Rule>>> {
 }
 
 enum Statement<'a> {
-    Macro,
+    Macro { name: WithSpan<ArcIntern<String>>, macro_def: WithSpan<Macro> },
     Instruction(WithSpan<Instruction>),
     LuaBlock(&'a str),
     Import(&'a str),
@@ -227,7 +233,10 @@ fn parse_statement(pair: Pair<'_, Rule>) -> Result<Statement<'_>, Box<Error<Rule
     let rule = pair.as_rule();
 
     match rule {
-        Rule::r#macro => todo!(),
+        Rule::r#macro => {
+            let (name, macro_def) = parse_macro(pair)?;
+            Ok(Statement::Macro { name, macro_def })
+        },
         Rule::instruction => Ok(Statement::Instruction(parse_instruction(pair)?)),
         Rule::lua_code => {
             Ok(Statement::LuaBlock(pair.as_str()))
@@ -311,6 +320,93 @@ fn parse_lua_call(pair: Pair<'_, Rule>) -> Result<LuaCall, Box<Error<Rule>>> {
     
 }
 
+fn parse_macro(pair: Pair<'_, Rule>) -> Result<(WithSpan<ArcIntern<String>>, WithSpan<Macro>), Box<Error<Rule>>> {
+    let span = pair.as_span();
+    let mut pairs = pair.into_inner().peekable();
+
+    let name = pairs.next().unwrap();
+    let name_str = name.as_str();
+
+    let after = pairs.peek().unwrap();
+
+    let after = if let Rule::ident = after.as_rule() {
+        Some(WithSpan::new(ArcIntern::from_ref(after.as_str()), after.as_span().into()))
+    } else {
+        None
+    };
+
+    let mut branches = Vec::<WithSpan<MacroBranch>>::new();
+
+    for branch in pairs {
+        let span = branch.as_span();
+
+        let mut pairs = branch.into_inner().peekable();
+
+        let mut pattern = Vec::new();
+
+        let mut first_pos: Option<pest::Position> = None;
+        let mut last_pos: Option<pest::Position> = None;
+
+        while let Some(pair) = pairs.peek() {
+            if Rule::macro_arg != pair.as_rule() {
+                break
+            }
+
+            let pair = pairs.next().unwrap();
+
+            let span = pair.as_span();
+
+            if first_pos.is_none() {
+                first_pos = Some(span.start_pos());
+            }
+            last_pos = Some(span.end_pos());
+
+            let mut arg_pairs = pair.into_inner();
+
+            let first_pair = arg_pairs.next().unwrap();
+
+            pattern.push(WithSpan::new(match first_pair.as_rule() {
+                Rule::ident => PatternComponent::Word(ArcIntern::from_ref(first_pair.as_str())),
+                Rule::constant => {
+                    let name = WithSpan::new(ArcIntern::from_ref(first_pair.as_str()), first_pair.as_span().into());
+
+                    let ty = arg_pairs.next().unwrap();
+
+                    PatternComponent::Argument { name, ty: WithSpan::new(match ty.as_str() {
+                        "block" => PatternArgTy::Block,
+                        "reg" => PatternArgTy::Reg,
+                        "int" => PatternArgTy::Int,
+                        "ident" => PatternArgTy::Ident,
+                        word => unreachable!("{word}"),
+                    }, ty.as_span().into()) }
+                },
+                rule => unreachable!("{rule:?}")
+            }, span.into()));
+        }
+
+        let body = pairs.next().unwrap();
+
+        let body = match body.as_rule() {
+            Rule::instruction => vec![parse_instruction(body)?],
+            Rule::block => parse_block(body)?.code,
+            rule => unreachable!("{rule:?}"),
+        };
+
+        let pattern_span = first_pos.unwrap().span(&last_pos.unwrap());
+        let pattern = Pattern(pattern);
+
+        for branch in branches.iter() {
+            if let Some(counterexample) = pattern.conflicts_with(name_str, &branch.pattern) {
+                return Err(Box::new(Error::new_from_span(ErrorVariant::CustomError { message: format!("This macro branch conflicts with the macro branch with the pattern `{}`. A counterexample matching both is `{counterexample}`.", branch.pattern.span().slice()) }, span)))
+            }
+        }
+
+        branches.push(WithSpan::new(MacroBranch { pattern: WithSpan::new(pattern, pattern_span.into()), code: body }, pattern_span.into()))
+    }
+
+    Ok((WithSpan::new(ArcIntern::from_ref(name.as_str()), name.as_span().into()), WithSpan::new(Macro { branches, after }, span.into())))
+}
+
 #[cfg(test)]
 mod tests {
     use std::rc::Rc;
@@ -328,6 +424,15 @@ mod tests {
                 )
                 f ← theoretical 90
                 g, h ← 3x3 (U, D)
+            }
+
+            .macro bruh {
+                (lmao $a:reg) => add 1 $a
+                (oofy $a:reg) => {
+                    bruh:
+                    add 1 $a
+                    goto bruh
+                }
             }
 
             .start-lua

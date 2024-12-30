@@ -129,7 +129,7 @@ struct Pattern(Vec<WithSpan<PatternComponent>>);
 
 impl Pattern {
     /// Returns `None` if the patterns do not conflict, otherwise returns a counterexample that would match both patterns.
-    fn conflicts_with(&self, other: &Pattern) -> Option<String> {
+    pub fn conflicts_with(&self, macro_name: &str, other: &Pattern) -> Option<String> {
         if self.0.len() != other.0.len() {
             return None;
         }
@@ -145,6 +145,7 @@ impl Pattern {
                 a.push_str(&v);
                 Some(a)
             })
+            .map(|e| format!("{macro_name}{e}"))
     }
 }
 
@@ -155,7 +156,7 @@ struct MacroBranch {
 
 struct Macro {
     branches: Vec<WithSpan<MacroBranch>>,
-    imported_from: ArcIntern<String>,
+    after: Option<WithSpan<ArcIntern<String>>>,
 }
 
 enum DefinedValue {

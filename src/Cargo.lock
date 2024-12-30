@@ -82,6 +82,7 @@ name = "compiler"
 version = "0.1.0"
 dependencies = [
  "internment",
+ "itertools",
  "mlua",
  "pest",
  "pest_derive",
