@@ -7,7 +7,7 @@ from common_types import (
 )
 
 PUZZLE_3x3 = PuzzleOrbitDefinition(
-    orbits=[
+    orbits=(
         Orbit(
             name="edges",
             cubie_count=12,
@@ -24,7 +24,7 @@ PUZZLE_3x3 = PuzzleOrbitDefinition(
                 sum_constraint=OrientationSumConstraint.ZERO,
             ),
         ),
-    ],
+    ),
     even_parity_constraints=(
         EvenParityConstraint(
             orbit_names=("edges", "corners"),
@@ -33,7 +33,7 @@ PUZZLE_3x3 = PuzzleOrbitDefinition(
 )
 
 PUZZLE_4x4 = PuzzleOrbitDefinition(
-    orbits=[
+    orbits=(
         Orbit(
             name="corners",
             cubie_count=8,
@@ -52,7 +52,7 @@ PUZZLE_4x4 = PuzzleOrbitDefinition(
             cubie_count=24,
             orientation_status=OrientationStatus.CannotOrient(),
         ),
-    ],
+    ),
     even_parity_constraints=(
         EvenParityConstraint(
             orbit_names=("corners", "centers"),
@@ -62,7 +62,7 @@ PUZZLE_4x4 = PuzzleOrbitDefinition(
 
 
 PUZZLE_5x5 = PuzzleOrbitDefinition(
-    orbits=[
+    orbits=(
         Orbit(
             name="edges",
             cubie_count=12,
@@ -94,7 +94,7 @@ PUZZLE_5x5 = PuzzleOrbitDefinition(
             cubie_count=24,
             orientation_status=OrientationStatus.CannotOrient(),
         ),
-    ],
+    ),
     even_parity_constraints=(
         EvenParityConstraint(
             orbit_names=("edges", "corners"),
@@ -109,7 +109,7 @@ PUZZLE_5x5 = PuzzleOrbitDefinition(
 )
 
 PUZZLE_MEGAMINX = PuzzleOrbitDefinition(
-    orbits=[
+    orbits=(
         Orbit(
             name="edges",
             cubie_count=30,
@@ -126,7 +126,7 @@ PUZZLE_MEGAMINX = PuzzleOrbitDefinition(
                 sum_constraint=OrientationSumConstraint.ZERO,
             ),
         ),
-    ],
+    ),
     even_parity_constraints=(
         EvenParityConstraint(
             orbit_names=("edges",),

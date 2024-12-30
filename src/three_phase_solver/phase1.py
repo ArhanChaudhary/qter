@@ -154,15 +154,13 @@ def cycle_combination_dominates(this, other):
     return different_orders or same_cycle
 
 
-def all_cycle_combinations(puzzle_orbit_definition, num_cycles):
-    """
-    Finds all cycle structure pairings on the Rubik's cube.
-    """
+def optimal_cycle_combinations(puzzle_orbit_definition, num_cycles, cache_clear=True):
     all_first_index_and_rest_constraint_flags = []
     constraint_orbit_flags = [False] * len(puzzle_orbit_definition.orbits)
     for even_parity_constraint in puzzle_orbit_definition.even_parity_constraints:
         add_to_rest = False
-        first_index_and_rest_constraint_flags = None
+        first_index = None
+        rest_constraint_flags = []
         constraint_flag_count = 0
         for i, orbit in enumerate(puzzle_orbit_definition.orbits):
             constraint_flag = any(
@@ -173,16 +171,19 @@ def all_cycle_combinations(puzzle_orbit_definition, num_cycles):
                 constraint_orbit_flags[i] = True
                 constraint_flag_count += 1
             if add_to_rest:
-                first_index_and_rest_constraint_flags[1].append(constraint_flag)
+                rest_constraint_flags.append(constraint_flag)
             elif constraint_flag:
-                first_index_and_rest_constraint_flags = (i, [])
+                first_index = i
                 add_to_rest = True
         if constraint_flag_count != len(even_parity_constraint.orbit_names):
             raise ValueError(
                 f"Invalid orbit names {even_parity_constraint.orbit_names}"
             )
         all_first_index_and_rest_constraint_flags.append(
-            first_index_and_rest_constraint_flags
+            (
+                first_index,
+                tuple(rest_constraint_flags),
+            )
         )
     all_first_index_and_rest_constraint_flags.sort(
         reverse=True, key=operator.itemgetter(0)
@@ -198,15 +199,10 @@ def all_cycle_combinations(puzzle_orbit_definition, num_cycles):
         all_rest_constraint_flags.append(rest_constraint_flags)
 
     even_parity_constraints_helper = EvenParityConstraintsHelper(
-        first_constraint_indicies=first_constraint_indicies,
-        rest_constraint_flags=all_rest_constraint_flags,
-        constraint_orbit_flags=constraint_orbit_flags,
+        first_constraint_indicies=tuple(first_constraint_indicies),
+        rest_constraint_flags=tuple(all_rest_constraint_flags),
+        constraint_orbit_flags=tuple(constraint_orbit_flags),
     )
-
-    global puzzle_orbit_definition_global
-    global even_parity_constraints_helper_global
-    puzzle_orbit_definition_global = puzzle_orbit_definition
-    even_parity_constraints_helper_global = even_parity_constraints_helper
 
     cycle_combination_objs = []
     # TODO(pri 1/5): upper bound of LCM is math.lcm(*range(1, <max orbit cubie count> + 1))
@@ -258,7 +254,9 @@ def all_cycle_combinations(puzzle_orbit_definition, num_cycles):
                     continue
                 seen_cycle_cubie_counts.add(all_cycle_cubie_counts)
                 for shared_cycle_combination in recursive_shared_cycle_combinations(
-                    all_cycle_cubie_counts
+                    all_cycle_cubie_counts,
+                    puzzle_orbit_definition,
+                    even_parity_constraints_helper,
                 ):
                     orbits_can_share = [False] * len(puzzle_orbit_definition.orbits)
                     share_orbit_counts = [0] * len(puzzle_orbit_definition.orbits)
@@ -403,21 +401,31 @@ def all_cycle_combinations(puzzle_orbit_definition, num_cycles):
                                 cycle_combination=start_permuted_descending_order_cycle_combination,
                             )
                         )
-    return cycle_combination_objs
+    if cache_clear:
+        recursive_shared_cycle_combinations.cache_clear()
+        highest_order_cycles_from_cubie_counts.cache_clear()
+        reduced_integer_partitions.cache_clear()
+    return pareto_efficient_cycle_combinations(cycle_combination_objs)
 
 
 # do not flush cache it is used across used cubie counts
 @functools.cache
-def recursive_shared_cycle_combinations(all_cycle_cubie_counts):
+def recursive_shared_cycle_combinations(
+    all_cycle_cubie_counts, puzzle_orbit_definition, even_parity_constraints_helper
+):
     if len(all_cycle_cubie_counts) == 0:
         return ((),)
     return tuple(
         (shared_cycle,) + rest_combination
         for shared_cycle in highest_order_cycles_from_cubie_counts(
-            all_cycle_cubie_counts[0]
+            all_cycle_cubie_counts[0],
+            puzzle_orbit_definition,
+            even_parity_constraints_helper,
         )
         for rest_combination in recursive_shared_cycle_combinations(
-            all_cycle_cubie_counts[1:]
+            all_cycle_cubie_counts[1:],
+            puzzle_orbit_definition,
+            even_parity_constraints_helper,
         )
     )
 
@@ -426,7 +434,9 @@ def recursive_shared_cycle_combinations(all_cycle_cubie_counts):
 # optimizations that make this faster. only find the highest order
 # product cycle dont care abt duplicates
 @functools.cache
-def highest_order_cycles_from_cubie_counts(cycle_cubie_counts):
+def highest_order_cycles_from_cubie_counts(
+    cycle_cubie_counts, puzzle_orbit_definition, even_parity_constraints_helper
+):
     shared_cycles = []
     highest_order = 1
     share_states = []
@@ -435,7 +445,7 @@ def highest_order_cycles_from_cubie_counts(cycle_cubie_counts):
         if (
             cubie_count == 0
             # TODO(pri 3/5 blocked on deriving lesser): cubie_count == used_cubie_counts[i]
-            or puzzle_orbit_definition_global.orbits[i].orientation_status
+            or puzzle_orbit_definition.orbits[i].orientation_status
             == OrientationStatus.CannotOrient()
         ):
             share_states.append(ShareState.CANNOT_SHARE_ORIENTATION)
@@ -466,6 +476,8 @@ def highest_order_cycles_from_cubie_counts(cycle_cubie_counts):
                 cycle_cubie_counts[i],
                 i,
                 share[i],
+                puzzle_orbit_definition,
+                even_parity_constraints_helper,
             )
             for i in range(len(cycle_cubie_counts))
         ]
@@ -491,9 +503,9 @@ def highest_order_cycles_from_cubie_counts(cycle_cubie_counts):
             continue_outer = False
             while (
                 next_even_parity_constraint_index
-                < len(even_parity_constraints_helper_global.first_constraint_indicies)
+                < len(even_parity_constraints_helper.first_constraint_indicies)
                 and i + 1
-                == even_parity_constraints_helper_global.first_constraint_indicies[
+                == even_parity_constraints_helper.first_constraint_indicies[
                     next_even_parity_constraint_index
                 ]
             ):
@@ -507,7 +519,7 @@ def highest_order_cycles_from_cubie_counts(cycle_cubie_counts):
                                 partition_obj_path[i + 2 :],
                             )
                         )
-                        if even_parity_constraints_helper_global.rest_constraint_flags[
+                        if even_parity_constraints_helper.rest_constraint_flags[
                             next_even_parity_constraint_index
                         ][j]
                     )
@@ -550,8 +562,14 @@ def highest_order_cycles_from_cubie_counts(cycle_cubie_counts):
 
 
 @functools.cache
-def reduced_integer_partitions(cycle_cubie_count, orbit_index, s):
-    orbit = puzzle_orbit_definition_global.orbits[orbit_index]
+def reduced_integer_partitions(
+    cycle_cubie_count,
+    orbit_index,
+    s,
+    puzzle_orbit_definition,
+    even_parity_constraints_helper,
+):
+    orbit = puzzle_orbit_definition.orbits[orbit_index]
     partition_objs = []
     for partition in integer_partitions(cycle_cubie_count):
         if s:
@@ -633,7 +651,7 @@ def reduced_integer_partitions(cycle_cubie_count, orbit_index, s):
                 curr_partition_obj.order % partition_objs[j].order == 0
                 and curr_partition_obj.order != partition_objs[j].order
                 and (
-                    not even_parity_constraints_helper_global.constraint_orbit_flags[
+                    not even_parity_constraints_helper.constraint_orbit_flags[
                         orbit_index
                     ]
                     or sign(curr_partition_obj.partition)
@@ -666,121 +684,22 @@ def pareto_efficient_cycle_combinations(cycle_combination_objs):
 
 
 def cycle_combination_objs_stats(cycle_combination_objs):
-    a = collections.defaultdict(int)
+    stats = collections.defaultdict(int)
     for cycle_combination_obj in cycle_combination_objs:
-        a[
+        stats[
             tuple(
-                zip(
-                    map(
-                        operator.attrgetter("order"),
-                        cycle_combination_obj.cycle_combination,
-                    )
+                map(
+                    operator.attrgetter("order"),
+                    cycle_combination_obj.cycle_combination,
                 )
             )
         ] += len(cycle_combination_obj.share_orders)
-    return dict(a)
-
-
-def test():
-    start = timeit.default_timer()
-    cycle_combination_objs = pareto_efficient_cycle_combinations(
-        all_cycle_combinations(
-            puzzle_orbit_definition=puzzle_orbit_definitions.PUZZLE_3x3,
-            num_cycles=2,
-        )
-    )
-
-    stats = cycle_combination_objs_stats(cycle_combination_objs)
-    assert stats == {
-        ((90,), (90,)): 16,
-        ((630,), (9,)): 4,
-        ((180,), (30,)): 1,
-        ((210,), (24,)): 1,
-        ((126,), (36,)): 8,
-        ((360,), (12,)): 4,
-        ((720,), (2,)): 2,
-    }, stats
-    print("Passed test 1")
-
-    cycle_combination_objs = pareto_efficient_cycle_combinations(
-        all_cycle_combinations(
-            puzzle_orbit_definition=puzzle_orbit_definitions.PUZZLE_3x3,
-            num_cycles=3,
-        )
-    )
-
-    stats = cycle_combination_objs_stats(cycle_combination_objs)
-    assert stats == {
-        ((90,), (90,), (6,)): 1,
-        ((90,), (30,), (18,)): 1,
-        ((30,), (30,), (30,)): 2,
-        ((180,), (18,), (6,)): 2,
-        ((126,), (12,), (12,)): 1,
-        ((630,), (9,), (3,)): 1,
-        ((210,), (9,), (9,)): 1,
-        ((36,), (36,), (12,)): 1,
-        ((126,), (36,), (3,)): 2,
-        ((42,), (36,), (9,)): 2,
-        ((360,), (6,), (6,)): 4,
-        ((210,), (15,), (3,)): 1,
-    }, stats
-    print("Passed test 2")
-
-    cycle_combination_objs = pareto_efficient_cycle_combinations(
-        all_cycle_combinations(
-            puzzle_orbit_definition=puzzle_orbit_definitions.PUZZLE_3x3,
-            num_cycles=4,
-        )
-    )
-
-    stats = cycle_combination_objs_stats(cycle_combination_objs)
-    assert stats == {
-        ((90,), (24,), (6,), (6,)): 1,
-        ((30,), (24,), (18,), (6,)): 1,
-        ((126,), (12,), (6,), (6,)): 1,
-        ((42,), (18,), (12,), (6,)): 1,
-        ((30,), (12,), (12,), (12,)): 1,
-        ((90,), (90,), (3,), (2,)): 1,
-        ((90,), (30,), (9,), (2,)): 1,
-        ((90,), (30,), (6,), (3,)): 8,
-        ((90,), (18,), (10,), (3,)): 1,
-        ((90,), (10,), (9,), (6,)): 1,
-        ((30,), (30,), (18,), (3,)): 8,
-        ((30,), (30,), (9,), (6,)): 8,
-        ((30,), (18,), (10,), (9,)): 1,
-        ((126,), (18,), (6,), (3,)): 1,
-        ((90,), (36,), (6,), (2,)): 2,
-        ((90,), (18,), (12,), (2,)): 2,
-        ((90,), (12,), (12,), (3,)): 2,
-        ((36,), (30,), (18,), (2,)): 2,
-        ((36,), (30,), (12,), (3,)): 2,
-        ((36,), (30,), (6,), (6,)): 16,
-        ((18,), (18,), (12,), (10,)): 2,
-        ((126,), (24,), (3,), (3,)): 1,
-        ((42,), (24,), (9,), (3,)): 1,
-        ((42,), (18,), (18,), (2,)): 5,
-        ((60,), (45,), (3,), (3,)): 1,
-        ((36,), (36,), (6,), (3,)): 4,
-        ((210,), (6,), (6,), (3,)): 1,
-        ((180,), (18,), (3,), (2,)): 2,
-        ((180,), (12,), (3,), (3,)): 2,
-        ((180,), (9,), (6,), (2,)): 2,
-        ((630,), (3,), (3,), (3,)): 6,
-        ((210,), (9,), (3,), (3,)): 7,
-        ((360,), (6,), (3,), (2,)): 4,
-        ((210,), (12,), (2,), (2,)): 1,
-    }, stats
-    end = timeit.default_timer()
-    print(f"\nPassed tests in {end - start} seconds")
-    print(recursive_shared_cycle_combinations.cache_info())
-    print(highest_order_cycles_from_cubie_counts.cache_info())
-    print(reduced_integer_partitions.cache_info())
-    exit()
+    return dict(stats)
 
 
 def main():
     a = timeit.default_timer()
-    cycle_combinations = all_cycle_combinations(
+    cycle_combinations = optimal_cycle_combinations(
         puzzle_orbit_definition=puzzle_orbit_definitions.PUZZLE_3x3,
         num_cycles=3,
     )
@@ -789,12 +708,10 @@ def main():
     print(recursive_shared_cycle_combinations.cache_info())
     print(highest_order_cycles_from_cubie_counts.cache_info())
     print(reduced_integer_partitions.cache_info())
-    cycle_combinations = pareto_efficient_cycle_combinations(cycle_combinations)
     return cycle_combinations
 
 
 if __name__ == "__main__":
-    # test()
     cycle_combination_objs = main()
     with open("./output.py", "w") as f:
         f.write(
