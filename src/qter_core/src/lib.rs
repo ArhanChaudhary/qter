@@ -38,7 +38,7 @@ impl Span {
     pub fn new(source: ArcIntern<String>, start: usize, end: usize) -> Span {
         assert!(start <= end);
         assert!(start < source.len());
-        assert!(end < source.len());
+        assert!(end <= source.len());
 
         Span {
             source,

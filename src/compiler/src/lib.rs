@@ -15,17 +15,19 @@ pub fn compile(
     todo!()
 }
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Clone, Debug)]
 struct Label {
     name: ArcIntern<String>,
     block: Option<BlockID>,
 }
 
+#[derive(Clone, Debug)]
 struct Block {
     code: Vec<WithSpan<Instruction>>,
     block: Option<BlockID>,
 }
 
+#[derive(Clone, Debug)]
 enum Primitive {
     Add {
         amt: WithSpan<Int<U>>,
@@ -52,6 +54,7 @@ enum Primitive {
     },
 }
 
+#[derive(Clone, Debug)]
 enum Value {
     Int(Int<U>),
     Constant(ArcIntern<String>),
@@ -59,21 +62,25 @@ enum Value {
     Block(Block),
 }
 
+#[derive(Clone, Debug)]
 struct MacroCall {
     name: WithSpan<ArcIntern<String>>,
     arguments: Vec<WithSpan<Value>>,
 }
 
+#[derive(Clone, Debug)]
 enum Code {
     Primitive(Primitive),
     Macro(MacroCall),
 }
 
+#[derive(Clone, Debug)]
 struct LuaCall {
     function_name: WithSpan<ArcIntern<String>>,
     args: Vec<WithSpan<Value>>,
 }
 
+#[derive(Clone, Debug)]
 enum Instruction {
     Label(Label),
     Code(Code),
@@ -91,6 +98,7 @@ enum PatternArgTy {
     Ident,
 }
 
+#[derive(Clone, Debug)]
 enum PatternComponent {
     Argument {
         name: WithSpan<ArcIntern<String>>,
@@ -125,6 +133,7 @@ impl PatternComponent {
     }
 }
 
+#[derive(Clone, Debug)]
 struct Pattern(Vec<WithSpan<PatternComponent>>);
 
 impl Pattern {
@@ -149,21 +158,25 @@ impl Pattern {
     }
 }
 
+#[derive(Clone, Debug)]
 struct MacroBranch {
     pattern: WithSpan<Pattern>,
     code: Vec<WithSpan<Instruction>>,
 }
 
+#[derive(Clone, Debug)]
 struct Macro {
     branches: Vec<WithSpan<MacroBranch>>,
     after: Option<WithSpan<ArcIntern<String>>>,
 }
 
+#[derive(Clone, Debug)]
 enum DefinedValue {
     Value(WithSpan<Value>),
     LuaCall(WithSpan<LuaCall>),
 }
 
+#[derive(Clone, Debug)]
 struct Define {
     name: WithSpan<ArcIntern<String>>,
     value: DefinedValue,
@@ -192,6 +205,7 @@ struct RegisterDecl {
     block: Option<BlockID>,
 }
 
+#[derive(Debug, Clone)]
 struct BlockInfo {
     parent: Option<BlockID>,
     children: Vec<BlockID>,
@@ -199,6 +213,7 @@ struct BlockInfo {
     defines: Vec<Define>,
 }
 
+#[derive(Clone, Debug)]
 struct ParsedSyntax {
     // Each block gets an ID and `block_parent` maps a block ID to it's parent
     // The global scope is block zero and if the block/label hasn't been expanded its ID is None

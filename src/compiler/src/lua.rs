@@ -1,6 +1,7 @@
 use mlua::{AnyUserData, IntoLua, Lua, UserDataMethods, UserDataRegistry, Value};
 use qter_core::{Int, I};
 
+#[derive(Clone, Debug)]
 pub struct LuaMacros {
     lua: Lua,
 }

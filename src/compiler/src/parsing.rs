@@ -20,7 +20,7 @@ use crate::{lua::LuaMacros, Block, BlockID, BlockInfo, Code, Cube, Define, Defin
 use super::Instruction;
 
 static PRELUDE: LazyLock<ParsedSyntax> = LazyLock::new(|| {
-    match parse(include_str!("../../qter_core/prelude.qat")) {
+    match parse(include_str!("../../qter_core/prelude.qat"), &|_| panic!("Prelude should not import files (because it's easier not to implement; message henry if you need this feature)"), true) {
         Ok(v) => v,
         Err(e) => panic!("{e}"),
     }
@@ -30,10 +30,10 @@ static PRELUDE: LazyLock<ParsedSyntax> = LazyLock::new(|| {
 #[grammar = "./qat.pest"]
 struct QatParser;
 
-fn parse(qat: &str) -> Result<ParsedSyntax, Box<Error<Rule>>> {
+fn parse(qat: &str, find_import: &impl Fn(&str) -> Result<ArcIntern<String>, String>, is_prelude: bool) -> Result<ParsedSyntax, Box<Error<Rule>>> {
     let file = ArcIntern::from_ref(qat);
 
-    let program = QatParser::parse(Rule::program, &qat)?.next().unwrap();
+    let program = QatParser::parse(Rule::program, qat)?.next().unwrap();
     let zero_pos = program.as_span().start_pos();
     let program = program.into_inner();
 
@@ -42,10 +42,11 @@ fn parse(qat: &str) -> Result<ParsedSyntax, Box<Error<Rule>>> {
         Err(e) => return Err(Box::new(Error::new_from_pos(ErrorVariant::CustomError { message: e.to_string()}, zero_pos))),
     };
 
-    let mut macros = HashMap::new();
-    let mut available_macros = HashMap::new();
-    let mut instructions = Vec::new();
-    let mut lua_macros = HashMap::new();
+    let mut syntax = ParsedSyntax { block_counter: 1, block_info: HashMap::new(), macros: HashMap::new(), available_macros: HashMap::new(), lua_macros: HashMap::new(), code: Vec::new() };
+
+    if !is_prelude {
+        merge_files(&mut syntax, (*PRELUDE).to_owned());
+    }
 
     for pair in program {
         if let Rule::EOI = pair.as_rule() {
@@ -58,31 +59,64 @@ fn parse(qat: &str) -> Result<ParsedSyntax, Box<Error<Rule>>> {
                 let span = name.span();
                 let name = ArcIntern::clone(&name);
 
-                if macros.contains_key(&(ArcIntern::clone(&file), ArcIntern::clone(&name))) {
+                if syntax.macros.contains_key(&(ArcIntern::clone(&file), ArcIntern::clone(&name))) {
                     return Err(Box::new(Error::new_from_span(ErrorVariant::CustomError { message: format!("The macro {} is already defined!", &*name) }, span.pest())));
                 }
                 
-                macros.insert((ArcIntern::clone(&file), ArcIntern::clone(&name)), macro_def);
-                available_macros.insert(name, ArcIntern::clone(&file));
+                syntax.macros.insert((ArcIntern::clone(&file), ArcIntern::clone(&name)), macro_def);
+                syntax.available_macros.insert(name, ArcIntern::clone(&file));
             },
             Statement::Instruction(instruction) => {
                 let span = instruction.span().to_owned();
 
-                instructions.push(WithSpan::new((instruction.value, BlockID(0)), span))
+                syntax.code.push(WithSpan::new((instruction.value, BlockID(0)), span))
             },
             Statement::LuaBlock(code) => if let Err(e) = lua.add_chunk(code) {
                 return Err(Box::new(Error::new_from_span(ErrorVariant::CustomError { message: e.to_string() }, span)))
             },
-            Statement::Import(_) => todo!(),
+            Statement::Import(name) => {
+                let import = match find_import(*name) {
+                    Ok(v) => v,
+                    Err(e) => return Err(Box::new(Error::new_from_span(ErrorVariant::CustomError { message: format!("Unable to find import: {e}") }, name.span().pest()))),
+                };
+
+                let file = parse(&import, find_import, is_prelude)?;
+
+                merge_files(&mut syntax, file);
+            },
         }
     }
 
-    let mut block_info = HashMap::new();
-    block_info.insert(BlockID(0), BlockInfo { parent: None, children: vec![], registers: None, defines: vec![] });
+    syntax.block_info.insert(BlockID(0), BlockInfo { parent: None, children: vec![], registers: None, defines: vec![] });
 
-    lua_macros.insert(file, lua);
+    syntax.lua_macros.insert(file, lua);
 
-    Ok(ParsedSyntax { block_counter: 1, block_info, macros, available_macros, lua_macros, code: instructions })
+    Ok(syntax)
+}
+
+fn merge_files(importer: &mut ParsedSyntax, mut importee: ParsedSyntax) {
+    // Block numbers shouldn't be defined deeper than the root in this stage
+    let block_offset = importer.block_counter;
+
+    let mut max_block = 0;
+
+    for (id, block) in importee.block_info {
+        max_block = max_block.max(id.0);
+
+        importer.block_info.insert(BlockID(id.0 + block_offset), block);
+    }
+
+    importer.macros.extend(importee.macros);
+    // Imports should not shadow existing macros
+    for (name, macro_file) in importee.available_macros {
+        importer.available_macros.entry(name).or_insert(macro_file);
+    }
+    importer.lua_macros.extend(importee.lua_macros);
+
+    importee.code.iter_mut().for_each(|v| {
+        v.1.0 += block_offset;
+    });
+    importer.code.extend(importee.code);
 }
 
 fn parse_registers(pair: Pair<'_, Rule>) -> Result<RegisterDecl, Box<Error<Rule>>> {
@@ -243,24 +277,29 @@ enum Statement<'a> {
     Macro { name: WithSpan<ArcIntern<String>>, macro_def: WithSpan<Macro> },
     Instruction(WithSpan<Instruction>),
     LuaBlock(&'a str),
-    Import(&'a str),
+    Import(WithSpan<&'a str>),
 }
 
 fn parse_statement(pair: Pair<'_, Rule>) -> Result<Statement<'_>, Box<Error<Rule>>> {
     let rule = pair.as_rule();
 
-    match rule {
+    Ok(match rule {
         Rule::r#macro => {
             let (name, macro_def) = parse_macro(pair)?;
-            Ok(Statement::Macro { name, macro_def })
+            Statement::Macro { name, macro_def }
         },
-        Rule::instruction => Ok(Statement::Instruction(parse_instruction(pair)?)),
+        Rule::instruction => Statement::Instruction(parse_instruction(pair)?),
         Rule::lua_code => {
-            Ok(Statement::LuaBlock(pair.as_str()))
+            Statement::LuaBlock(pair.as_str())
         },
-        Rule::import => todo!(),
+        Rule::import => {
+            let span = pair.as_span();
+            let filename = pair.into_inner().next().unwrap();
+
+            Statement::Import(WithSpan::new(filename.as_str(), span.into()))
+        },
         _ => unreachable!("{rule:?}"),
-    }
+    })
 }
 
 fn parse_instruction(pair: Pair<'_, Rule>) -> Result<WithSpan<Instruction>, Box<Error<Rule>>> {
@@ -427,7 +466,7 @@ fn parse_macro(pair: Pair<'_, Rule>) -> Result<(WithSpan<ArcIntern<String>>, Wit
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
+    use internment::ArcIntern;
 
     use super::parse;
 
@@ -467,16 +506,13 @@ mod tests {
 
             .define yeet lua bruh(1, 2, 3)
             .define pog 4
+
+            .import pog.qat
         ";
 
-        match parse(code) {
+        match parse(code, &|_| Ok(ArcIntern::from_ref("add 1 a")), false) {
             Ok(_) => {}
             Err(e) => panic!("{e}"),
         }
-
-        match parse(include_str!("../../qter_core/prelude.qat")) {
-            Ok(_) => {}
-            Err(e) => panic!("{e}")
-        };
     }
 }
