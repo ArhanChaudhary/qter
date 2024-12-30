@@ -258,7 +258,8 @@ end-lua
 }
 
 .start-lua
-    function repeat(code, start, end_, var)
+    -- `repeat` is a lua keyword
+    function repeat_(code, start, end_, var)
         local output = {}
 
         for i = start, end_ do
@@ -273,14 +274,14 @@ end-lua
 end-lua
 
 .macro repeat {
-    ($times:int $code:block) => lua repeat($code, 1, $times)
+    ($times:int $code:block) => lua repeat_($code, 1, $times)
 
-    ($times:int $var:ident $code:block) => lua repeat($code, 1, $times, $var)
+    ($times:int $var:ident $code:block) => lua repeat_($code, 1, $times, $var)
 
     -- should parse nested for loops such as `repeat j from $i to 10 { ... }`
     -- because the outer $i should be evaluated first
     ($times:int $var:ident from $start:int to $end:int $code:block) => {
-        lua repeat($code, $start, $end, $var)
+        lua repeat_($code, $start, $end, $var)
     }
 }
 
@@ -297,7 +298,7 @@ end-lua
     ($R1:reg $R2:reg using $R3:reg) => {
         lua multiply($R1, $R2, $R3)
     }
-    ($R1:reg N:int at $R2:reg) => {
+    ($R1:reg $N:int at $R2:reg) => {
             set $R2 to 0
         multiply_loop:
             solved-goto $R1 multiply_done

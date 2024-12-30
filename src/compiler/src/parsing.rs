@@ -455,5 +455,10 @@ mod tests {
             Ok(_) => {}
             Err(e) => panic!("{e}"),
         }
+
+        match parse(Rc::from(include_str!("../../qter_core/prelude.qat"))) {
+            Ok(_) => {}
+            Err(e) => panic!("{e}")
+        };
     }
 }
