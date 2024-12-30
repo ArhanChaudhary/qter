@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Debug, rc::Rc};
+use std::{collections::HashMap, fmt::Debug, sync::{Arc, LazyLock}};
 
 use internment::ArcIntern;
 use pest::{
@@ -15,18 +15,27 @@ use qter_core::{
     Int, WithSpan, U,
 };
 
-use crate::{lua::LuaMacros, Block, BlockID, Code, Cube, Define, DefinedValue, Label, LuaCall, Macro, MacroBranch, MacroCall, ParsedSyntax, Pattern, PatternArgTy, PatternComponent, RegisterDecl, Value};
+use crate::{lua::LuaMacros, Block, BlockID, BlockInfo, Code, Cube, Define, DefinedValue, Label, LuaCall, Macro, MacroBranch, MacroCall, ParsedSyntax, Pattern, PatternArgTy, PatternComponent, RegisterDecl, Value};
 
 use super::Instruction;
+
+static PRELUDE: LazyLock<ParsedSyntax> = LazyLock::new(|| {
+    match parse(include_str!("../../qter_core/prelude.qat")) {
+        Ok(v) => v,
+        Err(e) => panic!("{e}"),
+    }
+});
 
 #[derive(Parser)]
 #[grammar = "./qat.pest"]
 struct QatParser;
 
-fn parse(qat: Rc<str>) -> Result<ParsedSyntax, Box<Error<Rule>>> {
+fn parse(qat: &str) -> Result<ParsedSyntax, Box<Error<Rule>>> {
+    let file = ArcIntern::from_ref(qat);
+
     let program = QatParser::parse(Rule::program, &qat)?.next().unwrap();
     let zero_pos = program.as_span().start_pos();
-    let mut program = program.into_inner();
+    let program = program.into_inner();
 
     let lua = match LuaMacros::new() {
         Ok(v) => v,
@@ -34,7 +43,9 @@ fn parse(qat: Rc<str>) -> Result<ParsedSyntax, Box<Error<Rule>>> {
     };
 
     let mut macros = HashMap::new();
+    let mut available_macros = HashMap::new();
     let mut instructions = Vec::new();
+    let mut lua_macros = HashMap::new();
 
     for pair in program {
         if let Rule::EOI = pair.as_rule() {
@@ -44,11 +55,15 @@ fn parse(qat: Rc<str>) -> Result<ParsedSyntax, Box<Error<Rule>>> {
         let span = pair.as_span();
         match parse_statement(pair)? {
             Statement::Macro { name, macro_def } => {
-                if macros.contains_key(&*name) {
-                    return Err(Box::new(Error::new_from_span(ErrorVariant::CustomError { message: format!("The macro {} is already defined!", &*name) }, name.span().pest())));
+                let span = name.span();
+                let name = ArcIntern::clone(&name);
+
+                if macros.contains_key(&(ArcIntern::clone(&file), ArcIntern::clone(&name))) {
+                    return Err(Box::new(Error::new_from_span(ErrorVariant::CustomError { message: format!("The macro {} is already defined!", &*name) }, span.pest())));
                 }
                 
-                macros.insert(name.into_inner(), macro_def);
+                macros.insert((ArcIntern::clone(&file), ArcIntern::clone(&name)), macro_def);
+                available_macros.insert(name, ArcIntern::clone(&file));
             },
             Statement::Instruction(instruction) => {
                 let span = instruction.span().to_owned();
@@ -62,10 +77,12 @@ fn parse(qat: Rc<str>) -> Result<ParsedSyntax, Box<Error<Rule>>> {
         }
     }
 
-    let mut block_parent = HashMap::new();
-    block_parent.insert(BlockID(0), None);
+    let mut block_info = HashMap::new();
+    block_info.insert(BlockID(0), BlockInfo { parent: None, children: vec![], registers: None, defines: vec![] });
 
-    Ok(ParsedSyntax { block_counter: 1, block_parent, registers: HashMap::new(), macros, defines: Vec::new(), lua_macros: lua, code: instructions })
+    lua_macros.insert(file, lua);
+
+    Ok(ParsedSyntax { block_counter: 1, block_info, macros, available_macros, lua_macros, code: instructions })
 }
 
 fn parse_registers(pair: Pair<'_, Rule>) -> Result<RegisterDecl, Box<Error<Rule>>> {
@@ -196,7 +213,7 @@ fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Cube, Box<Error<Rule>>> {
                     }
 
                     match Architecture::new(puzzle.group, algorithms) {
-                        Ok(v) => Rc::new(v),
+                        Ok(v) => Arc::new(v),
                         Err(e) => {
                             return Err(Box::new(Error::new_from_span(
                                 ErrorVariant::CustomError {
@@ -284,7 +301,7 @@ fn parse_instruction(pair: Pair<'_, Rule>) -> Result<WithSpan<Instruction>, Box<
                 rule => unreachable!("{rule:?}"),
             };
 
-            Instruction::Define(Define { name: WithSpan::new(ArcIntern::from_ref(name.as_str()), name.as_span().into()), block: None, value })
+            Instruction::Define(Define { name: WithSpan::new(ArcIntern::from_ref(name.as_str()), name.as_span().into()), value })
         },
         Rule::registers=> Instruction::Registers(parse_registers(pair)?),
         _ => unreachable!("{rule:?}")
@@ -386,6 +403,7 @@ fn parse_macro(pair: Pair<'_, Rule>) -> Result<(WithSpan<ArcIntern<String>>, Wit
 
         let body = pairs.next().unwrap();
 
+        // TODO: Disallow macros emitting register declarations
         let body = match body.as_rule() {
             Rule::instruction => vec![parse_instruction(body)?],
             Rule::block => parse_block(body)?.code,
@@ -451,12 +469,12 @@ mod tests {
             .define pog 4
         ";
 
-        match parse(Rc::from(code)) {
+        match parse(code) {
             Ok(_) => {}
             Err(e) => panic!("{e}"),
         }
 
-        match parse(Rc::from(include_str!("../../qter_core/prelude.qat"))) {
+        match parse(include_str!("../../qter_core/prelude.qat")) {
             Ok(_) => {}
             Err(e) => panic!("{e}")
         };

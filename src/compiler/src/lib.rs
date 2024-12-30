@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap, sync::Arc};
 
 use internment::ArcIntern;
 use lua::LuaMacros;
@@ -9,8 +9,8 @@ mod lua;
 mod parsing;
 
 pub fn compile(
-    qat: Rc<str>,
-    find_import: impl Fn(&str) -> Result<Rc<str>, String>,
+    qat: Arc<str>,
+    find_import: impl Fn(&str) -> Result<Arc<str>, String>,
 ) -> Result<Program, Box<Error<parsing::Rule>>> {
     todo!()
 }
@@ -166,7 +166,6 @@ enum DefinedValue {
 
 struct Define {
     name: WithSpan<ArcIntern<String>>,
-    block: Option<BlockID>,
     value: DefinedValue,
 }
 
@@ -177,7 +176,10 @@ enum Cube {
         order: WithSpan<Int<U>>,
     },
     Real {
-        architectures: Vec<(Vec<WithSpan<ArcIntern<String>>>, WithSpan<Rc<Architecture>>)>,
+        architectures: Vec<(
+            Vec<WithSpan<ArcIntern<String>>>,
+            WithSpan<Arc<Architecture>>,
+        )>,
     },
 }
 
@@ -190,14 +192,23 @@ struct RegisterDecl {
     block: Option<BlockID>,
 }
 
+struct BlockInfo {
+    parent: Option<BlockID>,
+    children: Vec<BlockID>,
+    registers: Option<RegisterDecl>,
+    defines: Vec<Define>,
+}
+
 struct ParsedSyntax {
     // Each block gets an ID and `block_parent` maps a block ID to it's parent
     // The global scope is block zero and if the block/label hasn't been expanded its ID is None
     block_counter: usize,
-    block_parent: HashMap<BlockID, Option<BlockID>>,
-    registers: HashMap<BlockID, RegisterDecl>,
-    macros: HashMap<ArcIntern<String>, WithSpan<Macro>>,
-    defines: Vec<Define>,
-    lua_macros: LuaMacros,
+    block_info: HashMap<BlockID, BlockInfo>,
+    /// Map (file contents, macro name) to a macro
+    macros: HashMap<(ArcIntern<String>, ArcIntern<String>), WithSpan<Macro>>,
+    /// Map each macro name to the file that it's in
+    available_macros: HashMap<ArcIntern<String>, ArcIntern<String>>,
+    /// Each file has its own LuaMacros; use the file contents as the key
+    lua_macros: HashMap<ArcIntern<String>, LuaMacros>,
     code: Vec<WithSpan<(Instruction, BlockID)>>,
 }

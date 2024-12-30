@@ -1,7 +1,6 @@
 use std::{
-    cell::OnceCell,
     collections::{HashMap, HashSet},
-    rc::Rc,
+    sync::{Arc, OnceLock},
 };
 
 use internment::ArcIntern;
@@ -16,9 +15,9 @@ use crate::{
 #[derive(Debug)]
 pub struct PuzzleDefinition {
     /// The permutation group of the puzzle
-    pub group: Rc<PermutationGroup>,
+    pub group: Arc<PermutationGroup>,
     /// A list of preset architectures
-    pub presets: Vec<Rc<Architecture>>,
+    pub presets: Vec<Arc<Architecture>>,
 }
 
 impl PuzzleDefinition {
@@ -29,9 +28,9 @@ impl PuzzleDefinition {
 
     // If they want the cycles in a different order, create a new architecture with the cycles shuffled
     fn adapt_architecture(
-        architecture: &Rc<Architecture>,
+        architecture: &Arc<Architecture>,
         orders: &[Int<U>],
-    ) -> Option<Rc<Architecture>> {
+    ) -> Option<Arc<Architecture>> {
         let mut used = vec![false; orders.len()];
         let mut swizzle = vec![0; orders.len()];
 
@@ -53,7 +52,7 @@ impl PuzzleDefinition {
         }
 
         if swizzle.iter().enumerate().all(|(v, i)| v == *i) {
-            return Some(Rc::clone(architecture));
+            return Some(Arc::clone(architecture));
         }
 
         let mut new_arch = Architecture::clone(architecture);
@@ -69,11 +68,11 @@ impl PuzzleDefinition {
             }
         }
 
-        Some(Rc::new(new_arch))
+        Some(Arc::new(new_arch))
     }
 
     /// Find a preset with the specified cycle orders
-    pub fn get_preset(&self, orders: &[Int<U>]) -> Option<Rc<Architecture>> {
+    pub fn get_preset(&self, orders: &[Int<U>]) -> Option<Arc<Architecture>> {
         for preset in &self.presets {
             if preset.cycle_generators.len() != orders.len() {
                 continue;
@@ -131,8 +130,8 @@ impl PermutationGroup {
     pub fn identity(&self) -> Permutation {
         Permutation {
             // Map every value to itself
-            mapping: OnceCell::from((0..self.facelet_count()).collect::<Vec<_>>()),
-            cycles: OnceCell::new(),
+            mapping: OnceLock::from((0..self.facelet_count()).collect::<Vec<_>>()),
+            cycles: OnceLock::new(),
             facelet_count: self.facelet_count(),
         }
     }
@@ -171,8 +170,8 @@ impl PermutationGroup {
 pub struct Permutation {
     pub(crate) facelet_count: usize,
     // One of these two must be defined
-    mapping: OnceCell<Vec<usize>>,
-    cycles: OnceCell<Vec<Vec<usize>>>,
+    mapping: OnceLock<Vec<usize>>,
+    cycles: OnceLock<Vec<Vec<usize>>>,
 }
 
 impl Permutation {
@@ -186,8 +185,8 @@ impl Permutation {
 
         Permutation {
             facelet_count,
-            mapping: OnceCell::new(),
-            cycles: OnceCell::from(cycles),
+            mapping: OnceLock::new(),
+            cycles: OnceLock::from(cycles),
         }
     }
 
@@ -270,8 +269,8 @@ impl Permutation {
             }
         }
 
-        self.mapping = OnceCell::from(mapping);
-        self.cycles = OnceCell::new();
+        self.mapping = OnceLock::from(mapping);
+        self.cycles = OnceLock::new();
     }
 
     fn mapping_mut(&mut self) -> &mut [usize] {
@@ -292,7 +291,7 @@ impl Permutation {
         }
 
         // Invalidate `cycles`
-        self.cycles = OnceCell::new();
+        self.cycles = OnceLock::new();
     }
 }
 
@@ -328,7 +327,7 @@ pub struct CycleGenerator {
     pub(crate) permutation: Permutation,
     pub(crate) unshared_cycles: Vec<CycleGeneratorSubcycle>,
     pub(crate) order: Int<U>,
-    pub(crate) group: Rc<PermutationGroup>,
+    pub(crate) group: Arc<PermutationGroup>,
 }
 
 impl CycleGenerator {
@@ -422,7 +421,7 @@ impl CycleGenerator {
 /// An architecture of a `PermutationGroup`
 #[derive(Debug, Clone)]
 pub struct Architecture {
-    group: Rc<PermutationGroup>,
+    group: Arc<PermutationGroup>,
     cycle_generators: Vec<CycleGenerator>,
     shared_facelets: Vec<usize>,
 }
@@ -430,10 +429,10 @@ pub struct Architecture {
 impl Architecture {
     /// Create a new architecture from a permutation group and a list of algorithms.
     pub fn new(
-        group: Rc<PermutationGroup>,
+        group: Arc<PermutationGroup>,
         algorithms: Vec<Vec<ArcIntern<String>>>,
     ) -> Result<Architecture, ArcIntern<String>> {
-        let processed = algorithms_to_cycle_generators(Rc::clone(&group), &algorithms)?;
+        let processed = algorithms_to_cycle_generators(Arc::clone(&group), &algorithms)?;
 
         Ok(Architecture {
             group,
@@ -448,8 +447,8 @@ impl Architecture {
     }
 
     /// Get the underlying permutation group as an owned Rc
-    pub fn group_rc(&self) -> Rc<PermutationGroup> {
-        Rc::clone(&self.group)
+    pub fn group_arc(&self) -> Arc<PermutationGroup> {
+        Arc::clone(&self.group)
     }
 
     /// Get all of the registers of the architecture
@@ -473,7 +472,8 @@ pub fn puzzle_by_name(name: &str) -> Option<PuzzleDefinition> {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
+
+    use std::sync::Arc;
 
     use internment::ArcIntern;
     use itertools::Itertools;
@@ -508,7 +508,7 @@ mod tests {
         .iter()
         {
             let arch = Architecture::new(
-                Rc::clone(&cube.group),
+                Arc::clone(&cube.group),
                 arch.iter()
                     .map(|v| v.split(" ").map(ArcIntern::from_ref).collect_vec())
                     .collect_vec(),

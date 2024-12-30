@@ -1,8 +1,7 @@
 use std::{
     cell::OnceCell,
     ops::{Deref, DerefMut},
-    rc::Rc,
-    sync::OnceLock,
+    sync::{Arc, OnceLock},
 };
 
 pub mod architectures;
@@ -145,7 +144,7 @@ impl<T> WithSpan<T> {
 #[derive(Clone, Debug)]
 pub struct PermuteCube {
     cube_idx: usize,
-    group: Rc<PermutationGroup>,
+    group: Arc<PermutationGroup>,
     permutation: Permutation,
     generators: Vec<ArcIntern<String>>,
     chromatic_orders: OnceCell<Vec<Int<U>>>,
@@ -184,14 +183,14 @@ impl PermuteCube {
             permutation,
             generators,
             cube_idx,
-            group: arch.group_rc(),
+            group: arch.group_arc(),
             chromatic_orders: OnceCell::new(),
         }
     }
 
     /// Create a `PermuteCube` instance from a list of generators
     pub fn new_from_generators(
-        group: Rc<PermutationGroup>,
+        group: Arc<PermutationGroup>,
         cube_idx: usize,
         generators: Vec<ArcIntern<String>>,
     ) -> Result<PermuteCube, ArcIntern<String>> {
@@ -301,7 +300,7 @@ pub struct Program {
     /// A list of theoretical registers along with their orders
     pub theoretical: Vec<WithSpan<Int<U>>>,
     /// A list of puzzles to be used for registers
-    pub puzzles: Vec<WithSpan<Rc<PermutationGroup>>>,
+    pub puzzles: Vec<WithSpan<Arc<PermutationGroup>>>,
     /// The program itself
     pub instructions: Vec<WithSpan<Instruction>>,
 }

@@ -619,7 +619,7 @@ mod tests {
             .unwrap();
 
         // Define the registers
-        let puzzles = vec![WithSpan::new(arch.group_rc(), random_span.to_owned())];
+        let puzzles = vec![WithSpan::new(arch.group_arc(), random_span.to_owned())];
 
         let a_facelets = arch.registers()[1].signature_facelets();
         let b_facelets = arch.registers()[0].signature_facelets();

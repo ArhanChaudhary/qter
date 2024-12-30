@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap, sync::Arc};
 
 use internment::ArcIntern;
 use itertools::Itertools;
@@ -161,7 +161,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
         generators.insert(ArcIntern::from_ref(name), permutation);
     }
 
-    let group = Rc::new(PermutationGroup::new(colors, generators));
+    let group = Arc::new(PermutationGroup::new(colors, generators));
 
     let presets_pairs = parsed.next().unwrap().into_inner();
 
@@ -190,8 +190,8 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
             algorithms.push(moves);
         }
 
-        let architecture = match Architecture::new(Rc::clone(&group), algorithms) {
-            Ok(v) => Rc::new(v),
+        let architecture = match Architecture::new(Arc::clone(&group), algorithms) {
+            Ok(v) => Arc::new(v),
             Err(e) => {
                 return Err(Box::new(Error::new_from_span(
                     pest::error::ErrorVariant::CustomError {
