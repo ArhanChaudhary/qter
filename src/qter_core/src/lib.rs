@@ -78,6 +78,17 @@ impl Span {
         self.line_and_col().1
     }
 
+    pub fn merge(self, other: &Span) -> Span {
+        assert_eq!(self.source, other.source);
+
+        Span {
+            source: self.source,
+            start: self.start.min(other.start),
+            end: self.end.max(other.end),
+            line_and_col: OnceLock::new(),
+        }
+    }
+
     pub fn pest(&self) -> pest::Span<'_> {
         pest::Span::new(&self.source, self.start, self.end).unwrap()
     }
@@ -129,6 +140,13 @@ impl<T> WithSpan<T> {
 
     pub fn into_inner(self) -> T {
         self.value
+    }
+
+    pub fn map<V>(self, f: impl FnOnce(T) -> V) -> WithSpan<V> {
+        WithSpan {
+            value: f(self.value),
+            span: self.span,
+        }
     }
 
     pub fn span(&self) -> &Span {

@@ -1,17 +1,23 @@
 use std::{collections::HashMap, sync::Arc};
 
 use internment::ArcIntern;
+use itertools::Itertools;
 use lua::LuaMacros;
+use parsing::{parse, Rule};
 use pest::error::Error;
 use qter_core::{architectures::Architecture, Int, Program, WithSpan, U};
 
+mod builtin_macros;
 mod lua;
+mod macro_expansion;
 mod parsing;
 
 pub fn compile(
     qat: Arc<str>,
-    find_import: impl Fn(&str) -> Result<Arc<str>, String>,
+    find_import: impl Fn(&str) -> Result<ArcIntern<String>, String>,
 ) -> Result<Program, Box<Error<parsing::Rule>>> {
+    let parsed = parse(&qat, &find_import, false)?;
+
     todo!()
 }
 
@@ -19,6 +25,7 @@ pub fn compile(
 struct Label {
     name: ArcIntern<String>,
     block: Option<BlockID>,
+    available_in_blocks: Option<Vec<BlockID>>,
 }
 
 #[derive(Clone, Debug)]
@@ -28,29 +35,35 @@ struct Block {
 }
 
 #[derive(Clone, Debug)]
+struct RegisterReference {
+    block: BlockID,
+    name: WithSpan<ArcIntern<String>>,
+}
+
+#[derive(Clone, Debug)]
 enum Primitive {
     Add {
         amt: WithSpan<Int<U>>,
-        register: WithSpan<ArcIntern<String>>,
+        register: RegisterReference,
     },
     Goto {
-        label: WithSpan<ArcIntern<Label>>,
+        label: WithSpan<Label>,
     },
     SolvedGoto {
-        register: WithSpan<ArcIntern<String>>,
-        label: WithSpan<ArcIntern<Label>>,
+        register: RegisterReference,
+        label: WithSpan<Label>,
     },
     Input {
         message: WithSpan<String>,
-        register: WithSpan<ArcIntern<String>>,
+        register: RegisterReference,
     },
     Halt {
         message: WithSpan<String>,
-        register: WithSpan<ArcIntern<String>>,
+        register: RegisterReference,
     },
     Print {
         message: WithSpan<String>,
-        register: WithSpan<ArcIntern<String>>,
+        register: RegisterReference,
     },
 }
 
@@ -159,15 +172,30 @@ impl Pattern {
 }
 
 #[derive(Clone, Debug)]
+enum ValueOrReg {
+    Value(Value),
+    Register(RegisterReference),
+}
+
+#[derive(Clone, Debug)]
 struct MacroBranch {
     pattern: WithSpan<Pattern>,
     code: Vec<WithSpan<Instruction>>,
 }
 
 #[derive(Clone, Debug)]
-struct Macro {
-    branches: Vec<WithSpan<MacroBranch>>,
-    after: Option<WithSpan<ArcIntern<String>>>,
+enum Macro {
+    Splice {
+        branches: Vec<WithSpan<MacroBranch>>,
+        after: Option<WithSpan<ArcIntern<String>>>,
+    },
+    Builtin(
+        fn(
+            &ParsedSyntax,
+            WithSpan<Vec<WithSpan<Value>>>,
+            BlockID,
+        ) -> Result<Vec<Instruction>, Box<Error<Rule>>>,
+    ),
 }
 
 #[derive(Clone, Debug)]
@@ -221,9 +249,108 @@ struct ParsedSyntax {
     block_info: HashMap<BlockID, BlockInfo>,
     /// Map (file contents, macro name) to a macro
     macros: HashMap<(ArcIntern<String>, ArcIntern<String>), WithSpan<Macro>>,
-    /// Map each macro name to the file that it's in
-    available_macros: HashMap<ArcIntern<String>, ArcIntern<String>>,
+    /// Map each (file contents, macro name) to the file that it's in
+    available_macros: HashMap<(ArcIntern<String>, ArcIntern<String>), ArcIntern<String>>,
     /// Each file has its own LuaMacros; use the file contents as the key
     lua_macros: HashMap<ArcIntern<String>, LuaMacros>,
     code: Vec<WithSpan<(Instruction, BlockID)>>,
+}
+
+impl ParsedSyntax {
+    fn get_register(
+        &self,
+        name: WithSpan<ArcIntern<String>>,
+        mut from: BlockID,
+    ) -> Option<RegisterReference> {
+        loop {
+            let info = self.block_info.get(&from)?;
+            let decl = info.registers.as_ref()?;
+
+            for cube in &decl.cubes {
+                match cube {
+                    Cube::Theoretical {
+                        name: found_name,
+                        order: _,
+                    } => {
+                        if &*name == &**found_name {
+                            return Some(RegisterReference { block: from, name });
+                        }
+                    }
+                    Cube::Real { architectures } => {
+                        for (names, _) in architectures {
+                            for found_name in names {
+                                if &*name == &**found_name {
+                                    return Some(RegisterReference { block: from, name });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            from = info.parent?;
+        }
+    }
+
+    fn get_label(&self, name: &ArcIntern<String>, from: BlockID) -> Option<Label> {
+        let mut trace = Vec::new();
+
+        trace.push(from);
+
+        let mut current = from;
+        loop {
+            let info = self.block_info.get(&current)?;
+
+            if let Some(parent) = info.parent {
+                current = parent;
+            } else {
+                break;
+            }
+
+            trace.push(current);
+        }
+
+        let mut best = usize::MAX;
+        let mut found = None;
+
+        for instruction in &self.code {
+            match &instruction.0 {
+                Instruction::Label(label) => {
+                    if &label.name != name {
+                        continue;
+                    }
+
+                    if let Some(available_in) = &label.available_in_blocks {
+                        if !available_in.contains(&from) {
+                            continue;
+                        }
+                    }
+
+                    if let Some((idx, _)) = trace
+                        .iter()
+                        .take(best)
+                        .find_position(|v| Some(**v) == label.block)
+                    {
+                        best = idx;
+                        found = Some(label.to_owned());
+                    }
+                }
+                _ => continue,
+            }
+        }
+
+        found
+    }
+}
+
+#[derive(Clone, Debug)]
+enum ExpandedCode {
+    Instruction(Primitive, BlockID),
+    Label(Label),
+}
+
+#[derive(Clone, Debug)]
+struct Expanded {
+    block_info: HashMap<BlockID, BlockInfo>,
+    code: Vec<WithSpan<ExpandedCode>>,
 }

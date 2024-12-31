@@ -37,7 +37,8 @@ type = { "block" | "reg" | "int" | "ident" }
 
 macro        =  { ".macro" ~ tag_ident ~ ("after" ~ tag_ident)? ~ "{" ~ ("\n"* ~ macro_branch)+ ~ "\n"* ~ "}" }
 macro_arg    = ${ ident | (constant ~ ":" ~ type) }
-macro_branch =  { "(" ~ macro_arg* ~ ")" ~ "=>" ~ (block | instruction) }
+pattern = { macro_arg* }
+macro_branch =  { "(" ~ pattern ~ ")" ~ "=>" ~ (block | instruction) }
 
 block = { "{" ~ "\n"* ~ statement? ~ ("\n"+ ~ statement)* ~ "\n"* ~ "}" }
 

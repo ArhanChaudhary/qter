@@ -1,4 +1,5 @@
-use std::{collections::HashMap, fmt::Debug, sync::{Arc, LazyLock}};
+use crate::builtin_macros::builtin_macros;
+use std::{collections::HashMap, sync::{Arc, LazyLock}};
 
 use internment::ArcIntern;
 use pest::{
@@ -15,22 +16,28 @@ use qter_core::{
     Int, WithSpan, U,
 };
 
-use crate::{lua::LuaMacros, Block, BlockID, BlockInfo, Code, Cube, Define, DefinedValue, Label, LuaCall, Macro, MacroBranch, MacroCall, ParsedSyntax, Pattern, PatternArgTy, PatternComponent, RegisterDecl, Value};
+use crate::{lua::LuaMacros, Block, BlockID, BlockInfo,  Code, Cube, Define, DefinedValue, Label, LuaCall, Macro, MacroBranch, MacroCall, ParsedSyntax, Pattern, PatternArgTy, PatternComponent, RegisterDecl, Value};
 
 use super::Instruction;
 
 static PRELUDE: LazyLock<ParsedSyntax> = LazyLock::new(|| {
-    match parse(include_str!("../../qter_core/prelude.qat"), &|_| panic!("Prelude should not import files (because it's easier not to implement; message henry if you need this feature)"), true) {
+    let str = ArcIntern::<String>::from_ref(include_str!("../../qter_core/prelude.qat"));
+    
+    let mut prelude = match parse(&str, &|_| panic!("Prelude should not import files (because it's easier not to implement; message henry if you need this feature)"), true) {
         Ok(v) => v,
         Err(e) => panic!("{e}"),
-    }
+    };
+
+    prelude.macros.extend(builtin_macros(str));
+
+    prelude
 });
 
 #[derive(Parser)]
 #[grammar = "./qat.pest"]
 struct QatParser;
 
-fn parse(qat: &str, find_import: &impl Fn(&str) -> Result<ArcIntern<String>, String>, is_prelude: bool) -> Result<ParsedSyntax, Box<Error<Rule>>> {
+pub fn parse(qat: &str, find_import: &impl Fn(&str) -> Result<ArcIntern<String>, String>, is_prelude: bool) -> Result<ParsedSyntax, Box<Error<Rule>>> {
     let file = ArcIntern::from_ref(qat);
 
     let program = QatParser::parse(Rule::program, qat)?.next().unwrap();
@@ -64,7 +71,7 @@ fn parse(qat: &str, find_import: &impl Fn(&str) -> Result<ArcIntern<String>, Str
                 }
                 
                 syntax.macros.insert((ArcIntern::clone(&file), ArcIntern::clone(&name)), macro_def);
-                syntax.available_macros.insert(name, ArcIntern::clone(&file));
+                syntax.available_macros.insert((ArcIntern::clone(&file), name), ArcIntern::clone(&file));
             },
             Statement::Instruction(instruction) => {
                 let span = instruction.span().to_owned();
@@ -308,7 +315,7 @@ fn parse_instruction(pair: Pair<'_, Rule>) -> Result<WithSpan<Instruction>, Box<
     let span = pair.as_span().into();
 
     Ok(WithSpan::new(match rule {
-        Rule::label => Instruction::Label(Label { name: ArcIntern::<String>::from_ref(pair.into_inner().next().unwrap().as_str()), block: None } ),
+        Rule::label => Instruction::Label(Label { name: ArcIntern::<String>::from_ref(pair.into_inner().next().unwrap().as_str()), block: None, available_in_blocks: None } ),
         Rule::code => {
             let mut pairs = pair.into_inner();
 
@@ -396,28 +403,43 @@ fn parse_macro(pair: Pair<'_, Rule>) -> Result<(WithSpan<ArcIntern<String>>, Wit
     for branch in pairs {
         let span = branch.as_span();
 
-        let mut pairs = branch.into_inner().peekable();
+        let mut pairs = branch.into_inner();
 
+        let pattern = parse_pattern(pairs.next().unwrap())?;
+
+        for branch in branches.iter() {
+            if let Some(counterexample) = pattern.conflicts_with(name_str, &branch.pattern) {
+                return Err(Box::new(Error::new_from_span(ErrorVariant::CustomError { message: format!("This macro branch conflicts with the macro branch with the pattern `{}`. A counterexample matching both is `{counterexample}`.", branch.pattern.span().slice()) }, span)))
+            }
+        }
+
+        let body = pairs.next().unwrap();
+
+        // TODO: Disallow macros emitting register declarations
+        let body = match body.as_rule() {
+            Rule::instruction => vec![parse_instruction(body)?],
+            Rule::block => parse_block(body)?.code,
+            rule => unreachable!("{rule:?}"),
+        };
+
+        branches.push(WithSpan::new(MacroBranch { pattern, code: body }, span.into()))
+    }
+
+    Ok((WithSpan::new(ArcIntern::from_ref(name.as_str()), name.as_span().into()), WithSpan::new(Macro::Splice { branches, after }, span.into())))
+}
+
+fn parse_pattern(pair: Pair<Rule>) -> Result<WithSpan<Pattern>, Box<Error<Rule>>> {
         let mut pattern = Vec::new();
+        let span = pair.as_span();
 
-        let mut first_pos: Option<pest::Position> = None;
-        let mut last_pos: Option<pest::Position> = None;
-
-        while let Some(pair) = pairs.peek() {
+        for pair in pair.into_inner() {
             if Rule::macro_arg != pair.as_rule() {
                 break
             }
 
-            let pair = pairs.next().unwrap();
-
             let span = pair.as_span();
 
-            if first_pos.is_none() {
-                first_pos = Some(span.start_pos());
-            }
-            last_pos = Some(span.end_pos());
-
-            let mut arg_pairs = pair.into_inner();
+           let mut arg_pairs = pair.into_inner();
 
             let first_pair = arg_pairs.next().unwrap();
 
@@ -440,28 +462,8 @@ fn parse_macro(pair: Pair<'_, Rule>) -> Result<(WithSpan<ArcIntern<String>>, Wit
             }, span.into()));
         }
 
-        let body = pairs.next().unwrap();
-
-        // TODO: Disallow macros emitting register declarations
-        let body = match body.as_rule() {
-            Rule::instruction => vec![parse_instruction(body)?],
-            Rule::block => parse_block(body)?.code,
-            rule => unreachable!("{rule:?}"),
-        };
-
-        let pattern_span = first_pos.unwrap().span(&last_pos.unwrap());
-        let pattern = Pattern(pattern);
-
-        for branch in branches.iter() {
-            if let Some(counterexample) = pattern.conflicts_with(name_str, &branch.pattern) {
-                return Err(Box::new(Error::new_from_span(ErrorVariant::CustomError { message: format!("This macro branch conflicts with the macro branch with the pattern `{}`. A counterexample matching both is `{counterexample}`.", branch.pattern.span().slice()) }, span)))
-            }
-        }
-
-        branches.push(WithSpan::new(MacroBranch { pattern: WithSpan::new(pattern, pattern_span.into()), code: body }, pattern_span.into()))
-    }
-
-    Ok((WithSpan::new(ArcIntern::from_ref(name.as_str()), name.as_span().into()), WithSpan::new(Macro { branches, after }, span.into())))
+        Ok(WithSpan::new(Pattern(pattern), span.into()))
+    
 }
 
 #[cfg(test)]
