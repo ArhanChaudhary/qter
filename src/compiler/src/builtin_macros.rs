@@ -3,8 +3,8 @@ use pest::error::{Error, ErrorVariant};
 use qter_core::{Span, WithSpan};
 
 use crate::{
-    parsing::Rule, BlockID, Code, ExpansionInfo, Instruction, Label, Macro, ParsedSyntax,
-    Primitive, RegisterReference, Value,
+    parsing::Rule, BlockID, Code, ExpansionInfo, Instruction, LabelReference, Macro, Primitive,
+    RegisterReference, Value,
 };
 
 use std::collections::HashMap;
@@ -32,7 +32,7 @@ fn expect_reg(
         _ => {
             return Err(Box::new(Error::new_from_span(
                 ErrorVariant::CustomError {
-                    message: format!("Expected a register"),
+                    message: "Expected a register".to_string(),
                 },
                 reg.span().pest(),
             )));
@@ -42,25 +42,20 @@ fn expect_reg(
 
 fn expect_label(
     label: WithSpan<Value>,
-    syntax: &ExpansionInfo,
     block: BlockID,
-) -> Result<WithSpan<Label>, Box<Error<Rule>>> {
+) -> Result<WithSpan<LabelReference>, Box<Error<Rule>>> {
     match &*label {
-        Value::Word(word) => match syntax.get_label(word, block) {
-            Some(v) => Ok(WithSpan::new(v, label.span().to_owned())),
-            None => {
-                return Err(Box::new(Error::new_from_span(
-                    ErrorVariant::CustomError {
-                        message: format!("Label could not be found"),
-                    },
-                    label.span().pest(),
-                )))
-            }
-        },
+        Value::Word(word) => Ok(WithSpan::new(
+            LabelReference {
+                name: ArcIntern::clone(word),
+                block,
+            },
+            label.span().to_owned(),
+        )),
         _ => {
             return Err(Box::new(Error::new_from_span(
                 ErrorVariant::CustomError {
-                    message: format!("Expected a label"),
+                    message: "Expected a label".to_string(),
                 },
                 label.span().pest(),
             )));
@@ -76,7 +71,7 @@ fn print_like(
     if args.is_empty() {
         return Err(Box::new(Error::new_from_span(
             ErrorVariant::CustomError {
-                message: format!("Expected some arguments, found none"),
+                message: "Expected some arguments, found none".to_string(),
             },
             args.span().pest(),
         )));
@@ -93,10 +88,10 @@ fn print_like(
         .into_iter()
         .rev()
         .map(|v| match &*v {
-            Value::Word(word) => Ok(WithSpan::new(String::clone(&word), v.span().to_owned())),
+            Value::Word(word) => Ok(WithSpan::new(String::clone(word), v.span().to_owned())),
             _ => Err(Box::new(Error::new_from_span(
                 ErrorVariant::CustomError {
-                    message: format!("Expected an identifier"),
+                    message: "Expected an identifier".to_string(),
                 },
                 v.span().pest(),
             ))),
@@ -105,6 +100,7 @@ fn print_like(
             let mut a = a?;
             let v = v?;
 
+            a.push(' ');
             a.push_str(&v);
 
             let span = a.span().to_owned().merge(v.span());
@@ -145,7 +141,7 @@ pub fn builtin_macros(
                     _ => {
                         return Err(Box::new(Error::new_from_span(
                             ErrorVariant::CustomError {
-                                message: format!("Expected a number"),
+                                message: "Expected a number".to_string(),
                             },
                             num.span().pest(),
                         )));
@@ -164,7 +160,7 @@ pub fn builtin_macros(
     macros.insert(
         (prelude.to_owned(), ArcIntern::from_ref("goto")),
         WithSpan::new(
-            Macro::Builtin(|syntax, mut args, block| {
+            Macro::Builtin(|_syntax, mut args, block| {
                 if args.len() != 1 {
                     return Err(Box::new(Error::new_from_span(
                         ErrorVariant::CustomError {
@@ -174,7 +170,7 @@ pub fn builtin_macros(
                     )));
                 }
 
-                let label = expect_label(args.pop().unwrap(), syntax, block)?;
+                let label = expect_label(args.pop().unwrap(), block)?;
 
                 Ok(vec![Instruction::Code(Code::Primitive(Primitive::Goto {
                     label,
@@ -197,7 +193,7 @@ pub fn builtin_macros(
                     )));
                 }
 
-                let label = expect_label(args.pop().unwrap(), syntax, block)?;
+                let label = expect_label(args.pop().unwrap(), block)?;
                 let register = expect_reg(args.pop().unwrap(), syntax, block)?;
 
                 Ok(vec![Instruction::Code(Code::Primitive(

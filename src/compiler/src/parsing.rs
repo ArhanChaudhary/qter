@@ -28,7 +28,9 @@ static PRELUDE: LazyLock<ParsedSyntax> = LazyLock::new(|| {
         Err(e) => panic!("{e}"),
     };
 
-    prelude.expansion_info.macros.extend(builtin_macros(str));
+    let builtins = builtin_macros(str);
+    prelude.expansion_info.available_macros.extend(builtins.keys().map(|file| (file.to_owned(), file.0.to_owned())));
+    prelude.expansion_info.macros.extend(builtins);
 
     prelude
 });
@@ -57,7 +59,7 @@ block_counter: 1, block_info: HashMap::new(), macros: HashMap::new(), available_
     let mut syntax = ParsedSyntax { expansion_info, code };
 
     if !is_prelude {
-        merge_files(&mut syntax, (*PRELUDE).to_owned());
+        merge_files(&mut syntax, ArcIntern::clone(&file), (*PRELUDE).to_owned());
     }
 
     for pair in program {
@@ -92,9 +94,9 @@ block_counter: 1, block_info: HashMap::new(), macros: HashMap::new(), available_
                     Err(e) => return Err(Box::new(Error::new_from_span(ErrorVariant::CustomError { message: format!("Unable to find import: {e}") }, name.span().pest()))),
                 };
 
-                let file = parse(&import, find_import, is_prelude)?;
+                let importee = parse(&import, find_import, is_prelude)?;
 
-                merge_files(&mut syntax, file);
+                merge_files(&mut syntax, ArcIntern::clone(&file), importee);
             },
         }
     }
@@ -106,7 +108,7 @@ block_counter: 1, block_info: HashMap::new(), macros: HashMap::new(), available_
     Ok(syntax)
 }
 
-fn merge_files(importer: &mut ParsedSyntax, mut importee: ParsedSyntax) {
+fn merge_files(importer: &mut ParsedSyntax, importer_contents: ArcIntern<String>, mut importee: ParsedSyntax) {
     // Block numbers shouldn't be defined deeper than the root in this stage
     let block_offset = importer.expansion_info.block_counter;
 
@@ -119,9 +121,11 @@ fn merge_files(importer: &mut ParsedSyntax, mut importee: ParsedSyntax) {
     }
 
     importer.expansion_info.macros.extend(importee.expansion_info.macros);
-    // Imports should not shadow existing macros
     for (name, macro_file) in importee.expansion_info.available_macros {
-        importer.expansion_info.available_macros.entry(name).or_insert(macro_file);
+        // Imports should not shadow existing macros
+        importer.expansion_info.available_macros.entry((ArcIntern::clone(&importer_contents), ArcIntern::clone(&name.1))).or_insert_with(|| ArcIntern::clone(&macro_file));
+
+        importer.expansion_info.available_macros.insert(name, macro_file);
     }
     importer.expansion_info.lua_macros.extend(importee.expansion_info.lua_macros);
 
@@ -330,8 +334,10 @@ fn parse_instruction(pair: Pair<'_, Rule>) -> Result<WithSpan<Instruction>, Box<
             let name = WithSpan::new(ArcIntern::<String>::from_ref(name.as_str()), name.as_span().into());
 
             let arguments = pairs.map(|v| parse_value(v)).collect::<Result<Vec<_>, _>>()?;
+
+            let span = arguments.iter().map(|v| v.span()).fold(name.span().to_owned().after(), |a, v| a.merge(v));
             
-            Instruction::Code(Code::Macro(MacroCall { name, arguments }))
+            Instruction::Code(Code::Macro(MacroCall { name, arguments: WithSpan::new(arguments, span) }))
         },
         Rule::constant => Instruction::Constant(ArcIntern::<String>::from_ref(pair.into_inner().next().unwrap().as_str())),
         Rule::lua_call => {

@@ -166,12 +166,18 @@ impl PermutationGroup {
 }
 
 /// An element of a permutation group
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Permutation {
     pub(crate) facelet_count: usize,
     // One of these two must be defined
     mapping: OnceLock<Vec<usize>>,
     cycles: OnceLock<Vec<Vec<usize>>>,
+}
+
+impl core::fmt::Debug for Permutation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Permutation")
+    }
 }
 
 impl Permutation {

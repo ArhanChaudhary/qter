@@ -78,6 +78,11 @@ impl Span {
         self.line_and_col().1
     }
 
+    pub fn after(mut self) -> Span {
+        self.start = self.end;
+        self
+    }
+
     pub fn source(&self) -> ArcIntern<String> {
         ArcIntern::clone(&self.source)
     }

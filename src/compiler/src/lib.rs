@@ -24,11 +24,17 @@ pub fn compile(
     todo!()
 }
 
-#[derive(Hash, PartialEq, Eq, Clone, Debug)]
+#[derive(Clone, Debug)]
 struct Label {
     name: ArcIntern<String>,
     block: Option<BlockID>,
     available_in_blocks: Option<Vec<BlockID>>,
+}
+
+#[derive(Hash, PartialEq, Eq, Clone, Debug)]
+struct LabelReference {
+    name: ArcIntern<String>,
+    block: BlockID,
 }
 
 #[derive(Clone, Debug)]
@@ -50,11 +56,11 @@ enum Primitive {
         register: RegisterReference,
     },
     Goto {
-        label: WithSpan<Label>,
+        label: WithSpan<LabelReference>,
     },
     SolvedGoto {
         register: RegisterReference,
-        label: WithSpan<Label>,
+        label: WithSpan<LabelReference>,
     },
     Input {
         message: WithSpan<String>,
@@ -295,16 +301,16 @@ impl ExpansionInfo {
         }
     }
 
-    fn get_label(&self, name: &ArcIntern<String>, from: BlockID) -> Option<Label> {
-        let mut current = from;
+    fn get_label(&self, reference: &LabelReference) -> Option<Label> {
+        let mut current = reference.block;
 
         loop {
             let info = self.block_info.get(&current)?;
 
             for label in &info.labels {
-                if label.name == *name {
+                if label.name == reference.name {
                     if let Some(available_in) = &label.available_in_blocks {
-                        if available_in.contains(&from) {
+                        if available_in.contains(&reference.block) {
                             return Some(label.to_owned());
                         }
                     } else {
