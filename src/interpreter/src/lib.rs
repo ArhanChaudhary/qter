@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, rc::Rc};
+use std::{collections::VecDeque, sync::Arc};
 
 use qter_core::{
     architectures::{Permutation, PermutationGroup},
@@ -8,13 +8,13 @@ use qter_core::{
 
 /// Represents an instance of a `PermutationGroup`, in other words this simulates the rubik's cube
 pub struct Puzzle {
-    group: Rc<PermutationGroup>,
+    group: Arc<PermutationGroup>,
     state: Permutation,
 }
 
 impl Puzzle {
     /// Initialize the `Puzzle` in the solved state
-    pub fn initialize(group: Rc<PermutationGroup>) -> Puzzle {
+    pub fn initialize(group: Arc<PermutationGroup>) -> Puzzle {
         Puzzle {
             state: group.identity(),
             group,
@@ -253,7 +253,7 @@ impl Interpreter {
         let puzzle_states = program
             .puzzles
             .iter()
-            .map(|group| Puzzle::initialize(Rc::clone(group)))
+            .map(|group| Puzzle::initialize(Arc::clone(group)))
             .collect();
 
         Interpreter {
@@ -310,9 +310,16 @@ impl Interpreter {
 
     /// Execute one instruction
     pub fn step(&mut self) -> ActionPerformed<'_> {
-        // println!("PC: {}", self.instruction_counter);
+        let instruction = match self.program.instructions.get(self.instruction_counter) {
+            Some(v) => v,
+            None => {
+                return self
+                    .messaging
+                    .panic("Execution fell through the end of the program without reaching a halt instruction!");
+            }
+        };
 
-        match &*self.program.instructions[self.instruction_counter] {
+        match &**instruction {
             Instruction::Goto { instruction_idx } => {
                 self.instruction_counter = *instruction_idx;
 
@@ -466,7 +473,7 @@ impl Interpreter {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     use internment::ArcIntern;
     use qter_core::{
@@ -478,11 +485,11 @@ mod tests {
 
     #[test]
     fn facelets_solved() {
-        let group = Rc::new(
+        let group = Arc::new(
             PuzzleDefinition::parse(include_str!("../../qter_core/puzzles/3x3.txt")).unwrap(),
         );
 
-        let mut cube = Puzzle::initialize(Rc::clone(&group.group));
+        let mut cube = Puzzle::initialize(Arc::clone(&group.group));
 
         // Remember that the decoder will subtract the smallest facelet found in the definition to make it zero based
         assert!(cube.facelets_solved(&[0, 8, 16, 24]));
@@ -499,14 +506,14 @@ mod tests {
 
     #[test]
     fn decode() {
-        let group = Rc::new(
+        let group = Arc::new(
             PuzzleDefinition::parse(include_str!("../../qter_core/puzzles/3x3.txt")).unwrap(),
         );
 
-        let mut cube = Puzzle::initialize(Rc::clone(&group.group));
+        let mut cube = Puzzle::initialize(Arc::clone(&group.group));
 
         let permutation = PermuteCube::new_from_generators(
-            Rc::clone(&group.group),
+            Arc::clone(&group.group),
             0,
             vec![ArcIntern::from_ref("U")],
         )
@@ -534,7 +541,7 @@ mod tests {
 
     #[test]
     fn complicated_solved_decode_test() {
-        let group = Rc::new(
+        let group = Arc::new(
             PuzzleDefinition::parse(include_str!("../../qter_core/puzzles/3x3.txt")).unwrap(),
         );
 
@@ -550,7 +557,7 @@ mod tests {
         let a_permutation = PermuteCube::new_from_effect(&arch, 0, vec![(0, Int::one())]);
         let b_permutation = PermuteCube::new_from_effect(&arch, 0, vec![(1, Int::one())]);
 
-        let mut cube = Puzzle::initialize(Rc::clone(&group.group));
+        let mut cube = Puzzle::initialize(Arc::clone(&group.group));
 
         for i in 1..=23 {
             cube.state.compose(b_permutation.permutation());
@@ -609,7 +616,7 @@ mod tests {
             halt The modulus is A
         */
 
-        let random_span = Span::new(Rc::from("bruh"), 0, 0);
+        let random_span = Span::new(ArcIntern::from_ref("bruh"), 0, 0);
 
         let cube =
             PuzzleDefinition::parse(include_str!("../../qter_core/puzzles/3x3.txt")).unwrap();

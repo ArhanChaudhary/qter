@@ -3,15 +3,15 @@ use pest::error::{Error, ErrorVariant};
 use qter_core::{Span, WithSpan};
 
 use crate::{
-    parsing::Rule, BlockID, Code, Instruction, Label, Macro, ParsedSyntax, Primitive,
-    RegisterReference, Value,
+    parsing::Rule, BlockID, Code, ExpansionInfo, Instruction, Label, Macro, ParsedSyntax,
+    Primitive, RegisterReference, Value,
 };
 
 use std::collections::HashMap;
 
 fn expect_reg(
     reg: WithSpan<Value>,
-    syntax: &ParsedSyntax,
+    syntax: &ExpansionInfo,
     block: BlockID,
 ) -> Result<RegisterReference, Box<Error<Rule>>> {
     match &*reg {
@@ -42,7 +42,7 @@ fn expect_reg(
 
 fn expect_label(
     label: WithSpan<Value>,
-    syntax: &ParsedSyntax,
+    syntax: &ExpansionInfo,
     block: BlockID,
 ) -> Result<WithSpan<Label>, Box<Error<Rule>>> {
     match &*label {
@@ -69,7 +69,7 @@ fn expect_label(
 }
 
 fn print_like(
-    syntax: &ParsedSyntax,
+    syntax: &ExpansionInfo,
     mut args: WithSpan<Vec<WithSpan<Value>>>,
     block: BlockID,
 ) -> Result<(RegisterReference, WithSpan<String>), Box<Error<Rule>>> {

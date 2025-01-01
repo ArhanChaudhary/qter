@@ -78,6 +78,10 @@ impl Span {
         self.line_and_col().1
     }
 
+    pub fn source(&self) -> ArcIntern<String> {
+        ArcIntern::clone(&self.source)
+    }
+
     pub fn merge(self, other: &Span) -> Span {
         assert_eq!(self.source, other.source);
 

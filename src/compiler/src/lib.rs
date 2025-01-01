@@ -1,11 +1,12 @@
 use std::{collections::HashMap, sync::Arc};
 
 use internment::ArcIntern;
-use itertools::Itertools;
 use lua::LuaMacros;
 use parsing::{parse, Rule};
 use pest::error::Error;
 use qter_core::{architectures::Architecture, Int, Program, WithSpan, U};
+
+use crate::macro_expansion::expand;
 
 mod builtin_macros;
 mod lua;
@@ -17,6 +18,8 @@ pub fn compile(
     find_import: impl Fn(&str) -> Result<ArcIntern<String>, String>,
 ) -> Result<Program, Box<Error<parsing::Rule>>> {
     let parsed = parse(&qat, &find_import, false)?;
+
+    let expanded = expand(parsed)?;
 
     todo!()
 }
@@ -30,7 +33,7 @@ struct Label {
 
 #[derive(Clone, Debug)]
 struct Block {
-    code: Vec<WithSpan<Instruction>>,
+    code: Vec<WithSpan<(Instruction, Option<BlockID>)>>,
     block: Option<BlockID>,
 }
 
@@ -78,7 +81,7 @@ enum Value {
 #[derive(Clone, Debug)]
 struct MacroCall {
     name: WithSpan<ArcIntern<String>>,
-    arguments: Vec<WithSpan<Value>>,
+    arguments: WithSpan<Vec<WithSpan<Value>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -180,7 +183,7 @@ enum ValueOrReg {
 #[derive(Clone, Debug)]
 struct MacroBranch {
     pattern: WithSpan<Pattern>,
-    code: Vec<WithSpan<Instruction>>,
+    code: Vec<WithSpan<(Instruction, Option<BlockID>)>>,
 }
 
 #[derive(Clone, Debug)]
@@ -191,7 +194,7 @@ enum Macro {
     },
     Builtin(
         fn(
-            &ParsedSyntax,
+            &ExpansionInfo,
             WithSpan<Vec<WithSpan<Value>>>,
             BlockID,
         ) -> Result<Vec<Instruction>, Box<Error<Rule>>>,
@@ -239,10 +242,11 @@ struct BlockInfo {
     children: Vec<BlockID>,
     registers: Option<RegisterDecl>,
     defines: Vec<Define>,
+    labels: Vec<Label>,
 }
 
 #[derive(Clone, Debug)]
-struct ParsedSyntax {
+struct ExpansionInfo {
     // Each block gets an ID and `block_parent` maps a block ID to it's parent
     // The global scope is block zero and if the block/label hasn't been expanded its ID is None
     block_counter: usize,
@@ -253,10 +257,9 @@ struct ParsedSyntax {
     available_macros: HashMap<(ArcIntern<String>, ArcIntern<String>), ArcIntern<String>>,
     /// Each file has its own LuaMacros; use the file contents as the key
     lua_macros: HashMap<ArcIntern<String>, LuaMacros>,
-    code: Vec<WithSpan<(Instruction, BlockID)>>,
 }
 
-impl ParsedSyntax {
+impl ExpansionInfo {
     fn get_register(
         &self,
         name: WithSpan<ArcIntern<String>>,
@@ -272,14 +275,14 @@ impl ParsedSyntax {
                         name: found_name,
                         order: _,
                     } => {
-                        if &*name == &**found_name {
+                        if *name == **found_name {
                             return Some(RegisterReference { block: from, name });
                         }
                     }
                     Cube::Real { architectures } => {
                         for (names, _) in architectures {
                             for found_name in names {
-                                if &*name == &**found_name {
+                                if *name == **found_name {
                                     return Some(RegisterReference { block: from, name });
                                 }
                             }
@@ -293,54 +296,32 @@ impl ParsedSyntax {
     }
 
     fn get_label(&self, name: &ArcIntern<String>, from: BlockID) -> Option<Label> {
-        let mut trace = Vec::new();
-
-        trace.push(from);
-
         let mut current = from;
+
         loop {
             let info = self.block_info.get(&current)?;
 
-            if let Some(parent) = info.parent {
-                current = parent;
-            } else {
-                break;
-            }
-
-            trace.push(current);
-        }
-
-        let mut best = usize::MAX;
-        let mut found = None;
-
-        for instruction in &self.code {
-            match &instruction.0 {
-                Instruction::Label(label) => {
-                    if &label.name != name {
-                        continue;
-                    }
-
+            for label in &info.labels {
+                if label.name == *name {
                     if let Some(available_in) = &label.available_in_blocks {
-                        if !available_in.contains(&from) {
-                            continue;
+                        if available_in.contains(&from) {
+                            return Some(label.to_owned());
                         }
-                    }
-
-                    if let Some((idx, _)) = trace
-                        .iter()
-                        .take(best)
-                        .find_position(|v| Some(**v) == label.block)
-                    {
-                        best = idx;
-                        found = Some(label.to_owned());
-                    }
+                    } else {
+                        return Some(label.to_owned());
+                    };
                 }
-                _ => continue,
             }
-        }
 
-        found
+            current = info.parent?;
+        }
     }
+}
+
+#[derive(Clone, Debug)]
+struct ParsedSyntax {
+    expansion_info: ExpansionInfo,
+    code: Vec<WithSpan<(Instruction, Option<BlockID>)>>,
 }
 
 #[derive(Clone, Debug)]
