@@ -77,9 +77,9 @@ fn print_like(
         )));
     }
 
-    args.reverse();
-
     let register = expect_reg(args.pop().unwrap(), syntax, block)?;
+
+    args.reverse();
 
     let span = args.span().to_owned();
 

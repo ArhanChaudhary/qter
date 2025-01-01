@@ -16,10 +16,10 @@ mod parsing;
 mod strip_expanded;
 
 pub fn compile(
-    qat: Arc<str>,
+    qat: &str,
     find_import: impl Fn(&str) -> Result<ArcIntern<String>, String>,
 ) -> Result<Program, Box<Error<parsing::Rule>>> {
-    let parsed = parse(&qat, &find_import, false)?;
+    let parsed = parse(qat, &find_import, false)?;
 
     let expanded = expand(parsed)?;
 

@@ -25,11 +25,6 @@ impl Puzzle {
     pub fn facelets_solved(&self, facelets: &[usize]) -> bool {
         for facelet in facelets {
             let maps_to = self.state().mapping()[*facelet];
-            println!(
-                "{facelet}; {maps_to}: {}; {}",
-                self.group.facelet_colors()[self.state().mapping()[*facelet]],
-                self.group().facelet_colors()[*facelet],
-            );
             if self.group.facelet_colors()[maps_to] != self.group.facelet_colors()[*facelet] {
                 return false;
             }
@@ -478,6 +473,7 @@ impl Interpreter {
 mod tests {
     use std::sync::Arc;
 
+    use compiler::compile;
     use internment::ArcIntern;
     use qter_core::{
         architectures::PuzzleDefinition, Facelets, Instruction, Int, PermuteCube, Program,
@@ -554,8 +550,6 @@ mod tests {
         let a_facelets = arch.registers()[0].signature_facelets();
         let b_facelets = arch.registers()[1].signature_facelets();
 
-        println!("{b_facelets:?}");
-
         let a_permutation = PermuteCube::new_from_effect(&arch, vec![(0, Int::one())]);
         let b_permutation = PermuteCube::new_from_effect(&arch, vec![(1, Int::one())]);
 
@@ -597,142 +591,34 @@ mod tests {
 
     #[test]
     fn modulus() {
-        /*
-            input Number to modulus: A
-        loop:
-            print A is now A
-            B += N
-        decrement:
-            solved-goto B loop
-            solved-goto A fix
-            A -= 1
-            B -= 1
-            goto decrement
-        fix:
-            solved-goto B finalize
-            A -= 1
-            B -= 1
-            goto fix
-        finalize:
-            A += N
-            halt The modulus is A
-        */
+        let code = "
+            .registers {
+                B, A ← 3x3 builtin (24, 210)
+            }
+        
+                input Number to modulus A
+            loop:
+                print A is now A
+                add 13 B
+            decrement:
+                solved-goto B loop
+                solved-goto A fix
+                add 209 A
+                add 23 B
+                goto decrement
+            fix:
+                solved-goto B finalize
+                add 209 A
+                add 23 B
+                goto fix
+            finalize:
+                add 13 A
+                halt The modulus is A
+        ";
 
-        let random_span = Span::new(ArcIntern::from_ref("bruh"), 0, 0);
-
-        let cube =
-            PuzzleDefinition::parse(include_str!("../../qter_core/puzzles/3x3.txt")).unwrap();
-
-        let arch = cube
-            .get_preset(&[Int::from(24_u64), Int::from(210_u64)])
-            .unwrap();
-
-        // Define the registers
-        let puzzles = vec![WithSpan::new(arch.group_arc(), random_span.to_owned())];
-
-        let a_facelets = arch.registers()[1].signature_facelets();
-        let b_facelets = arch.registers()[0].signature_facelets();
-
-        let a_gen = RegisterGenerator::Puzzle {
-            generator: PermuteCube::new_from_effect(&arch, vec![(1, Int::one())]),
-            facelets: a_facelets.to_owned(),
-        };
-        let b_gen = RegisterGenerator::Puzzle {
-            generator: PermuteCube::new_from_effect(&arch, vec![(0, Int::one())]),
-            facelets: b_facelets.to_owned(),
-        };
-
-        let a_fl = Facelets::Puzzle {
-            facelets: a_facelets,
-        };
-        let b_fl = Facelets::Puzzle {
-            facelets: b_facelets.to_owned(),
-        };
-
-        let a_idx = 1;
-        let b_idx = 0;
-
-        let to_modulus = Int::from(13_u64);
-        // Negative numbers by overflowing
-        let a_minus_1 = Int::from(209_u64);
-        let b_minus_1 = Int::from(23_u64);
-
-        let instructions = vec![
-            // 0
-            Instruction::Input {
-                message: "Number to modulus:".to_owned(),
-                register: a_gen.to_owned(),
-                register_idx: 0,
-            },
-            // 1; loop:
-            Instruction::Print {
-                message: "A is now".to_owned(),
-                register: a_gen.to_owned(),
-                register_idx: 0,
-            },
-            // 2
-            Instruction::PermuteCube {
-                permutation: PermuteCube::new_from_effect(&arch, vec![(b_idx, to_modulus)]),
-                cube_idx: 0,
-            },
-            // 3; decrement:
-            Instruction::SolvedGoto {
-                instruction_idx: 1, // loop
-                facelets: b_fl.to_owned(),
-                register_idx: 0,
-            },
-            // 4
-            Instruction::SolvedGoto {
-                instruction_idx: 7, // fix
-                facelets: a_fl.to_owned(),
-                register_idx: 0,
-            },
-            // 5
-            Instruction::PermuteCube {
-                permutation: PermuteCube::new_from_effect(
-                    &arch,
-                    vec![(a_idx, a_minus_1), (b_idx, b_minus_1)],
-                ),
-                cube_idx: 0,
-            },
-            // 6
-            Instruction::Goto { instruction_idx: 3 }, // decrement
-            // 7; fix:
-            Instruction::SolvedGoto {
-                instruction_idx: 10, // finalize
-                facelets: b_fl.to_owned(),
-                register_idx: 0,
-            },
-            // 8
-            Instruction::PermuteCube {
-                permutation: PermuteCube::new_from_effect(
-                    &arch,
-                    vec![(a_idx, a_minus_1), (b_idx, b_minus_1)],
-                ),
-                cube_idx: 0,
-            },
-            // 9
-            Instruction::Goto { instruction_idx: 7 }, // fix
-            // 10; finalize:
-            Instruction::PermuteCube {
-                permutation: PermuteCube::new_from_effect(&arch, vec![(a_idx, to_modulus)]),
-                cube_idx: 0,
-            },
-            // 11
-            Instruction::Halt {
-                message: "The modulus is".to_owned(),
-                register: a_gen.to_owned(),
-                register_idx: 0,
-            },
-        ];
-
-        let program = Program {
-            instructions: instructions
-                .into_iter()
-                .map(|v| WithSpan::new(v, random_span.to_owned()))
-                .collect(),
-            theoretical: vec![],
-            puzzles,
+        let program = match compile(code, |_| unreachable!()) {
+            Ok(v) => v,
+            Err(e) => panic!("{e}"),
         };
 
         let mut interpreter = Interpreter::new(program);
@@ -740,7 +626,7 @@ mod tests {
         assert!(matches!(
             interpreter.step_until_halt(),
             PausedState::Input {
-                message: "Number to modulus:",
+                message: "Number to modulus",
                 register: RegisterGenerator::Puzzle {
                     generator: _,
                     facelets: _
@@ -750,22 +636,6 @@ mod tests {
         ));
 
         interpreter.give_input(Int::from(133_u64));
-
-        // for _ in 0..1000 {
-        //     if interpreter.paused {
-        //         break;
-        //     }
-
-        //     interpreter.step();
-        //     println!(
-        //         "pc = {}, {:?}",
-        //         interpreter.instruction_counter,
-        //         interpreter.group_state.puzzle_states[0].decode(
-        //             &b_facelets,
-        //             &PermuteCube::new_from_effect(&arch, 0, vec![(0, U512::ONE)])
-        //         ),
-        //     );
-        // }
 
         assert!(matches!(
             interpreter.step_until_halt(),
@@ -780,7 +650,7 @@ mod tests {
         ));
 
         let expected_output = [
-            "Number to modulus:",
+            "Number to modulus",
             "A is now 133",
             "A is now 120",
             "A is now 107",

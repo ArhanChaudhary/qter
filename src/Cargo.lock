@@ -222,6 +222,7 @@ dependencies = [
 name = "interpreter"
 version = "0.1.0"
 dependencies = [
+ "compiler",
  "internment",
  "qter_core",
 ]

@@ -187,7 +187,7 @@ mod tests {
 
             loop:
                 add 1 a
-                print a What da heck
+                print What da heck a
                 solved-goto a loop
 
                 add 89 b
@@ -196,7 +196,7 @@ mod tests {
 
             over:
 
-                halt b Poggers
+                halt Poggers b
         ";
 
         let parsed = match parse(code, &|_| unreachable!(), false) {
