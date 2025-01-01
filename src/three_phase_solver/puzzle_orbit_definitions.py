@@ -35,7 +35,10 @@ def cube(N):
         )
         even_parity_constraints.append(
             EvenParityConstraint(
-                orbit_names=("edges", "corners"),
+                orbit_names=(
+                    "edges",
+                    "corners",
+                ),
             ),
         )
 
@@ -51,7 +54,11 @@ def cube(N):
             )
             even_parity_constraints.append(
                 EvenParityConstraint(
-                    orbit_names=("corners", f"wings{c2}", f"+centers{c2}"),
+                    orbit_names=(
+                        "corners",
+                        f"wings{c2}",
+                        f"+centers{c2}",
+                    ),
                 ),
             )
 
@@ -80,7 +87,10 @@ def cube(N):
                 )
                 even_parity_constraints.append(
                     EvenParityConstraint(
-                        orbit_names=("corners", f"xcenters{c1}"),
+                        orbit_names=(
+                            "corners",
+                            f"xcenters{c1}",
+                        ),
                     ),
                 )
 
@@ -128,7 +138,7 @@ def minx(N):
     # all piece types on the minxes must have even parity since every move induces only 5-cycles
     even_parity_constraints.append(
         EvenParityConstraint(
-            orbit_names=("corners"),
+            orbit_names=("corners",),
         ),
     )
 
@@ -146,7 +156,7 @@ def minx(N):
         )
         even_parity_constraints.append(
             EvenParityConstraint(
-                orbit_names=("edges"),
+                orbit_names=("edges",),
             ),
         )
 
@@ -161,7 +171,7 @@ def minx(N):
             )
             even_parity_constraints.append(
                 EvenParityConstraint(
-                    orbit_names=(f"+centers{c2}"),
+                    orbit_names=(f"+centers{c2}",),
                 ),
             )
 
@@ -176,7 +186,7 @@ def minx(N):
         )
         even_parity_constraints.append(
             EvenParityConstraint(
-                orbit_names=(f"wings{w}"),
+                orbit_names=(f"wings{w}",),
             ),
         )
 
@@ -194,7 +204,7 @@ def minx(N):
                 )
                 even_parity_constraints.append(
                     EvenParityConstraint(
-                        orbit_names=(f"xcenters{c1}"),
+                        orbit_names=(f"xcenters{c1}",),
                     ),
                 )
 
@@ -209,7 +219,7 @@ def minx(N):
                 )
                 even_parity_constraints.append(
                     EvenParityConstraint(
-                        orbit_names=(f"obliques{c1};{c2}"),
+                        orbit_names=(f"obliques{c1};{c2}",),
                     ),
                 )
 
