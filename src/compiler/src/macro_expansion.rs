@@ -58,7 +58,7 @@ fn expand_block(
         .flat_map(|v| {
             let id = v.1.unwrap();
 
-            let block_info = info.block_info.get_mut(&id).unwrap();
+            let block_info = info.block_info.0.get_mut(&id).unwrap();
 
             let span = v.span().to_owned();
             let instruction = v.into_inner();

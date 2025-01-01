@@ -5,6 +5,7 @@ use lua::LuaMacros;
 use parsing::{parse, Rule};
 use pest::error::Error;
 use qter_core::{architectures::Architecture, Int, Program, WithSpan, U};
+use strip_expanded::strip_expanded;
 
 use crate::macro_expansion::expand;
 
@@ -12,6 +13,7 @@ mod builtin_macros;
 mod lua;
 mod macro_expansion;
 mod parsing;
+mod strip_expanded;
 
 pub fn compile(
     qat: Arc<str>,
@@ -21,7 +23,7 @@ pub fn compile(
 
     let expanded = expand(parsed)?;
 
-    todo!()
+    strip_expanded(expanded)
 }
 
 #[derive(Clone, Debug)]
@@ -251,28 +253,16 @@ struct BlockInfo {
     labels: Vec<Label>,
 }
 
-#[derive(Clone, Debug)]
-struct ExpansionInfo {
-    // Each block gets an ID and `block_parent` maps a block ID to it's parent
-    // The global scope is block zero and if the block/label hasn't been expanded its ID is None
-    block_counter: usize,
-    block_info: HashMap<BlockID, BlockInfo>,
-    /// Map (file contents, macro name) to a macro
-    macros: HashMap<(ArcIntern<String>, ArcIntern<String>), WithSpan<Macro>>,
-    /// Map each (file contents, macro name) to the file that it's in
-    available_macros: HashMap<(ArcIntern<String>, ArcIntern<String>), ArcIntern<String>>,
-    /// Each file has its own LuaMacros; use the file contents as the key
-    lua_macros: HashMap<ArcIntern<String>, LuaMacros>,
-}
+#[derive(Debug, Clone)]
+struct BlockInfoTracker(HashMap<BlockID, BlockInfo>);
 
-impl ExpansionInfo {
-    fn get_register(
-        &self,
-        name: WithSpan<ArcIntern<String>>,
-        mut from: BlockID,
-    ) -> Option<RegisterReference> {
+impl BlockInfoTracker {
+    fn get_register(&self, reference: &RegisterReference) -> Option<(RegisterReference, &Cube)> {
+        let mut from = reference.block;
+        let name = reference.name.to_owned();
+
         loop {
-            let info = self.block_info.get(&from)?;
+            let info = self.0.get(&from)?;
             let decl = info.registers.as_ref()?;
 
             for cube in &decl.cubes {
@@ -282,14 +272,14 @@ impl ExpansionInfo {
                         order: _,
                     } => {
                         if *name == **found_name {
-                            return Some(RegisterReference { block: from, name });
+                            return Some((RegisterReference { block: from, name }, cube));
                         }
                     }
                     Cube::Real { architectures } => {
                         for (names, _) in architectures {
                             for found_name in names {
                                 if *name == **found_name {
-                                    return Some(RegisterReference { block: from, name });
+                                    return Some((RegisterReference { block: from, name }, cube));
                                 }
                             }
                         }
@@ -301,20 +291,26 @@ impl ExpansionInfo {
         }
     }
 
-    fn get_label(&self, reference: &LabelReference) -> Option<Label> {
+    fn label_scope(&self, reference: &LabelReference) -> Option<LabelReference> {
         let mut current = reference.block;
 
         loop {
-            let info = self.block_info.get(&current)?;
+            let info = self.0.get(&current)?;
 
             for label in &info.labels {
                 if label.name == reference.name {
                     if let Some(available_in) = &label.available_in_blocks {
                         if available_in.contains(&reference.block) {
-                            return Some(label.to_owned());
+                            return Some(LabelReference {
+                                name: ArcIntern::clone(&reference.name),
+                                block: current,
+                            });
                         }
                     } else {
-                        return Some(label.to_owned());
+                        return Some(LabelReference {
+                            name: ArcIntern::clone(&reference.name),
+                            block: current,
+                        });
                     };
                 }
             }
@@ -322,6 +318,20 @@ impl ExpansionInfo {
             current = info.parent?;
         }
     }
+}
+
+#[derive(Clone, Debug)]
+struct ExpansionInfo {
+    // Each block gets an ID and `block_parent` maps a block ID to it's parent
+    // The global scope is block zero and if the block/label hasn't been expanded its ID is None
+    block_counter: usize,
+    block_info: BlockInfoTracker,
+    /// Map (file contents, macro name) to a macro
+    macros: HashMap<(ArcIntern<String>, ArcIntern<String>), WithSpan<Macro>>,
+    /// Map each (file contents, macro name) to the file that it's in
+    available_macros: HashMap<(ArcIntern<String>, ArcIntern<String>), ArcIntern<String>>,
+    /// Each file has its own LuaMacros; use the file contents as the key
+    lua_macros: HashMap<ArcIntern<String>, LuaMacros>,
 }
 
 #[derive(Clone, Debug)]
@@ -338,6 +348,6 @@ enum ExpandedCode {
 
 #[derive(Clone, Debug)]
 struct Expanded {
-    block_info: HashMap<BlockID, BlockInfo>,
+    block_info: BlockInfoTracker,
     code: Vec<WithSpan<ExpandedCode>>,
 }

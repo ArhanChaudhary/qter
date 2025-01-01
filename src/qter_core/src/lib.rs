@@ -170,7 +170,6 @@ impl<T> WithSpan<T> {
 /// Represents a sequence of moves to apply to a cube in the `Program`
 #[derive(Clone, Debug)]
 pub struct PermuteCube {
-    cube_idx: usize,
     group: Arc<PermutationGroup>,
     permutation: Permutation,
     generators: Vec<ArcIntern<String>>,
@@ -181,11 +180,7 @@ impl PermuteCube {
     /// Create a `PermuteCube` from what values it should add to which registers.
     ///
     /// `effect` is a list of tuples of register indices and how much to add to add to them.
-    pub fn new_from_effect(
-        arch: &Architecture,
-        cube_idx: usize,
-        effect: Vec<(usize, Int<U>)>,
-    ) -> PermuteCube {
+    pub fn new_from_effect(arch: &Architecture, effect: Vec<(usize, Int<U>)>) -> PermuteCube {
         let mut permutation = arch.group().identity();
 
         let mut generators = Vec::new();
@@ -209,7 +204,6 @@ impl PermuteCube {
         PermuteCube {
             permutation,
             generators,
-            cube_idx,
             group: arch.group_arc(),
             chromatic_orders: OnceCell::new(),
         }
@@ -218,7 +212,6 @@ impl PermuteCube {
     /// Create a `PermuteCube` instance from a list of generators
     pub fn new_from_generators(
         group: Arc<PermutationGroup>,
-        cube_idx: usize,
         generators: Vec<ArcIntern<String>>,
     ) -> Result<PermuteCube, ArcIntern<String>> {
         let mut permutation = group.identity();
@@ -226,7 +219,6 @@ impl PermuteCube {
         group.compose_generators_into(&mut permutation, generators.iter())?;
 
         Ok(PermuteCube {
-            cube_idx,
             group,
             permutation,
             generators,
@@ -237,11 +229,6 @@ impl PermuteCube {
     /// Get the underlying permutation of the `PermuteCube` instance
     pub fn permutation(&self) -> &Permutation {
         &self.permutation
-    }
-
-    /// Get the index of the cube that this is intented to be applied to
-    pub fn cube_idx(&self) -> usize {
-        self.cube_idx
     }
 
     /// Returns a list of generators that when composed, give the same result as applying `.permutation()`
@@ -319,7 +306,10 @@ pub enum Instruction {
         register_idx: usize,
         amount: Int<U>,
     },
-    PermuteCube(PermuteCube),
+    PermuteCube {
+        cube_idx: usize,
+        permutation: PermuteCube,
+    },
 }
 
 /// A qter program

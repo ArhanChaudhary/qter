@@ -421,9 +421,12 @@ impl Interpreter {
                     amt: *amount,
                 }
             }
-            Instruction::PermuteCube(permute_cube) => {
+            Instruction::PermuteCube {
+                permutation: permute_cube,
+                cube_idx,
+            } => {
                 self.group_state
-                    .compose_into(permute_cube.cube_idx(), permute_cube.permutation());
+                    .compose_into(*cube_idx, permute_cube.permutation());
 
                 self.instruction_counter += 1;
 
@@ -514,7 +517,6 @@ mod tests {
 
         let permutation = PermuteCube::new_from_generators(
             Arc::clone(&group.group),
-            0,
             vec![ArcIntern::from_ref("U")],
         )
         .unwrap();
@@ -554,8 +556,8 @@ mod tests {
 
         println!("{b_facelets:?}");
 
-        let a_permutation = PermuteCube::new_from_effect(&arch, 0, vec![(0, Int::one())]);
-        let b_permutation = PermuteCube::new_from_effect(&arch, 0, vec![(1, Int::one())]);
+        let a_permutation = PermuteCube::new_from_effect(&arch, vec![(0, Int::one())]);
+        let b_permutation = PermuteCube::new_from_effect(&arch, vec![(1, Int::one())]);
 
         let mut cube = Puzzle::initialize(Arc::clone(&group.group));
 
@@ -632,11 +634,11 @@ mod tests {
         let b_facelets = arch.registers()[0].signature_facelets();
 
         let a_gen = RegisterGenerator::Puzzle {
-            generator: PermuteCube::new_from_effect(&arch, 0, vec![(1, Int::one())]),
+            generator: PermuteCube::new_from_effect(&arch, vec![(1, Int::one())]),
             facelets: a_facelets.to_owned(),
         };
         let b_gen = RegisterGenerator::Puzzle {
-            generator: PermuteCube::new_from_effect(&arch, 0, vec![(0, Int::one())]),
+            generator: PermuteCube::new_from_effect(&arch, vec![(0, Int::one())]),
             facelets: b_facelets.to_owned(),
         };
 
@@ -669,11 +671,10 @@ mod tests {
                 register_idx: 0,
             },
             // 2
-            Instruction::PermuteCube(PermuteCube::new_from_effect(
-                &arch,
-                0,
-                vec![(b_idx, to_modulus)],
-            )),
+            Instruction::PermuteCube {
+                permutation: PermuteCube::new_from_effect(&arch, vec![(b_idx, to_modulus)]),
+                cube_idx: 0,
+            },
             // 3; decrement:
             Instruction::SolvedGoto {
                 instruction_idx: 1, // loop
@@ -687,11 +688,13 @@ mod tests {
                 register_idx: 0,
             },
             // 5
-            Instruction::PermuteCube(PermuteCube::new_from_effect(
-                &arch,
-                0,
-                vec![(a_idx, a_minus_1), (b_idx, b_minus_1)],
-            )),
+            Instruction::PermuteCube {
+                permutation: PermuteCube::new_from_effect(
+                    &arch,
+                    vec![(a_idx, a_minus_1), (b_idx, b_minus_1)],
+                ),
+                cube_idx: 0,
+            },
             // 6
             Instruction::Goto { instruction_idx: 3 }, // decrement
             // 7; fix:
@@ -701,19 +704,20 @@ mod tests {
                 register_idx: 0,
             },
             // 8
-            Instruction::PermuteCube(PermuteCube::new_from_effect(
-                &arch,
-                0,
-                vec![(a_idx, a_minus_1), (b_idx, b_minus_1)],
-            )),
+            Instruction::PermuteCube {
+                permutation: PermuteCube::new_from_effect(
+                    &arch,
+                    vec![(a_idx, a_minus_1), (b_idx, b_minus_1)],
+                ),
+                cube_idx: 0,
+            },
             // 9
             Instruction::Goto { instruction_idx: 7 }, // fix
             // 10; finalize:
-            Instruction::PermuteCube(PermuteCube::new_from_effect(
-                &arch,
-                0,
-                vec![(a_idx, to_modulus)],
-            )),
+            Instruction::PermuteCube {
+                permutation: PermuteCube::new_from_effect(&arch, vec![(a_idx, to_modulus)]),
+                cube_idx: 0,
+            },
             // 11
             Instruction::Halt {
                 message: "The modulus is".to_owned(),

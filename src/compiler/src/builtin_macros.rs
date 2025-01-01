@@ -15,11 +15,11 @@ fn expect_reg(
     block: BlockID,
 ) -> Result<RegisterReference, Box<Error<Rule>>> {
     match &*reg {
-        Value::Word(name) => match syntax.get_register(
-            WithSpan::new(ArcIntern::clone(name), reg.span().to_owned()),
+        Value::Word(name) => match syntax.block_info.get_register(&RegisterReference {
             block,
-        ) {
-            Some(v) => Ok(v),
+            name: WithSpan::new(ArcIntern::clone(name), reg.span().to_owned()),
+        }) {
+            Some(v) => Ok(v.0),
             None => {
                 return Err(Box::new(Error::new_from_span(
                     ErrorVariant::CustomError {

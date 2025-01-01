@@ -1,4 +1,4 @@
-use crate::{builtin_macros::builtin_macros, ExpansionInfo};
+use crate::{builtin_macros::builtin_macros, BlockInfoTracker, ExpansionInfo};
 use std::{collections::HashMap, sync::{Arc, LazyLock}};
 
 use internment::ArcIntern;
@@ -53,7 +53,7 @@ pub fn parse(qat: &str, find_import: &impl Fn(&str) -> Result<ArcIntern<String>,
 
     let expansion_info = ExpansionInfo {
         
-block_counter: 1, block_info: HashMap::new(), macros: HashMap::new(), available_macros: HashMap::new(), lua_macros: HashMap::new()    };
+block_counter: 1, block_info: BlockInfoTracker(HashMap::new()), macros: HashMap::new(), available_macros: HashMap::new(), lua_macros: HashMap::new()    };
     let code = Vec::new();
 
     let mut syntax = ParsedSyntax { expansion_info, code };
@@ -101,7 +101,7 @@ block_counter: 1, block_info: HashMap::new(), macros: HashMap::new(), available_
         }
     }
 
-    syntax.expansion_info.block_info.insert(BlockID(0), BlockInfo { parent: None, children: vec![], registers: None, defines: vec![], labels: vec![] });
+    syntax.expansion_info.block_info.0.insert(BlockID(0), BlockInfo { parent: None, children: vec![], registers: None, defines: vec![], labels: vec![] });
 
     syntax.expansion_info.lua_macros.insert(file, lua);
 
@@ -114,10 +114,10 @@ fn merge_files(importer: &mut ParsedSyntax, importer_contents: ArcIntern<String>
 
     let mut max_block = 0;
 
-    for (id, block) in importee.expansion_info.block_info {
+    for (id, block) in importee.expansion_info.block_info.0 {
         max_block = max_block.max(id.0);
 
-        importer.expansion_info.block_info.insert(BlockID(id.0 + block_offset), block);
+        importer.expansion_info.block_info.0.insert(BlockID(id.0 + block_offset), block);
     }
 
     importer.expansion_info.macros.extend(importee.expansion_info.macros);
@@ -169,6 +169,8 @@ fn parse_registers(pair: Pair<'_, Rule>) -> Result<RegisterDecl, Box<Error<Rule>
             rule => unreachable!("{rule:?}, {}", decl.as_str()),
         });
     }
+
+    // TODO: Verify that the registers have unique names
 
     Ok(RegisterDecl { cubes, block: None })
 }
