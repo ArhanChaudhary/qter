@@ -2,7 +2,7 @@
     A, B, C, D <- 3x3 builtin (30, 18, 10, 9)
 }
 
-    input "Which Fibonacci number to calculate: " D
+    input "Which Fibonacci number to calculate:" D
     solved-goto D do_if_1
     goto after_if_1
 do_if_1:
@@ -14,7 +14,7 @@ continue_1:
     solved-goto D do_if_2
     goto after_if_2
 do_if_2:
-    halt "The number is: " B
+    halt "The number is" B
 after_if_2:
 continue_2:
     solved-goto B break_2
@@ -27,7 +27,7 @@ break_2:
     solved-goto D do_if_3
     goto after_if_3
 do_if_3:
-    halt "The number is: " A
+    halt "The number is" A
 after_if_3:
 continue_3:
     solved-goto A break_3
@@ -40,7 +40,7 @@ break_3:
     solved-goto D do_if_4
     goto after_if_4
 do_if_4:
-    halt "The number is: " C
+    halt "The number is" C
 after_if_4:
 continue_4:
     solved-goto C continue_1
@@ -48,4 +48,3 @@ continue_4:
     add B 1
     add A 1
     goto continue_4
-break_1:

@@ -6,7 +6,7 @@
     ($R1:reg $R2:reg $R3:reg $counter:reg) => {
         dec $counter
         if solved $counter {
-            halt "The number is: " $R1
+            halt "The number is" $R1
         }
         while not-solved $R1 {
             dec $R1
@@ -16,7 +16,7 @@
     }
 }
 
-input "Which Fibonacci number to calculate: " D
+input "Which Fibonacci number to calculate:" D
 if solved D {
     halt "The number is: 0"
 }

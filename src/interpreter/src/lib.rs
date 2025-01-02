@@ -601,7 +601,7 @@ mod tests {
             .registers {
                 B, A ← 3x3 builtin (24, 210)
             }
-        
+
                 input \"Number to modulus:\" A
             loop:
                 print \"A is now\" A
@@ -686,5 +686,119 @@ mod tests {
         {
             assert_eq!(message, expected);
         }
+    }
+
+    #[test]
+    fn fib() {
+        // TODO: a test directory of qat files?
+        let code = "
+            .registers {
+                D, C, B, A ← 3x3 builtin (9, 10, 18, 30)
+            }
+
+                input \"Which Fibonacci number to calculate:\" D
+                solved-goto D do_if_1
+                goto after_if_1
+            do_if_1:
+                halt \"The number is\" A
+            after_if_1:
+                add 1 B
+            continue_1:
+                add 8 D
+                solved-goto D do_if_2
+                goto after_if_2
+            do_if_2:
+                halt \"The number is\" B
+            after_if_2:
+            continue_2:
+                solved-goto B break_2
+                add 17 B
+                add 1 A
+                add 1 C
+                goto continue_2
+            break_2:
+                add 8 D
+                solved-goto D do_if_3
+                goto after_if_3
+            do_if_3:
+                halt \"The number is\" A
+            after_if_3:
+            continue_3:
+                solved-goto A break_3
+                add 29 A
+                add 1 C
+                add 1 B
+                goto continue_3
+            break_3:
+                add 8 D
+                solved-goto D do_if_4
+                goto after_if_4
+            do_if_4:
+                halt \"The number is\" C
+            after_if_4:
+            continue_4:
+                solved-goto C break_4
+                add 9 C
+                add 1 B
+                add 1 A
+                goto continue_4
+            break_4:
+                goto continue_1
+        ";
+
+        let program = match compile(code, |_| unreachable!()) {
+            Ok(v) => v,
+            Err(e) => panic!("{e}"),
+        };
+
+        let mut interpreter = Interpreter::new(program);
+
+        assert!(matches!(
+            interpreter.step_until_halt(),
+            PausedState::Input {
+                message: "Which Fibonacci number to calculate:",
+                register: RegisterGenerator::Puzzle {
+                    generator: _,
+                    facelets: _
+                },
+                register_idx: 0,
+            }
+        ));
+
+        interpreter.give_input(Int::from(8_u64));
+
+        assert!(matches!(
+            interpreter.step_until_halt(),
+            PausedState::Halt {
+                message: "The number is",
+                register: RegisterGenerator::Puzzle {
+                    generator: _,
+                    facelets: _
+                },
+                register_idx: 0,
+            }
+        ));
+
+        let expected_output = [
+            "Which Fibonacci number to calculate:",
+            "The number is 21",
+        ];
+
+        assert_eq!(
+            expected_output.len(),
+            interpreter.messages().len(),
+            "{:?}",
+            interpreter.messages()
+        );
+
+        for (message, expected) in interpreter
+            .messaging
+            .messages
+            .iter()
+            .zip(expected_output.iter())
+        {
+            assert_eq!(message, expected);
+        }
+
     }
 }

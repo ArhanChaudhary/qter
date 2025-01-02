@@ -1,7 +1,7 @@
 Puzzles
 A: 3x3
 
-1  | input "Which Fibonacci number to calculate: "
+1  | input "Which Fibonacci number to calculate:"
            B2 U2 L F' R B L2 D2 B R' F L
            max-input 8
 2  | solved-goto UFR 4
@@ -11,7 +11,7 @@ A: 3x3
 6  | L' F' R B' D2 L2 B' R' F L' U2 B2
 7  | solved-goto UFR 9
 8  | goto 10
-9  | halt "The number is: "
+9  | halt "The number is"
           L D B L' F L B' L2 F' L D'
           counting-until DL DFL
 10 | solved-goto DL DFL 13
@@ -20,7 +20,7 @@ A: 3x3
 13 | L' F' R B' D2 L2 B' R' F L' U2 B2
 14 | solved-goto UFR 16
 15 | goto 17
-16 | halt "The number is: "
+16 | halt "The number is"
           F2 L2 U2 D' R U' B L' B L' U'
           counting-until FR DRF
 17 | solved-goto FR DRF 20
@@ -30,7 +30,7 @@ A: 3x3
 20 | L' F' R B' D2 L2 B' R' F L' U2 B2
 21 | solved-goto UFR 23
 22 | goto 24
-23 | halt "The number is: "
+23 | halt "The number is"
           U L' R' F' U' F' L' F2 L U R
           counting-until UF
 24 | solved-goto UF 6
