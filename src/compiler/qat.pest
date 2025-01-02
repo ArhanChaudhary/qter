@@ -3,10 +3,9 @@ COMMENT    = _{ ("--[[" ~ (!"--]]" ~ ANY)* ~ "--]]") | ("--" ~ (!"\n" ~ ANY)* ~ 
 
 program = { "\n"* ~ statement ~ ("\n"+ ~ statement)* ~ "\n"* ~ EOI }
 
-special_char = { "lua" | "{" | "}" | "." | ":" | "$" | "--" | "," | "<-" | "←" | "\n" | "(" | ")" | "!" | WHITESPACE }
+special_char = { "lua" | "{" | "}" | "." | ":" | "$" | "--" | "," | "<-" | "←" | "\n" | "(" | ")" | "!" | "\"" | WHITESPACE }
 
-// TODO: Allow arbitrary quoted characters to be an identifier
-ident = @{ !(number ~ WHITESPACE) ~ (!special_char ~ ANY)+ }
+ident = @{ (!(number ~ WHITESPACE) ~ (!special_char ~ ANY)+) | ("\"" ~ (!"\"" ~ ANY)* ~ "\"")  }
 tag_ident = @{ "!"? ~ ident }
 
 number = { ASCII_DIGIT+ }

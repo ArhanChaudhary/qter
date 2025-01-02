@@ -68,10 +68,10 @@ fn print_like(
     mut args: WithSpan<Vec<WithSpan<Value>>>,
     block: BlockID,
 ) -> Result<(RegisterReference, WithSpan<String>), Box<Error<Rule>>> {
-    if args.is_empty() {
+    if args.len() != 2 {
         return Err(Box::new(Error::new_from_span(
             ErrorVariant::CustomError {
-                message: "Expected some arguments, found none".to_string(),
+                message: format!("Expected two arguments, found {}", args.len()),
             },
             args.span().pest(),
         )));
@@ -79,36 +79,19 @@ fn print_like(
 
     let register = expect_reg(args.pop().unwrap(), syntax, block)?;
 
-    args.reverse();
-
-    let span = args.span().to_owned();
-
-    let message = args
-        .into_inner()
-        .into_iter()
-        .rev()
-        .map(|v| match &*v {
-            Value::Word(word) => Ok(WithSpan::new(String::clone(word), v.span().to_owned())),
-            _ => Err(Box::new(Error::new_from_span(
+    let message = args.pop().unwrap();
+    let message_span = message.span().to_owned();
+    let message = match message.into_inner() {
+        Value::Word(v) => WithSpan::new(v.trim_matches('"').to_owned(), message_span),
+        _ => {
+            return Err(Box::new(Error::new_from_span(
                 ErrorVariant::CustomError {
-                    message: "Expected an identifier".to_string(),
+                    message: "Expected a message".to_string(),
                 },
-                v.span().pest(),
-            ))),
-        })
-        .reduce(|a, v| {
-            let mut a = a?;
-            let v = v?;
-
-            a.push(' ');
-            a.push_str(&v);
-
-            let span = a.span().to_owned().merge(v.span());
-
-            Ok(WithSpan::new(a.into_inner(), span))
-        })
-        .transpose()?
-        .unwrap_or_else(|| WithSpan::new(String::new(), span));
+                message_span.pest(),
+            )));
+        }
+    };
 
     Ok((register, message))
 }

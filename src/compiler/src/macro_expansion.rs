@@ -187,7 +187,7 @@ mod tests {
 
             loop:
                 add 1 a
-                print What da heck a
+                print \"What da heck\" a
                 solved-goto a loop
 
                 add 89 b

@@ -602,9 +602,9 @@ mod tests {
                 B, A ← 3x3 builtin (24, 210)
             }
         
-                input Number to modulus A
+                input \"Number to modulus:\" A
             loop:
-                print A is now A
+                print \"A is now\" A
                 add 13 B
             decrement:
                 solved-goto B loop
@@ -619,7 +619,7 @@ mod tests {
                 goto fix
             finalize:
                 add 13 A
-                halt The modulus is A
+                halt \"The modulus is\" A
         ";
 
         let program = match compile(code, |_| unreachable!()) {
@@ -632,7 +632,7 @@ mod tests {
         assert!(matches!(
             interpreter.step_until_halt(),
             PausedState::Input {
-                message: "Number to modulus",
+                message: "Number to modulus:",
                 register: RegisterGenerator::Puzzle {
                     generator: _,
                     facelets: _
@@ -656,7 +656,7 @@ mod tests {
         ));
 
         let expected_output = [
-            "Number to modulus",
+            "Number to modulus:",
             "A is now 133",
             "A is now 120",
             "A is now 107",
