@@ -702,9 +702,9 @@ mod tests {
             do_if_1:
                 halt \"The number is\" A
             after_if_1:
-                add 1 B
+                add B 1
             continue_1:
-                add 8 D
+                add D 8
                 solved-goto D do_if_2
                 goto after_if_2
             do_if_2:
@@ -712,12 +712,12 @@ mod tests {
             after_if_2:
             continue_2:
                 solved-goto B break_2
-                add 17 B
-                add 1 A
-                add 1 C
+                add B 17
+                add A 1
+                add C 1
                 goto continue_2
             break_2:
-                add 8 D
+                add D 8
                 solved-goto D do_if_3
                 goto after_if_3
             do_if_3:
@@ -725,12 +725,12 @@ mod tests {
             after_if_3:
             continue_3:
                 solved-goto A break_3
-                add 29 A
-                add 1 C
-                add 1 B
+                add A 29
+                add C 1
+                add B 1
                 goto continue_3
             break_3:
-                add 8 D
+                add D 8
                 solved-goto D do_if_4
                 goto after_if_4
             do_if_4:
@@ -738,9 +738,9 @@ mod tests {
             after_if_4:
             continue_4:
                 solved-goto C break_4
-                add 9 C
-                add 1 B
-                add 1 A
+                add C 9
+                add B 1
+                add A 1
                 goto continue_4
             break_4:
                 goto continue_1
@@ -779,10 +779,7 @@ mod tests {
             }
         ));
 
-        let expected_output = [
-            "Which Fibonacci number to calculate:",
-            "The number is 21",
-        ];
+        let expected_output = ["Which Fibonacci number to calculate:", "The number is 21"];
 
         assert_eq!(
             expected_output.len(),
@@ -799,6 +796,5 @@ mod tests {
         {
             assert_eq!(message, expected);
         }
-
     }
 }
