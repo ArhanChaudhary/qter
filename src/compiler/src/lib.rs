@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity)]
 use std::{collections::HashMap, sync::Arc};
 
 use internment::ArcIntern;

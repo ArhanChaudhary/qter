@@ -1,0 +1,1 @@
+ignore-interior-mutability = [ "qter_core::WithSpan" ]

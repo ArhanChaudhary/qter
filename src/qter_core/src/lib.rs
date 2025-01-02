@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 use std::{
     cell::OnceCell,
     ops::{Deref, DerefMut},
@@ -164,6 +166,20 @@ impl<T> WithSpan<T> {
 
     pub fn line(&self) -> usize {
         self.span().line()
+    }
+}
+
+impl<T: PartialEq> PartialEq for WithSpan<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl<T: Eq> Eq for WithSpan<T> {}
+
+impl<T: core::hash::Hash> core::hash::Hash for WithSpan<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value.hash(state)
     }
 }
 

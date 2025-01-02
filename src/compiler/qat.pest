@@ -1,4 +1,4 @@
-WHITESPACE = _{ " " }
+WHITESPACE = _{ " " | "\t" }
 COMMENT    = _{ ("--[[" ~ (!"--]]" ~ ANY)* ~ "--]]") | ("--" ~ (!"\n" ~ ANY)* ~ "\n") }
 
 program = { "\n"* ~ statement ~ ("\n"+ ~ statement)* ~ "\n"* ~ EOI }

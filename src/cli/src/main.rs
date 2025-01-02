@@ -26,6 +26,11 @@ enum Commands {
         /// Which file to interpret; must be a .qat or .q file
         file: PathBuf,
     },
+    /// Evaluate unit tests in a QAT program
+    Test {
+        /// Which file to test; must be a .qat file
+        file: PathBuf,
+    },
 }
 
 fn main() -> color_eyre::Result<()> {
@@ -96,6 +101,7 @@ fn main() -> color_eyre::Result<()> {
             }
         }
         Commands::Debug { file: _ } => todo!(),
+        Commands::Test { file: _ } => todo!(),
     }
 
     Ok(())

@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity)]
 use std::{collections::VecDeque, sync::Arc};
 
 use qter_core::{
