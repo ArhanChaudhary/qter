@@ -17,7 +17,6 @@ import math
 import operator
 import functools
 import timeit
-import line_profiler
 import puzzle_orbit_definitions
 from common_types import (
     OrientationStatus,
@@ -452,7 +451,6 @@ def recursive_shared_cycle_combinations(
 # optimizations that make this faster. only find the highest order
 # product cycle dont care abt duplicates
 @functools.cache
-@line_profiler.profile
 def highest_order_cycles_from_cubie_counts(
     cycle_cubie_counts, puzzle_orbit_definition, even_parity_constraints_helper
 ):
@@ -488,8 +486,6 @@ def highest_order_cycles_from_cubie_counts(
                     share.append(False)
                 case ShareState.MUST_SHARE_ORIENTATION:
                     share.append(True)
-        # TODO(pri 1/5): benchmark adding highest
-        # number to stack first and then using a fibonacci heap
         all_reduced_integer_partitions = [
             reduced_integer_partitions(
                 cycle_cubie_counts[i],
@@ -721,7 +717,7 @@ def cycle_combination_objs_stats(cycle_combination_objs):
 
 
 def main():
-    a = timeit.default_timer()
+    start = timeit.default_timer()
     # cycle_combinations = optimal_cycle_combinations(
     #     puzzle_orbit_definition=puzzle_orbit_definitions.PUZZLE_4x4,
     #     num_cycles=1,
@@ -766,8 +762,7 @@ def main():
                 orientation_status=OrientationStatus.CannotOrient(),
             ),
         ),
-        even_parity_constraints=(
-        ),
+        even_parity_constraints=(),
     )
 
     cycle_combinations = highest_order_cycles_from_cubie_counts(
@@ -777,8 +772,7 @@ def main():
             puzzle_orbit_definition
         ),
     )
-    b = timeit.default_timer()
-    print(b - a)
+    print(timeit.default_timer() - start)
     print(recursive_shared_cycle_combinations.cache_info())
     print(highest_order_cycles_from_cubie_counts.cache_info())
     print(reduced_integer_partitions.cache_info())

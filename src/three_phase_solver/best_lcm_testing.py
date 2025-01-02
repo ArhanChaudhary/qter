@@ -1,7 +1,11 @@
 from timeit import default_timer
-import math
 import heapq
+import math
 import operator
+
+# outputs of reduced_integer_partitions on 8, 12, and 24
+# a suffix with `constraint` indicates that partitions must
+# have equal signatures for the lesser LCM to be filtered out
 
 edges_constraint = [
     (120, (3, 4, 5)),
@@ -151,47 +155,80 @@ s24_constraint = [
     (23, (1, 23)),
 ]
 
-_6x6 = [
-    corners_constraint,
-    s24_noconstraint,
-    s24_noconstraint,
-    s24_noconstraint,
-    s24_noconstraint,
-    s24_noconstraint,
-    s24_noconstraint,
-]
+# the first element of the tuple is the index where everything then and after
+# wards are identical orbits (s24). This is used to enforce a constraint that
+# the partitions must be in ascending order for these orbits to avoid duplicates
 
 
-_5x5 = [
-    edges_constraint,
-    corners_constraint,
-    s24_constraint,
-    s24_constraint,
-    s24_constraint,
-]
+_3x3 = (
+    2,
+    [
+        edges_constraint,
+        corners_constraint,
+    ],
+)
 
-_4x4 = [
-    corners_constraint,
-    s24_noconstraint,
-    s24_constraint,
-]
+_4x4 = (
+    1,
+    [
+        corners_constraint,
+        s24_noconstraint,
+        s24_constraint,
+    ],
+)
 
-_3x3 = [
-    edges_constraint,
-    corners_constraint,
-]
+_5x5 = (
+    2,
+    [
+        edges_constraint,
+        corners_constraint,
+        s24_constraint,
+        s24_constraint,
+        s24_constraint,
+    ],
+)
 
 
-def sign(x):
-    return (sum(x) - len(x)) % 2
+_6x6 = (
+    1,
+    [
+        corners_constraint,
+        # these *should* be s24_constraint but it's really slow :(
+        s24_noconstraint,
+        s24_noconstraint,
+        s24_noconstraint,
+        s24_noconstraint,
+        s24_noconstraint,
+        s24_noconstraint,
+    ],
+)
+
+# GOAL: make 7x7 and onwards fast
+
+_7x7 = (
+    2,
+    [
+        edges_constraint,
+        corners_constraint,
+        s24_noconstraint,
+        s24_noconstraint,
+        s24_noconstraint,
+        s24_noconstraint,
+        s24_noconstraint,
+        s24_noconstraint,
+        s24_noconstraint,
+        s24_noconstraint,
+    ],
+)
 
 
-def iterative_process_desc(all_reduced_integer_partitions, g, org=False):
-    c = 0
+# big_cube is unused
+def highest_order_partitions(puzzle, big_cube):
+    identical_index, all_reduced_integer_partitions = puzzle
+    count = 0
     highest_order = -1
     rest_upper_bounds = []
     cycles = []
-    cubie_partition_objs = [None] * len(all_reduced_integer_partitions)
     rest_upper_bound = 1
 
     for lcm_and_partition in map(
@@ -201,69 +238,64 @@ def iterative_process_desc(all_reduced_integer_partitions, g, org=False):
         rest_upper_bound *= lcm_and_partition[0]
 
     heap = []
-    if org:
-        heap.append((len(all_reduced_integer_partitions) - 1, 1, None))
-    else:
-        heapq.heappush(heap, (len(all_reduced_integer_partitions) - 1, 1, 1, None))
+    # NOTE: heapq is not efficient! there are more efficient priority queue
+    # data structures that exist (strict fibonacci heaps) but we use heapq
+    # for simplicity.
+    heapq.heappush(heap, (1, 1, len(all_reduced_integer_partitions) - 1, []))
     while heap:
-        if org:
-            i, running_order, prev_partition = heap.pop()
-        else:
-            p = heapq.heappop(heap)
-            i, _gcd, running_order, prev_partition = p
-        if prev_partition is not None:
-            cubie_partition_objs[i + 1] = prev_partition
+        _, running_order, i, cubie_partition_objs = heapq.heappop(heap)
+
         if i == -1:
-            # if sum(map(sign, cubie_partition_objs)) % 2 != 0:
-            #     continue
             if running_order > highest_order:
                 cycles.clear()
             if running_order < highest_order:
                 continue
             highest_order = running_order
-            cycles.append(cubie_partition_objs.copy())
+            cycles.append(cubie_partition_objs)
             continue
+
         for lcm_and_partition in all_reduced_integer_partitions[i]:
-            c += 1
+            count += 1
             lcm, partition = lcm_and_partition
             rest_upper_bound = running_order * lcm
             if rest_upper_bound * rest_upper_bounds[i] < highest_order:
                 break
             gcd = math.gcd(running_order, lcm)
-            if i > 1 and (
-                gcd != 1 or prev_partition is not None and partition > prev_partition
+            if (
+                # does the current index refer to an identical orbit (s24)
+                i >= identical_index
+                # if so, then enforce p1 < p2 < p3 ... < pn for all partitions
+                # to ensure no duplicates are generated. It is assumed that the
+                # caller will manually permute these identical partitions/
+                # TODO: how should duplicates be handled?
+                and cubie_partition_objs
+                and partition > cubie_partition_objs[0]
             ):
                 continue
-            if org:
-                heap.append((i - 1, rest_upper_bound // gcd, partition))
-            else:
-                heapq.heappush(
-                    heap,
-                    (
-                        i - 1,
-                        gcd,
-                        rest_upper_bound // gcd,
-                        partition,
-                    ),
-                )
-    print("Worst: ", math.prod(map(len, all_reduced_integer_partitions)))
-    print("Actual: ", c)
+            heapq.heappush(
+                heap,
+                (
+                    # adding `gcd` in front makes it faster, but not sure why
+                    gcd,
+                    rest_upper_bound // gcd,
+                    i - 1,
+                    # there are probably more efficient ways to create a new list
+                    # every iteration, but I will leave it like this for the sake
+                    # of not making the code more complicated than it already is
+                    [partition] + cubie_partition_objs,
+                ),
+            )
+    print(f"Took {count} loop iterations")
     return highest_order, cycles
 
-print("NEW:\n")
+
+WRITE_TO_FILE = True
 
 start = default_timer()
-print(iterative_process_desc(_5x5, 1, False))
-print(default_timer() - start)
-start = default_timer()
-print(iterative_process_desc(_6x6, 0, False))
-print(default_timer() - start)
-
-print("\nORG:\n")
-
-start2 = default_timer()
-print(iterative_process_desc(_5x5, 1, True))
-print(default_timer() - start2)
-start2 = default_timer()
-print(iterative_process_desc(_6x6, 0, True))
-print(default_timer() - start2)
+results = highest_order_partitions(_7x7, False)
+print(f"Generated results in {default_timer() - start:.3g}s\n")
+if WRITE_TO_FILE:
+    with open("output.py", "w") as f:
+        f.write(str(results))
+else:
+    print(results)
