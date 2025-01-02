@@ -605,20 +605,20 @@ mod tests {
                 input \"Number to modulus:\" A
             loop:
                 print \"A is now\" A
-                add 13 B
+                add B 13
             decrement:
                 solved-goto B loop
                 solved-goto A fix
-                add 209 A
-                add 23 B
+                add A 209
+                add B 23
                 goto decrement
             fix:
                 solved-goto B finalize
-                add 209 A
-                add 23 B
+                add A 209
+                add B 23
                 goto fix
             finalize:
-                add 13 A
+                add A 13
                 halt \"The modulus is\" A
         ";
 

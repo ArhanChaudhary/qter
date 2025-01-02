@@ -116,8 +116,6 @@ pub fn builtin_macros(
                     )));
                 }
 
-                let reg = expect_reg(args.pop().unwrap(), syntax, block)?;
-
                 let num = args.pop().unwrap();
                 let num = match &*num {
                     Value::Int(int) => WithSpan::new(*int, num.span().to_owned()),
@@ -130,6 +128,8 @@ pub fn builtin_macros(
                         )));
                     }
                 };
+
+                let reg = expect_reg(args.pop().unwrap(), syntax, block)?;
 
                 Ok(vec![Instruction::Code(Code::Primitive(Primitive::Add {
                     amt: num,

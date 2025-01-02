@@ -186,11 +186,11 @@ mod tests {
             }
 
             loop:
-                add 1 a
+                add a 1
                 print \"What da heck\" a
                 solved-goto a loop
 
-                add 89 b
+                add b 89
                 solved-goto b over
                 goto loop
 

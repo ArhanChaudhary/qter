@@ -82,6 +82,7 @@ fn main() -> color_eyre::Result<()> {
                     loop {
                         let mut number = String::new();
                         io::stdin().read_line(&mut number)?;
+                        // TODO: Allow negative input
                         match number.parse::<Int<U>>() {
                             Ok(v) => {
                                 interpreter.give_input(v);
