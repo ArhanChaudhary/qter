@@ -268,7 +268,13 @@ impl Interpreter {
 
     /// Get the current state of the interpreter
     pub fn state(&self) -> State<'_> {
-        let instruction = &self.program.instructions[self.instruction_counter];
+        let idx = if self.instruction_counter >= self.program.instructions.len() {
+            self.program.instructions.len() - 1
+        } else {
+            self.instruction_counter
+        };
+
+        let instruction = &self.program.instructions[idx];
 
         let state_ty = if let Some(message) = &self.messaging.panicked {
             StateTy::Paused(PausedState::Panicked(message))
@@ -298,7 +304,7 @@ impl Interpreter {
 
         State {
             span: instruction.span().to_owned(),
-            instruction: self.instruction_counter,
+            instruction: idx,
             state_ty,
         }
     }

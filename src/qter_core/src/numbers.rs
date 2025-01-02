@@ -7,7 +7,7 @@ use std::{
     str::FromStr,
 };
 
-use bnum::types::I512;
+use bnum::types::{I512, U512};
 
 /// Signed
 pub struct I;
@@ -105,11 +105,22 @@ impl<Signed> Display for NumberOutOfRange<Signed> {
     }
 }
 
-impl<Signed> FromStr for Int<Signed> {
+impl FromStr for Int<I> {
     type Err = bnum::errors::ParseIntError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self::from_inner(s.trim().parse()?))
+    }
+}
+
+impl FromStr for Int<U> {
+    type Err = bnum::errors::ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let num: U512 = s.trim().parse()?;
+        let num: I512 = num.to_string().parse()?;
+
+        Ok(Self::from_inner(num))
     }
 }
 

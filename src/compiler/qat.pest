@@ -5,6 +5,7 @@ program = { "\n"* ~ statement ~ ("\n"+ ~ statement)* ~ "\n"* ~ EOI }
 
 special_char = { "lua" | "{" | "}" | "." | ":" | "$" | "--" | "," | "<-" | "←" | "\n" | "(" | ")" | "!" | WHITESPACE }
 
+// TODO: Allow arbitrary quoted characters to be an identifier
 ident = @{ !(number ~ WHITESPACE) ~ (!special_char ~ ANY)+ }
 tag_ident = @{ "!"? ~ ident }
 
