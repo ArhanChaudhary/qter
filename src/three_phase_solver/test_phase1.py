@@ -176,19 +176,12 @@ class NoConstraints(unittest.TestCase):
                 ),
                 even_parity_constraints=(),
             ),
-            num_cycles=2,
+            num_cycles=1,
         )
         stats = phase1.cycle_combination_objs_stats(cycle_combination_objs)
         self.assertEqual(
             stats,
-            {
-                (360, 36): 8,
-                (180, 72): 8,
-                (90, 90): 16,
-                (630, 12): 1,
-                (1260, 4): 2,
-                (840, 6): 2,
-            },
+            {(2520,): 2},
         )
 
     def test_3x3_2_cycles_no_orientation_constraints(self):

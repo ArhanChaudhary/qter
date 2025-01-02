@@ -17,6 +17,7 @@ import math
 import operator
 import functools
 import timeit
+import line_profiler
 import puzzle_orbit_definitions
 from common_types import (
     OrientationStatus,
@@ -178,12 +179,13 @@ def p_adic_valuation(n, p):
     return exponent
 
 
+@functools.cache
 def sign(partition):
     """
     Calculate the [signature](https://en.wikipedia.org/wiki/Parity_of_a_permutation)
     of a partition, made easy by having all cycle lengths.
     """
-    return (sum(partition) - len(partition)) % 2
+    return sum(partition) - len(partition)
 
 
 def cycle_combination_dominates(this, other):
@@ -263,7 +265,6 @@ def optimal_cycle_combinations(puzzle_orbit_definition, num_cycles, cache_clear=
                     all_cycle_cubie_counts.append(cubie_counts)
                 if continue_outer:
                     continue
-                # TODO (pri 3/5): use heaps and then convert to sorted vec
                 all_cycle_cubie_counts = tuple(
                     sorted(all_cycle_cubie_counts, reverse=True)
                 )
@@ -451,6 +452,7 @@ def recursive_shared_cycle_combinations(
 # optimizations that make this faster. only find the highest order
 # product cycle dont care abt duplicates
 @functools.cache
+@line_profiler.profile
 def highest_order_cycles_from_cubie_counts(
     cycle_cubie_counts, puzzle_orbit_definition, even_parity_constraints_helper
 ):
@@ -671,8 +673,12 @@ def reduced_integer_partitions(
                     not even_parity_constraints_helper.constraint_orbit_flags[
                         orbit_index
                     ]
-                    or sign(curr_partition_obj.partition)
-                    == sign(partition_objs[j].partition)
+                    or (
+                        sign(curr_partition_obj.partition)
+                        + sign(partition_objs[j].partition)
+                    )
+                    % 2
+                    == 0
                 )
             ):
                 dominated[j] = True
@@ -720,11 +726,55 @@ def main():
     #     puzzle_orbit_definition=puzzle_orbit_definitions.PUZZLE_4x4,
     #     num_cycles=1,
     # )
+    puzzle_orbit_definition = PuzzleOrbitDefinition(
+        orbits=(
+            Orbit(
+                name="corners",
+                cubie_count=8,
+                orientation_status=OrientationStatus.CanOrient(
+                    count=3, sum_constraint=OrientationSumConstraint.ZERO
+                ),
+            ),
+            Orbit(
+                name="wings1",
+                cubie_count=24,
+                orientation_status=OrientationStatus.CannotOrient(),
+            ),
+            Orbit(
+                name="wings2",
+                cubie_count=24,
+                orientation_status=OrientationStatus.CannotOrient(),
+            ),
+            Orbit(
+                name="centers1;1",
+                cubie_count=24,
+                orientation_status=OrientationStatus.CannotOrient(),
+            ),
+            Orbit(
+                name="centers1;2",
+                cubie_count=24,
+                orientation_status=OrientationStatus.CannotOrient(),
+            ),
+            Orbit(
+                name="centers2;1",
+                cubie_count=24,
+                orientation_status=OrientationStatus.CannotOrient(),
+            ),
+            Orbit(
+                name="centers2;2",
+                cubie_count=24,
+                orientation_status=OrientationStatus.CannotOrient(),
+            ),
+        ),
+        even_parity_constraints=(
+        ),
+    )
+
     cycle_combinations = highest_order_cycles_from_cubie_counts(
-        cycle_cubie_counts=(12, 8, 24, 24, 24),
-        puzzle_orbit_definition=puzzle_orbit_definitions.PUZZLE_5x5,
+        cycle_cubie_counts=(8, 24, 24, 24, 24, 24, 24),
+        puzzle_orbit_definition=puzzle_orbit_definition,
         even_parity_constraints_helper=EvenParityConstraintsHelper.from_puzzle_orbit_definition(
-            puzzle_orbit_definitions.PUZZLE_5x5
+            puzzle_orbit_definition
         ),
     )
     b = timeit.default_timer()

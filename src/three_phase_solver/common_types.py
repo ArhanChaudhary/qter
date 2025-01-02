@@ -13,13 +13,10 @@ class OrientationStatus:
     class CannotOrient:
         pass
 
-    @dataclasses.dataclass(frozen=True)
+    @dataclasses.dataclass(frozen=True, unsafe_hash=True)
     class CanOrient:
         count: int
         sum_constraint: OrientationSumConstraint
-
-        def __hash__(self):
-            return hash((self.count, self.sum_constraint))
 
 
 PuzzleOrbitDefinition = collections.namedtuple(
