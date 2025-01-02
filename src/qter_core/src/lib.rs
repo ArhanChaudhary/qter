@@ -190,7 +190,7 @@ impl PermuteCube {
             let reg = &arch.registers()[*register];
             let mut perm = reg.permutation.to_owned();
 
-            perm.exponentiate(*amt);
+            perm.exponentiate((*amt).into());
 
             permutation.compose(&perm);
 

@@ -3,7 +3,7 @@ use std::{collections::VecDeque, sync::Arc};
 use qter_core::{
     architectures::{Permutation, PermutationGroup},
     discrete_math::chinese_remainder_theorem,
-    Facelets, Instruction, Int, PermuteCube, Program, RegisterGenerator, Span, U,
+    Facelets, Instruction, Int, PermuteCube, Program, RegisterGenerator, Span, I, U,
 };
 
 /// Represents an instance of a `PermutationGroup`, in other words this simulates the rubik's cube
@@ -189,14 +189,14 @@ impl GroupStates {
     }
 
     /// Explicitly add a number to a register
-    fn add_num_to(&mut self, register_idx: usize, which_reg: &RegisterGenerator, amt: Int<U>) {
+    fn add_num_to(&mut self, register_idx: usize, which_reg: &RegisterGenerator, amt: Int<I>) {
         match which_reg {
             RegisterGenerator::Theoretical => {
                 let TheoreticalState { state, order } = &mut self.theoretical_states[register_idx];
 
                 assert!(amt < *order);
 
-                *state += amt;
+                *state += amt % *order;
 
                 if *state >= *order {
                     *state -= *order;
@@ -413,7 +413,8 @@ impl Interpreter {
             } => {
                 let reg = RegisterGenerator::Theoretical;
 
-                self.group_state.add_num_to(*register_idx, &reg, *amount);
+                self.group_state
+                    .add_num_to(*register_idx, &reg, (*amount).into());
 
                 self.instruction_counter += 1;
 
@@ -458,7 +459,7 @@ impl Interpreter {
     /// Give an input to the interpreter
     ///
     /// Panics if the interpreter is not executing an `input` instruction
-    pub fn give_input(&mut self, value: Int<U>) {
+    pub fn give_input(&mut self, value: Int<I>) {
         let reg = match self.state().state_ty {
             StateTy::Paused(PausedState::Input {
                 message: _,
@@ -481,10 +482,7 @@ mod tests {
 
     use compiler::compile;
     use internment::ArcIntern;
-    use qter_core::{
-        architectures::PuzzleDefinition, Facelets, Instruction, Int, PermuteCube, Program,
-        RegisterGenerator, Span, WithSpan, U,
-    };
+    use qter_core::{architectures::PuzzleDefinition, Int, PermuteCube, RegisterGenerator, U};
 
     use crate::{Interpreter, PausedState, Puzzle};
 

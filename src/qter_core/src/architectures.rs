@@ -8,7 +8,7 @@ use itertools::Itertools;
 
 use crate::{
     discrete_math::lcm_iter, puzzle_parser,
-    shared_facelet_detection::algorithms_to_cycle_generators, Int, U,
+    shared_facelet_detection::algorithms_to_cycle_generators, Int, I, U,
 };
 
 /// The definition of a puzzle parsed from the custom format
@@ -259,7 +259,7 @@ impl Permutation {
     /// Find the result of applying the permutation to the identity `power` times.
     ///
     /// This calculates the value in O(1) time with respect to `power`.
-    pub fn exponentiate(&mut self, power: Int<U>) {
+    pub fn exponentiate(&mut self, power: Int<I>) {
         self.cycles();
         let mut mapping = self
             .mapping
@@ -271,7 +271,7 @@ impl Permutation {
             let len = Int::<U>::from(cycle.len());
             for i in 0..cycle.len() {
                 mapping[cycle[i]] =
-                    cycle[TryInto::<usize>::try_into((Int::<U>::from(i) + power) % len).unwrap()];
+                    cycle[TryInto::<usize>::try_into((Int::<I>::from(i) + power) % len).unwrap()];
             }
         }
 
@@ -484,7 +484,7 @@ mod tests {
     use internment::ArcIntern;
     use itertools::Itertools;
 
-    use crate::{Int, U};
+    use crate::{Int, I, U};
 
     use super::{Architecture, PuzzleDefinition};
 
@@ -541,7 +541,7 @@ mod tests {
             .unwrap();
 
         let mut exp_perm = perm.clone();
-        exp_perm.exponentiate(Int::<U>::from(7_u64));
+        exp_perm.exponentiate(Int::<I>::from(7_u64));
 
         let mut repeat_compose_perm = cube.group.identity();
 

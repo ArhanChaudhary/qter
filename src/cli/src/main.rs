@@ -5,7 +5,7 @@ use color_eyre::eyre::eyre;
 use compiler::compile;
 use internment::ArcIntern;
 use interpreter::{Interpreter, PausedState};
-use qter_core::{Int, U};
+use qter_core::{Int, I, U};
 
 /// Compiles and interprets qter programs
 #[derive(Parser)]
@@ -82,13 +82,12 @@ fn main() -> color_eyre::Result<()> {
                     loop {
                         let mut number = String::new();
                         io::stdin().read_line(&mut number)?;
-                        // TODO: Allow negative input
-                        match number.parse::<Int<U>>() {
+                        match number.parse::<Int<I>>() {
                             Ok(v) => {
                                 interpreter.give_input(v);
                                 break;
                             }
-                            Err(_) => println!("Please input a non-negative integer"),
+                            Err(_) => println!("Please input an integer"),
                         }
                     }
                 } else {
