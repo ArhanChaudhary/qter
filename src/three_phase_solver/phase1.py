@@ -244,6 +244,7 @@ def optimal_cycle_combinations(puzzle_orbit_definition, num_cycles, cache_clear=
                     num_cycles - len(partition_cubie_counts)
                 )
             seen_cycle_cubie_counts = set()
+            # TODO: permuting can be done within integer_partitions itself
             for all_permuted_partition_cubie_counts in itertools.product(
                 *map(unique_permutations, all_partition_cubie_counts)
             ):

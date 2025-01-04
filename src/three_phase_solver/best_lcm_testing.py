@@ -241,9 +241,9 @@ def highest_order_partitions(puzzle, big_cube):
     # NOTE: heapq is not efficient! there are more efficient priority queue
     # data structures that exist (strict fibonacci heaps) but we use heapq
     # for simplicity.
-    heapq.heappush(heap, (1, 1, len(all_reduced_integer_partitions) - 1, []))
+    heapq.heappush(heap, (1, len(all_reduced_integer_partitions) - 1, 1, []))
     while heap:
-        _, running_order, i, cubie_partition_objs = heapq.heappop(heap)
+        _, i, running_order, cubie_partition_objs = heapq.heappop(heap)
 
         if i == -1:
             if running_order > highest_order:
@@ -277,8 +277,10 @@ def highest_order_partitions(puzzle, big_cube):
                 (
                     # adding `gcd` in front makes it faster, but not sure why
                     gcd,
-                    rest_upper_bound // gcd,
+                    # the order of the next two arguments is insignificant. I am
+                    # getting slight performance improvements with this order.
                     i - 1,
+                    rest_upper_bound // gcd,
                     # there are probably more efficient ways to create a new list
                     # every iteration, but I will leave it like this for the sake
                     # of not making the code more complicated than it already is
@@ -292,10 +294,14 @@ def highest_order_partitions(puzzle, big_cube):
 WRITE_TO_FILE = True
 
 start = default_timer()
-results = highest_order_partitions(_7x7, False)
-print(f"Generated results in {default_timer() - start:.3g}s\n")
+# TEST CASE: _6x6 should generate 7742 unique results
+results = highest_order_partitions(_6x6, False)
+end = default_timer() - start
+print(f"Generated {len(results[1])} unique results in {end:.3g}s\n")
 if WRITE_TO_FILE:
     with open("output.py", "w") as f:
-        f.write(str(results))
+        f.write(
+            f"# Highest order: {results[0]}\n# Run `python -i output.py`\nresults = {results[1]}"
+        )
 else:
     print(results)
