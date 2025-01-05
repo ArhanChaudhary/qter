@@ -17,7 +17,6 @@ import math
 import operator
 import functools
 import timeit
-import puzzle_orbit_definitions
 from common_types import (
     OrientationStatus,
     OrientationSumConstraint,

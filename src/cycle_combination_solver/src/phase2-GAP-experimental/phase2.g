@@ -8,7 +8,7 @@ B := (33,35,40,38)(34,37,39,36)( 3, 9,46,32)( 2,12,47,29)( 1,14,48,27);
 D := (41,43,48,46)(42,45,47,44)(14,22,30,38)(15,23,31,39)(16,24,32,40);
 cube := Group(U, L, F, R, B, D);
 
-Read("../phase3/util.g");
+Read("./util.g");
 
 cornercube := ClosureGroup(
     Stabilizer(cube, Orbit(cube, edge_facelet_buf), OnTuples),

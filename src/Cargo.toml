@@ -1,9 +1,9 @@
 [workspace]
-resolver="2"
+resolver = "2"
 members = [
   "qter_core",
   "interpreter",
   "compiler",
   "cli",
+  "cycle_combination_solver",
 ]
-

@@ -269,6 +269,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "cycle_combination_solver"
+version = "0.1.0"
+
+[[package]]
 name = "dashmap"
 version = "5.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
