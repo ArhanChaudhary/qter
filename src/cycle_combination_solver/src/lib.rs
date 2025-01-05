@@ -1,2 +1,2 @@
-// mod phase1;
+mod phase1;
 mod phase2;
