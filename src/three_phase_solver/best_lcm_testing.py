@@ -1,159 +1,133 @@
+import functools
 from timeit import default_timer
 import heapq
 import math
 import operator
 
-# outputs of reduced_integer_partitions on 8, 12, and 24
-# a suffix with `constraint` indicates that partitions must
-# have equal signatures for the lesser LCM to be filtered out
 
-edges_constraint = [
-    (120, (3, 4, 5)),
-    (84, (2, 3, 7)),
-    (70, (5, 7)),
-    (60, (2, 2, 3, 5)),
-    (56, (1, 4, 7)),
-    (48, (1, 3, 8)),
-    (42, (1, 1, 3, 7)),
-    (40, (1, 2, 4, 5)),
-    (36, (1, 2, 9)),
-    (28, (1, 2, 2, 7)),
-    (24, (1, 3, 4, 4)),
-    (24, (2, 3, 3, 4)),
-    (24, (1, 1, 1, 2, 3, 4)),
-    (24, (1, 1, 4, 6)),
-    (22, (1, 11)),
-    (18, (1, 1, 1, 9)),
-    (18, (3, 9)),
-    (16, (4, 8)),
-    (16, (1, 1, 2, 8)),
-]
+def p_adic_valuation(n, p):
+    exponent = 0
+    while n % p == 0 and n != 0:
+        n //= p
+        exponent += 1
+    return exponent
 
-corners_constraint = [
-    (45, (3, 5)),
-    (36, (1, 3, 4)),
-    (30, (1, 2, 5)),
-    (21, (1, 7)),
-    (18, (1, 2, 2, 3)),
-    (18, (2, 6)),
-    (12, (1, 1, 2, 4)),
-    (12, (4, 4)),
-    (8, (8,)),
-]
 
-s24_noconstraint = [
-    (840, (1, 3, 5, 7, 8)),
-    (660, (1, 3, 4, 5, 11)),
-    (630, (1, 2, 5, 7, 9)),
-    (504, (7, 8, 9)),
-    (462, (6, 7, 11)),
-    (462, (1, 2, 3, 7, 11)),
-    (440, (5, 8, 11)),
-    (396, (4, 9, 11)),
-    (390, (5, 6, 13)),
-    (390, (1, 2, 3, 5, 13)),
-    (385, (1, 5, 7, 11)),
-    (364, (4, 7, 13)),
-    (360, (2, 5, 8, 9)),
-    (360, (1, 1, 5, 8, 9)),
-    (312, (3, 8, 13)),
-    (308, (1, 1, 4, 7, 11)),
-    (308, (2, 4, 7, 11)),
-    (273, (1, 3, 7, 13)),
-    (264, (1, 1, 3, 8, 11)),
-    (264, (2, 3, 8, 11)),
-    (260, (2, 4, 5, 13)),
-    (260, (1, 1, 4, 5, 13)),
-    (240, (3, 5, 16)),
-    (234, (2, 9, 13)),
-    (204, (3, 4, 17)),
-    (170, (2, 5, 17)),
-    (143, (11, 13)),
-    (119, (7, 17)),
-    (114, (2, 3, 19)),
-    (112, (1, 7, 16)),
-    (95, (5, 19)),
-    (76, (1, 4, 19)),
-    (23, (1, 23)),
-]
+@functools.cache
+def integer_partitions(n):
+    if n == 0:
+        return {()}
+    answer = {(n,)}
+    for x in range(1, n):
+        for y in integer_partitions(n - x):
+            answer.add(tuple(sorted((x,) + y)))
+    return answer
 
-s24_constraint = [
-    (840, (1, 3, 5, 7, 8)),
-    (660, (1, 3, 4, 5, 11)),
-    (630, (1, 2, 5, 7, 9)),
-    (504, (7, 8, 9)),
-    (462, (6, 7, 11)),
-    (462, (1, 2, 3, 7, 11)),
-    (440, (5, 8, 11)),
-    (420, (1, 1, 4, 5, 6, 7)),
-    (420, (1, 1, 1, 2, 3, 4, 5, 7)),
-    (420, (3, 4, 7, 10)),
-    (420, (1, 3, 4, 4, 5, 7)),
-    (420, (2, 3, 3, 4, 5, 7)),
-    (396, (4, 9, 11)),
-    (390, (5, 6, 13)),
-    (390, (1, 2, 3, 5, 13)),
-    (385, (1, 5, 7, 11)),
-    (364, (4, 7, 13)),
-    (360, (2, 5, 8, 9)),
-    (360, (1, 1, 5, 8, 9)),
-    (330, (1, 2, 2, 3, 5, 11)),
-    (330, (2, 5, 6, 11)),
-    (315, (1, 1, 1, 5, 7, 9)),
-    (315, (3, 5, 7, 9)),
-    (312, (3, 8, 13)),
-    (308, (1, 1, 4, 7, 11)),
-    (308, (2, 4, 7, 11)),
-    (280, (4, 5, 7, 8)),
-    (280, (1, 1, 2, 5, 7, 8)),
-    (273, (1, 3, 7, 13)),
-    (264, (1, 1, 3, 8, 11)),
-    (264, (2, 3, 8, 11)),
-    (260, (2, 4, 5, 13)),
-    (260, (1, 1, 4, 5, 13)),
-    (252, (4, 4, 7, 9)),
-    (252, (1, 1, 2, 4, 7, 9)),
-    (240, (3, 5, 16)),
-    (234, (2, 9, 13)),
-    (231, (3, 3, 7, 11)),
-    (231, (1, 1, 1, 3, 7, 11)),
-    (220, (4, 4, 5, 11)),
-    (220, (1, 1, 2, 4, 5, 11)),
-    (204, (3, 4, 17)),
-    (198, (2, 2, 9, 11)),
-    (195, (1, 1, 1, 3, 5, 13)),
-    (195, (3, 3, 5, 13)),
-    (182, (2, 2, 7, 13)),
-    (170, (2, 5, 17)),
-    (168, (1, 1, 1, 6, 7, 8)),
-    (168, (3, 6, 7, 8)),
-    (168, (1, 1, 3, 4, 7, 8)),
-    (168, (2, 2, 2, 3, 7, 8)),
-    (168, (1, 2, 3, 3, 7, 8)),
-    (168, (1, 1, 1, 1, 2, 3, 7, 8)),
-    (156, (3, 4, 4, 13)),
-    (156, (1, 1, 2, 3, 4, 13)),
-    (156, (1, 4, 6, 13)),
-    (143, (11, 13)),
-    (119, (7, 17)),
-    (117, (1, 1, 9, 13)),
-    (114, (2, 3, 19)),
-    (112, (1, 7, 16)),
-    (104, (1, 2, 8, 13)),
-    (102, (2, 2, 3, 17)),
-    (95, (5, 19)),
-    (85, (1, 1, 5, 17)),
-    (80, (1, 2, 5, 16)),
-    (76, (1, 4, 19)),
-    (68, (1, 2, 4, 17)),
-    (57, (1, 1, 3, 19)),
-    (48, (1, 1, 1, 2, 3, 16)),
-    (48, (2, 3, 3, 16)),
-    (48, (1, 3, 4, 16)),
-    (48, (1, 1, 6, 16)),
-    (38, (1, 2, 2, 19)),
-    (23, (1, 23)),
-]
+
+def partition_order(partition, orientation_count):
+    lcm = math.lcm(*partition)
+    if orientation_count == 1:
+        return lcm
+    order = lcm
+
+    always_orient = None
+    critical_orient = None
+    max_p_adic_valuation = -1
+
+    for j, permutation_order in enumerate(partition):
+        curr_p_adic_valuation = p_adic_valuation(
+            permutation_order,
+            orientation_count,
+        )
+        if curr_p_adic_valuation > max_p_adic_valuation:
+            max_p_adic_valuation = curr_p_adic_valuation
+            critical_orient = [j]
+        elif curr_p_adic_valuation == max_p_adic_valuation:
+            critical_orient.append(j)
+        if permutation_order == 1:
+            if always_orient is None:
+                always_orient = [j]
+            else:
+                always_orient.append(j)
+
+    orient_count = 0 if always_orient is None else len(always_orient)
+    critical_is_disjoint = critical_orient is not None and (
+        always_orient is None or all(j not in always_orient for j in critical_orient)
+    )
+    if critical_is_disjoint:
+        orient_count += 1
+    unorient_critical = orient_count == len(partition) and (
+        orientation_count == 2
+        and orient_count % 2 == 1
+        or orientation_count > 2
+        and orient_count == 1
+    )
+    if unorient_critical:
+        if critical_is_disjoint:
+            return order
+        else:
+            return None
+    else:
+        if orient_count == 0:
+            return order
+        else:
+            return order * orientation_count
+
+
+def full_integer_partitions(cycle_cubie_count, orientation_count):
+    partitions = [
+        (order, partition)
+        for partition in integer_partitions(cycle_cubie_count)
+        if (order := partition_order(partition, orientation_count)) is not None
+    ]
+    partitions.sort(reverse=True, key=operator.itemgetter(0))
+    return partitions
+
+
+def reduced_integer_partitions(cycle_cubie_count, orientation_count, parity_aware):
+    partitions = full_integer_partitions(cycle_cubie_count, orientation_count)
+
+    dominated = [False] * len(partitions)
+    reduced_partitions = []
+    for i in range(len(partitions)):
+        if dominated[i]:
+            continue
+        partition = partitions[i]
+        reduced_partitions.append(partition)
+        for j in range(i + 1, len(partitions)):
+            if (
+                partition[0] % partitions[j][0] == 0
+                and partition[0] != partitions[j][0]
+                and (
+                    not parity_aware
+                    or (
+                        sum(partition[1])
+                        + len(partition[1])
+                        + sum(partitions[j][1])
+                        + len(partitions[j][1])
+                    )
+                    % 2
+                    == 0
+                )
+            ):
+                dominated[j] = True
+    return reduced_partitions
+
+
+# list of (order, partition of N)
+# example:
+# corners_constraint == [(45, (3, 5)), (36, (1, 3, 4)), (30, (1, 2, 5)), (21, (1, 7)), (18, (1, 2, 2, 3)), (18, (2, 6)), (12, (1, 1, 2, 4)), (12, (4, 4)), (8, (8,))]
+
+edges_constraint = reduced_integer_partitions(12, 2, True)
+corners_constraint = reduced_integer_partitions(8, 3, True)
+s24_noconstraint = reduced_integer_partitions(24, 1, False)
+s24_constraint = reduced_integer_partitions(24, 1, True)
+# TODO: asher and I discussed needing the full integer partitions for larger
+# cubes. this is unfortunately very very slow
+# edges_constraint = full_integer_partitions(12, 2)
+# corners_constraint = full_integer_partitions(8, 3)
+# s24_noconstraint = full_integer_partitions(24, 1)
+# s24_constraint = full_integer_partitions(24, 1)
 
 # the first element of the tuple is the index where everything then and after
 # wards are identical orbits (s24). This is used to enforce a constraint that
@@ -223,7 +197,7 @@ _7x7 = (
 
 
 # big_cube is unused
-def highest_order_partitions(puzzle, big_cube):
+def highest_order_partitions(puzzle, debug, big_cube):
     identical_index, all_reduced_integer_partitions = puzzle
     count = 0
     highest_order = -1
@@ -242,7 +216,13 @@ def highest_order_partitions(puzzle, big_cube):
     # data structures that exist (strict fibonacci heaps) but we use heapq
     # for simplicity.
     heapq.heappush(heap, (1, len(all_reduced_integer_partitions) - 1, 1, []))
+    if debug:
+        t = 0
     while heap:
+        if debug:
+            if t % 10000 == 0:
+                print(f"The heap has {len(heap)} elements")
+            t += 1
         _, i, running_order, cubie_partition_objs = heapq.heappop(heap)
 
         if i == -1:
@@ -252,6 +232,9 @@ def highest_order_partitions(puzzle, big_cube):
                 continue
             highest_order = running_order
             cycles.append(cubie_partition_objs)
+            if debug:
+                print(f"New highest order: {highest_order}")
+                print(f"Cycles: {cycles}")
             continue
 
         for lcm_and_partition in all_reduced_integer_partitions[i]:
@@ -294,14 +277,13 @@ def highest_order_partitions(puzzle, big_cube):
 WRITE_TO_FILE = True
 
 start = default_timer()
-# TEST CASE: _6x6 should generate 7742 unique results
-results = highest_order_partitions(_6x6, False)
+results = highest_order_partitions(_5x5, True, False)
 end = default_timer() - start
-print(f"Generated {len(results[1])} unique results in {end:.3g}s\n")
+print(f"Generated {len(results[1])} unique results in {end:.3g}s")
 if WRITE_TO_FILE:
     with open("output.py", "w") as f:
         f.write(
-            f"# Highest order: {results[0]}\n# Run `python -i output.py`\nresults = {results[1]}"
+            f"# Highest order: {results[0]}\n# Run `python -i output.py`\n\nresults = {results[1]}"
         )
 else:
-    print(results)
+    print(f"\nHighest order: {results[0]}\n{results[1]}")
