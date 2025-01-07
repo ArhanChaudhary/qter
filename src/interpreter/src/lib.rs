@@ -77,14 +77,14 @@ impl Puzzle {
 }
 
 /// If the interpreter is paused, this represents the reason why.
-pub enum PausedState<'s> {
+pub enum PausedState {
     Halt {
-        message: &'s str,
+        message: String,
         register_idx: Option<usize>,
         register: Option<RegisterGenerator>,
     },
     Input {
-        message: &'s str,
+        message: String,
         register_idx: usize,
         register: RegisterGenerator,
     },
@@ -92,16 +92,16 @@ pub enum PausedState<'s> {
 }
 
 /// Whether the interpreter can be stepped forward or is paused for some reason
-pub enum ExecutionState<'s> {
+pub enum ExecutionState {
     Running,
-    Paused(PausedState<'s>),
+    Paused(PausedState),
 }
 
 /// The current execution state of the interpreter
 pub struct State<'s> {
     span: Span,
-    instruction: usize,
-    execution_state: ExecutionState<'s>,
+    instruction_idx: usize,
+    execution_state: &'s ExecutionState,
 }
 
 /// An instance of a theoretical register. Analagous to the `Puzzle` structure.
@@ -134,6 +134,7 @@ pub struct Interpreter {
     instruction_counter: usize,
     program: Program,
     messaging: Messaging,
+    execution_state: ExecutionState,
 }
 
 /// The action performed by the instruction that was just executed
@@ -261,50 +262,28 @@ impl Interpreter {
             program,
             instruction_counter: 0,
             messaging: Messaging::default(),
+            execution_state: ExecutionState::Running,
         }
     }
 
     /// Get the current state of the interpreter
     pub fn state(&self) -> State<'_> {
-        let idx = if self.instruction_counter >= self.program.instructions.len() {
+        let instruction_idx = if self.instruction_counter >= self.program.instructions.len() {
             self.program.instructions.len() - 1
         } else {
             self.instruction_counter
         };
 
-        let instruction = &self.program.instructions[idx];
-
-        let state_ty = if let Some(message) = &self.messaging.panicked {
-            ExecutionState::Paused(PausedState::Panicked(message))
-        } else {
-            match &**instruction {
-                Instruction::Halt {
-                    message,
-                    register,
-                    register_idx,
-                } => ExecutionState::Paused(PausedState::Halt {
-                    message,
-                    register: register.to_owned(),
-                    register_idx: *register_idx,
-                }),
-                Instruction::Input {
-                    message,
-                    register,
-                    register_idx,
-                } => ExecutionState::Paused(PausedState::Input {
-                    message,
-                    register: register.to_owned(),
-                    register_idx: *register_idx,
-                }),
-                _ => ExecutionState::Running,
-            }
-        };
-
+        let instruction = &self.program.instructions[instruction_idx];
         State {
             span: instruction.span().to_owned(),
-            instruction: idx,
-            execution_state: state_ty,
+            instruction_idx,
+            execution_state: self.execution_state(),
         }
+    }
+
+    pub fn execution_state(&self) -> &ExecutionState {
+        &self.execution_state
     }
 
     /// Execute one instruction
@@ -321,6 +300,9 @@ impl Interpreter {
         match &**instruction {
             Instruction::Goto { instruction_idx } => {
                 self.instruction_counter = *instruction_idx;
+                if self.messaging.panicked.is_none() {
+                    self.execution_state = ExecutionState::Running;
+                }
 
                 ActionPerformed::Goto {
                     location: *instruction_idx,
@@ -331,6 +313,9 @@ impl Interpreter {
                 facelets,
                 register_idx,
             } => {
+                if self.messaging.panicked.is_none() {
+                    self.execution_state = ExecutionState::Running;
+                }
                 if self
                     .puzzle_states
                     .is_register_solved(*register_idx, facelets)
@@ -353,9 +338,16 @@ impl Interpreter {
             }
             Instruction::Input {
                 message,
-                register: _,
-                register_idx: _,
+                register,
+                register_idx,
             } => {
+                if self.messaging.panicked.is_none() {
+                    self.execution_state = ExecutionState::Paused(PausedState::Input {
+                        message: message.to_owned(),
+                        register: register.to_owned(),
+                        register_idx: *register_idx,
+                    });
+                }
                 if !self.messaging.paused {
                     self.messaging.paused = true;
                     self.messaging.messages.push_back(message.to_owned());
@@ -368,6 +360,13 @@ impl Interpreter {
                 register,
                 register_idx,
             } => {
+                if self.messaging.panicked.is_none() {
+                    self.execution_state = ExecutionState::Paused(PausedState::Halt {
+                        message: message.to_owned(),
+                        register: register.to_owned(),
+                        register_idx: *register_idx,
+                    });
+                }
                 if !self.messaging.paused {
                     self.messaging.paused = true;
                     let full_message = if register.is_none() {
@@ -395,6 +394,9 @@ impl Interpreter {
                 register,
                 register_idx,
             } => {
+                if self.messaging.panicked.is_none() {
+                    self.execution_state = ExecutionState::Running;
+                }
                 let full_message = if register.is_none() {
                     message.to_owned()
                 } else {
@@ -410,9 +412,7 @@ impl Interpreter {
                         }
                     }
                 };
-
                 self.messaging.messages.push_back(full_message);
-
                 self.instruction_counter += 1;
 
                 ActionPerformed::None
@@ -421,10 +421,14 @@ impl Interpreter {
                 register_idx,
                 amount,
             } => {
-                let reg = RegisterGenerator::Theoretical;
-
-                self.puzzle_states
-                    .add_num_to(*register_idx, &reg, (*amount).into());
+                if self.messaging.panicked.is_none() {
+                    self.execution_state = ExecutionState::Running;
+                }
+                self.puzzle_states.add_num_to(
+                    *register_idx,
+                    &RegisterGenerator::Theoretical,
+                    (*amount).into(),
+                );
 
                 self.instruction_counter += 1;
 
@@ -437,6 +441,9 @@ impl Interpreter {
                 permutation: permute_cube,
                 cube_idx,
             } => {
+                if self.messaging.panicked.is_none() {
+                    self.execution_state = ExecutionState::Running;
+                }
                 self.puzzle_states
                     .compose_into(*cube_idx, permute_cube.permutation());
 
@@ -455,14 +462,15 @@ impl Interpreter {
     /// Execute instructions until an input or halt instruction is reached
     ///
     /// Returns details of the paused state reached
-    pub fn step_until_halt(&mut self) -> PausedState<'_> {
-        while !self.messaging.paused {
-            self.step();
+    pub fn step_until_halt(&mut self) -> &PausedState {
+        loop {
+            if let ActionPerformed::Paused = self.step() {
+                break;
+            }
         }
-
-        match self.state().execution_state {
-            ExecutionState::Running => panic!("Cannot be halted while running"),
+        match self.execution_state() {
             ExecutionState::Paused(v) => v,
+            ExecutionState::Running => panic!("Cannot be halted while running"),
         }
     }
 
@@ -470,17 +478,19 @@ impl Interpreter {
     ///
     /// Panics if the interpreter is not executing an `input` instruction
     pub fn give_input(&mut self, value: Int<I>) {
-        let (register_idx, which_reg) = match self.state().execution_state {
+        let (register_idx, which_reg) = match self.execution_state() {
             ExecutionState::Paused(PausedState::Input {
                 message: _,
                 register,
                 register_idx,
-            }) => (register_idx, register),
+            }) => (*register_idx, register),
             _ => panic!("The interpreter isn't in an input state"),
         };
 
+        // TODO: the clone can absolutely be avoided here as the mutable and
+        // immutable parts of Interpreter are disjoint
         self.puzzle_states
-            .add_num_to(register_idx, &which_reg, value);
+            .add_num_to(register_idx, &which_reg.clone(), value);
 
         self.messaging.paused = false;
         self.instruction_counter += 1;
@@ -638,31 +648,43 @@ mod tests {
 
         let mut interpreter = Interpreter::new(program);
 
-        assert!(matches!(
-            interpreter.step_until_halt(),
+        // assert!(matches!(
+        //     PausedState::Input {
+        //         message: String::from("Number to modulus:"),
+        //         register_idx: 0,
+        //         register: RegisterGenerator::Puzzle {
+        //             generator: _,
+        //             facelets: _
+        //         },
+        //     },
+        // ));
+        assert!(match interpreter.step_until_halt() {
             PausedState::Input {
-                message: "Number to modulus:",
-                register: RegisterGenerator::Puzzle {
-                    generator: _,
-                    facelets: _
-                },
+                message,
+                register:
+                    RegisterGenerator::Puzzle {
+                        generator: _,
+                        facelets: _,
+                    },
                 register_idx: 0,
-            }
-        ));
+            } => message == "Number to modulus:",
+            _ => false,
+        });
 
         interpreter.give_input(Int::from(133_u64));
 
-        assert!(matches!(
-            interpreter.step_until_halt(),
+        assert!(match interpreter.step_until_halt() {
             PausedState::Halt {
-                message: "The modulus is",
-                register: Some(RegisterGenerator::Puzzle {
-                    generator: _,
-                    facelets: _
-                }),
+                message,
+                register:
+                    Some(RegisterGenerator::Puzzle {
+                        generator: _,
+                        facelets: _,
+                    }),
                 register_idx: Some(0),
-            }
-        ));
+            } => message == "The modulus is",
+            _ => false,
+        });
 
         let expected_output = [
             "Number to modulus:",
@@ -762,31 +784,33 @@ mod tests {
 
         let mut interpreter = Interpreter::new(program);
 
-        assert!(matches!(
-            interpreter.step_until_halt(),
+        assert!(match interpreter.step_until_halt() {
             PausedState::Input {
-                message: "Which Fibonacci number to calculate:",
-                register: RegisterGenerator::Puzzle {
-                    generator: _,
-                    facelets: _
-                },
+                message,
+                register:
+                    RegisterGenerator::Puzzle {
+                        generator: _,
+                        facelets: _,
+                    },
                 register_idx: 0,
-            }
-        ));
+            } => message == "Which Fibonacci number to calculate:",
+            _ => false,
+        });
 
         interpreter.give_input(Int::from(8_u64));
 
-        assert!(matches!(
-            interpreter.step_until_halt(),
+        assert!(match interpreter.step_until_halt() {
             PausedState::Halt {
-                message: "The number is",
-                register: Some(RegisterGenerator::Puzzle {
-                    generator: _,
-                    facelets: _
-                }),
+                message,
+                register:
+                    Some(RegisterGenerator::Puzzle {
+                        generator: _,
+                        facelets: _,
+                    }),
                 register_idx: Some(0),
-            }
-        ));
+            } => message == "The number is",
+            _ => false,
+        });
 
         let expected_output = ["Which Fibonacci number to calculate:", "The number is 21"];
 
