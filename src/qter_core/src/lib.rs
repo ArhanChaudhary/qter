@@ -309,13 +309,13 @@ pub enum Instruction {
     },
     Halt {
         message: String,
-        register_idx: usize,
-        register: RegisterGenerator,
+        register_idx: Option<usize>,
+        register: Option<RegisterGenerator>,
     },
     Print {
         message: String,
-        register_idx: usize,
-        register: RegisterGenerator,
+        register_idx: Option<usize>,
+        register: Option<RegisterGenerator>,
     },
     /// Add to a theoretical register; has no representation in .Q
     AddTheoretical {

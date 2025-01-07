@@ -20,23 +20,19 @@ fn expect_reg(
             name: WithSpan::new(ArcIntern::clone(name), reg.span().to_owned()),
         }) {
             Some(v) => Ok(v.0),
-            None => {
-                return Err(Box::new(Error::new_from_span(
-                    ErrorVariant::CustomError {
-                        message: format!("The register {name} does not exist"),
-                    },
-                    reg.span().pest(),
-                )));
-            }
-        },
-        _ => {
-            return Err(Box::new(Error::new_from_span(
+            None => Err(Box::new(Error::new_from_span(
                 ErrorVariant::CustomError {
-                    message: "Expected a register".to_string(),
+                    message: format!("The register {name} does not exist"),
                 },
                 reg.span().pest(),
-            )));
-        }
+            ))),
+        },
+        _ => Err(Box::new(Error::new_from_span(
+            ErrorVariant::CustomError {
+                message: "Expected a register".to_string(),
+            },
+            reg.span().pest(),
+        ))),
     }
 }
 
@@ -52,14 +48,12 @@ fn expect_label(
             },
             label.span().to_owned(),
         )),
-        _ => {
-            return Err(Box::new(Error::new_from_span(
-                ErrorVariant::CustomError {
-                    message: "Expected a label".to_string(),
-                },
-                label.span().pest(),
-            )));
-        }
+        _ => Err(Box::new(Error::new_from_span(
+            ErrorVariant::CustomError {
+                message: "Expected a label".to_string(),
+            },
+            label.span().pest(),
+        ))),
     }
 }
 
@@ -67,17 +61,21 @@ fn print_like(
     syntax: &ExpansionInfo,
     mut args: WithSpan<Vec<WithSpan<Value>>>,
     block: BlockID,
-) -> Result<(RegisterReference, WithSpan<String>), Box<Error<Rule>>> {
-    if args.len() != 2 {
+) -> Result<(Option<RegisterReference>, WithSpan<String>), Box<Error<Rule>>> {
+    if args.len() > 2 {
         return Err(Box::new(Error::new_from_span(
             ErrorVariant::CustomError {
-                message: format!("Expected two arguments, found {}", args.len()),
+                message: format!("Expected one or two arguments, found {}", args.len()),
             },
             args.span().pest(),
         )));
     }
 
-    let register = expect_reg(args.pop().unwrap(), syntax, block)?;
+    let register = if args.len() == 2 {
+        Some(expect_reg(args.pop().unwrap(), syntax, block)?)
+    } else {
+        None
+    };
 
     let message = args.pop().unwrap();
     let message_span = message.span().to_owned();
@@ -190,8 +188,31 @@ pub fn builtin_macros(
     macros.insert(
         (prelude.to_owned(), ArcIntern::from_ref("input")),
         WithSpan::new(
-            Macro::Builtin(|syntax, args, block| {
-                let (register, message) = print_like(syntax, args, block)?;
+            Macro::Builtin(|syntax, mut args, block| {
+                if args.len() != 2 {
+                    return Err(Box::new(Error::new_from_span(
+                        ErrorVariant::CustomError {
+                            message: format!("Expected two arguments, found {}", args.len()),
+                        },
+                        args.span().pest(),
+                    )));
+                }
+
+                let register = expect_reg(args.pop().unwrap(), syntax, block)?;
+
+                let message = args.pop().unwrap();
+                let message_span = message.span().to_owned();
+                let message = match message.into_inner() {
+                    Value::Word(v) => WithSpan::new(v.trim_matches('"').to_owned(), message_span),
+                    _ => {
+                        return Err(Box::new(Error::new_from_span(
+                            ErrorVariant::CustomError {
+                                message: "Expected a message".to_string(),
+                            },
+                            message_span.pest(),
+                        )));
+                    }
+                };
 
                 Ok(vec![Instruction::Code(Code::Primitive(Primitive::Input {
                     register,

@@ -71,11 +71,11 @@ enum Primitive {
     },
     Halt {
         message: WithSpan<String>,
-        register: RegisterReference,
+        register: Option<RegisterReference>,
     },
     Print {
         message: WithSpan<String>,
-        register: RegisterReference,
+        register: Option<RegisterReference>,
     },
 }
 

@@ -199,24 +199,37 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
                         register: reg.generator(),
                     }
                 }
-                Primitive::Halt { message, register } => {
-                    let (reg, idx) = global_regs.get_reg(&register);
+                Primitive::Halt { message, register } => match register {
+                    Some(register) => {
+                        let (reg, idx) = global_regs.get_reg(&register);
 
-                    Instruction::Halt {
-                        message: message.into_inner(),
-                        register_idx: idx,
-                        register: reg.generator(),
+                        Instruction::Halt {
+                            message: message.into_inner(),
+                            register_idx: Some(idx),
+                            register: Some(reg.generator()),
+                        }
                     }
-                }
-                Primitive::Print { message, register } => {
-                    let (reg, idx) = global_regs.get_reg(&register);
-
-                    Instruction::Print {
+                    None => Instruction::Halt {
                         message: message.into_inner(),
-                        register_idx: idx,
-                        register: reg.generator(),
+                        register_idx: None,
+                        register: None,
+                    },
+                },
+                Primitive::Print { message, register } => match register {
+                    Some(register) => {
+                        let (reg, idx) = global_regs.get_reg(&register);
+                        Instruction::Print {
+                            message: message.into_inner(),
+                            register_idx: Some(idx),
+                            register: Some(reg.generator()),
+                        }
                     }
-                }
+                    None => Instruction::Print {
+                        message: message.into_inner(),
+                        register_idx: None,
+                        register: None,
+                    },
+                },
             };
 
             Ok(WithSpan::new(instruction, span))

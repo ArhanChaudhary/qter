@@ -80,8 +80,8 @@ impl Puzzle {
 pub enum PausedState<'s> {
     Halt {
         message: &'s str,
-        register_idx: usize,
-        register: RegisterGenerator,
+        register_idx: Option<usize>,
+        register: Option<RegisterGenerator>,
     },
     Input {
         message: &'s str,
@@ -368,20 +368,24 @@ impl Interpreter {
                 register,
                 register_idx,
             } => {
-                let decoded = match self.group_state.decode_register(*register_idx, register) {
-                    Some(v) => v,
-                    None => {
-                        return self
-                            .messaging
-                            .panic("The register specified is not decodable!");
-                    }
-                };
-
                 if !self.messaging.paused {
                     self.messaging.paused = true;
-                    self.messaging
-                        .messages
-                        .push_back(format!("{message} {decoded}",));
+                    let full_message = if register.is_none() {
+                        message.to_owned()
+                    } else {
+                        match self
+                            .group_state
+                            .decode_register(register_idx.unwrap(), register.as_ref().unwrap())
+                        {
+                            Some(v) => format!("{message} {v}",),
+                            None => {
+                                return self
+                                    .messaging
+                                    .panic("The register specified is not decodable!");
+                            }
+                        }
+                    };
+                    self.messaging.messages.push_back(full_message);
                 }
 
                 ActionPerformed::Paused
@@ -391,18 +395,23 @@ impl Interpreter {
                 register,
                 register_idx,
             } => {
-                let decoded = match self.group_state.decode_register(*register_idx, register) {
-                    Some(v) => v,
-                    None => {
-                        return self
-                            .messaging
-                            .panic("The register specified is not decodable!");
+                let full_message = if register.is_none() {
+                    message.to_owned()
+                } else {
+                    match self
+                        .group_state
+                        .decode_register(register_idx.unwrap(), register.as_ref().unwrap())
+                    {
+                        Some(v) => format!("{message} {v}",),
+                        None => {
+                            return self
+                                .messaging
+                                .panic("The register specified is not decodable!");
+                        }
                     }
                 };
 
-                self.messaging
-                    .messages
-                    .push_back(format!("{message} {decoded}"));
+                self.messaging.messages.push_back(full_message);
 
                 self.instruction_counter += 1;
 
@@ -646,11 +655,11 @@ mod tests {
             interpreter.step_until_halt(),
             PausedState::Halt {
                 message: "The modulus is",
-                register: RegisterGenerator::Puzzle {
+                register: Some(RegisterGenerator::Puzzle {
                     generator: _,
                     facelets: _
-                },
-                register_idx: 0,
+                }),
+                register_idx: Some(0),
             }
         ));
 
@@ -699,7 +708,7 @@ mod tests {
                 solved-goto D do_if_1
                 goto after_if_1
             do_if_1:
-                halt \"The number is\" A
+                halt \"The number is 0\"
             after_if_1:
                 add B 1
             continue_1:
@@ -770,11 +779,11 @@ mod tests {
             interpreter.step_until_halt(),
             PausedState::Halt {
                 message: "The number is",
-                register: RegisterGenerator::Puzzle {
+                register: Some(RegisterGenerator::Puzzle {
                     generator: _,
                     facelets: _
-                },
-                register_idx: 0,
+                }),
+                register_idx: Some(0),
             }
         ));
 
