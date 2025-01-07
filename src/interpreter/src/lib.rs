@@ -4,10 +4,10 @@ use std::{collections::VecDeque, sync::Arc};
 use qter_core::{
     architectures::{Permutation, PermutationGroup},
     discrete_math::chinese_remainder_theorem,
-    Facelets, Instruction, Int, PermuteCube, Program, RegisterGenerator, Span, I, U,
+    Facelets, Instruction, Int, PermutePuzzle, Program, RegisterGenerator, Span, I, U,
 };
 
-/// Represents an instance of a `PermutationGroup`, in other words this simulates the rubik's cube
+/// Represents an instance of a `PermutationGroup`, in other words this simulates the puzzle
 pub struct Puzzle {
     group: Arc<PermutationGroup>,
     state: Permutation,
@@ -37,7 +37,7 @@ impl Puzzle {
     /// Decode the permutation using the register generator and the given facelets.
     ///
     /// In general, an arbitrary scramble cannot be decoded. If this is the case, the function will return `None`.
-    pub fn decode(&self, facelets: &[usize], generator: &PermuteCube) -> Option<Int<U>> {
+    pub fn decode(&self, facelets: &[usize], generator: &PermutePuzzle) -> Option<Int<U>> {
         chinese_remainder_theorem(facelets.iter().map(|facelet| {
             let maps_to = self.state().mapping()[*facelet];
 
@@ -121,7 +121,7 @@ struct PuzzleStates {
 /// An interpreter for a qter program
 pub struct Interpreter {
     puzzle_states: PuzzleStates,
-    instruction_counter: usize,
+    program_counter: usize,
     program: Program,
     messages: VecDeque<String>,
     execution_state: ExecutionState,
@@ -147,7 +147,7 @@ pub enum ActionPerformed<'s> {
         register_idx: usize,
         amt: Int<U>,
     },
-    ExecutedAlgorithm(&'s PermuteCube),
+    ExecutedAlgorithm(&'s PermutePuzzle),
     Panic,
 }
 
@@ -249,7 +249,7 @@ impl Interpreter {
                 puzzle_states,
             },
             program,
-            instruction_counter: 0,
+            program_counter: 0,
             messages: VecDeque::new(),
             execution_state: ExecutionState::Running,
         }
@@ -257,10 +257,10 @@ impl Interpreter {
 
     /// Get the current state of the interpreter
     pub fn state(&self) -> State<'_> {
-        let instruction_idx = if self.instruction_counter >= self.program.instructions.len() {
+        let instruction_idx = if self.program_counter >= self.program.instructions.len() {
             self.program.instructions.len() - 1
         } else {
-            self.instruction_counter
+            self.program_counter
         };
 
         let instruction = &self.program.instructions[instruction_idx];
@@ -280,7 +280,7 @@ impl Interpreter {
         if let ExecutionState::Paused(_) = self.execution_state() {
             return ActionPerformed::Paused;
         }
-        let instruction = match self.program.instructions.get(self.instruction_counter) {
+        let instruction = match self.program.instructions.get(self.program_counter) {
             Some(v) => v,
             None => {
                 return interpreter_panic!(self, "Execution fell through the end of the program without reaching a halt instruction!");
@@ -289,7 +289,7 @@ impl Interpreter {
 
         match &**instruction {
             Instruction::Goto { instruction_idx } => {
-                self.instruction_counter = *instruction_idx;
+                self.program_counter = *instruction_idx;
                 self.execution_state = ExecutionState::Running;
 
                 ActionPerformed::Goto {
@@ -306,7 +306,7 @@ impl Interpreter {
                     .puzzle_states
                     .is_register_solved(*register_idx, facelets)
                 {
-                    self.instruction_counter = *instruction_idx;
+                    self.program_counter = *instruction_idx;
 
                     ActionPerformed::SucceededSolvedGoto {
                         facelets,
@@ -314,7 +314,7 @@ impl Interpreter {
                         register_idx: *register_idx,
                     }
                 } else {
-                    self.instruction_counter += 1;
+                    self.program_counter += 1;
 
                     ActionPerformed::FailedSolvedGoto {
                         facelets,
@@ -389,7 +389,7 @@ impl Interpreter {
                     }
                 };
                 self.messages.push_back(full_message);
-                self.instruction_counter += 1;
+                self.program_counter += 1;
 
                 ActionPerformed::None
             }
@@ -404,24 +404,24 @@ impl Interpreter {
                     (*amount).into(),
                 );
 
-                self.instruction_counter += 1;
+                self.program_counter += 1;
 
                 ActionPerformed::AddToTheoretical {
                     register_idx: *register_idx,
                     amt: *amount,
                 }
             }
-            Instruction::PermuteCube {
-                permutation: permute_cube,
-                cube_idx,
+            Instruction::PermutePuzzle {
+                permute_puzzle,
+                puzzle_idx,
             } => {
                 self.execution_state = ExecutionState::Running;
                 self.puzzle_states
-                    .compose_into(*cube_idx, permute_cube.permutation());
+                    .compose_into(*puzzle_idx, permute_puzzle.permutation());
 
-                self.instruction_counter += 1;
+                self.program_counter += 1;
 
-                ActionPerformed::ExecutedAlgorithm(permute_cube)
+                ActionPerformed::ExecutedAlgorithm(permute_puzzle)
             }
         }
     }
@@ -465,7 +465,7 @@ impl Interpreter {
             .add_num_to(register_idx, &which_reg.clone(), value);
 
         self.execution_state = ExecutionState::Running;
-        self.instruction_counter += 1;
+        self.program_counter += 1;
     }
 }
 
@@ -475,7 +475,7 @@ mod tests {
 
     use compiler::compile;
     use internment::ArcIntern;
-    use qter_core::{architectures::PuzzleDefinition, Int, PermuteCube, RegisterGenerator, U};
+    use qter_core::{architectures::PuzzleDefinition, Int, PermutePuzzle, RegisterGenerator, U};
 
     use crate::{Interpreter, PausedState, Puzzle};
 
@@ -508,7 +508,7 @@ mod tests {
 
         let mut cube = Puzzle::initialize(Arc::clone(&group.group));
 
-        let permutation = PermuteCube::new_from_generators(
+        let permutation = PermutePuzzle::new_from_generators(
             Arc::clone(&group.group),
             vec![ArcIntern::from_ref("U")],
         )
@@ -547,8 +547,8 @@ mod tests {
         let a_facelets = arch.registers()[0].signature_facelets();
         let b_facelets = arch.registers()[1].signature_facelets();
 
-        let a_permutation = PermuteCube::new_from_effect(&arch, vec![(0, Int::one())]);
-        let b_permutation = PermuteCube::new_from_effect(&arch, vec![(1, Int::one())]);
+        let a_permutation = PermutePuzzle::new_from_effect(&arch, vec![(0, Int::one())]);
+        let b_permutation = PermutePuzzle::new_from_effect(&arch, vec![(1, Int::one())]);
 
         let mut cube = Puzzle::initialize(Arc::clone(&group.group));
 

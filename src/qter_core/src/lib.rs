@@ -183,20 +183,20 @@ impl<T: core::hash::Hash> core::hash::Hash for WithSpan<T> {
     }
 }
 
-/// Represents a sequence of moves to apply to a cube in the `Program`
+/// Represents a sequence of moves to apply to a puzzle in the `Program`
 #[derive(Clone, Debug)]
-pub struct PermuteCube {
+pub struct PermutePuzzle {
     group: Arc<PermutationGroup>,
     permutation: Permutation,
     generators: Vec<ArcIntern<String>>,
     chromatic_orders: OnceCell<Vec<Int<U>>>,
 }
 
-impl PermuteCube {
-    /// Create a `PermuteCube` from what values it should add to which registers.
+impl PermutePuzzle {
+    /// Create a `PermutePuzzle` from what values it should add to which registers.
     ///
     /// `effect` is a list of tuples of register indices and how much to add to add to them.
-    pub fn new_from_effect(arch: &Architecture, effect: Vec<(usize, Int<U>)>) -> PermuteCube {
+    pub fn new_from_effect(arch: &Architecture, effect: Vec<(usize, Int<U>)>) -> PermutePuzzle {
         let mut permutation = arch.group().identity();
 
         let mut generators = Vec::new();
@@ -217,7 +217,7 @@ impl PermuteCube {
             }
         }
 
-        PermuteCube {
+        PermutePuzzle {
             permutation,
             generators,
             group: arch.group_arc(),
@@ -225,16 +225,16 @@ impl PermuteCube {
         }
     }
 
-    /// Create a `PermuteCube` instance from a list of generators
+    /// Create a `PermutePuzzle` instance from a list of generators
     pub fn new_from_generators(
         group: Arc<PermutationGroup>,
         generators: Vec<ArcIntern<String>>,
-    ) -> Result<PermuteCube, ArcIntern<String>> {
+    ) -> Result<PermutePuzzle, ArcIntern<String>> {
         let mut permutation = group.identity();
 
         group.compose_generators_into(&mut permutation, generators.iter())?;
 
-        Ok(PermuteCube {
+        Ok(PermutePuzzle {
             group,
             permutation,
             generators,
@@ -242,7 +242,7 @@ impl PermuteCube {
         })
     }
 
-    /// Get the underlying permutation of the `PermuteCube` instance
+    /// Get the underlying permutation of the `PermutePuzzle` instance
     pub fn permutation(&self) -> &Permutation {
         &self.permutation
     }
@@ -252,7 +252,7 @@ impl PermuteCube {
         &self.generators
     }
 
-    /// Calculate the order of every cycle of facelets created by seeing this `PermuteCube` instance as a register generator.
+    /// Calculate the order of every cycle of facelets created by seeing this `PermutePuzzle` instance as a register generator.
     ///
     /// Returns a list of chromatic orders where the index is the facelet.
     pub fn chromatic_orders_by_facelets(&self) -> &[Int<U>] {
@@ -286,7 +286,7 @@ pub enum Facelets {
 pub enum RegisterGenerator {
     Theoretical,
     Puzzle {
-        generator: PermuteCube,
+        generator: PermutePuzzle,
         facelets: Vec<usize>,
     },
 }
@@ -322,9 +322,9 @@ pub enum Instruction {
         register_idx: usize,
         amount: Int<U>,
     },
-    PermuteCube {
-        cube_idx: usize,
-        permutation: PermuteCube,
+    PermutePuzzle {
+        puzzle_idx: usize,
+        permute_puzzle: PermutePuzzle,
     },
 }
 

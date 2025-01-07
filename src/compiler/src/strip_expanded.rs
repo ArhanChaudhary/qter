@@ -5,7 +5,7 @@ use itertools::Itertools;
 use pest::error::{Error, ErrorVariant};
 use qter_core::{
     architectures::{Architecture, PermutationGroup},
-    Facelets, Instruction, Int, PermuteCube, Program, RegisterGenerator, WithSpan, U,
+    Facelets, Instruction, Int, PermutePuzzle, Program, RegisterGenerator, WithSpan, U,
 };
 
 use crate::{
@@ -32,7 +32,7 @@ impl RegisterIdx {
         match self {
             RegisterIdx::Theoretical => RegisterGenerator::Theoretical,
             RegisterIdx::Real { idx, arch } => RegisterGenerator::Puzzle {
-                generator: PermuteCube::new_from_effect(arch, vec![(*idx, Int::<U>::one())]),
+                generator: PermutePuzzle::new_from_effect(arch, vec![(*idx, Int::<U>::one())]),
                 facelets: arch.registers()[*idx].signature_facelets(),
             },
         }
@@ -56,7 +56,7 @@ impl GlobalRegs {
 
 pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
     let mut label_locations = HashMap::new();
-    let mut instruction_counter = 0;
+    let mut program_counter = 0;
 
     let mut global_regs = GlobalRegs {
         register_table: HashMap::new(),
@@ -65,9 +65,9 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
     };
 
     if let Some(decl) = &expanded.block_info.0.get(&BlockID(0)).unwrap().registers {
-        for cube in &decl.cubes {
-            match cube {
-                crate::Cube::Theoretical { name, order } => {
+        for puzzle in &decl.puzzles {
+            match puzzle {
+                crate::Puzzle::Theoretical { name, order } => {
                     global_regs.register_table.insert(
                         ArcIntern::clone(name),
                         (RegisterIdx::Theoretical, global_regs.theoretical.len()),
@@ -75,7 +75,7 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
 
                     global_regs.theoretical.push(order.to_owned());
                 }
-                crate::Cube::Real { architectures } => {
+                crate::Puzzle::Real { architectures } => {
                     // TODO: Support for architecture switching
                     // Just take the first architecture
                     let (names, architecture) = &architectures[0];
@@ -115,7 +115,7 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
 
             match v.into_inner() {
                 ExpandedCode::Instruction(primitive, block) => {
-                    instruction_counter += 1;
+                    program_counter += 1;
                     Some(WithSpan::new((primitive, block), span))
                 }
                 ExpandedCode::Label(label) => {
@@ -124,7 +124,7 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
                             name: label.name,
                             block: label.block.unwrap(),
                         },
-                        instruction_counter,
+                        program_counter,
                     );
                     None
                 }
@@ -140,15 +140,18 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
 
             let instruction = match instruction {
                 Primitive::Add { amt, register } => {
-                    let (cube_idx, idx) = global_regs.get_reg(&register);
-                    match cube_idx {
+                    let (puzzle_idx, register_idx) = global_regs.get_reg(&register);
+                    match puzzle_idx {
                         RegisterIdx::Theoretical => Instruction::AddTheoretical {
-                            register_idx: idx,
+                            register_idx,
                             amount: *amt,
                         },
-                        RegisterIdx::Real { idx: reg_idx, arch } => Instruction::PermuteCube {
-                            cube_idx: idx,
-                            permutation: PermuteCube::new_from_effect(&arch, vec![(reg_idx, *amt)]),
+                        RegisterIdx::Real { idx: reg_idx, arch } => Instruction::PermutePuzzle {
+                            puzzle_idx: register_idx,
+                            permute_puzzle: PermutePuzzle::new_from_effect(
+                                &arch,
+                                vec![(reg_idx, *amt)],
+                            ),
                         },
                     }
                 }

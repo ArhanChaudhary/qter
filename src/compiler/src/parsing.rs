@@ -20,8 +20,8 @@ use qter_core::{
 };
 
 use crate::{
-    lua::LuaMacros, Block, BlockID, BlockInfo, Code, Cube, Define, DefinedValue, Label, LuaCall,
-    Macro, MacroBranch, MacroCall, ParsedSyntax, Pattern, PatternArgTy, PatternComponent,
+    lua::LuaMacros, Block, BlockID, BlockInfo, Code, Define, DefinedValue, Label, LuaCall, Macro,
+    MacroBranch, MacroCall, ParsedSyntax, Pattern, PatternArgTy, PatternComponent, Puzzle,
     RegisterDecl, Value,
 };
 
@@ -237,12 +237,12 @@ fn merge_files(
 }
 
 fn parse_registers(pair: Pair<'_, Rule>) -> Result<RegisterDecl, Box<Error<Rule>>> {
-    let mut cubes = Vec::new();
+    let mut puzzles = Vec::new();
 
     let mut names = HashSet::new();
 
     for decl in pair.into_inner() {
-        let decl = match decl.as_rule() {
+        let puzzle = match decl.as_rule() {
             Rule::unswitchable => parse_declaration(decl)?,
             Rule::switchable => {
                 let mut decls = Vec::new();
@@ -251,21 +251,21 @@ fn parse_registers(pair: Pair<'_, Rule>) -> Result<RegisterDecl, Box<Error<Rule>
                     let span = pair.as_span();
 
                     match parse_declaration(pair)? {
-                        Cube::Theoretical { name: _, order: _ } => return Err(Box::new(Error::new_from_span(
+                        Puzzle::Theoretical { name: _, order: _ } => return Err(Box::new(Error::new_from_span(
                             ErrorVariant::CustomError {
                                 message:
-                                    "Cannot create a switchable cube with a theoretical register"
+                                    "Cannot create a switchable puzzle with a theoretical register"
                                         .to_owned(),
                             },
                             span,
                         ))),
-                        Cube::Real { architectures } => decls.extend_from_slice(&architectures),
+                        Puzzle::Real { architectures } => decls.extend_from_slice(&architectures),
                     }
                 }
 
                 // TODO: Verify that the architectures are compatible with each other
 
-                Cube::Real {
+                Puzzle::Real {
                     architectures: decls,
                 }
             }
@@ -274,11 +274,11 @@ fn parse_registers(pair: Pair<'_, Rule>) -> Result<RegisterDecl, Box<Error<Rule>
 
         let mut found_names = HashSet::new();
 
-        match &decl {
-            Cube::Theoretical { name, order: _ } => {
+        match &puzzle {
+            Puzzle::Theoretical { name, order: _ } => {
                 found_names.insert(name.to_owned());
             }
-            Cube::Real { architectures } => found_names.extend(
+            Puzzle::Real { architectures } => found_names.extend(
                 architectures
                     .iter()
                     .flat_map(|v| v.0.iter())
@@ -299,13 +299,16 @@ fn parse_registers(pair: Pair<'_, Rule>) -> Result<RegisterDecl, Box<Error<Rule>
             }
         }
 
-        cubes.push(decl);
+        puzzles.push(puzzle);
     }
 
-    Ok(RegisterDecl { cubes, block: None })
+    Ok(RegisterDecl {
+        puzzles,
+        block: None,
+    })
 }
 
-fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Cube, Box<Error<Rule>>> {
+fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Puzzle, Box<Error<Rule>>> {
     let span = pair.as_span();
     let mut pairs = pair.into_inner();
 
@@ -353,7 +356,7 @@ fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Cube, Box<Error<Rule>>> {
 
             let number = arch.into_inner().next().unwrap();
 
-            Ok(Cube::Theoretical {
+            Ok(Puzzle::Theoretical {
                 name: regs.pop().unwrap(),
                 order: WithSpan::new(
                     number.as_str().parse::<Int<U>>().unwrap(),
@@ -423,11 +426,11 @@ fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Cube, Box<Error<Rule>>> {
                 rule => unreachable!("{rule:?}"),
             };
 
-            let cube = Cube::Real {
+            let puzzle = Puzzle::Real {
                 architectures: vec![(regs, WithSpan::new(decoded_arch, span.into()))],
             };
 
-            Ok(cube)
+            Ok(puzzle)
         }
         rule => unreachable!("{rule:?}"),
     }

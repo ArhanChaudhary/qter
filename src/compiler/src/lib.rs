@@ -223,7 +223,7 @@ struct Define {
 }
 
 #[derive(Clone, Debug)]
-enum Cube {
+enum Puzzle {
     Theoretical {
         name: WithSpan<ArcIntern<String>>,
         order: WithSpan<Int<U>>,
@@ -241,7 +241,7 @@ struct BlockID(pub usize);
 
 #[derive(Clone, Debug)]
 struct RegisterDecl {
-    cubes: Vec<Cube>,
+    puzzles: Vec<Puzzle>,
     block: Option<BlockID>,
 }
 
@@ -258,7 +258,7 @@ struct BlockInfo {
 struct BlockInfoTracker(HashMap<BlockID, BlockInfo>);
 
 impl BlockInfoTracker {
-    fn get_register(&self, reference: &RegisterReference) -> Option<(RegisterReference, &Cube)> {
+    fn get_register(&self, reference: &RegisterReference) -> Option<(RegisterReference, &Puzzle)> {
         let mut from = reference.block;
         let name = reference.name.to_owned();
 
@@ -266,21 +266,21 @@ impl BlockInfoTracker {
             let info = self.0.get(&from)?;
             let decl = info.registers.as_ref()?;
 
-            for cube in &decl.cubes {
-                match cube {
-                    Cube::Theoretical {
+            for puzzle in &decl.puzzles {
+                match puzzle {
+                    Puzzle::Theoretical {
                         name: found_name,
                         order: _,
                     } => {
                         if *name == **found_name {
-                            return Some((RegisterReference { block: from, name }, cube));
+                            return Some((RegisterReference { block: from, name }, puzzle));
                         }
                     }
-                    Cube::Real { architectures } => {
+                    Puzzle::Real { architectures } => {
                         for (names, _) in architectures {
                             for found_name in names {
                                 if *name == **found_name {
-                                    return Some((RegisterReference { block: from, name }, cube));
+                                    return Some((RegisterReference { block: from, name }, puzzle));
                                 }
                             }
                         }
