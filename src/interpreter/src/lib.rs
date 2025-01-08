@@ -3,7 +3,7 @@ use std::{collections::VecDeque, sync::Arc};
 
 use qter_core::{
     architectures::{Permutation, PermutationGroup},
-    discrete_math::chinese_remainder_theorem,
+    discrete_math::{chinese_remainder_theorem, lcm},
     Facelets, Instruction, Int, PermutePuzzle, Program, RegisterGenerator, Span, I, U,
 };
 
@@ -85,6 +85,7 @@ pub enum PausedState {
     },
     Input {
         message: String,
+        valid_input_range: (Int<I>, Int<I>),
         register_idx: usize,
         register: RegisterGenerator,
     },
@@ -181,6 +182,19 @@ impl PuzzleStates {
         }
     }
 
+    fn register_order(&self, which_reg: &RegisterGenerator, register_idx: usize) -> Int<U> {
+        match which_reg {
+            RegisterGenerator::Theoretical => self.theoretical_states[register_idx].order,
+            RegisterGenerator::Puzzle {
+                generator,
+                facelets,
+            } => facelets
+                .iter()
+                .map(|facelet| generator.chromatic_orders_by_facelets()[*facelet])
+                .fold(Int::<U>::one(), lcm),
+        }
+    }
+
     /// Explicitly add a number to a register
     fn add_num_to(&mut self, register_idx: usize, which_reg: &RegisterGenerator, amt: Int<I>) {
         match which_reg {
@@ -215,14 +229,6 @@ impl PuzzleStates {
     }
 }
 
-macro_rules! interpreter_panic {
-    ($self:ident, $message:expr) => {{
-        $self.execution_state = ExecutionState::Paused(PausedState::Panicked($message));
-        $self.messages.push_back(format!("Panicked: {{$message}}"));
-        ActionPerformed::Panic
-    }};
-}
-
 impl Interpreter {
     /// Create a new interpreter from a program and initial states for registers
     ///
@@ -255,6 +261,16 @@ impl Interpreter {
         }
     }
 
+    /// Get the current execution state of the interpreter
+    pub fn execution_state(&self) -> &ExecutionState {
+        &self.execution_state
+    }
+
+    /// Get the message queue of the interpreter
+    pub fn messages(&mut self) -> &mut VecDeque<String> {
+        &mut self.messages
+    }
+
     /// Get the current state of the interpreter
     pub fn state(&self) -> State<'_> {
         let instruction_idx = if self.program_counter >= self.program.instructions.len() {
@@ -271,12 +287,16 @@ impl Interpreter {
         }
     }
 
-    pub fn execution_state(&self) -> &ExecutionState {
-        &self.execution_state
-    }
-
     /// Execute one instruction
     pub fn step(&mut self) -> ActionPerformed<'_> {
+        macro_rules! interpreter_panic {
+            ($self:ident, $message:expr) => {{
+                $self.execution_state = ExecutionState::Paused(PausedState::Panicked($message));
+                $self.messages.push_back(format!("Panicked: {{$message}}"));
+                ActionPerformed::Panic
+            }};
+        }
+
         if let ExecutionState::Paused(_) = self.execution_state() {
             return ActionPerformed::Paused;
         }
@@ -327,12 +347,18 @@ impl Interpreter {
                 register,
                 register_idx,
             } => {
+                // TODO: figure out how we should handle minimum input
+                let min_input = Int::<I>::zero();
+                let max_input =
+                    self.puzzle_states.register_order(register, *register_idx) - Int::<I>::one();
                 self.execution_state = ExecutionState::Paused(PausedState::Input {
                     message: message.to_owned(),
+                    valid_input_range: (min_input, max_input),
                     register: register.to_owned(),
                     register_idx: *register_idx,
                 });
-                self.messages.push_back(message.to_owned());
+                self.messages
+                    .push_back(format!("{message} [{min_input}-{max_input}]"));
 
                 ActionPerformed::Paused
             }
@@ -353,7 +379,7 @@ impl Interpreter {
                         .puzzle_states
                         .decode_register(register_idx.unwrap(), register.as_ref().unwrap())
                     {
-                        Some(v) => format!("{message} {v}",),
+                        Some(v) => format!("{message} {v}"),
                         None => {
                             return interpreter_panic!(
                                 self,
@@ -426,11 +452,6 @@ impl Interpreter {
         }
     }
 
-    /// Get the message queue of the interpreter
-    pub fn messages(&mut self) -> &mut VecDeque<String> {
-        &mut self.messages
-    }
-
     /// Execute instructions until an input or halt instruction is reached
     ///
     /// Returns details of the paused state reached
@@ -449,23 +470,31 @@ impl Interpreter {
     /// Give an input to the interpreter
     ///
     /// Panics if the interpreter is not executing an `input` instruction
-    pub fn give_input(&mut self, value: Int<I>) {
-        let (register_idx, which_reg) = match self.execution_state() {
-            ExecutionState::Paused(PausedState::Input {
-                message: _,
-                register,
-                register_idx,
-            }) => (*register_idx, register),
-            _ => panic!("The interpreter isn't in an input state"),
+    pub fn give_input(&mut self, value: Int<I>) -> Result<(), String> {
+        let ExecutionState::Paused(PausedState::Input {
+            message: _,
+            valid_input_range,
+            register_idx,
+            register,
+        }) = self.execution_state()
+        else {
+            panic!("The interpreter isn't in an input state");
         };
+        if value < valid_input_range.0 || value > valid_input_range.1 {
+            return Err(format!(
+                "The input {value} must be bewteen {} and {}.",
+                valid_input_range.0, valid_input_range.1
+            ));
+        }
 
         // TODO: the clone can absolutely be avoided here as the mutable and
         // immutable parts of Interpreter are disjoint
         self.puzzle_states
-            .add_num_to(register_idx, &which_reg.clone(), value);
+            .add_num_to(*register_idx, &register.clone(), value);
 
         self.execution_state = ExecutionState::Running;
         self.program_counter += 1;
+        Ok(())
     }
 }
 
@@ -623,17 +652,21 @@ mod tests {
         assert!(match interpreter.step_until_halt() {
             PausedState::Input {
                 message,
+                valid_input_range,
                 register:
                     RegisterGenerator::Puzzle {
                         generator: _,
                         facelets: _,
                     },
                 register_idx: 0,
-            } => message == "Number to modulus:",
+            } =>
+                message == "Number to modulus:"
+                    && dbg!(valid_input_range).0 == Int::<U>::zero()
+                    && valid_input_range.1 == Int::from(209),
             _ => false,
         });
 
-        interpreter.give_input(Int::from(133_u64));
+        assert!(interpreter.give_input(Int::from(133_u64)).is_ok());
 
         assert!(match interpreter.step_until_halt() {
             PausedState::Halt {
@@ -649,7 +682,7 @@ mod tests {
         });
 
         let expected_output = [
-            "Number to modulus:",
+            "Number to modulus: [0-209]",
             "A is now 133",
             "A is now 120",
             "A is now 107",
@@ -744,17 +777,21 @@ mod tests {
         assert!(match interpreter.step_until_halt() {
             PausedState::Input {
                 message,
+                valid_input_range,
                 register:
                     RegisterGenerator::Puzzle {
                         generator: _,
                         facelets: _,
                     },
                 register_idx: 0,
-            } => message == "Which Fibonacci number to calculate:",
+            } =>
+                message == "Which Fibonacci number to calculate:"
+                    && valid_input_range.0 == Int::<U>::zero()
+                    && valid_input_range.1 == Int::from(8),
             _ => false,
         });
 
-        interpreter.give_input(Int::from(8_u64));
+        assert!(interpreter.give_input(Int::from(8_u64)).is_ok());
 
         assert!(match interpreter.step_until_halt() {
             PausedState::Halt {
@@ -769,7 +806,10 @@ mod tests {
             _ => false,
         });
 
-        let expected_output = ["Which Fibonacci number to calculate:", "The number is 21"];
+        let expected_output = [
+            "Which Fibonacci number to calculate: [0-8]",
+            "The number is 21",
+        ];
 
         assert_eq!(
             expected_output.len(),

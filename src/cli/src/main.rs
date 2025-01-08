@@ -5,7 +5,7 @@ use color_eyre::eyre::eyre;
 use compiler::compile;
 use internment::ArcIntern;
 use interpreter::{Interpreter, PausedState};
-use qter_core::{Int, I, U};
+use qter_core::{Int, I};
 
 /// Compiles and interprets qter programs
 #[derive(Parser)]
@@ -74,6 +74,7 @@ fn main() -> color_eyre::Result<()> {
                     state,
                     PausedState::Input {
                         message: _,
+                        valid_input_range: _,
                         register_idx: _,
                         register: _
                     }
@@ -88,10 +89,10 @@ fn main() -> color_eyre::Result<()> {
                         let mut number = String::new();
                         io::stdin().read_line(&mut number)?;
                         match number.parse::<Int<I>>() {
-                            Ok(v) => {
-                                interpreter.give_input(v);
-                                break;
-                            }
+                            Ok(v) => match interpreter.give_input(v) {
+                                Ok(_) => break,
+                                Err(e) => println!("{e}"),
+                            },
                             Err(_) => println!("Please input an integer"),
                         }
                     }
