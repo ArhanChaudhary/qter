@@ -282,7 +282,7 @@ impl Permutation {
     fn mapping_mut(&mut self) -> &mut [usize] {
         self.mapping();
 
-        return self.mapping.get_mut().unwrap();
+        self.mapping.get_mut().unwrap()
     }
 
     /// Compose another permutation into this permutation

@@ -73,7 +73,6 @@ fn main() -> color_eyre::Result<()> {
                 let is_input = matches!(
                     state,
                     PausedState::Input {
-                        message: _,
                         valid_input_range: _,
                         register_idx: _,
                         register: _

@@ -79,17 +79,15 @@ impl Puzzle {
 /// If the interpreter is paused, this represents the reason why.
 pub enum PausedState {
     Halt {
-        message: String,
         register_idx: Option<usize>,
         register: Option<RegisterGenerator>,
     },
     Input {
-        message: String,
-        valid_input_range: (Int<I>, Int<I>),
+        valid_input_range: [Int<I>; 2],
         register_idx: usize,
         register: RegisterGenerator,
     },
-    Panicked(&'static str),
+    Panicked,
 }
 
 /// Whether the interpreter can be stepped forward or is paused for some reason
@@ -144,12 +142,12 @@ pub enum ActionPerformed<'s> {
         facelets: &'s Facelets,
         location: usize,
     },
-    AddToTheoretical {
+    AddedToTheoretical {
         register_idx: usize,
         amt: Int<U>,
     },
     ExecutedAlgorithm(&'s PermutePuzzle),
-    Panic,
+    Panicked,
 }
 
 impl PuzzleStates {
@@ -291,9 +289,9 @@ impl Interpreter {
     pub fn step(&mut self) -> ActionPerformed<'_> {
         macro_rules! interpreter_panic {
             ($self:ident, $message:expr) => {{
-                $self.execution_state = ExecutionState::Paused(PausedState::Panicked($message));
+                $self.execution_state = ExecutionState::Paused(PausedState::Panicked);
                 $self.messages.push_back(format!("Panicked: {{$message}}"));
-                ActionPerformed::Panic
+                ActionPerformed::Panicked
             }};
         }
 
@@ -352,8 +350,7 @@ impl Interpreter {
                 let max_input =
                     self.puzzle_states.register_order(register, *register_idx) - Int::<I>::one();
                 self.execution_state = ExecutionState::Paused(PausedState::Input {
-                    message: message.to_owned(),
-                    valid_input_range: (min_input, max_input),
+                    valid_input_range: [min_input, max_input],
                     register: register.to_owned(),
                     register_idx: *register_idx,
                 });
@@ -368,7 +365,6 @@ impl Interpreter {
                 register_idx,
             } => {
                 self.execution_state = ExecutionState::Paused(PausedState::Halt {
-                    message: message.to_owned(),
                     register: register.to_owned(),
                     register_idx: *register_idx,
                 });
@@ -432,7 +428,7 @@ impl Interpreter {
 
                 self.program_counter += 1;
 
-                ActionPerformed::AddToTheoretical {
+                ActionPerformed::AddedToTheoretical {
                     register_idx: *register_idx,
                     amt: *amount,
                 }
@@ -472,7 +468,6 @@ impl Interpreter {
     /// Panics if the interpreter is not executing an `input` instruction
     pub fn give_input(&mut self, value: Int<I>) -> Result<(), String> {
         let ExecutionState::Paused(PausedState::Input {
-            message: _,
             valid_input_range,
             register_idx,
             register,
@@ -480,10 +475,10 @@ impl Interpreter {
         else {
             panic!("The interpreter isn't in an input state");
         };
-        if value < valid_input_range.0 || value > valid_input_range.1 {
+        if value < valid_input_range[0] || value > valid_input_range[1] {
             return Err(format!(
                 "The input {value} must be bewteen {} and {}.",
-                valid_input_range.0, valid_input_range.1
+                valid_input_range[0], valid_input_range[1]
             ));
         }
 
@@ -651,7 +646,6 @@ mod tests {
 
         assert!(match interpreter.step_until_halt() {
             PausedState::Input {
-                message,
                 valid_input_range,
                 register:
                     RegisterGenerator::Puzzle {
@@ -659,27 +653,22 @@ mod tests {
                         facelets: _,
                     },
                 register_idx: 0,
-            } =>
-                message == "Number to modulus:"
-                    && dbg!(valid_input_range).0 == Int::<U>::zero()
-                    && valid_input_range.1 == Int::from(209),
+            } => valid_input_range[0] == Int::<U>::zero() && valid_input_range[1] == Int::from(209),
             _ => false,
         });
 
         assert!(interpreter.give_input(Int::from(133_u64)).is_ok());
 
-        assert!(match interpreter.step_until_halt() {
+        assert!(matches!(
+            interpreter.step_until_halt(),
             PausedState::Halt {
-                message,
-                register:
-                    Some(RegisterGenerator::Puzzle {
-                        generator: _,
-                        facelets: _,
-                    }),
+                register: Some(RegisterGenerator::Puzzle {
+                    generator: _,
+                    facelets: _,
+                }),
                 register_idx: Some(0),
-            } => message == "The modulus is",
-            _ => false,
-        });
+            }
+        ));
 
         let expected_output = [
             "Number to modulus: [0-209]",
@@ -776,7 +765,6 @@ mod tests {
 
         assert!(match interpreter.step_until_halt() {
             PausedState::Input {
-                message,
                 valid_input_range,
                 register:
                     RegisterGenerator::Puzzle {
@@ -784,27 +772,22 @@ mod tests {
                         facelets: _,
                     },
                 register_idx: 0,
-            } =>
-                message == "Which Fibonacci number to calculate:"
-                    && valid_input_range.0 == Int::<U>::zero()
-                    && valid_input_range.1 == Int::from(8),
+            } => valid_input_range[0] == Int::<U>::zero() && valid_input_range[1] == Int::from(8),
             _ => false,
         });
 
         assert!(interpreter.give_input(Int::from(8_u64)).is_ok());
 
-        assert!(match interpreter.step_until_halt() {
+        assert!(matches!(
+            interpreter.step_until_halt(),
             PausedState::Halt {
-                message,
-                register:
-                    Some(RegisterGenerator::Puzzle {
-                        generator: _,
-                        facelets: _,
-                    }),
+                register: Some(RegisterGenerator::Puzzle {
+                    generator: _,
+                    facelets: _,
+                }),
                 register_idx: Some(0),
-            } => message == "The number is",
-            _ => false,
-        });
+            }
+        ));
 
         let expected_output = [
             "Which Fibonacci number to calculate: [0-8]",
