@@ -216,7 +216,7 @@ If a negative input is meaningful to the program you are executing, you can inpu
 
 <ul>
 
-This instruction exits the program with an output, and it is similar to the `input` instruction. Repeat the given algorithm until the positions are solved (see the `solved-goto` instruction). The number of repetitions this took is then added to the end of the given message to serve as the output of the program. For example:
+This instruction terminates the program and gives an output, and it is similar to the `input` instruction. To decode the output of the program, repeat the given algorithm until the positions given are solved (see the `solved-goto` instruction). The number of repetitions it took to solve the given pieces along with the specified message is considered the output of the program. For example:
 
 ```l
 Puzzles
@@ -231,9 +231,9 @@ A: 3x3
 ```
 
 <!-- NOTE: let's try not to go too in depth as to why this program's output is its input. Save the yapping for the design section as it may unnecessarily confuse readers (but Henry if you could lightly introduce the concept in a way that makes sense go for it) -->
-If you input the number two, you would then have to repeat `U R U' R'` until the UFR corner is solved. In this case, the expected number of repetitions is two, so the expected output of the program is "You chose 2".
+In this example, after performing the input and reaching the halt instruction, you would have to repeat `U R U' R'` until the UFR corner is solved. For example, if you inputted the number two by performing `(R U R' U') (R U R' U')`, the expected output will be two, since you have to perform `U R U' R'` twice to solve the UFR corner. Therefore, the expected output of the program is "You chose 2".
 
-Lastly, a `halt` instruction with just a message is legal. For example:
+If the program does not require giving a numeric output, then the algorithm may be left out. For example:
 
 ```l
 Puzzles
@@ -248,7 +248,7 @@ A: 3x3
 
 <ul>
 
-Physically switch to a different puzzle, labeled by letter in the `Puzzles` declaration. It is important that you do not rotate the puzzle when setting it aside or picking it back up. For example:
+Put down your current puzzle and pick up a different one, labeled by letter in the `Puzzles` declaration. It is important that you do not rotate the puzzle when setting it aside or picking it back up. For example:
 
 ```l
 Puzzles
@@ -261,21 +261,21 @@ B: 3x3
 ...
 ```
 
-this program requires two Rubik's cubes to execute. The instructions indicate performing `U` on the first Rubik's cube and then `R` on the second.
+this program requires two Rubik's cubes to execute. The instructions indicate performing `U` on the first Rubik's cube and then `R` on the second. When the program starts, you are expected to be holding the first cube in the list.
 
 </ul>
 
 ### Advanced instructions
 
-The Q file format thus far is theoretically equivalent to the computational facilities of a computer, an important theorem proven in the [computer architecture design](#computer-architecture-design) section. This section details advanced instructions the Q file format supports.
+The Q file format thus far is theoretically equivalent to a classical computer, as demonstrated in the [computer architecture design](#computer-architecture-design) section. This section details advanced instructions that the Q file format supports.
 
 - `print <message> [<algorithm> counting-until <positions>]`
 
 <ul>
 
-This is an optional instruction that you may entirely ignore. It is primarily intended for emulators to utilize. The `print` instruction serves as a secondary mechanism to product output without exiting the program. The motivation stems from the fact that, without this instruction, the only form of meaningful output is the single number produced by the `halt` instruction.
+This is an optional instruction that you may choose to ignore. The `print` instruction serves as a secondary mechanism to produce output without exiting the program. The motivation stems from the fact that, without this instruction, the only form of meaningful output is the single number produced by the `halt` instruction.
 
-Repeat the given algorithm until the positions are solved (see the `solved-goto` instruction). The number of repetitions this took is then added to the end of the given message to serve as output of the program. Then, you must perform the algorithm in reverse the same number of times, undoing what you just did. For example:
+To execute this instruction, repeat the given algorithm until the positions are solved, analagous to the halt instruction. The number of repetitions this took is then the output of the print statement. Then, you must perform the inverse of the algorithm the same number of times, undoing what you just did and returning the cube to the state it was in before executing the print instruction. For example:
 
 ```l
 Puzzles
@@ -283,6 +283,8 @@ A: 3x3
 
 1 | R U R2 B2 U L U' L' D' R' D R B2 U2
 2 | print "This should output ten:"
+          R U counting-until UFR UF
+3 | halt "This should also output ten:"
           R U counting-until UFR UF
 ...
 ```
@@ -508,7 +510,7 @@ Talking points
 # About the authors
 
 - Arhan Chaudhary: Hi! I am a sophomore at Purdue University, and I have always been fascinated by Rubik's cubes since I learned how to solve them in middle school. I was greatly inspired by the [Purdue Hackers](https://www.purduehackers.com/) community to begin this project, and have spent the better part of the entire school year working on it. I'm looking for Summer 2026 internships - and I'm particularly excited about working with startups. Read more about my work at my [website](https://arhan.sh/).
-- Henry Rovnyak (_jumps off of a catwalk and lands behind you_): Hello there! Like Arhan, I too am a sophomore at Purdue University. I'm interested in math and programming, and I met Arhan through this project and the Purdue Hackers community. I enjoy systems and scientific programming, but I also have a soft spot for theoretical work and frontend design. Arhan may or may not have gotten me addicted to cubes... I'm also interested in Summer 2026 internships, and you should consider checking out [my website](https://hrovnyak.gitlab.io/) to see some of the other stuff I've been working on.
+- Henry Rovnyak: (_jumps off of a catwalk and lands behind you_) Hello there! Like Arhan, I too am a sophomore at Purdue University. I'm interested in math and programming, and I met Arhan through this project and the Purdue Hackers community. I enjoy systems and scientific programming, but I also have a soft spot for theoretical work and frontend design. Arhan may or may not have gotten me addicted to cubes... I'm also interested in Summer 2026 internships, and you should consider checking out [my website](https://hrovnyak.gitlab.io/) to see some of the other stuff I've been working on.
 - Asher Gray: I am neither a sophomore nor at Purdue University. I love studying math, solving Rubik's cubes, and making videos about them! I recently made a video about using the cube as a calculator, then Arhan reached out and invited me to help out with a similar project he'd been working on, qter! It has been a lot of fun. You can find me on [YouTube](https://m.youtube.com/channel/UCJZt93WO-evfsfi7YlVmrQA) or enjoy some interactive math visualizations on my [website](https://thegraycuber.github.io/).
 
 # References
