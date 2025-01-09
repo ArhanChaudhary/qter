@@ -82,7 +82,7 @@ pub enum PausedState {
         register: Option<RegisterGenerator>,
     },
     Input {
-        valid_input_range: [Int<I>; 2],
+        max_input: Int<I>,
         register_idx: usize,
         register: RegisterGenerator,
     },
@@ -322,17 +322,15 @@ impl Interpreter {
                 register,
                 register_idx,
             } => {
-                // TODO: figure out how we should handle minimum input
-                let min_input = Int::<I>::zero();
                 let max_input =
                     self.puzzle_states.register_order(register, *register_idx) - Int::<I>::one();
                 self.execution_state = ExecutionState::Paused(PausedState::Input {
-                    valid_input_range: [min_input, max_input],
+                    max_input,
                     register: register.to_owned(),
                     register_idx: *register_idx,
                 });
                 self.messages
-                    .push_back(format!("{message} [{min_input}-{max_input}]"));
+                    .push_back(format!("{message} (max input {max_input})"));
 
                 ActionPerformed::Paused
             }
@@ -445,18 +443,21 @@ impl Interpreter {
     /// Panics if the interpreter is not executing an `input` instruction
     pub fn give_input(&mut self, value: Int<I>) -> Result<(), String> {
         let ExecutionState::Paused(PausedState::Input {
-            valid_input_range,
+            max_input,
             register_idx,
             register,
         }) = self.execution_state()
         else {
             panic!("The interpreter isn't in an input state");
         };
-        if value < valid_input_range[0] || value > valid_input_range[1] {
+        if value > *max_input {
             return Err(format!(
-                "The input {value} must be bewteen {} and {}.",
-                valid_input_range[0], valid_input_range[1]
+                "Your input must not be greater than {}.",
+                max_input
             ));
+        }
+        if value < -*max_input {
+            return Err(format!("Your input must not be less than {}.", -*max_input));
         }
 
         // TODO: the clone can absolutely be avoided here as the mutable and
@@ -623,14 +624,14 @@ mod tests {
 
         assert!(match interpreter.step_until_halt() {
             PausedState::Input {
-                valid_input_range,
+                max_input,
                 register:
                     RegisterGenerator::Puzzle {
                         generator: _,
                         facelets: _,
                     },
                 register_idx: 0,
-            } => valid_input_range[0] == Int::<U>::zero() && valid_input_range[1] == Int::from(209),
+            } => *max_input == Int::from(209),
             _ => false,
         });
 
@@ -648,7 +649,7 @@ mod tests {
         ));
 
         let expected_output = [
-            "Number to modulus: [0-209]",
+            "Number to modulus: (max input 209)",
             "A is now 133",
             "A is now 120",
             "A is now 107",
@@ -742,14 +743,14 @@ mod tests {
 
         assert!(match interpreter.step_until_halt() {
             PausedState::Input {
-                valid_input_range,
+                max_input,
                 register:
                     RegisterGenerator::Puzzle {
                         generator: _,
                         facelets: _,
                     },
                 register_idx: 0,
-            } => valid_input_range[0] == Int::<U>::zero() && valid_input_range[1] == Int::from(8),
+            } => *max_input == Int::from(8),
             _ => false,
         });
 
@@ -767,7 +768,7 @@ mod tests {
         ));
 
         let expected_output = [
-            "Which Fibonacci number to calculate: [0-8]",
+            "Which Fibonacci number to calculate: (max input 8)",
             "The number is 21",
         ];
 
