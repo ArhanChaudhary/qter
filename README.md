@@ -6,7 +6,7 @@
 
 PROJECT STATUS: almost MVP; many features incomplete
 
-Qter is a human-friendly Rubik's cube computer. This means you can compile a computer program and then act as a computer processor by physically turning a Rubik's cube to affect its computation, even if you have no knowledge of how computers work. Following is an example executable program that accepts user input and computes corresponding Fibonacci number iteratively, written in our custom Rubik's cube file format named Q:
+Qter is a human-friendly Rubik's cube computer. This means you can compile a computer program and then act as a computer processor by physically turning a Rubik's cube to affect its computation, even if you have no knowledge of how computers work. Following is an example executable program that accepts an index as user input and computes corresponding Fibonacci number. It is written in our custom Rubik's cube file format named Q, the syntax of which will be explained later:
 
 `fib.q`
 <!-- some alternatives: clarity cl el janet lfe lean nlogo opa pact promela scilab -->
@@ -114,11 +114,11 @@ loop {
 
 ### The Q file format
 
-The Q file format is qter's representation of a computer program in an executable Rubik's cube language. As promised, the file format was designed in such a way that, with relatively little effort or knowledge, humans can physically manipulate a Rubik's cube to execute these programs and affect a meaningful computation.
+The Q file format is qter's representation of a computer program in an executable Rubik's cube language. The file format was designed in such a way that, with only basic Rubik's cube knowledge, a human can physically manipulate a twisty puzzle to execute a program and perform a meaningful computation.
 
-Contrary to what was introduced, qter doesn't just work with Rubik's cubes, but with any twisty puzzle in the shape of a platonic solid. However, we are most familiar with the Rubik's cube, thus for demonstration purposes we will introduce the Q file format with the aforementioned from now on.
+Qter doesn't just support 3x3x3 cubes, but any twisty puzzle in the shape of a platonic solid. Since most people are most familiar with the 3x3x3 cube, we will introduce qter with the aforementioned from now on.
 
-Q files are expected to be read from top to bottom, with labeled line numbers for visual clarity. Each line indicates an instruction, which can either be a manipulation to physically perform or an alterative logic construct on the Rubik's cube. For example:
+Q files are expected to be read from top to bottom. Each line indicates an instruction, which can either be an algorithm to perform or an alterative logic construct on the Rubik's cube. For example:
 
 ```l
 Puzzles
@@ -129,9 +129,9 @@ A: 3x3
 ...
 ```
 
-The `Puzzles` declaration specifies the types of twisty puzzles used, it being just the Rubik's cube in this case. The instructions indicate performing the moves U' R2 L D' on the Rubik's cube, given in [standard move notation](https://jperm.net/3x3/moves). You must begin with all specified puzzles solved at any angle before following the instructions.
+The `Puzzles` declaration specifies the types of twisty puzzles used. In this example, it is declaring that you must start with a 3x3x3 cube, and giving it the name "A". The name is is unimportant in this example, but becomes important when operating on multiple cubes. The instructions indicate that you must performa the moves U' R2 L D' on the Rubik's cube, given in [standard move notation](https://jperm.net/3x3/moves). You must begin with all specified puzzles solved before following the instructions.
 
-The Q file format also permits special instructions that involve the used twisty puzzle but require additional logic. These logical instructions were designed to be simple enough for humans to understand and perform.
+The Q file format also includes special instructions that involve the twisty puzzle but require additional logic. These logical instructions were designed to be simple enough for humans to understand and perform.
 
 ### Logical instructions
 
@@ -140,7 +140,7 @@ Following this section, you should be able to entirely understand how to physica
 - `goto [number]`
 
 <ul>
-Start reading instructions from the specified line number. For example:
+When encountering this instruction, jump to the specified line number instead of reading on to the next line. For example:
 
 <pre>
 Puzzles
@@ -151,13 +151,13 @@ A: 3x3
 3 | goto 1
 ...
 </pre>
-Indicates an infinite loop of performing U' R2 L D' on the Rubik's cube.
+Indicates an infinite loop of performing U' R2 L D' on the Rubik's cube. After performing the algorithm, the `goto` instruction requires you to jump back to the line 1 where you started.
 </ul>
 
 - `solved-goto [number] [positions]`
 
 <ul>
-Start reading instructions from the specified line number if the specified positions on the puzzle each contain their solved piece. If not, fall through and ignore this instruction. For example:
+If the specified positions on the puzzle each contain their solved piece, then jump to the line number specified as if it was a `goto` instruction. Otherwise, go on to the next instruction as if it was not there. For example:
 
 ```l
 Puzzles
@@ -170,9 +170,9 @@ A: 3x3
 ...
 ```
 
-Indicates repeatedly performing U' R2 until the UFR corner position and UB edge position contain their solved pieces, at when perform L D' on the Rubik's cube. Note that three faces uniquely identify any corner position and two faces uniquely identify any edge position on the Rubik's cube, hence UFR (up front right) and UF (up front).
+Indicates repeatedly performing U' R2 until the UFR corner position and UB edge position contain their solved pieces. Then, perform L D' on the Rubik's cube. Note that three faces uniquely identify any corner position and two faces uniquely identify any edge position on the Rubik's cube, hence UFR (up front right) and UF (up front).
 
-Determining if a position contains its solved piece slightly varies from puzzle to puzzle, but the idea remains the same. For the Rubik's cube, this is the case when each face of the piece at the position is uniform with its center. The following illustrates a successful `solved-goto 4 UFR UF` instruction:
+Determining if a position contains its solved piece slightly varies from puzzle to puzzle, but the idea remains the same. For the Rubik's cube, this is the case when each face of the piece at the position is the same color as its center. The following illustrates a successful `solved-goto 4 UFR UF` instruction:
 
 <img src="media/solved-goto-example.png" width="125" alt="A Rubik's cube with the UFR and UF positions solved">
 
@@ -182,12 +182,7 @@ Determining if a position contains its solved piece slightly varies from puzzle 
 
 <ul>
 
-This instruction facilitates arbitrary input from a user which will be stored and processed on the puzzle.
-
-What we could do is supply the algorithm for the cycle and tell the user to repeat that algorithm <their input> number of times
-this is equivalent to incrementing a register value by one <their input> number of times
-
- incrementing by the inputted number of times
+This instruction facilitates arbitrary input from a user which will be stored and processed on the puzzle. To input the number two, the user would perform the specified algorithm on the Rubik's cube two times.
 
 ```l
 Puzzles
@@ -198,6 +193,8 @@ A: 3x3
           max-input 5
 ...
 ```
+
+In this example, if the user wanted to input the number two at this step, they would execute the algorithm `R U R' U' R U R' U'`. Note that if you try to execute the algorithm six times, the cube will return to its solved state as if you inputted the number zero. This is shown to the user by the `max-input 5` syntax. If a negative number input is meaningful to the program you are executing, you can input negative one by performing the inverse of the algorithm. For example, negative two would be inputted as `U R U' R' U R U' R'`.
 
 </ul>
 
@@ -257,7 +254,7 @@ If you have experience working with a compiled programming language, you know th
 
 # Design
 
-Obligatorily, much of qter is heavily based on group theory, compiler theory, and programming language theory. The target audience of this document more reflects the lay person rather than the advanced mathematician or computer scientist, so we will provide gentle introductions to these concepts to make our design principles and the rest of this document as accessible as possible.
+Much of qter is heavily based on group theory, compiler theory, and programming language theory. We will only provide a basic overview of these concepts to make our design principles and the rest of this document as accessible as possible.
 
 ## Computer architecture
 
