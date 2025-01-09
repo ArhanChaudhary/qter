@@ -87,17 +87,16 @@ loop {
 
 ### Table of Contents
 
-- [Usage](#usage)
-  - [Physically running qter](#physically-running-qter)
-    - [The Q file format](#the-q-file-format)
-    - [Logical instructions](#logical-instructions)
-    - [Advanced instructions](#advanced-instructions)
-    - [Other twisty puzzles](#other-twisty-puzzles)
-  - [The QAT programming language](#the-qat-programming-language)
-    - [Your first QAT program](#your-first-qat-program)
-    - [Metaprogramming](#metaprogramming)
-    - [Prelude](#prelude)
-    - [The stack](#the-stack)
+- [Physically running qter](#physically-running-qter)
+  - [The Q file format](#the-q-file-format)
+  - [Logical instructions](#logical-instructions)
+  - [Advanced instructions](#advanced-instructions)
+  - [Other twisty puzzles](#other-twisty-puzzles)
+- [The QAT programming language](#the-qat-programming-language)
+  - [Your first QAT program](#your-first-qat-program)
+  - [Metaprogramming](#metaprogramming)
+  - [Prelude](#prelude)
+  - [The stack](#the-stack)
 - [Computer architecture design](#computer-architecture-design)
   - [Rubik's cube theory](#rubiks-cube-theory)
   - [Cycles are registers](#cycles-are-registers)
@@ -112,11 +111,9 @@ loop {
 - [References](#references)
 - [Acknowledgements](#acknowledgements)
 
-# Usage
+# Physically running qter
 
-## Physically running qter
-
-### The Q file format
+## The Q file format
 
 The Q file format is qter's representation of a computer program in an executable Rubik's cube language. The file format was designed in such a way that, with only basic Rubik's cube knowledge, a human can physically manipulate a twisty puzzle to execute a program and perform a meaningful computation.
 
@@ -137,7 +134,7 @@ The `Puzzles` declaration specifies the types of twisty puzzles used. In this ex
 
 The Q file format also includes special instructions that involve the twisty puzzle but require additional logic. These logical instructions are designed to be simple enough for humans to understand and perform.
 
-### Logical instructions
+## Logical instructions
 
 Following this section, you should be able to understand how to physically execute the example Fibonacci program provided at the beginning of this document. More complicated instructions are expanded upon in the next section.
 
@@ -234,7 +231,6 @@ A: 3x3
           counting-until UFR
 ```
 
-<!-- NOTE: let's try not to go too in depth as to why this program's output is its input. Save the yapping for the design section as it may unnecessarily confuse readers (but Henry if you could lightly introduce the concept in a way that makes sense go for it) -->
 In this example, after performing the input and reaching the halt instruction, you would have to repeat `U R U' R'` until the UFR corner is solved. For example, if you inputted the number two by performing `(R U R' U') (R U R' U')`, the expected output will be two, since you have to perform `U R U' R'` twice to solve the UFR corner. Therefore, the expected output of the program is "You chose 2".
 
 If the program does not require giving a numeric output, then the algorithm may be left out. For example:
@@ -269,7 +265,7 @@ this program requires two Rubik's cubes to execute. The instructions indicate pe
 
 </ul>
 
-### Advanced instructions
+## Advanced instructions
 
 The Q file format thus far is theoretically equivalent to a classical computer, as demonstrated in the [computer architecture design](#computer-architecture-design) section. This section details advanced instructions that the Q file format supports.
 
@@ -279,7 +275,7 @@ The Q file format thus far is theoretically equivalent to a classical computer, 
 
 This is an optional instruction that you may choose to ignore. The `print` instruction serves as a secondary mechanism to produce output without exiting the program. The motivation stems from the fact that, without this instruction, the only form of meaningful output is the single number produced by the `halt` instruction.
 
-To execute this instruction, repeat the given algorithm until the positions are solved, analagous to the halt instruction. The number of repetitions this took is then the output of the print statement. Then, you must perform the inverse of the algorithm the same number of times, undoing what you just did and returning the cube to the state it was in before executing the print instruction. For example:
+To execute this instruction, repeat the given algorithm until the positions are solved, analogous to the halt instruction. The number of repetitions this took is then the output of the print statement. Then, you must perform the inverse of the algorithm the same number of times, undoing what you just did and returning the cube to the state it was in before executing the print instruction. For example:
 
 ```l
 Puzzles
@@ -290,7 +286,6 @@ A: 3x3
           R U counting-until UFR UF
 3 | halt "This should also output ten:"
           R U counting-until UFR UF
-...
 ```
 
 Like the `halt` instruction, including just a message is legal. In this case, you can skip this instruction as there is nothing to do. For example:
@@ -299,7 +294,7 @@ Like the `halt` instruction, including just a message is legal. In this case, yo
 Puzzles
 A: 3x3
 
-2 | print "Just a friendly debugging message :-)"
+1 | print "Just a friendly debugging message :-)"
 ...
 ```
 
@@ -335,7 +330,7 @@ WIP
 
 </ul>
 
-### Other twisty puzzles
+## Other twisty puzzles
 
 WIP
 
@@ -344,11 +339,11 @@ Talking points:
 - The `Puzzles` declaration accepts a hard-coded puzzle name or a PuzzleGeometry description
 - PuzzleGeometry is a format developed and designed by Tomas Rokicki that generates a puzzle definition from a simple description. You can read more about it [here](https://alpha.twizzle.net/explore/help.html) or use the format interactively on [Twizzle Explorer](https://alpha.twizzle.net/explore) (click "Config").
 
-## The QAT programming language
+# The QAT programming language
 
 This section assumes moderate familiarity with an existing programming language, such as Python, JavaScript, or C.
 
-### Your first QAT program
+## Your first QAT program
 
 If you have experience working with a compiled programming language, you know that to run a program, you compile your source code into machine code that the computer processor then interprets and executes. The qter compilation pipeline works similarly.
 
@@ -394,7 +389,7 @@ stop:
 - guide on how to use the CLI
 - explain variables (.registers declaration), labels, and primitive instructions
 
-### Metaprogramming
+## Metaprogramming
 
 WIP
 
@@ -404,7 +399,7 @@ Talking points:
 - .define
 - lua
 
-### Prelude
+## Prelude
 
 WIP
 
@@ -413,7 +408,7 @@ Talking points:
 - convenience macros like `inc`, `dec`, and control flow
 - [Link to prelude](src/qter_core/prelude.qat) and encourage its reference
 
-### The stack
+## The stack
 
 WIP
 
@@ -519,7 +514,7 @@ Talking points
 
 # References
 <!-- cspell:disable -->
-[<span id="ref-1">1</span>] Bergvall, O., Hynning, E., Hedberg, M., Mickelin, J., & Masawe, P. (2010). On Rubik’s cube. _Report, KTH Royal Institute of Technology_ (pp. 65-73). \
+[<span id="ref-1">1</span>] Bergvall, O., Hynning, E., Hedberg, M., Mickelin, J., & Masawe, P. (2010). On Rubik’s cube. _Report, KTH Royal Institute of Technology_ (pp. 65-79). \
 [<span id="ref-2">2</span>] Rokicki, T., Kociemba, H., Davidson, M., & Dethridge, J. (2014). The diameter of the rubik's cube group is twenty. _siam REVIEW, 56_(4), 645-670.
 <!-- cspell:enable -->
 # Acknowledgements
