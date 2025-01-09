@@ -116,9 +116,9 @@ loop {
 
 The Q file format is qter's representation of a computer program in an executable Rubik's cube language. The file format was designed in such a way that, with only basic Rubik's cube knowledge, a human can physically manipulate a twisty puzzle to execute a program and perform a meaningful computation.
 
-Qter doesn't just support 3x3x3 cubes, but any twisty puzzle in the shape of a platonic solid. Since most people are most familiar with the 3x3x3 cube, we will introduce qter with the aforementioned from now on.
+Qter doesn't just support 3x3x3 cubes, but it works with any twisty puzzle in the shape of a platonic solid. Since most people are most familiar with the 3x3x3 cube, we will introduce qter with the aforementioned from now on.
 
-Q files are expected to be read from top to bottom. Each line indicates an instruction, which can either be an algorithm to perform or an alterative logic construct on the Rubik's cube. For example:
+Q files are expected to be read from top to bottom. Each line indicates an instruction: the simplest type of instruction is just an algorithm to perform on the cube. For example:
 
 ```l
 Puzzles
@@ -129,15 +129,15 @@ A: 3x3
 ...
 ```
 
-The `Puzzles` declaration specifies the types of twisty puzzles used. In this example, it is declaring that you must start with a 3x3x3 cube, and giving it the name "A". The name is is unimportant in this example, but becomes important when operating on multiple cubes. The instructions indicate that you must performa the moves U' R2 L D' on the Rubik's cube, given in [standard move notation](https://jperm.net/3x3/moves). You must begin with all specified puzzles solved before following the instructions.
+The `Puzzles` declaration specifies the types of twisty puzzles used. In this example, it is declaring that you must start with a 3x3x3 cube, and that it has the name "A". The name is is unimportant in this example, but becomes important when operating on multiple cubes. The instructions indicate that you must perform the moves U' R2 L D' on the Rubik's cube, given in [standard move notation](https://jperm.net/3x3/moves). You must begin with the cube solved before following the instructions.
 
-The Q file format also includes special instructions that involve the twisty puzzle but require additional logic. These logical instructions were designed to be simple enough for humans to understand and perform.
+The Q file format also includes special instructions that involve the twisty puzzle but require additional logic. These logical instructions are designed to be simple enough for humans to understand and perform.
 
 ### Logical instructions
 
 Following this section, you should be able to entirely understand how to physically execute the example Fibonacci program provided at the beginning of this document. More complicated instructions are expanded upon in the next section.
 
-- `goto [number]`
+- `goto <number>`
 
 <ul>
 When encountering this instruction, jump to the specified line number instead of reading on to the next line. For example:
@@ -154,7 +154,7 @@ A: 3x3
 Indicates an infinite loop of performing U' R2 L D' on the Rubik's cube. After performing the algorithm, the `goto` instruction requires you to jump back to the line 1 where you started.
 </ul>
 
-- `solved-goto [number] [positions]`
+- `solved-goto <number> <positions>`
 
 <ul>
 If the specified positions on the puzzle each contain their solved piece, then jump to the line number specified as if it was a `goto` instruction. Otherwise, go on to the next instruction as if it was not there. For example:
@@ -178,7 +178,7 @@ Determining if a position contains its solved piece slightly varies from puzzle 
 
 </ul>
 
-- `input [message] [moves] max-input [number]`
+- `input <message> <moves> max-input <number>`
 
 <ul>
 
@@ -194,7 +194,7 @@ A: 3x3
 ...
 ```
 
-In this example, if the user wanted to input the number two at this step, they would execute the algorithm `R U R' U' R U R' U'`. Note that if you try to execute the algorithm six times, the cube will return to its solved state as if you inputted the number zero. This is shown to the user by the `max-input 5` syntax. If a negative number input is meaningful to the program you are executing, you can input negative one by performing the inverse of the algorithm. For example, negative two would be inputted as `U R U' R' U R U' R'`.
+In this example, if the user wanted to input the number two, they would execute the algorithm `(R U R' U') (R U R' U')`. Note that if you try to execute the algorithm six times, the cube will return to its solved state as if you inputted the number zero. This is shown to the user by the `max-input 5` syntax. If a negative input is meaningful to the program you are executing, you can input negative one by performing the inverse of the algorithm. For example, negative two would be inputted as `(U R U' R') (U R U' R')`.
 
 </ul>
 
@@ -254,7 +254,7 @@ If you have experience working with a compiled programming language, you know th
 
 # Design
 
-Much of qter is heavily based on group theory, compiler theory, and programming language theory. We will only provide a basic overview of these concepts to make our design principles and the rest of this document as accessible as possible.
+Much of qter is heavily based on group theory, compiler theory, and programming language theory. We will only provide a simplified overview of these concepts to make our design principles and the rest of this document as accessible as possible.
 
 ## Computer architecture
 
