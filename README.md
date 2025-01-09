@@ -174,7 +174,7 @@ Indicates repeatedly performing U' R2 until the UFR corner position and UB edge 
 
 Determining if a position contains its solved piece slightly varies from puzzle to puzzle, but the idea remains the same. For the Rubik's cube, this is the case when each face of the piece at the position is uniform with its center. The following illustrates a successful `solved-goto 4 UFR UF` instruction:
 
-<img src="media/solved-goto-example.png" width="125" alt="The qter logo">
+<img src="media/solved-goto-example.png" width="125" alt="A Rubik's cube with the UFR and UF positions solved">
 
 </ul>
 
@@ -184,7 +184,19 @@ Determining if a position contains its solved piece slightly varies from puzzle 
 
 This instruction facilitates arbitrary input from a user which will be stored and processed on the puzzle.
 
-WIP
+What we could do is supply the algorithm for the cycle and tell the user to repeat that algorithm <their input> number of times
+this is equivalent to incrementing a register value by one <their input> number of times
+
+ incrementing by the inputted number of times
+
+```l
+Puzzles
+A: 3x3
+
+1 | input "Choose 0-5"
+          R U R' U'
+          max-input 5
+...
 
 </ul>
 
