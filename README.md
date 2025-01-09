@@ -197,6 +197,7 @@ A: 3x3
           R U R' U'
           max-input 5
 ...
+```
 
 </ul>
 

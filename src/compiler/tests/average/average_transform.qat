@@ -1,0 +1,22 @@
+.registers {
+    A, B <- 3x3 builtin (90, 90)
+}
+
+    input "First number:" A
+    input "Second number:" B
+loop:
+    add A 1
+    add B 89
+    solved-goto B found_total
+    goto loop
+found_total:
+    add A 1
+divide_by_2:
+    add A 89
+    solved-goto A stop
+    add A 89
+    solved-goto A stop
+    add B 1
+    goto divide_by_2
+stop:
+    halt "The average is" B
