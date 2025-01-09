@@ -1,10 +1,9 @@
-#![allow(clippy::type_complexity)]
 use std::{collections::VecDeque, sync::Arc};
 
 use qter_core::{
     architectures::{Permutation, PermutationGroup},
     discrete_math::{chinese_remainder_theorem, lcm},
-    Facelets, Instruction, Int, PermutePuzzle, Program, RegisterGenerator, Span, I, U,
+    Facelets, Instruction, Int, PermutePuzzle, Program, RegisterGenerator, I, U,
 };
 
 /// Represents an instance of a `PermutationGroup`, in other words this simulates the puzzle
@@ -91,16 +90,10 @@ pub enum PausedState {
 }
 
 /// Whether the interpreter can be stepped forward or is paused for some reason
+#[allow(clippy::large_enum_variant)]
 pub enum ExecutionState {
     Running,
     Paused(PausedState),
-}
-
-/// The current execution state of the interpreter
-pub struct State<'s> {
-    span: Span,
-    instruction_idx: usize,
-    execution_state: &'s ExecutionState,
 }
 
 /// An instance of a theoretical register. Analagous to the `Puzzle` structure.
@@ -267,22 +260,6 @@ impl Interpreter {
     /// Get the message queue of the interpreter
     pub fn messages(&mut self) -> &mut VecDeque<String> {
         &mut self.messages
-    }
-
-    /// Get the current state of the interpreter
-    pub fn state(&self) -> State<'_> {
-        let instruction_idx = if self.program_counter >= self.program.instructions.len() {
-            self.program.instructions.len() - 1
-        } else {
-            self.program_counter
-        };
-
-        let instruction = &self.program.instructions[instruction_idx];
-        State {
-            span: instruction.span().to_owned(),
-            instruction_idx,
-            execution_state: self.execution_state(),
-        }
     }
 
     /// Execute one instruction
