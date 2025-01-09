@@ -6,7 +6,7 @@
 
 PROJECT STATUS: almost MVP; many features incomplete
 
-Qter is a human-friendly Rubik's cube computer. This means you can compile a computer program and then act as a computer processor by physically turning a Rubik's cube to affect its computation, even if you have no knowledge of how computers work. Following is an example executable program that accepts an index as user input and computes corresponding Fibonacci number. It is written in our custom Rubik's cube file format named Q, the syntax of which will be explained later:
+Qter is a human-friendly Rubik's cube computer. This means you can compile a computer program and then act as a computer processor by physically turning a Rubik's cube to affect its computation, even if you have no knowledge of how computers work. Following is an example executable program that accepts an index as user input and computes the corresponding Fibonacci number. It is written in our custom Rubik's cube file format named Q:
 
 `fib.q`
 <!-- some alternatives: clarity cl el janet lfe lean nlogo opa pact promela scilab -->
@@ -118,7 +118,7 @@ The Q file format is qter's representation of a computer program in an executabl
 
 Qter doesn't just support 3x3x3 cubes, but it works with any twisty puzzle in the shape of a platonic solid. Since most people are most familiar with the 3x3x3 cube, we will introduce qter with the aforementioned from now on.
 
-Q files are expected to be read from top to bottom. Each line indicates an instruction: the simplest type of instruction is just an algorithm to perform on the cube. For example:
+Q files are expected to be read from top to bottom. Each line indicates an instruction, the simplest of which is just an algorithm to perform on the cube. For example:
 
 ```l
 Puzzles
@@ -129,7 +129,7 @@ A: 3x3
 ...
 ```
 
-The `Puzzles` declaration specifies the types of twisty puzzles used. In this example, it is declaring that you must start with a 3x3x3 cube, and that it has the name "A". The name is is unimportant in this example, but becomes important when operating on multiple cubes. The instructions indicate that you must perform the moves U' R2 L D' on the Rubik's cube, given in [standard move notation](https://jperm.net/3x3/moves). You must begin with the cube solved before following the instructions.
+The `Puzzles` declaration specifies the types of twisty puzzles used. In this example, it is declaring that you must start with a 3x3x3 cube, and that it has the name "A". The name is unimportant in this example, but becomes important when operating on multiple cubes. The instructions indicate that you must perform the moves U' R2 L D' on the Rubik's cube, given in [standard move notation](https://jperm.net/3x3/moves). You must begin with the cube solved before following the instructions.
 
 The Q file format also includes special instructions that involve the twisty puzzle but require additional logic. These logical instructions are designed to be simple enough for humans to understand and perform.
 
@@ -142,7 +142,7 @@ Following this section, you should be able to entirely understand how to physica
 <ul>
 When encountering this instruction, jump to the specified line number instead of reading on to the next line. For example:
 
-<pre>
+```l
 Puzzles
 A: 3x3
 
@@ -150,14 +150,16 @@ A: 3x3
 2 | L D'
 3 | goto 1
 ...
-</pre>
-Indicates an infinite loop of performing U' R2 L D' on the Rubik's cube. After performing the algorithm, the `goto` instruction requires you to jump back to the line 1 where you started.
+```
+
+Indicates an infinite loop of performing U' R2 L D' on the Rubik's cube. After performing the algorithm, the `goto` instruction requires you to jump back to line 1 where you started.
 </ul>
 
 - `solved-goto <number> <positions>`
 
 <ul>
-If the specified positions on the puzzle each contain their solved piece, then jump to the line number specified as if it was a `goto` instruction. Otherwise, go on to the next instruction as if it was not there. For example:
+
+If the specified positions on the puzzle each contain their solved piece, then jump to the line number specified as if it was a `goto` instruction. Otherwise, fall through and go to the next instruction. For example:
 
 ```l
 Puzzles
@@ -176,13 +178,14 @@ Determining if a position contains its solved piece slightly varies from puzzle 
 
 <img src="media/solved-goto-example.png" width="125" alt="A Rubik's cube with the UFR and UF positions solved">
 
+For other twisty puzzles, see [Other twisty puzzles](#other-twisty-puzzles).
 </ul>
 
-- `input <message> <moves> max-input <number>`
+- `input <prompt> <moves> max-input <number>`
 
 <ul>
 
-This instruction facilitates arbitrary input from a user which will be stored and processed on the puzzle. To input the number two, the user would perform the specified algorithm on the Rubik's cube two times.
+This instruction facilitates arbitrary input from a user which will be stored and processed on the puzzle. To do so, repeat the given sequence of moves "your input" number of times. For example:
 
 ```l
 Puzzles
@@ -194,7 +197,9 @@ A: 3x3
 ...
 ```
 
-In this example, if the user wanted to input the number two, they would execute the algorithm `(R U R' U') (R U R' U')`. Note that if you try to execute the algorithm six times, the cube will return to its solved state as if you inputted the number zero. This is shown to the user by the `max-input 5` syntax. If a negative input is meaningful to the program you are executing, you can input negative one by performing the inverse of the algorithm. For example, negative two would be inputted as `(U R U' R') (U R U' R')`.
+To input the number two, execute the algorithm `(R U R' U') (R U R' U')` on the Rubik's cube. Notice that if you try to execute the algorithm six times, the cube will return to its solved state as if you had inputted the number zero. Thus, your input number must not be greater than five, and this is shown with the `max-input 5` syntax.
+
+If a negative input is meaningful to the program you are executing, you can input negative one by performing the inverse of the algorithm. For example, negative two would be inputted as `(U R U' R') (U R U' R')`.
 
 </ul>
 
