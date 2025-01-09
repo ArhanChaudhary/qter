@@ -11,6 +11,7 @@ pub mod discrete_math;
 mod numbers;
 mod puzzle_parser;
 mod shared_facelet_detection;
+pub mod table_encoding;
 
 pub use numbers::*;
 
