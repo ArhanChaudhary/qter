@@ -1,4 +1,4 @@
-<!-- cspell:ignore nlogo promela scilab vcube benwh rokicki lgarron ditrus voltara infinidoge esqu1 Arhan Chaudhary Rovnyak korf -->
+<!-- cspell:ignore nlogo promela scilab vcube benwh rokicki lgarron ditrus voltara infinidoge esqu1 Arhan Chaudhary Rovnyak korf twizzle metaprogramming cubies -->
 <p align="center">
     <img src="media/CPU Logo.png" width="200" alt="The qter logo">
 </p>
@@ -93,17 +93,21 @@ loop {
     - [Logical instructions](#logical-instructions)
     - [Advanced instructions](#advanced-instructions)
     - [Other twisty puzzles](#other-twisty-puzzles)
-  - [Programming qter](#programming-qter)
-    - [Compilation pipeline](#compilation-pipeline)
-    - [Programming language](#programming-language)
-- [Design](#design)
-  - [Computer architecture](#computer-architecture)
-  - [Programming language](#programming-language-1)
+  - [The QAT programming language](#the-qat-programming-language)
+    - [Your first QAT program](#your-first-qat-program)
+    - [Metaprogramming](#metaprogramming)
+    - [Prelude](#prelude)
+    - [The stack](#the-stack)
+- [Computer architecture design](#computer-architecture-design)
+  - [Rubik's cube theory](#rubiks-cube-theory)
+  - [Cycles are registers](#cycles-are-registers)
+  - [Conditional branching](#conditional-branching)
+  - [The Rubik's cube is a computer](#the-rubiks-cube-is-a-computer)
 - [Technical details](#technical-details)
   - [Cycle combination solver](#cycle-combination-solver)
     - [Phase 1](#phase-1)
     - [Phase 2](#phase-2)
-    - [Phase 2 with GAP](#phase-2-with-gap)
+    - [Experimental phase 3 with GAP](#experimental-phase-3-with-gap)
 - [About the authors](#about-the-authors)
 - [References](#references)
 - [Acknowledgements](#acknowledgements)
@@ -129,18 +133,19 @@ A: 3x3
 ...
 ```
 
-The `Puzzles` declaration specifies the types of twisty puzzles used. In this example, it is declaring that you must start with a 3x3x3 cube, and that it has the name "A". The name is unimportant in this example, but becomes important when operating on multiple cubes. The instructions indicate that you must perform the moves U' R2 L D' on the Rubik's cube, given in [standard move notation](https://jperm.net/3x3/moves). You must begin with the cube solved before following the instructions.
+The `Puzzles` declaration specifies the types of twisty puzzles used. In this example, it is declaring that you must start with a 3x3x3 cube, and that it has the name "A". The name is unimportant in this example, but becomes important when operating on multiple cubes. The instructions indicate that you must perform the algorithm `U' R2 L D'` on the Rubik's cube, given in [standard move notation](https://jperm.net/3x3/moves). You must begin with the cube solved before following the instructions.
 
 The Q file format also includes special instructions that involve the twisty puzzle but require additional logic. These logical instructions are designed to be simple enough for humans to understand and perform.
 
 ### Logical instructions
 
-Following this section, you should be able to entirely understand how to physically execute the example Fibonacci program provided at the beginning of this document. More complicated instructions are expanded upon in the next section.
+Following this section, you should be able to understand how to physically execute the example Fibonacci program provided at the beginning of this document. More complicated instructions are expanded upon in the next section.
 
 - `goto <number>`
 
 <ul>
-When encountering this instruction, jump to the specified line number instead of reading on to the next line. For example:
+
+Jump to the specified line number instead of reading on to the next line. For example:
 
 ```l
 Puzzles
@@ -152,7 +157,8 @@ A: 3x3
 ...
 ```
 
-Indicates an infinite loop of performing U' R2 L D' on the Rubik's cube. After performing the algorithm, the `goto` instruction requires you to jump back to line 1 where you started.
+Indicates an infinite loop of performing `U' R2 L D'` on the Rubik's cube. After performing the algorithm, the `goto` instruction requires you to jump back to line 1 where you started.
+
 </ul>
 
 - `solved-goto <number> <positions>`
@@ -172,20 +178,21 @@ A: 3x3
 ...
 ```
 
-Indicates repeatedly performing U' R2 until the UFR corner position and UB edge position contain their solved pieces. Then, perform L D' on the Rubik's cube. Note that three faces uniquely identify any corner position and two faces uniquely identify any edge position on the Rubik's cube, hence UFR (up front right) and UF (up front).
+Indicates repeatedly performing `U' R2` until the UFR corner position and UB edge position contain their solved pieces. Then, perform `L D'` on the Rubik's cube. Note that three faces uniquely identify any corner position and two faces uniquely identify any edge position on the Rubik's cube, hence UFR (up front right) and UF (up front).
 
 Determining if a position contains its solved piece slightly varies from puzzle to puzzle, but the idea remains the same. For the Rubik's cube, this is the case when each face of the piece at the position is the same color as its center. The following illustrates a successful `solved-goto 4 UFR UF` instruction:
 
 <img src="media/solved-goto-example.png" width="125" alt="A Rubik's cube with the UFR and UF positions solved">
 
 For other twisty puzzles, see [Other twisty puzzles](#other-twisty-puzzles).
+
 </ul>
 
-- `input <prompt> <moves> max-input <number>`
+- `input <prompt> <algorithm> max-input <number>`
 
 <ul>
 
-This instruction facilitates arbitrary input from a user which will be stored and processed on the puzzle. To do so, repeat the given sequence of moves "your input" number of times. For example:
+This instruction facilitates arbitrary input from a user which will be stored and processed on the puzzle. To do so, repeat the given algorithm "your input" number of times. For example:
 
 ```l
 Puzzles
@@ -197,114 +204,311 @@ A: 3x3
 ...
 ```
 
-To input the number two, execute the algorithm `(R U R' U') (R U R' U')` on the Rubik's cube. Notice that if you try to execute the algorithm six times, the cube will return to its solved state as if you had inputted the number zero. Thus, your input number must not be greater than five, and this is shown with the `max-input 5` syntax.
+To input the number two, execute the algorithm `(R U R' U') (R U R' U')` on the Rubik's cube. Notice that if you try to execute `R U R' U'` six times, the cube will return to its solved state as if you had inputted the number zero. Thus, your input number must not be greater than five, and this is shown with the `max-input 5` syntax.
 
 If a negative input is meaningful to the program you are executing, you can input negative one by performing the inverse of the algorithm. For example, negative two would be inputted as `(U R U' R') (U R U' R')`.
 
 </ul>
 
-- `halt`
+- `halt <message> [<algorithm> counting-until <positions>]`
 
 <ul>
-WIP
+
+This instruction exits the program with an output, and it is similar to the `input` instruction. Repeat the given algorithm until the positions are solved (see the `solved-goto` instruction). The number of repetitions this took is then added to the end of the given message to serve as the output of the program. For example:
+
+```l
+Puzzles
+A: 3x3
+
+1 | input "Choose 0-5"
+          R U R' U'
+          max-input 5
+2 | halt "You chose"
+          U R U' R'
+          counting-until UFR
+```
+
+<!-- NOTE: let's try not to go too in depth as to why this program's output is its input. Save the yapping for the design section as it may unnecessarily confuse readers (but Henry if you could lightly introduce the concept in a way that makes sense go for it) -->
+If you input the number two, you would then have to repeat `U R U' R'` until the UFR corner is solved. In this case, the expected number of repetitions is two, so the expected output of the program is "You chose 2".
+
+Lastly, a `halt` instruction with just a message is legal. For example:
+
+```l
+Puzzles
+A: 3x3
+
+1 | halt "I halt immediately"
+```
+
 </ul>
 
-- `switch`
+- `switch <letter>`
 
 <ul>
-WIP
+
+Physically switch to a different puzzle, labeled by letter in the `Puzzles` declaration. It is important that you do not rotate the puzzle when setting it aside or picking it back up. For example:
+
+```l
+Puzzles
+A: 3x3
+B: 3x3
+
+1 | U
+2 | switch B
+3 | R
+...
+```
+
+this program requires two Rubik's cubes to execute. The instructions indicate performing `U` on the first Rubik's cube and then `R` on the second.
+
 </ul>
 
 ### Advanced instructions
 
-The Q file format thus far is theoretically equivalent to the computational facilities of a computer, an important theorem proven in the [computer architecture](#computer-architecture) section.
+The Q file format thus far is theoretically equivalent to the computational facilities of a computer, an important theorem proven in the [computer architecture design](#computer-architecture-design) section. This section details advanced instructions the Q file format supports.
 
-- `print`
+- `print <message> [<algorithm> counting-until <positions>]`
 
 <ul>
-WIP
+
+This is an optional instruction that you may entirely ignore. It is primarily intended for emulators to utilize. The `print` instruction serves as a secondary mechanism to product output without exiting the program. The motivation stems from the fact that, without this instruction, the only form of meaningful output is the single number produced by the `halt` instruction.
+
+Repeat the given algorithm until the positions are solved (see the `solved-goto` instruction). The number of repetitions this took is then added to the end of the given message to serve as output of the program. Then, you must perform the algorithm in reverse the same number of times, undoing what you just did. For example:
+
+```l
+Puzzles
+A: 3x3
+
+1 | R U R2 B2 U L U' L' D' R' D R B2 U2
+2 | print "This should output ten:"
+          R U counting-until UFR UF
+...
+```
+
 </ul>
+
+Talk about the stack here WIP (Henry you could write the rest of this section if you want)
 
 - `push`
 
 <ul>
+
 WIP
+
+Talking points:
+
+- Will need many puzzles
+
 </ul>
 
 - `pop`
 
 <ul>
+
 WIP
+
 </ul>
 
 - `switch-top`
 
 <ul>
+
 WIP
+
 </ul>
 
 ### Other twisty puzzles
 
-To specify
-
 WIP
 
-## Programming qter
+Talking points:
 
-### Compilation pipeline
+- The `Puzzles` declaration accepts a hard-coded puzzle name or a PuzzleGeometry description
+- PuzzleGeometry is a format developed and designed by Tomas Rokicki that generates a puzzle definition from a simple description. You can read more about it [here](https://alpha.twizzle.net/explore/help.html) or use the format interactively on [Twizzle Explorer](https://alpha.twizzle.net/explore) (click "Config").
+
+## The QAT programming language
+
+This section assumes moderate familiarity with an existing programming language, such as Python, JavaScript, or C.
+
+### Your first QAT program
 
 If you have experience working with a compiled programming language, you know that to run a program, you compile your source code into machine code that the computer processor then interprets and executes. The qter compilation pipeline works similarly.
 
-### Programming language
+![A diagram of the qter compilation pipeline](media/compilation-pipeline.svg)
 
-# Design
+Qter's high level programming language is called QAT, or Qter Assembly Text.
 
-Much of qter is heavily based on group theory, compiler theory, and programming language theory. We will only provide a simplified overview of these concepts to make our design principles and the rest of this document as accessible as possible.
+WIP
 
-## Computer architecture
+Talking points:
+
+- bare bones QAT program without macros
+
+<ul>
+
+```l
+.registers {
+    A, B <- 3x3 builtin (90, 90)
+}
+
+    input "First number:" A
+    input "Second number:" B
+loop:
+    add A 1
+    add B 89
+    solved-goto B found_total
+    goto loop
+found_total:
+    add A 1
+divide_by_2:
+    add A 89
+    solved-goto A stop
+    add A 89
+    solved-goto A stop
+    add B 1
+    goto divide_by_2
+stop:
+    halt "The average is" B
+```
+
+</ul>
+
+- guide on how to use the CLI
+- explain variables (.registers declaration), labels, and primitive instructions
+
+### Metaprogramming
+
+WIP
+
+Talking points:
+
+- macros
+- .define
+- lua
+
+### Prelude
+
+WIP
+
+Talking points:
+
+- convenience macros like `inc`, `dec`, and control flow
+- [Link to prelude](src/qter_core/prelude.qat) and encourage its reference
+
+### The stack
+
+WIP
+
+Talking points:
+
+- functions and recursion
+
+# Computer architecture design
 
 Qter is similar in many ways to how modern computers work, yet at the same time esoteric by nature. This section will start with a light background of how Rubik's cubes work and then elaborate on the unique properties that make qter possible.
 
-WIP
-
-## Programming language
+## Rubik's cube theory
 
 WIP
+
+Talking points:
+
+- Define move as a manipulation of the cube and algorithm as a sequence of moves
+- Optionally reintroduce [standard move notation](https://jperm.net/3x3/moves)
+- Centers do not move
+- If you repeat a constant sequence of moves on the Rubik's cube starting from the solved state, you will eventually reach the solved state after enough repetitions & proof
+- The states that the repetitions of an algorithm visits before repeating form that algorithm's cycle
+- Define order as # of repetitions
+
+## Cycles are registers
+
+WIP
+
+Talking points:
+
+- A register is a unit of storage in a computer. Think of it like memory — it can stores a value and update the value stored any time
+- Use the U cycle to demonstrate a register of order 4 meaning it returns to its original state with 4 moves. Emphasize mod 4
+- The value of this cycle's corresponding register, is the Nth step (or index) of the algorithm
+- We have a way to increment a register by a constant
+- 1260 order is maximal [[1](#ref-1)] and not enough for any meaningful computation
+- Generalize the notion of a register to multiple cycles that coexist on the Rubik's cube
+- The set of pieces affected by a given cycle must not interfere with the set of pieces affected by any other cycle. Helpful to think no longer in terms of moves but in cycles as in these pieces may be moved but they are restored. If the pieces were to interfere, then this would mean modifying the value of one register has a side effect of modifying the value of another unintended register.
+- More registers mean more states 90*90 > 1260
+
+## Conditional branching
+
+WIP
+
+Talking points:
+
+- We have defined a way to represent a register on a Rubik's cube, but how does this bring us closer to a computer?
+- We are limited in what we can do if the only operation our computer is able to perform on its memory is adding a constant
+- Allow conditionally executing code
+- Recall from U cycle, when the pieces of a cycle are solved, the register value is 0 because there are zero repetitions of the algorithm
+- A piece is solved if the colors on each of its faces match the center of the corresponding side of a Rubik's cube
+- If a register value is zero, then we conditionally execute some code, if not, execute some other code
+
+## The Rubik's cube is a computer
+
+WIP
+
+Talking points:
+
+- store instruction memory separate to the cube
+- dissect an example
+- works with any twisty puzzle
 
 # Technical details
 
 ## Cycle combination solver
 
-WIP
+Qter's cycle combination solver computes the optimal computer architecture for a puzzle using any amount of cycles.
 
 ### Phase 1
 
 WIP
 
+Talking points
+
+- Based on [[1](#ref-1)]
+- Find all ways to assign cubies to orbits, then find the max order using partitions and priority queue
+- Pareto front
+
 ### Phase 2
 
 WIP
 
-### Phase 2 with GAP
+Talking points
+
+- Korf's algorithm
+- Symmetry and inverse reduction [[2](#ref-2)]
+
+### Experimental phase 3 with GAP
 
 WIP
+
+Talking points
+
+- Stabilizers
+- Conjugacy classes
+- Fork of optimal solver
 
 # About the authors
 
 - Arhan Chaudhary: Hi! I am a sophomore at Purdue University, and I have always been fascinated by Rubik's cubes since I learned how to solve them in middle school. I was greatly inspired by the [Purdue Hackers](https://www.purduehackers.com/) community to begin this project, and have spent the better part of the entire school year working on it. I'm looking for Summer 2026 internships - and I'm particularly excited about working with startups. Read more about my work at my [website](https://arhan.sh/).
 - Henry Rovnyak (_jumps off of a catwalk and lands behind you_): Hello there! Like Arhan, I too am a sophomore at Purdue University. I'm interested in math and programming, and I met Arhan through this project and the Purdue Hackers community. I enjoy systems and scientific programming, but I also have a soft spot for theoretical work and frontend design. Arhan may or may not have gotten me addicted to cubes... I'm also interested in Summer 2026 internships, and you should consider checking out [my website](https://hrovnyak.gitlab.io/) to see some of the other stuff I've been working on.
-- Asher Gray: I am neither a sophomore nor a Purdue University. I love studying math, solving Rubik's cubes, and making videos about them! I recently made a video about using the cube as a calculator, then Arhan reached out and invited me to help out with a similar project he'd been working on, qter! It has been a lot of fun. You can find me on [YouTube](https://m.youtube.com/channel/UCJZt93WO-evfsfi7YlVmrQA) or enjoy some interactive math visualizations on my [website](https://thegraycuber.github.io/).
+- Asher Gray: I am neither a sophomore nor at Purdue University. I love studying math, solving Rubik's cubes, and making videos about them! I recently made a video about using the cube as a calculator, then Arhan reached out and invited me to help out with a similar project he'd been working on, qter! It has been a lot of fun. You can find me on [YouTube](https://m.youtube.com/channel/UCJZt93WO-evfsfi7YlVmrQA) or enjoy some interactive math visualizations on my [website](https://thegraycuber.github.io/).
 
 # References
 <!-- cspell:disable -->
-[1] Bergvall, O., Hynning, E., Hedberg, M., Mickelin, J., & Masawe, P. (2010). On Rubik’s cube. *Report, KTH Royal Institute of Technology* (pp. 65-73). \
-[2] Rokicki, T., Kociemba, H., Davidson, M., & Dethridge, J. (2014). The diameter of the rubik's cube group is twenty. *siam REVIEW, 56*(4), 645-670.
+[<span id="ref-1">1</span>] Bergvall, O., Hynning, E., Hedberg, M., Mickelin, J., & Masawe, P. (2010). On Rubik’s cube. _Report, KTH Royal Institute of Technology_ (pp. 65-73). \
+[<span id="ref-2">2</span>] Rokicki, T., Kociemba, H., Davidson, M., & Dethridge, J. (2014). The diameter of the rubik's cube group is twenty. _siam REVIEW, 56_(4), 645-670.
 <!-- cspell:enable -->
 # Acknowledgements
 
 - [@lgarron](https://github.com/lgarron) and [@esqu1](https://github.com/esqu1) for reference Korf's algorithm implementations ([1](https://github.com/cubing/twsearch/blob/efb207e11162174360e3ae49aa552cda1313df81/src/rs/_internal/search/idf_search.rs#L340) and [2](https://github.com/esqu1/Rusty-Rubik/blob/1e32829e83c662816bd85f6c37d6f774a15e3aea/src/solver.rs#L123)).
 - [@ScriptRacoon](https://github.com/ScriptRacoon) for providing developmental [code](https://gist.github.com/ScriptRaccoon/c12c4884c116dead62a15a3d09732d5d) for phase 1.
-- [@rokicki](https://github.com/rokicki) for designing the [PuzzleGeometry format](https://alpha.twizzle.net/explore/help.html) and [reference code](https://github.com/cubing/cubing.js/blob/main/src/cubing/puzzle-geometry/PuzzleGeometry.ts).
+- [@rokicki](https://github.com/rokicki) for designing the [PuzzleGeometry format](https://alpha.twizzle.net/explore/help.html).
 - [@benwh1](https://github.com/benwh1) and [@adrian154](https://github.com/adrian154) for miscellaneous puzzle theory insights.
 - [@DitrusNight](https://github.com/DitrusNight) for advising our programming language design.
 - [@Infinidoge](https://github.com/Infinidoge) for generously providing access to powerful hardware for the cycle combination solver.
