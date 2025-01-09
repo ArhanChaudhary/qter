@@ -180,9 +180,13 @@ A: 3x3
 
 Indicates repeatedly performing `U' R2` until the UFR corner position and UB edge position contain their solved pieces. Then, perform `L D'` on the Rubik's cube. Note that three faces uniquely identify any corner position and two faces uniquely identify any edge position on the Rubik's cube, hence UFR (up front right) and UF (up front).
 
-Determining if a position contains its solved piece slightly varies from puzzle to puzzle, but the idea remains the same. For the Rubik's cube, this is the case when each face of the piece at the position is the same color as its center. The following illustrates a successful and unsuccessful `solved-goto 4 UFR UF` instruction:
+Determining if a position contains its solved piece slightly varies from puzzle to puzzle, but the idea remains the same. For the Rubik's cube, this is the case when each face of the piece at the position is the same color as its center.
+
+The following illustrates a successful `solved-goto 4 UFR UF` instruction where you would jump to line 4:
 
 <img src="media/solved-goto-success-example.png" width="125" alt="A Rubik's cube with the UFR and UF positions solved">
+
+The following illustrates an unsuccessful `solved-goto 4 UFR UF` instruction where you would skip it and continue to the next instruction. Note that _all_ pieces specified need to be in their solved positions, not just one:
 
 <img src="media/solved-goto-failure-example.png" width="125" alt="A Rubik's cube with the UFR and UF positions unsolved">
 
