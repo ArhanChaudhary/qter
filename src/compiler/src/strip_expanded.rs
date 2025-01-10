@@ -2,10 +2,10 @@ use std::{collections::HashMap, sync::Arc};
 
 use internment::ArcIntern;
 use itertools::Itertools;
-use pest::error::{Error, ErrorVariant};
+use pest::error::Error;
 use qter_core::{
     architectures::{Architecture, PermutationGroup},
-    Facelets, Instruction, Int, PermutePuzzle, Program, RegisterGenerator, WithSpan, U,
+    mk_error, Facelets, Instruction, Int, PermutePuzzle, Program, RegisterGenerator, WithSpan, U,
 };
 
 use crate::{
@@ -159,12 +159,7 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
                     let label = match expanded.block_info.label_scope(&label) {
                         Some(v) => v,
                         None => {
-                            return Err(Box::new(Error::new_from_span(
-                                ErrorVariant::CustomError {
-                                    message: "Could not find label in scope".to_owned(),
-                                },
-                                label.span().pest(),
-                            )));
+                            return Err(mk_error("Could not find label in scope", label.span()));
                         }
                     };
 
@@ -176,12 +171,7 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
                     let label = match expanded.block_info.label_scope(&label) {
                         Some(v) => v,
                         None => {
-                            return Err(Box::new(Error::new_from_span(
-                                ErrorVariant::CustomError {
-                                    message: "Could not find label in scope".to_owned(),
-                                },
-                                label.span().pest(),
-                            )));
+                            return Err(mk_error("Could not find label in scope", label.span()));
                         }
                     };
 

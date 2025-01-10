@@ -10,3 +10,4 @@ members = [
 
 [workspace.lints.clippy]
 type_complexity = "allow"
+disallowed_types = "deny"

@@ -2,8 +2,8 @@ use std::{cell::OnceCell, mem};
 
 use internment::ArcIntern;
 use itertools::Itertools;
-use pest::error::{Error, ErrorVariant};
-use qter_core::WithSpan;
+use pest::error::Error;
+use qter_core::{mk_error, WithSpan};
 
 use crate::{BlockID, Code, Expanded, ExpandedCode, ExpansionInfo, Instruction, ParsedSyntax};
 
@@ -80,13 +80,10 @@ fn expand_block(
                 Instruction::Define(define) => {
                     for found_define in &block_info.defines {
                         if *found_define.name == *define.name {
-                            return vec![Err(Box::new(Error::new_from_span(
-                                ErrorVariant::CustomError {
-                                    message: "Cannot shadow a `.define` in the same scope!"
-                                        .to_string(),
-                                },
-                                define.name.span().pest(),
-                            )))];
+                            return vec![Err(mk_error(
+                                "Cannot shadow a `.define` in the same scope!",
+                                define.name.span(),
+                            ))];
                         }
                     }
 
@@ -97,12 +94,10 @@ fn expand_block(
                 }
                 Instruction::Registers(decl) => match block_info.registers {
                     Some(_) => {
-                        vec![Err(Box::new(Error::new_from_span(
-                            ErrorVariant::CustomError {
-                                message: "Cannot have multiple register declarations in the same scope!".to_string(),
-                            },
-                            span.pest(),
-                        )))]
+                        vec![Err(mk_error(
+                            "Cannot have multiple register declarations in the same scope!",
+                            span,
+                        ))]
                     }
 
                     None => {
@@ -148,12 +143,10 @@ fn expand_code(
     )) {
         Some(v) => v,
         None => {
-            return Err(Box::new(Error::new_from_span(
-                ErrorVariant::CustomError {
-                    message: "Macro was not found in this scope".to_string(),
-                },
-                macro_call.name.span().pest(),
-            )));
+            return Err(mk_error(
+                "Macro was not found in this scope",
+                macro_call.name.span(),
+            ));
         }
     };
 

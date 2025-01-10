@@ -5,18 +5,11 @@ use std::{
 };
 
 use internment::ArcIntern;
-use pest::{
-    error::{
-        Error,
-        ErrorVariant::{self, CustomError},
-    },
-    iterators::Pair,
-    Parser,
-};
+use pest::{error::Error, iterators::Pair, Parser};
 use pest_derive::Parser;
 use qter_core::{
     architectures::{puzzle_by_name, Architecture},
-    Int, WithSpan, U,
+    mk_error, Int, WithSpan, U,
 };
 
 use crate::{
@@ -69,14 +62,7 @@ pub fn parse(
 
     let lua = match LuaMacros::new() {
         Ok(v) => v,
-        Err(e) => {
-            return Err(Box::new(Error::new_from_pos(
-                ErrorVariant::CustomError {
-                    message: e.to_string(),
-                },
-                zero_pos,
-            )))
-        }
+        Err(e) => return Err(mk_error(e.to_string(), zero_pos)),
     };
 
     let expansion_info = ExpansionInfo {
@@ -113,12 +99,10 @@ pub fn parse(
                     .macros
                     .contains_key(&(ArcIntern::clone(&file), ArcIntern::clone(&name)))
                 {
-                    return Err(Box::new(Error::new_from_span(
-                        ErrorVariant::CustomError {
-                            message: format!("The macro {} is already defined!", &*name),
-                        },
-                        span.pest(),
-                    )));
+                    return Err(mk_error(
+                        format!("The macro {} is already defined!", &*name),
+                        span,
+                    ));
                 }
 
                 syntax.expansion_info.macros.insert(
@@ -139,24 +123,14 @@ pub fn parse(
             }
             Statement::LuaBlock(code) => {
                 if let Err(e) = lua.add_chunk(code) {
-                    return Err(Box::new(Error::new_from_span(
-                        ErrorVariant::CustomError {
-                            message: e.to_string(),
-                        },
-                        span,
-                    )));
+                    return Err(mk_error(e.to_string(), span));
                 }
             }
             Statement::Import(name) => {
                 let import = match find_import(*name) {
                     Ok(v) => v,
                     Err(e) => {
-                        return Err(Box::new(Error::new_from_span(
-                            ErrorVariant::CustomError {
-                                message: format!("Unable to find import: {e}"),
-                            },
-                            name.span().pest(),
-                        )))
+                        return Err(mk_error(format!("Unable to find import: {e}"), name.span()))
                     }
                 };
 
@@ -251,14 +225,12 @@ fn parse_registers(pair: Pair<'_, Rule>) -> Result<RegisterDecl, Box<Error<Rule>
                     let span = pair.as_span();
 
                     match parse_declaration(pair)? {
-                        Puzzle::Theoretical { name: _, order: _ } => return Err(Box::new(Error::new_from_span(
-                            ErrorVariant::CustomError {
-                                message:
-                                    "Cannot create a switchable puzzle with a theoretical register"
-                                        .to_owned(),
-                            },
-                            span,
-                        ))),
+                        Puzzle::Theoretical { name: _, order: _ } => {
+                            return Err(mk_error(
+                                "Cannot create a switchable puzzle with a theoretical register",
+                                span,
+                            ))
+                        }
                         Puzzle::Real { architectures } => decls.extend_from_slice(&architectures),
                     }
                 }
@@ -288,12 +260,7 @@ fn parse_registers(pair: Pair<'_, Rule>) -> Result<RegisterDecl, Box<Error<Rule>
 
         for item in found_names.into_iter() {
             if names.contains(&item) {
-                return Err(Box::new(Error::new_from_span(
-                    ErrorVariant::CustomError {
-                        message: "Register name is already defined".to_owned(),
-                    },
-                    item.span().pest(),
-                )));
+                return Err(mk_error("Register name is already defined", item.span()));
             } else {
                 names.insert(item);
             }
@@ -322,12 +289,7 @@ fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Puzzle, Box<Error<Rule>>> {
             let name = ArcIntern::<str>::from(pair.as_str());
 
             if names.contains(&name) {
-                return Err(Box::new(Error::new_from_span(
-                    ErrorVariant::CustomError {
-                        message: "Register name is already defined".to_owned(),
-                    },
-                    pair.as_span(),
-                )));
+                return Err(mk_error("Register name is already defined", pair.as_span()));
             }
             names.insert(ArcIntern::clone(&name));
 
@@ -343,15 +305,13 @@ fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Puzzle, Box<Error<Rule>>> {
     match arch.as_rule() {
         Rule::theoretical_architecture => {
             if regs.len() > 1 {
-                return Err(Box::new(Error::new_from_span(
-                    CustomError {
-                        message: format!(
-                            "Expected one register name for a theoretical architecture, found {}",
-                            regs.len()
-                        ),
-                    },
+                return Err(mk_error(
+                    format!(
+                        "Expected one register name for a theoretical architecture, found {}",
+                        regs.len()
+                    ),
                     span,
-                )));
+                ));
             }
 
             let number = arch.into_inner().next().unwrap();
@@ -373,14 +333,7 @@ fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Puzzle, Box<Error<Rule>>> {
             let puzzle_name = arch.next().unwrap();
             let puzzle = match puzzle_by_name(puzzle_name.as_str()) {
                 Some(v) => v,
-                None => {
-                    return Err(Box::new(Error::new_from_span(
-                        ErrorVariant::CustomError {
-                            message: "Unknown puzzle".to_string(),
-                        },
-                        puzzle_name.as_span(),
-                    )))
-                }
+                None => return Err(mk_error("Unknown puzzle", puzzle_name.as_span())),
             };
 
             let decoded_arch = match rule {
@@ -393,7 +346,7 @@ fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Puzzle, Box<Error<Rule>>> {
 
                     match puzzle.get_preset(&orders) {
                         Some(arch) => arch,
-                        None => return Err(Box::new(Error::new_from_span(ErrorVariant::CustomError { message: "Could not find a builtin architecture for the given puzzle with the given orders".to_string() }, span))),
+                        None => return Err(mk_error("Could not find a builtin architecture for the given puzzle with the given orders", span)),
                     }
                 }
                 Rule::custom_architecture => {
@@ -412,14 +365,10 @@ fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Puzzle, Box<Error<Rule>>> {
                     match Architecture::new(puzzle.group, algorithms) {
                         Ok(v) => Arc::new(v),
                         Err(e) => {
-                            return Err(Box::new(Error::new_from_span(
-                                ErrorVariant::CustomError {
-                                    message: format!(
-                                        "The generator `{e}` isn't defined for the given puzzle"
-                                    ),
-                                },
+                            return Err(mk_error(
+                                format!("The generator `{e}` isn't defined for the given puzzle"),
                                 span,
-                            )));
+                            ));
                         }
                     }
                 }
@@ -604,7 +553,7 @@ fn parse_macro(
 
         for branch in branches.iter() {
             if let Some(counterexample) = pattern.conflicts_with(name_str, &branch.pattern) {
-                return Err(Box::new(Error::new_from_span(ErrorVariant::CustomError { message: format!("This macro branch conflicts with the macro branch with the pattern `{}`. A counterexample matching both is `{counterexample}`.", branch.pattern.span().slice()) }, span)));
+                return Err(mk_error(format!("This macro branch conflicts with the macro branch with the pattern `{}`. A counterexample matching both is `{counterexample}`.", branch.pattern.span().slice()), span));
             }
         }
 

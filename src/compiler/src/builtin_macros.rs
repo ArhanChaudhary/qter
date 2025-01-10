@@ -1,6 +1,6 @@
 use internment::ArcIntern;
-use pest::error::{Error, ErrorVariant};
-use qter_core::{Span, WithSpan};
+use pest::error::Error;
+use qter_core::{mk_error, Span, WithSpan};
 
 use crate::{
     parsing::Rule, BlockID, Code, ExpansionInfo, Instruction, LabelReference, Macro, Primitive,
@@ -20,19 +20,12 @@ fn expect_reg(
             name: WithSpan::new(ArcIntern::clone(name), reg.span().to_owned()),
         }) {
             Some(v) => Ok(v.0),
-            None => Err(Box::new(Error::new_from_span(
-                ErrorVariant::CustomError {
-                    message: format!("The register {name} does not exist"),
-                },
-                reg.span().pest(),
-            ))),
+            None => Err(mk_error(
+                format!("The register {name} does not exist"),
+                reg.span(),
+            )),
         },
-        _ => Err(Box::new(Error::new_from_span(
-            ErrorVariant::CustomError {
-                message: "Expected a register".to_string(),
-            },
-            reg.span().pest(),
-        ))),
+        _ => Err(mk_error("Expected a register", reg.span())),
     }
 }
 
@@ -48,12 +41,7 @@ fn expect_label(
             },
             label.span().to_owned(),
         )),
-        _ => Err(Box::new(Error::new_from_span(
-            ErrorVariant::CustomError {
-                message: "Expected a label".to_string(),
-            },
-            label.span().pest(),
-        ))),
+        _ => Err(mk_error("Expected a label", label.span())),
     }
 }
 
@@ -63,12 +51,10 @@ fn print_like(
     block: BlockID,
 ) -> Result<(Option<RegisterReference>, WithSpan<String>), Box<Error<Rule>>> {
     if args.len() > 2 {
-        return Err(Box::new(Error::new_from_span(
-            ErrorVariant::CustomError {
-                message: format!("Expected one or two arguments, found {}", args.len()),
-            },
-            args.span().pest(),
-        )));
+        return Err(mk_error(
+            format!("Expected one or two arguments, found {}", args.len()),
+            args.span(),
+        ));
     }
 
     let register = if args.len() == 2 {
@@ -82,12 +68,7 @@ fn print_like(
     let message = match message.into_inner() {
         Value::Word(v) => {
             if !v.starts_with('"') || !v.ends_with('"') {
-                return Err(Box::new(Error::new_from_span(
-                    ErrorVariant::CustomError {
-                        message: "The message must be quoted".to_owned(),
-                    },
-                    message_span.pest(),
-                )));
+                return Err(mk_error("The message must be quoted", message_span));
             }
 
             let v = v.strip_prefix('"').unwrap_or(&v);
@@ -96,12 +77,7 @@ fn print_like(
             WithSpan::new(v.to_owned(), message_span)
         }
         _ => {
-            return Err(Box::new(Error::new_from_span(
-                ErrorVariant::CustomError {
-                    message: "Expected a message".to_string(),
-                },
-                message_span.pest(),
-            )));
+            return Err(mk_error("Expected a message", message_span));
         }
     };
 
@@ -120,24 +96,17 @@ pub fn builtin_macros(
         WithSpan::new(
             Macro::Builtin(|syntax, mut args, block| {
                 if args.len() != 2 {
-                    return Err(Box::new(Error::new_from_span(
-                        ErrorVariant::CustomError {
-                            message: format!("Expected two arguments, found {}", args.len()),
-                        },
-                        args.span().pest(),
-                    )));
+                    return Err(mk_error(
+                        format!("Expected two arguments, found {}", args.len()),
+                        args.span(),
+                    ));
                 }
 
                 let num = args.pop().unwrap();
                 let num = match &*num {
                     Value::Int(int) => WithSpan::new(*int, num.span().to_owned()),
                     _ => {
-                        return Err(Box::new(Error::new_from_span(
-                            ErrorVariant::CustomError {
-                                message: "Expected a number".to_string(),
-                            },
-                            num.span().pest(),
-                        )));
+                        return Err(mk_error("Expected a number", num.span()));
                     }
                 };
 
@@ -157,12 +126,10 @@ pub fn builtin_macros(
         WithSpan::new(
             Macro::Builtin(|_syntax, mut args, block| {
                 if args.len() != 1 {
-                    return Err(Box::new(Error::new_from_span(
-                        ErrorVariant::CustomError {
-                            message: format!("Expected one argument, found {}", args.len()),
-                        },
-                        args.span().pest(),
-                    )));
+                    return Err(mk_error(
+                        format!("Expected one argument, found {}", args.len()),
+                        args.span(),
+                    ));
                 }
 
                 let label = expect_label(args.pop().unwrap(), block)?;
@@ -180,12 +147,10 @@ pub fn builtin_macros(
         WithSpan::new(
             Macro::Builtin(|syntax, mut args, block| {
                 if args.len() != 2 {
-                    return Err(Box::new(Error::new_from_span(
-                        ErrorVariant::CustomError {
-                            message: format!("Expected two arguments, found {}", args.len()),
-                        },
-                        args.span().pest(),
-                    )));
+                    return Err(mk_error(
+                        format!("Expected two arguments, found {}", args.len()),
+                        args.span(),
+                    ));
                 }
 
                 let label = expect_label(args.pop().unwrap(), block)?;
@@ -204,12 +169,10 @@ pub fn builtin_macros(
         WithSpan::new(
             Macro::Builtin(|syntax, mut args, block| {
                 if args.len() != 2 {
-                    return Err(Box::new(Error::new_from_span(
-                        ErrorVariant::CustomError {
-                            message: format!("Expected two arguments, found {}", args.len()),
-                        },
-                        args.span().pest(),
-                    )));
+                    return Err(mk_error(
+                        format!("Expected two arguments, found {}", args.len()),
+                        args.span(),
+                    ));
                 }
 
                 let register = expect_reg(args.pop().unwrap(), syntax, block)?;
@@ -219,12 +182,7 @@ pub fn builtin_macros(
                 let message = match message.into_inner() {
                     Value::Word(v) => WithSpan::new(v.trim_matches('"').to_owned(), message_span),
                     _ => {
-                        return Err(Box::new(Error::new_from_span(
-                            ErrorVariant::CustomError {
-                                message: "Expected a message".to_string(),
-                            },
-                            message_span.pest(),
-                        )));
+                        return Err(mk_error("Expected a message", message_span));
                     }
                 };
 

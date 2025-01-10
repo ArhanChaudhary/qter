@@ -17,6 +17,54 @@ use architectures::{Architecture, Permutation, PermutationGroup};
 // Use a huge integers for orders to allow crazy things like examinx
 use discrete_math::length_of_substring_that_this_string_is_n_repeated_copies_of;
 use internment::ArcIntern;
+use pest::{Position, RuleType};
+
+pub fn mk_error<Rule: RuleType>(
+    message: impl Into<String>,
+    loc: impl AsPestLoc,
+) -> Box<pest::error::Error<Rule>> {
+    let err = pest::error::ErrorVariant::CustomError {
+        message: message.into(),
+    };
+
+    return Box::new(match loc.as_pest_loc() {
+        SpanOrPos::Span(span) => pest::error::Error::new_from_span(err, span),
+        SpanOrPos::Pos(pos) => pest::error::Error::new_from_pos(err, pos),
+    });
+}
+
+pub enum SpanOrPos<'a> {
+    Span(pest::Span<'a>),
+    Pos(pest::Position<'a>),
+}
+
+pub trait AsPestLoc {
+    fn as_pest_loc(&self) -> SpanOrPos<'_>;
+}
+
+impl<'a> AsPestLoc for pest::Span<'a> {
+    fn as_pest_loc(&self) -> SpanOrPos<'_> {
+        SpanOrPos::Span(self.to_owned())
+    }
+}
+
+impl AsPestLoc for Span {
+    fn as_pest_loc(&self) -> SpanOrPos<'_> {
+        SpanOrPos::Span(self.pest())
+    }
+}
+
+impl<'a> AsPestLoc for Position<'a> {
+    fn as_pest_loc(&self) -> SpanOrPos<'_> {
+        SpanOrPos::Pos(self.to_owned())
+    }
+}
+
+impl<T: AsPestLoc> AsPestLoc for &T {
+    fn as_pest_loc(&self) -> SpanOrPos<'_> {
+        (*self).as_pest_loc()
+    }
+}
 
 /// A slice of the original source code; to be attached to pieces of data for error reporting
 #[derive(Clone)]
@@ -95,7 +143,7 @@ impl Span {
         }
     }
 
-    pub fn pest(&self) -> pest::Span<'_> {
+    fn pest(&self) -> pest::Span<'_> {
         pest::Span::new(&self.source, self.start, self.end).unwrap()
     }
 }

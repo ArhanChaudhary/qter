@@ -1,1 +1,4 @@
 ignore-interior-mutability = [ "qter_core::WithSpan" ]
+disallowed-types = [
+  { path = "pest::error::ErrorVariant", reason = "Using the `error` function in `qter_core` is more concise" }
+]
