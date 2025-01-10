@@ -10,3 +10,6 @@ qter_core = { path = "../qter_core" }
 compiler = { path = "../compiler" }
 interpreter = { path = "../interpreter" }
 internment = { version = "0.8", features = [ "arc" ] }
+
+[lints]
+workspace = true

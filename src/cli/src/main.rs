@@ -53,7 +53,7 @@ fn main() -> color_eyre::Result<()> {
                         }
 
                         match fs::read_to_string(path) {
-                            Ok(s) => Ok(ArcIntern::new(s)),
+                            Ok(s) => Ok(ArcIntern::from(s)),
                             Err(e) => Err(e.to_string()),
                         }
                     })?

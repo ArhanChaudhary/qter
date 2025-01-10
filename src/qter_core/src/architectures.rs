@@ -90,15 +90,15 @@ impl PuzzleDefinition {
 /// A permutation subgroup defined by a set of generators along with the color of each facelet
 #[derive(Clone, Debug)]
 pub struct PermutationGroup {
-    facelet_colors: Vec<ArcIntern<String>>,
-    generators: HashMap<ArcIntern<String>, Permutation>,
+    facelet_colors: Vec<ArcIntern<str>>,
+    generators: HashMap<ArcIntern<str>, Permutation>,
 }
 
 impl PermutationGroup {
     /// Construct a new `PermutationGroup` from a list of facelet colors and generator permutations
     pub fn new(
-        facelet_colors: Vec<ArcIntern<String>>,
-        mut generators: HashMap<ArcIntern<String>, Permutation>,
+        facelet_colors: Vec<ArcIntern<str>>,
+        mut generators: HashMap<ArcIntern<str>, Permutation>,
     ) -> PermutationGroup {
         assert!(!generators.is_empty());
 
@@ -122,7 +122,7 @@ impl PermutationGroup {
     }
 
     /// The colors of every facelet
-    pub fn facelet_colors(&self) -> &[ArcIntern<String>] {
+    pub fn facelet_colors(&self) -> &[ArcIntern<str>] {
         &self.facelet_colors
     }
 
@@ -138,7 +138,7 @@ impl PermutationGroup {
 
     /// Get a generator by it's name
     pub fn get_generator(&self, name: &str) -> Option<&Permutation> {
-        self.generators.get(&ArcIntern::from_ref(name))
+        self.generators.get(&ArcIntern::from(name))
     }
 
     /// Compose a list of generators into an existing permutation
@@ -147,13 +147,10 @@ impl PermutationGroup {
     pub fn compose_generators_into<'a>(
         &self,
         permutation: &mut Permutation,
-        generators: impl Iterator<Item = &'a ArcIntern<String>>,
-    ) -> Result<(), ArcIntern<String>> {
+        generators: impl Iterator<Item = &'a ArcIntern<str>>,
+    ) -> Result<(), ArcIntern<str>> {
         for generator in generators {
-            let generator = match self
-                .generators
-                .get(&ArcIntern::from_ref(generator.as_ref()))
-            {
+            let generator = match self.generators.get(&ArcIntern::from(generator.as_ref())) {
                 Some(idx) => idx,
                 None => return Err(ArcIntern::clone(generator)),
             };
@@ -329,7 +326,7 @@ impl CycleGeneratorSubcycle {
 /// A generator for a register in an architecture
 #[derive(Debug, Clone)]
 pub struct CycleGenerator {
-    pub(crate) generator_sequence: Vec<ArcIntern<String>>,
+    pub(crate) generator_sequence: Vec<ArcIntern<str>>,
     pub(crate) permutation: Permutation,
     pub(crate) unshared_cycles: Vec<CycleGeneratorSubcycle>,
     pub(crate) order: Int<U>,
@@ -338,7 +335,7 @@ pub struct CycleGenerator {
 
 impl CycleGenerator {
     /// Get the sequence of group generators that compose the cycle generator
-    pub fn generator_sequence(&self) -> &[ArcIntern<String>] {
+    pub fn generator_sequence(&self) -> &[ArcIntern<str>] {
         &self.generator_sequence
     }
 
@@ -436,8 +433,8 @@ impl Architecture {
     /// Create a new architecture from a permutation group and a list of algorithms.
     pub fn new(
         group: Arc<PermutationGroup>,
-        algorithms: Vec<Vec<ArcIntern<String>>>,
-    ) -> Result<Architecture, ArcIntern<String>> {
+        algorithms: Vec<Vec<ArcIntern<str>>>,
+    ) -> Result<Architecture, ArcIntern<str>> {
         let processed = algorithms_to_cycle_generators(Arc::clone(&group), &algorithms)?;
 
         Ok(Architecture {
@@ -516,7 +513,7 @@ mod tests {
             let arch = Architecture::new(
                 Arc::clone(&cube.group),
                 arch.iter()
-                    .map(|v| v.split(" ").map(ArcIntern::from_ref).collect_vec())
+                    .map(|v| v.split(" ").map(ArcIntern::from).collect_vec())
                     .collect_vec(),
             )
             .unwrap();
@@ -536,7 +533,7 @@ mod tests {
         cube.group
             .compose_generators_into(
                 &mut perm,
-                [ArcIntern::from_ref("U"), ArcIntern::from_ref("L")].iter(),
+                [ArcIntern::from("U"), ArcIntern::from("L")].iter(),
             )
             .unwrap();
 

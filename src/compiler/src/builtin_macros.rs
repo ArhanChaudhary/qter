@@ -109,14 +109,14 @@ fn print_like(
 }
 
 pub fn builtin_macros(
-    prelude: ArcIntern<String>,
-) -> HashMap<(ArcIntern<String>, ArcIntern<String>), WithSpan<Macro>> {
+    prelude: ArcIntern<str>,
+) -> HashMap<(ArcIntern<str>, ArcIntern<str>), WithSpan<Macro>> {
     let mut macros = HashMap::new();
 
-    let s = Span::new(ArcIntern::from_ref(" "), 0, 0);
+    let s = Span::new(ArcIntern::from(" "), 0, 0);
 
     macros.insert(
-        (prelude.to_owned(), ArcIntern::from_ref("add")),
+        (prelude.to_owned(), ArcIntern::from("add")),
         WithSpan::new(
             Macro::Builtin(|syntax, mut args, block| {
                 if args.len() != 2 {
@@ -153,7 +153,7 @@ pub fn builtin_macros(
     );
 
     macros.insert(
-        (prelude.to_owned(), ArcIntern::from_ref("goto")),
+        (prelude.to_owned(), ArcIntern::from("goto")),
         WithSpan::new(
             Macro::Builtin(|_syntax, mut args, block| {
                 if args.len() != 1 {
@@ -176,7 +176,7 @@ pub fn builtin_macros(
     );
 
     macros.insert(
-        (prelude.to_owned(), ArcIntern::from_ref("solved-goto")),
+        (prelude.to_owned(), ArcIntern::from("solved-goto")),
         WithSpan::new(
             Macro::Builtin(|syntax, mut args, block| {
                 if args.len() != 2 {
@@ -200,7 +200,7 @@ pub fn builtin_macros(
     );
 
     macros.insert(
-        (prelude.to_owned(), ArcIntern::from_ref("input")),
+        (prelude.to_owned(), ArcIntern::from("input")),
         WithSpan::new(
             Macro::Builtin(|syntax, mut args, block| {
                 if args.len() != 2 {
@@ -238,7 +238,7 @@ pub fn builtin_macros(
     );
 
     macros.insert(
-        (prelude.to_owned(), ArcIntern::from_ref("halt")),
+        (prelude.to_owned(), ArcIntern::from("halt")),
         WithSpan::new(
             Macro::Builtin(|syntax, args, block| {
                 let (register, message) = print_like(syntax, args, block)?;
@@ -253,7 +253,7 @@ pub fn builtin_macros(
     );
 
     macros.insert(
-        (prelude.to_owned(), ArcIntern::from_ref("print")),
+        (prelude.to_owned(), ArcIntern::from("print")),
         WithSpan::new(
             Macro::Builtin(|syntax, args, block| {
                 let (register, message) = print_like(syntax, args, block)?;

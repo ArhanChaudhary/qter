@@ -28,7 +28,7 @@ use crate::{
 use super::Instruction;
 
 static PRELUDE: LazyLock<ParsedSyntax> = LazyLock::new(|| {
-    let str = ArcIntern::<String>::from_ref(include_str!("../../qter_core/prelude.qat"));
+    let str = ArcIntern::<str>::from(include_str!("../../qter_core/prelude.qat"));
 
     let mut prelude = match parse(
         &str,
@@ -58,10 +58,10 @@ struct QatParser;
 
 pub fn parse(
     qat: &str,
-    find_import: &impl Fn(&str) -> Result<ArcIntern<String>, String>,
+    find_import: &impl Fn(&str) -> Result<ArcIntern<str>, String>,
     is_prelude: bool,
 ) -> Result<ParsedSyntax, Box<Error<Rule>>> {
-    let file = ArcIntern::from_ref(qat);
+    let file = ArcIntern::<str>::from(qat);
 
     let program = QatParser::parse(Rule::program, qat)?.next().unwrap();
     let zero_pos = program.as_span().start_pos();
@@ -185,7 +185,7 @@ pub fn parse(
 
 fn merge_files(
     importer: &mut ParsedSyntax,
-    importer_contents: ArcIntern<String>,
+    importer_contents: ArcIntern<str>,
     mut importee: ParsedSyntax,
 ) {
     // Block numbers shouldn't be defined deeper than the root in this stage
@@ -319,7 +319,7 @@ fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Puzzle, Box<Error<Rule>>> {
 
     for pair in pairs.by_ref() {
         if let Rule::ident = pair.as_rule() {
-            let name = ArcIntern::<String>::from_ref(pair.as_str());
+            let name = ArcIntern::<str>::from(pair.as_str());
 
             if names.contains(&name) {
                 return Err(Box::new(Error::new_from_span(
@@ -403,7 +403,7 @@ fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Puzzle, Box<Error<Rule>>> {
                         let mut generators = Vec::new();
 
                         for generator in algorithm.into_inner() {
-                            generators.push(ArcIntern::<String>::from_ref(generator.as_str()));
+                            generators.push(ArcIntern::<str>::from(generator.as_str()));
                         }
 
                         algorithms.push(generators);
@@ -438,7 +438,7 @@ fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Puzzle, Box<Error<Rule>>> {
 
 enum Statement<'a> {
     Macro {
-        name: WithSpan<ArcIntern<String>>,
+        name: WithSpan<ArcIntern<str>>,
         macro_def: WithSpan<Macro>,
     },
     Instruction(WithSpan<Instruction>),
@@ -474,7 +474,7 @@ fn parse_instruction(pair: Pair<'_, Rule>) -> Result<WithSpan<Instruction>, Box<
     Ok(WithSpan::new(
         match rule {
             Rule::label => Instruction::Label(Label {
-                name: ArcIntern::<String>::from_ref(pair.into_inner().next().unwrap().as_str()),
+                name: ArcIntern::<str>::from(pair.into_inner().next().unwrap().as_str()),
                 block: None,
                 available_in_blocks: None,
             }),
@@ -482,10 +482,8 @@ fn parse_instruction(pair: Pair<'_, Rule>) -> Result<WithSpan<Instruction>, Box<
                 let mut pairs = pair.into_inner();
 
                 let name = pairs.next().unwrap();
-                let name = WithSpan::new(
-                    ArcIntern::<String>::from_ref(name.as_str()),
-                    name.as_span().into(),
-                );
+                let name =
+                    WithSpan::new(ArcIntern::<str>::from(name.as_str()), name.as_span().into());
 
                 let arguments = pairs
                     .map(|v| parse_value(v))
@@ -501,7 +499,7 @@ fn parse_instruction(pair: Pair<'_, Rule>) -> Result<WithSpan<Instruction>, Box<
                     arguments: WithSpan::new(arguments, span),
                 }))
             }
-            Rule::constant => Instruction::Constant(ArcIntern::<String>::from_ref(
+            Rule::constant => Instruction::Constant(ArcIntern::<str>::from(
                 pair.into_inner().next().unwrap().as_str(),
             )),
             Rule::lua_call => Instruction::LuaCall(parse_lua_call(pair)?),
@@ -526,7 +524,7 @@ fn parse_instruction(pair: Pair<'_, Rule>) -> Result<WithSpan<Instruction>, Box<
                 };
 
                 Instruction::Define(Define {
-                    name: WithSpan::new(ArcIntern::from_ref(name.as_str()), name.as_span().into()),
+                    name: WithSpan::new(ArcIntern::from(name.as_str()), name.as_span().into()),
                     value,
                 })
             }
@@ -545,8 +543,8 @@ fn parse_value(pair: Pair<'_, Rule>) -> Result<WithSpan<Value>, Box<Error<Rule>>
     Ok(WithSpan::new(
         match rule {
             Rule::number => Value::Int(pair.as_str().parse::<Int<U>>().unwrap()),
-            Rule::constant => Value::Constant(ArcIntern::from_ref(pair.as_str())),
-            Rule::ident => Value::Word(ArcIntern::from_ref(pair.as_str())),
+            Rule::constant => Value::Constant(ArcIntern::from(pair.as_str())),
+            Rule::ident => Value::Word(ArcIntern::from(pair.as_str())),
             Rule::block => Value::Block(parse_block(pair)?),
             _ => unreachable!("{rule:?}"),
         },
@@ -570,14 +568,14 @@ fn parse_lua_call(pair: Pair<'_, Rule>) -> Result<LuaCall, Box<Error<Rule>>> {
     let name = pairs.next().unwrap();
 
     Ok(LuaCall {
-        function_name: WithSpan::new(ArcIntern::from_ref(name.as_str()), name.as_span().into()),
+        function_name: WithSpan::new(ArcIntern::from(name.as_str()), name.as_span().into()),
         args: pairs.map(|v| parse_value(v)).collect::<Result<_, _>>()?,
     })
 }
 
 fn parse_macro(
     pair: Pair<'_, Rule>,
-) -> Result<(WithSpan<ArcIntern<String>>, WithSpan<Macro>), Box<Error<Rule>>> {
+) -> Result<(WithSpan<ArcIntern<str>>, WithSpan<Macro>), Box<Error<Rule>>> {
     let span = pair.as_span();
     let mut pairs = pair.into_inner().peekable();
 
@@ -588,7 +586,7 @@ fn parse_macro(
 
     let after = if let Rule::ident = after.as_rule() {
         Some(WithSpan::new(
-            ArcIntern::from_ref(after.as_str()),
+            ArcIntern::from(after.as_str()),
             after.as_span().into(),
         ))
     } else {
@@ -629,7 +627,7 @@ fn parse_macro(
     }
 
     Ok((
-        WithSpan::new(ArcIntern::from_ref(name.as_str()), name.as_span().into()),
+        WithSpan::new(ArcIntern::from(name.as_str()), name.as_span().into()),
         WithSpan::new(Macro::Splice { branches, after }, span.into()),
     ))
 }
@@ -651,10 +649,10 @@ fn parse_pattern(pair: Pair<Rule>) -> Result<WithSpan<Pattern>, Box<Error<Rule>>
 
         pattern.push(WithSpan::new(
             match first_pair.as_rule() {
-                Rule::ident => PatternComponent::Word(ArcIntern::from_ref(first_pair.as_str())),
+                Rule::ident => PatternComponent::Word(ArcIntern::from(first_pair.as_str())),
                 Rule::constant => {
                     let name = WithSpan::new(
-                        ArcIntern::from_ref(first_pair.as_str()),
+                        ArcIntern::from(first_pair.as_str()),
                         first_pair.as_span().into(),
                     );
 
@@ -729,7 +727,7 @@ mod tests {
             .import pog.qat
         ";
 
-        match parse(code, &|_| Ok(ArcIntern::from_ref("add 1 a")), false) {
+        match parse(code, &|_| Ok(ArcIntern::from("add 1 a")), false) {
             Ok(_) => {}
             Err(e) => panic!("{e}"),
         }

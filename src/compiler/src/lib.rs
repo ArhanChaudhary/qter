@@ -1,4 +1,3 @@
-#![allow(clippy::type_complexity)]
 use std::{collections::HashMap, sync::Arc};
 
 use internment::ArcIntern;
@@ -18,7 +17,7 @@ mod strip_expanded;
 
 pub fn compile(
     qat: &str,
-    find_import: impl Fn(&str) -> Result<ArcIntern<String>, String>,
+    find_import: impl Fn(&str) -> Result<ArcIntern<str>, String>,
 ) -> Result<Program, Box<Error<parsing::Rule>>> {
     let parsed = parse(qat, &find_import, false)?;
 
@@ -29,14 +28,14 @@ pub fn compile(
 
 #[derive(Clone, Debug)]
 struct Label {
-    name: ArcIntern<String>,
+    name: ArcIntern<str>,
     block: Option<BlockID>,
     available_in_blocks: Option<Vec<BlockID>>,
 }
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug)]
 struct LabelReference {
-    name: ArcIntern<String>,
+    name: ArcIntern<str>,
     block: BlockID,
 }
 
@@ -49,7 +48,7 @@ struct Block {
 #[derive(Clone, Debug)]
 struct RegisterReference {
     block: BlockID,
-    name: WithSpan<ArcIntern<String>>,
+    name: WithSpan<ArcIntern<str>>,
 }
 
 #[derive(Clone, Debug)]
@@ -82,14 +81,14 @@ enum Primitive {
 #[derive(Clone, Debug)]
 enum Value {
     Int(Int<U>),
-    Constant(ArcIntern<String>),
-    Word(ArcIntern<String>),
+    Constant(ArcIntern<str>),
+    Word(ArcIntern<str>),
     Block(Block),
 }
 
 #[derive(Clone, Debug)]
 struct MacroCall {
-    name: WithSpan<ArcIntern<String>>,
+    name: WithSpan<ArcIntern<str>>,
     arguments: WithSpan<Vec<WithSpan<Value>>>,
 }
 
@@ -101,7 +100,7 @@ enum Code {
 
 #[derive(Clone, Debug)]
 struct LuaCall {
-    function_name: WithSpan<ArcIntern<String>>,
+    function_name: WithSpan<ArcIntern<str>>,
     args: Vec<WithSpan<Value>>,
 }
 
@@ -109,7 +108,7 @@ struct LuaCall {
 enum Instruction {
     Label(Label),
     Code(Code),
-    Constant(ArcIntern<String>),
+    Constant(ArcIntern<str>),
     LuaCall(LuaCall),
     Define(Define),
     Registers(RegisterDecl),
@@ -126,26 +125,26 @@ enum PatternArgTy {
 #[derive(Clone, Debug)]
 enum PatternComponent {
     Argument {
-        name: WithSpan<ArcIntern<String>>,
+        name: WithSpan<ArcIntern<str>>,
         ty: WithSpan<PatternArgTy>,
     },
-    Word(ArcIntern<String>),
+    Word(ArcIntern<str>),
 }
 
 impl PatternComponent {
     /// Returns `None` if the patterns do not conflict, otherwise returns a counterexample that would match both patterns.
-    fn conflicts_with(&self, other: &PatternComponent) -> Option<ArcIntern<String>> {
+    fn conflicts_with(&self, other: &PatternComponent) -> Option<ArcIntern<str>> {
         use PatternArgTy as A;
         use PatternComponent as P;
 
         match (self, other) {
             (P::Argument { name: _, ty: a }, P::Argument { name: _, ty: b }) => match (**a, **b) {
-                (A::Int, A::Int) => Some(ArcIntern::from_ref("123")),
+                (A::Int, A::Int) => Some(ArcIntern::from("123")),
                 (A::Reg, A::Reg)
                 | (A::Ident, A::Reg)
                 | (A::Reg, A::Ident)
-                | (A::Ident, A::Ident) => Some(ArcIntern::from_ref("a")),
-                (A::Block, A::Block) => Some(ArcIntern::from_ref("{ }")),
+                | (A::Ident, A::Ident) => Some(ArcIntern::from("a")),
+                (A::Block, A::Block) => Some(ArcIntern::from("{ }")),
                 _ => None,
             },
             (P::Argument { name: _, ty }, P::Word(word))
@@ -199,7 +198,7 @@ struct MacroBranch {
 enum Macro {
     Splice {
         branches: Vec<WithSpan<MacroBranch>>,
-        after: Option<WithSpan<ArcIntern<String>>>,
+        after: Option<WithSpan<ArcIntern<str>>>,
     },
     Builtin(
         fn(
@@ -218,21 +217,18 @@ enum DefinedValue {
 
 #[derive(Clone, Debug)]
 struct Define {
-    name: WithSpan<ArcIntern<String>>,
+    name: WithSpan<ArcIntern<str>>,
     value: DefinedValue,
 }
 
 #[derive(Clone, Debug)]
 enum Puzzle {
     Theoretical {
-        name: WithSpan<ArcIntern<String>>,
+        name: WithSpan<ArcIntern<str>>,
         order: WithSpan<Int<U>>,
     },
     Real {
-        architectures: Vec<(
-            Vec<WithSpan<ArcIntern<String>>>,
-            WithSpan<Arc<Architecture>>,
-        )>,
+        architectures: Vec<(Vec<WithSpan<ArcIntern<str>>>, WithSpan<Arc<Architecture>>)>,
     },
 }
 
@@ -328,11 +324,11 @@ struct ExpansionInfo {
     block_counter: usize,
     block_info: BlockInfoTracker,
     /// Map (file contents, macro name) to a macro
-    macros: HashMap<(ArcIntern<String>, ArcIntern<String>), WithSpan<Macro>>,
+    macros: HashMap<(ArcIntern<str>, ArcIntern<str>), WithSpan<Macro>>,
     /// Map each (file contents, macro name) to the file that it's in
-    available_macros: HashMap<(ArcIntern<String>, ArcIntern<String>), ArcIntern<String>>,
+    available_macros: HashMap<(ArcIntern<str>, ArcIntern<str>), ArcIntern<str>>,
     /// Each file has its own LuaMacros; use the file contents as the key
-    lua_macros: HashMap<ArcIntern<String>, LuaMacros>,
+    lua_macros: HashMap<ArcIntern<str>, LuaMacros>,
 }
 
 #[derive(Clone, Debug)]

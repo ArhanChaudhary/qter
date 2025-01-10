@@ -1,5 +1,3 @@
-#![allow(clippy::type_complexity)]
-
 use std::{
     cell::OnceCell,
     ops::{Deref, DerefMut},
@@ -23,7 +21,7 @@ use internment::ArcIntern;
 /// A slice of the original source code; to be attached to pieces of data for error reporting
 #[derive(Clone)]
 pub struct Span {
-    source: ArcIntern<String>,
+    source: ArcIntern<str>,
     start: usize,
     end: usize,
     line_and_col: OnceLock<(usize, usize)>,
@@ -31,14 +29,10 @@ pub struct Span {
 
 impl Span {
     pub fn from_span(span: pest::Span) -> Span {
-        Span::new(
-            ArcIntern::from_ref(span.get_input()),
-            span.start(),
-            span.end(),
-        )
+        Span::new(ArcIntern::from(span.get_input()), span.start(), span.end())
     }
 
-    pub fn new(source: ArcIntern<String>, start: usize, end: usize) -> Span {
+    pub fn new(source: ArcIntern<str>, start: usize, end: usize) -> Span {
         assert!(start <= end);
         assert!(start < source.len());
         assert!(end <= source.len());
@@ -86,7 +80,7 @@ impl Span {
         self
     }
 
-    pub fn source(&self) -> ArcIntern<String> {
+    pub fn source(&self) -> ArcIntern<str> {
         ArcIntern::clone(&self.source)
     }
 
@@ -189,7 +183,7 @@ impl<T: core::hash::Hash> core::hash::Hash for WithSpan<T> {
 pub struct PermutePuzzle {
     group: Arc<PermutationGroup>,
     permutation: Permutation,
-    generators: Vec<ArcIntern<String>>,
+    generators: Vec<ArcIntern<str>>,
     chromatic_orders: OnceCell<Vec<Int<U>>>,
 }
 
@@ -229,8 +223,8 @@ impl PermutePuzzle {
     /// Create a `PermutePuzzle` instance from a list of generators
     pub fn new_from_generators(
         group: Arc<PermutationGroup>,
-        generators: Vec<ArcIntern<String>>,
-    ) -> Result<PermutePuzzle, ArcIntern<String>> {
+        generators: Vec<ArcIntern<str>>,
+    ) -> Result<PermutePuzzle, ArcIntern<str>> {
         let mut permutation = group.identity();
 
         group.compose_generators_into(&mut permutation, generators.iter())?;
@@ -249,7 +243,7 @@ impl PermutePuzzle {
     }
 
     /// Returns a list of generators that when composed, give the same result as applying `.permutation()`
-    pub fn generators(&self) -> &[ArcIntern<String>] {
+    pub fn generators(&self) -> &[ArcIntern<str>] {
         &self.generators
     }
 
@@ -262,7 +256,7 @@ impl PermutePuzzle {
 
             self.permutation().cycles().iter().for_each(|cycle| {
                 let chromatic_order = length_of_substring_that_this_string_is_n_repeated_copies_of(
-                    cycle.iter().map(|v| &**self.group.facelet_colors()[*v]),
+                    cycle.iter().map(|v| &*self.group.facelet_colors()[*v]),
                 );
 
                 for facelet in cycle {

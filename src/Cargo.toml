@@ -7,3 +7,6 @@ members = [
   "cli",
   "cycle_combination_solver",
 ]
+
+[workspace.lints.clippy]
+type_complexity = "allow"

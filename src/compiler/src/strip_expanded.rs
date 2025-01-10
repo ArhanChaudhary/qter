@@ -40,7 +40,7 @@ impl RegisterIdx {
 }
 
 struct GlobalRegs {
-    register_table: HashMap<ArcIntern<String>, (RegisterIdx, usize)>,
+    register_table: HashMap<ArcIntern<str>, (RegisterIdx, usize)>,
     theoretical: Vec<WithSpan<Int<U>>>,
     puzzles: Vec<WithSpan<Arc<PermutationGroup>>>,
 }
