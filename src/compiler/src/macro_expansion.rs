@@ -166,7 +166,10 @@ fn expand_code(
         .unwrap();
 
     Ok(match &**macro_def {
-        crate::Macro::Splice { branches: _, after: _ } => todo!(),
+        crate::Macro::Splice {
+            branches: _,
+            after: _,
+        } => todo!(),
         crate::Macro::Builtin(call) => call(info, macro_call.arguments, id)?
             .into_iter()
             .map(|v| (v, Some(id)))
@@ -196,7 +199,7 @@ mod tests {
 
             over:
 
-                halt Poggers b
+                halt \"Poggers\" b
         ";
 
         let parsed = match parse(code, &|_| unreachable!(), false) {

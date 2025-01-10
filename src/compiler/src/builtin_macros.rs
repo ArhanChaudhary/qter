@@ -80,7 +80,18 @@ fn print_like(
     let message = args.pop().unwrap();
     let message_span = message.span().to_owned();
     let message = match message.into_inner() {
-        Value::Word(v) => WithSpan::new(v.trim_matches('"').to_owned(), message_span),
+        Value::Word(v) => {
+            if !v.starts_with('"') || !v.ends_with('"') {
+                return Err(Box::new(Error::new_from_span(
+                    ErrorVariant::CustomError {
+                        message: "The message must be quoted".to_owned(),
+                    },
+                    message_span.pest(),
+                )));
+            }
+
+            WithSpan::new(v.trim_matches('"').to_owned(), message_span)
+        }
         _ => {
             return Err(Box::new(Error::new_from_span(
                 ErrorVariant::CustomError {

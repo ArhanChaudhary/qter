@@ -38,7 +38,7 @@ fn ans_encode(symbols: &[u16]) -> Vec<u8> {
 }
 
 fn ans_decode(mut data: &[u8]) -> Vec<u16> {
-    let mut state = u16::from_le_bytes(TryFrom::try_from(&data[data.len() - 2..]).unwrap()) as u32;
+    let mut state = u16::from_le_bytes(TryFrom::try_from(&data[data.len() - 2..]).unwrap());
     let mut output = Vec::new();
 
     data = &data[..data.len() - 2];
@@ -64,7 +64,7 @@ fn ans_decode(mut data: &[u8]) -> Vec<u16> {
                     data = new_data;
 
                     state <<= 8;
-                    state |= *v as u32;
+                    state |= *v as u16;
                 }
                 None => break 'decoding,
             }
