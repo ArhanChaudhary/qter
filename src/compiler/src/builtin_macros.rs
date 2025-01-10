@@ -90,7 +90,10 @@ fn print_like(
                 )));
             }
 
-            WithSpan::new(v.trim_matches('"').to_owned(), message_span)
+            let v = v.strip_prefix('"').unwrap_or(&v);
+            let v = v.strip_suffix('"').unwrap_or(v);
+
+            WithSpan::new(v.to_owned(), message_span)
         }
         _ => {
             return Err(Box::new(Error::new_from_span(
