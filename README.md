@@ -181,11 +181,11 @@ Determining if a position contains its solved piece slightly varies from puzzle 
 
 The following illustrates a successful `solved-goto 4 UFR UF` instruction where you would jump to line 4:
 
-<img src="media/solved-goto-success-dark.png" width="125" alt="A Rubik's cube with the UFR and UF positions solved">
+<img src="media/solved-goto-success-dark.png" width="200" alt="A Rubik's cube with the UFR and UF positions solved">
 
 The following illustrates an unsuccessful `solved-goto 4 UFR UF` instruction where you would skip it and continue to the next instruction. Note that _all_ pieces specified need to be in their solved positions, not just one:
 
-<img src="media/solved-goto-failure-dark.png" width="125" alt="A Rubik's cube with the UFR and UF positions unsolved">
+<img src="media/solved-goto-failure-dark.png" width="200" alt="A Rubik's cube with the UFR and UF positions unsolved">
 
 For other twisty puzzles, see [Other twisty puzzles](#other-twisty-puzzles).
 
@@ -343,11 +343,12 @@ Talking points:
 
 This section assumes moderate familiarity with an existing programming language, such as Python, JavaScript, or C.
 
+<img src="media/CompilationPipelineVert.svg" width="360" alt="A diagram of the qter compilation pipeline" align="right">
+
 ## Your first QAT program
 
 If you have experience working with a compiled programming language, you know that to run a program, you compile your source code into machine code that the computer processor then interprets and executes. The qter compilation pipeline works similarly.
 
-<img src="media/CompilationPipelineVert.svg" width="500" alt="A diagram of the qter compilation pipeline" align="right">
 
 Qter's high level programming language is called QAT, or Qter Assembly Text.
 
