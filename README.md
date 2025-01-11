@@ -343,9 +343,9 @@ Talking points:
 
 This section assumes moderate familiarity with an existing programming language, such as Python, JavaScript, or C.
 
-<img src="media/CompilationPipelineVert.svg" width="360" alt="A diagram of the qter compilation pipeline" align="right">
-
 ## Your first QAT program
+
+<img src="media/CompilationPipelineVert.svg" width="360" alt="A diagram of the qter compilation pipeline" align="right">
 
 If you have experience working with a compiled programming language, you know that to run a program, you compile your source code into machine code that the computer processor then interprets and executes. The qter compilation pipeline works similarly.
 
