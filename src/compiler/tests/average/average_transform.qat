@@ -4,12 +4,12 @@
 
     input "First number:" A
     input "Second number:" B
-loop:
+sum_loop:
     add A 1
     add B 89
-    solved-goto B found_total
-    goto loop
-found_total:
+    solved-goto B found_sum
+    goto sum_loop
+found_sum:
     add A 1
 divide_by_2:
     add A 89

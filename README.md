@@ -54,6 +54,8 @@ A: 3x3
 
 This was compiled from our custom high level programming language named QAT (Qter Assembly Text):
 
+`fib.qat`
+
 ```janet
 .registers {
     A, B, C, D <- 3x3 builtin (30, 18, 10, 9)
@@ -275,7 +277,7 @@ The Q file format thus far is theoretically equivalent to a classical computer, 
 
 This is an optional instruction that you may choose to ignore. The `print` instruction serves as a secondary mechanism to produce output without exiting the program. The motivation stems from the fact that, without this instruction, the only form of meaningful output is the single number produced by the `halt` instruction.
 
-To execute this instruction, repeat the given algorithm until the positions are solved, analogous to the halt instruction. The number of repetitions this took is then the output of the print statement. Then, you must perform the inverse of the algorithm the same number of times, undoing what you just did and returning the cube to the state it was in before executing the print instruction. For example:
+To execute this instruction, repeat the given algorithm until the positions are solved, analogous to the halt instruction. The number of repetitions this took is then the output of the print statement. Then, you must perform the inverse of the algorithm the same number of times, undoing what you just did and returning the puzzle to the state it was in before executing the print instruction. For example:
 
 ```l
 Puzzles
@@ -345,10 +347,9 @@ This section assumes moderate familiarity with an existing programming language,
 
 ## Your first QAT program
 
-<img src="media/CompilationPipelineVert.svg" width="360" alt="A diagram of the qter compilation pipeline" align="right">
+<img src="media/CompilationPipelineVert.svg" width="360" alt="A diagram of the qter compilation pipeline" align="left">
 
 If you have experience working with a compiled programming language, you know that to run a program, you compile your source code into machine code that the computer processor then interprets and executes. The qter compilation pipeline works similarly.
-
 
 Qter's high level programming language is called QAT, or Qter Assembly Text.
 
@@ -360,19 +361,19 @@ Talking points:
 
 <ul>
 
-```l
+```janet
 .registers {
     A, B <- 3x3 builtin (90, 90)
 }
 
     input "First number:" A
     input "Second number:" B
-loop:
+sum_loop:
     add A 1
     add B 89
-    solved-goto B found_total
-    goto loop
-found_total:
+    solved-goto B found_sum
+    goto sum_loop
+found_sum:
     add A 1
 divide_by_2:
     add A 89
