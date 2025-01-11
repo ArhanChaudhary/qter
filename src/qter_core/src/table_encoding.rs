@@ -10,14 +10,14 @@ struct TableStats {
 }
 
 /// Returns an encoded table or None if there are too many unique generators to be able to encode them (contact Henry)
-fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
+pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
     // Statistical modelling of twisty puzzle algs:
     //
     // First, we're going to keep track of frequencies of different generators. I technically don't know but I highly doubt that generators for optimal solutions will be completely uniform. Also, if Arhan decides to pick algs with better finger tricks, this will take advantage of the distribution.
     //
     // Second, we're going to keep track of the distribution of alg lengths, allowing us to set the probability of the "end of alg" symbol appropriately.
     //
-    // Third, if two generators composed together equal another generator or the identity, they can never exist next to each other in an optimally solved algorithm (U U' = I, U U2 = U'). We find this list of disallowed pairs dynamically so we don't have to assume anything about notation.
+    // Third, if two generators composed together equal another generator or the identity, they can never exist next to each other in an optimally solved algorithm (U U' = I, U U2 = U'). We find this list of disallowed pairs dynamically so we don't have to assume anything about notation. This list of disallowed pairs is assumed to be sparse.
     //
     // The generators are assumed to be random according to this distribution with no other patterns.
 
@@ -95,11 +95,11 @@ fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
     stream.extend_from_slice(&(stats.length_frequencies.len() as u32).to_le_bytes());
 
     for (len, freq) in &stats.length_frequencies {
-        stream.extend_from_slice(&len.to_le_bytes());
+        stream.extend_from_slice(&(*len as u32).to_le_bytes());
         stream.extend_from_slice(&freq.to_le_bytes());
     }
 
-    stream.extend_from_slice(&(stats.disallowed_pairs.len() as u32).to_le_bytes());
+    stream.extend_from_slice(&(stats.disallowed_pairs.len() as u32 * 2).to_le_bytes());
 
     let dist = unweighted_ranges(stats.frequencies.len());
 
@@ -145,7 +145,7 @@ fn unweighted_ranges(generator_count: usize) -> Vec<u16> {
 }
 
 /// Decodes a table and returns None if it can't be decoded
-fn decode_table(mut data: &[u8]) -> Option<Vec<Vec<ArcIntern<str>>>> {
+pub fn decode_table(mut data: &[u8]) -> Option<Vec<Vec<ArcIntern<str>>>> {
     let (symbol_count, new_data) = data.split_first_chunk::<4>()?;
     data = new_data;
 
@@ -185,14 +185,12 @@ fn decode_table(mut data: &[u8]) -> Option<Vec<Vec<ArcIntern<str>>>> {
 
     let (disallowed_pair_count, new_data) = data.split_first_chunk::<4>()?;
     data = new_data;
+    let disallowed_pair_count = u32::from_le_bytes(*disallowed_pair_count) as usize;
 
     let dist = unweighted_ranges(frequencies.len());
 
-    let (disallowed_pairs_symbols, taken) = ans_decode(
-        data,
-        Some(u32::from_le_bytes(*disallowed_pair_count) as usize),
-        |_| dist.to_owned(),
-    );
+    let (disallowed_pairs_symbols, taken) =
+        ans_decode(data, Some(disallowed_pair_count), |_| dist.to_owned())?;
     data = data.split_at(taken).1;
 
     let mut disallowed_pairs = HashSet::new();
@@ -212,7 +210,7 @@ fn decode_table(mut data: &[u8]) -> Option<Vec<Vec<ArcIntern<str>>>> {
 
     let end_of_alg_symbol = stats.frequencies.len() as u16;
 
-    let algs = ans_decode(data, None, mk_distribution_closure(stats))
+    let algs = ans_decode(data, None, mk_distribution_closure(stats))?
         .0
         .split(|s| *s == end_of_alg_symbol)
         .map(|alg| {
@@ -226,10 +224,12 @@ fn decode_table(mut data: &[u8]) -> Option<Vec<Vec<ArcIntern<str>>>> {
 }
 
 fn mk_distribution_closure(stats: TableStats) -> impl Fn(&[u16]) -> Vec<u16> {
-    |_| todo!()
+    let dist = unweighted_ranges(stats.frequencies.len() + 1);
+
+    move |_| dist.to_owned()
 }
 
-const N: u32 = 2;
+const N: u32 = 8;
 
 type State = u16;
 type StateNextUp = u32;
@@ -292,14 +292,18 @@ fn ans_decode(
     data: &[u8],
     max_symbols: Option<usize>,
     next_ranges: impl Fn(&[u16]) -> Vec<u16>,
-) -> (Vec<u16>, usize) {
+) -> Option<(Vec<u16>, usize)> {
+    if let Some(max) = max_symbols {
+        if max == 0 {
+            return Some((vec![], 0));
+        }
+    }
+
     let len_before = data.len();
 
     let mut ranges = next_ranges(&[]);
 
-    let (state, mut data) = data
-        .split_first_chunk::<{ (State::BITS / 8) as usize }>()
-        .unwrap();
+    let (state, mut data) = data.split_first_chunk::<{ (State::BITS / 8) as usize }>()?;
 
     let mut state = State::from_le_bytes(*state);
     let mut output = Vec::new();
@@ -350,14 +354,17 @@ fn ans_decode(
         ranges = next_ranges(&output);
     }
 
-    (output, len_before - data.len())
+    Some((output, len_before - data.len()))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::table_encoding::ans_decode;
+    use internment::ArcIntern;
+    use itertools::Itertools;
 
-    use super::ans_encode;
+    use crate::table_encoding::{ans_decode, decode_table, N};
+
+    use super::{ans_encode, encode_table};
 
     #[test]
     fn test_encoding() {
@@ -365,32 +372,160 @@ mod tests {
             0, 1, 0, 2, 0, 2, 1, 0, 1, 0, 2, 0, 2, 0, 1, 2, 0, 2, 0, 1, 0, 1, 2, 0,
         ];
 
-        let dist = |found: &[u16]| match found.last() {
-            Some(prev) => {
-                if *prev == 0 {
-                    vec![0, 2, 2]
-                } else if *prev == 1 {
-                    vec![3, 0, 1]
-                } else if *prev == 2 {
-                    vec![3, 1, 0]
-                } else {
-                    panic!("{prev}");
+        let dist = |found: &[u16]| {
+            let mut dist = match found.last() {
+                Some(prev) => {
+                    if *prev == 0 {
+                        vec![0, 2, 2]
+                    } else if *prev == 1 {
+                        vec![3, 0, 1]
+                    } else if *prev == 2 {
+                        vec![3, 1, 0]
+                    } else {
+                        panic!("{prev}");
+                    }
                 }
-            }
-            None => {
-                vec![2, 1, 1]
-            }
+                None => {
+                    vec![2, 1, 1]
+                }
+            };
+
+            dist.iter_mut().for_each(|v| *v *= (1 << N) / 4);
+
+            dist
         };
 
         let mut encoded = Vec::new();
         ans_encode(&mut encoded, &v, dist);
         println!("{encoded:?}");
-        let (decoded, taken) = ans_decode(&encoded, None, dist);
+        let (decoded, taken) = ans_decode(&encoded, None, dist).unwrap();
         assert_eq!(taken, 4);
         assert_eq!(decoded, v);
         encoded.extend_from_slice(&[1, 2, 3, 4, 5]);
-        let (decoded, taken) = ans_decode(&encoded, Some(v.len()), dist);
+        let (decoded, taken) = ans_decode(&encoded, Some(v.len()), dist).unwrap();
         assert_eq!(taken, 4);
         assert_eq!(decoded, v);
+    }
+
+    fn mk_algs_datastructure(spec: &str) -> Vec<Vec<ArcIntern<str>>> {
+        spec.split('\n')
+            .map(|v| v.trim())
+            .filter(|v| !v.is_empty())
+            .map(|alg| {
+                alg.split(' ')
+                    .map(|v| v.trim())
+                    .filter(|v| !v.is_empty())
+                    .map(ArcIntern::from)
+                    .collect_vec()
+            })
+            .collect_vec()
+    }
+
+    #[test]
+    fn test_table_encoding() {
+        let algs = mk_algs_datastructure(
+            "
+                A B C
+                C B A
+            ",
+        );
+
+        let encoded = encode_table(&algs).unwrap();
+        println!("{encoded:?}");
+        let decoded = decode_table(&encoded).unwrap();
+        assert_eq!(algs, decoded);
+    }
+
+    #[test]
+    fn extensive_table_encoding_test() {
+        // All the OLL PLL algs
+        let spec = "R' U L' U2 R U' R' U2 R L
+R U R' F' R U R' U' R' F R2 U' R'
+R U' R' U' R U R D R' U' R D' R' U2 R'
+R' U2 R U2 R' F R U R' U' R' F' R2
+F' R U R' U' R' F R2 F U' R' U' R U F' R'
+r' D' F r U' r' F' D r2 U r' U' r' F r F'
+x' R U' R' D R U R' D' R U R' D  R U' R' D' x
+R' U' F' R U R' U' R' F R2 U' R' U' R U R' U R
+M2' U M2' U2 M2' U M2'
+R U R' U' R' F R2 U' R' U' R U R' F'
+R' U R' U' R D' R' D R' U D' R2 U' R2' D R2
+F R U' R' U' R U R F' R U R' U' R' F R F'
+M' U M2' U M2' U M' U2 M2'
+R2 U R' U R' U' R U' R2 U' D R' U R D'
+R' U' R U D' R2' U R' U R U' R U' R2' D
+R2 F2 R U2 R U2 R' F R U R' U' R' F R2
+R U R' U' D R2 U' R U' R' U R' U R2 D'
+R U R' U' R U' R' F' U' F R U R'
+F R' F R2 U' R' U' R U R' F2
+R U R' U R U2 R' F R U R' U' F'
+R' U' R U' R' U2 R F R U R' U' F'
+L F' L' U' L U F U' L'
+R' F R U R' U' F' U R
+R U R2 U' R' F R U R U' F'
+R' U' R' F R F' U R
+r U R' U' r' R U R U' R'
+R U R' U' M' U R U' r'
+R U2 R' U' R U R' U' R U' R'
+R U2 R2 U' R2 U' R2 U2 R
+R2 D' R U2 R' D R U2 R
+r U R' U' r' F R F'
+F' r U R' U' r' F R
+R U2 R' U' R U' R'
+R U R' U R U2 R'
+R U2 R2 F R F' U2 R' F R F'
+r U r' U2 r U2 R' U2 R U' r'
+r' R2 U R' U r U2 r' U M'
+M U' r U2 r' U' R U' R' M'
+F R' F' R2 r' U R U' R' U' M'
+r U R' U R U2 r2 U' R U' R' U2 r
+r' R U R U R' U' M' R' F R F'
+r U R' U' M2 U R U' R' U' M'
+R U R' U' R' F R2 U R' U' F'
+R U R' U R' F R F' R U2 R'
+R U2 R2 F R F' R U2 R'
+F R' F' R U R U' R'
+F U R U' R' U R U' R' F'
+R U R' U R U' B U' B' R'
+R' F R U R U' R2 F' R2 U' R' U R U R'
+r' U' r U' R' U R U' R' U R r' U r
+F U R U' R2 F' R U R U' R'
+R' F R U R' F' R F U' F'
+l' U' l L' U' L U l' U l
+r U r' R U R' U' r U' r'
+R' U' F U R U' R' F' R
+L U F' U' L' U L F L'
+F' U' L' U L F
+F U R U' R' F'
+R' U' R' F R F' R' F R F' U R
+F R U R' U' R U R' U' F'
+r U' r2 U r2 U r2 U' r
+r' U r2 U' r2 U' r2 U r'
+l' U2 L U L' U' L U L' U l
+r U2 R' U' R U R' U' R U' r'
+r U R' U R U2 r'
+l' U' L U' L' U2 l
+r U R' U R' F R F' R U2 r'
+M' R' U' R U' R' U2 R U' R r'
+l' U2 L U L' U l
+r U2 R' U' R U' r'
+R U R' U' R' F R F'
+F R U R' U' F'
+L' U' L U' L' U L U L F' L' F
+R U R' U R U' R' U' R' F R F'";
+
+        let algs = mk_algs_datastructure(spec);
+
+        let encoded = encode_table(&algs).unwrap();
+        println!("{encoded:?}");
+        let decoded = decode_table(&encoded).unwrap();
+        assert_eq!(algs, decoded);
+
+        // panic!(
+        //     "{} → {} : {:.2}",
+        //     spec.len(),
+        //     encoded.len(),
+        //     encoded.len() as f64 / spec.len() as f64
+        // );
     }
 }
