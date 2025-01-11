@@ -6,7 +6,7 @@ use itertools::Itertools;
 struct TableStats {
     frequencies: HashMap<ArcIntern<str>, u32>,
     length_frequencies: HashMap<usize, u32>,
-    allowed_pairs: HashSet<(ArcIntern<str>, ArcIntern<str>)>,
+    disallowed_pairs: HashSet<(ArcIntern<str>, ArcIntern<str>)>,
 }
 
 /// Returns an encoded table or None if there are too many unique generators to be able to encode them (contact Henry)
@@ -25,7 +25,7 @@ fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
         TableStats {
             frequencies: HashMap::new(),
             length_frequencies: HashMap::new(),
-            allowed_pairs: HashSet::new(),
+            disallowed_pairs: HashSet::new(),
         },
         |mut stats, alg| {
             *stats.length_frequencies.entry(alg.len()).or_insert(0) += 1;
@@ -37,14 +37,15 @@ fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
                     .or_insert(0) += 1;
             }
 
+            // Note: `disallowed_pairs` will actually contain the set of allowed pairs and we will take the complement of the set later
             for (a, b) in alg.iter().tuple_windows() {
                 let a = ArcIntern::clone(a);
                 let b = ArcIntern::clone(b);
 
                 if a < b {
-                    stats.allowed_pairs.insert((a, b));
+                    stats.disallowed_pairs.insert((a, b));
                 } else {
-                    stats.allowed_pairs.insert((b, a));
+                    stats.disallowed_pairs.insert((b, a));
                 }
             }
 
@@ -54,25 +55,6 @@ fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
 
     if stats.frequencies.len() > (1 << N) - 1 {
         return None;
-    }
-
-    let mut stream = Vec::new();
-
-    let mut symbol_indices = HashMap::new();
-
-    stream.extend_from_slice(&(stats.frequencies.len() as u32).to_le_bytes());
-
-    for (i, (symbol, freq)) in stats.frequencies.iter().enumerate() {
-        symbol_indices.insert(ArcIntern::clone(symbol), i as State);
-        stream.extend_from_slice(&(symbol.len() as u32).to_le_bytes());
-        stream.extend_from_slice(&freq.to_le_bytes());
-    }
-
-    stream.extend_from_slice(&(stats.length_frequencies.len() as u32).to_le_bytes());
-
-    for (len, freq) in &stats.length_frequencies {
-        stream.extend_from_slice(&len.to_le_bytes());
-        stream.extend_from_slice(&freq.to_le_bytes());
     }
 
     let mut disallowed_pairs = HashSet::new();
@@ -88,25 +70,42 @@ fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
 
         let pair = (ArcIntern::clone(pair.0), ArcIntern::clone(pair.1));
 
-        if !stats.allowed_pairs.contains(&pair) {
+        if !stats.disallowed_pairs.contains(&pair) {
             disallowed_pairs.insert(pair);
         }
     }
 
-    stream.extend_from_slice(&(disallowed_pairs.len() as u32).to_le_bytes());
+    stats.disallowed_pairs = disallowed_pairs;
 
-    let mut dist = vec![1_u16; stats.frequencies.len()];
-    let mut range_left = (1 << N) - stats.frequencies.len() as u32;
+    // Now `disallowed_pairs` means the correct thing
 
-    for (i, dist_spot) in dist.iter_mut().enumerate() {
-        let range_to_take = range_left / (stats.frequencies.len() - i) as u32;
-        range_left -= range_to_take;
-        *dist_spot += range_to_take as u16;
+    let mut stream = Vec::new();
+
+    let mut symbol_indices = HashMap::new();
+
+    stream.extend_from_slice(&(stats.frequencies.len() as u32).to_le_bytes());
+
+    for (i, (symbol, freq)) in stats.frequencies.iter().enumerate() {
+        symbol_indices.insert(ArcIntern::clone(symbol), i as State);
+        stream.extend_from_slice(&(symbol.len() as u32).to_le_bytes());
+        stream.extend_from_slice(symbol.as_bytes());
+        stream.extend_from_slice(&freq.to_le_bytes());
     }
+
+    stream.extend_from_slice(&(stats.length_frequencies.len() as u32).to_le_bytes());
+
+    for (len, freq) in &stats.length_frequencies {
+        stream.extend_from_slice(&len.to_le_bytes());
+        stream.extend_from_slice(&freq.to_le_bytes());
+    }
+
+    stream.extend_from_slice(&(stats.disallowed_pairs.len() as u32).to_le_bytes());
+
+    let dist = unweighted_ranges(stats.frequencies.len());
 
     let mut disallowed_pair_symbols = Vec::new();
 
-    for pair in disallowed_pairs {
+    for pair in &stats.disallowed_pairs {
         disallowed_pair_symbols.push(*symbol_indices.get(&pair.0).unwrap());
         disallowed_pair_symbols.push(*symbol_indices.get(&pair.1).unwrap());
     }
@@ -130,6 +129,100 @@ fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
     ans_encode(&mut stream, &symbols, mk_distribution_closure(stats));
 
     Some(stream)
+}
+
+fn unweighted_ranges(generator_count: usize) -> Vec<u16> {
+    let mut dist = vec![1_u16; generator_count];
+    let mut range_left = (1 << N) - generator_count as u32;
+
+    for (i, dist_spot) in dist.iter_mut().enumerate() {
+        let range_to_take = range_left / (generator_count - i) as u32;
+        range_left -= range_to_take;
+        *dist_spot += range_to_take as u16;
+    }
+
+    dist
+}
+
+/// Decodes a table and returns None if it can't be decoded
+fn decode_table(mut data: &[u8]) -> Option<Vec<Vec<ArcIntern<str>>>> {
+    let (symbol_count, new_data) = data.split_first_chunk::<4>()?;
+    data = new_data;
+
+    let mut symbols = Vec::new();
+    let mut frequencies = HashMap::new();
+
+    for _ in 0..u32::from_le_bytes(*symbol_count) {
+        let (symbol_len, new_data) = data.split_first_chunk::<4>()?;
+        data = new_data;
+        let (generator, new_data) = data.split_at(u32::from_le_bytes(*symbol_len) as usize);
+        data = new_data;
+
+        let generator = ArcIntern::<str>::from(String::from_utf8(generator.to_owned()).ok()?);
+        symbols.push(ArcIntern::clone(&generator));
+
+        let (freq, new_data) = data.split_first_chunk::<4>()?;
+        data = new_data;
+        frequencies.insert(generator, u32::from_le_bytes(*freq));
+    }
+
+    let mut length_frequencies = HashMap::new();
+
+    let (length_count, new_data) = data.split_first_chunk::<4>()?;
+    data = new_data;
+
+    for _ in 0..u32::from_le_bytes(*length_count) {
+        let (length, new_data) = data.split_first_chunk::<4>()?;
+        data = new_data;
+        let (freq, new_data) = data.split_first_chunk::<4>()?;
+        data = new_data;
+
+        length_frequencies.insert(
+            u32::from_le_bytes(*length) as usize,
+            u32::from_le_bytes(*freq),
+        );
+    }
+
+    let (disallowed_pair_count, new_data) = data.split_first_chunk::<4>()?;
+    data = new_data;
+
+    let dist = unweighted_ranges(frequencies.len());
+
+    let (disallowed_pairs_symbols, taken) = ans_decode(
+        data,
+        Some(u32::from_le_bytes(*disallowed_pair_count) as usize),
+        |_| dist.to_owned(),
+    );
+    data = data.split_at(taken).1;
+
+    let mut disallowed_pairs = HashSet::new();
+
+    for (a, b) in disallowed_pairs_symbols.iter().tuples() {
+        disallowed_pairs.insert((
+            ArcIntern::clone(&symbols[*a as usize]),
+            ArcIntern::clone(&symbols[*b as usize]),
+        ));
+    }
+
+    let stats = TableStats {
+        frequencies,
+        length_frequencies,
+        disallowed_pairs,
+    };
+
+    let end_of_alg_symbol = stats.frequencies.len() as u16;
+
+    let algs = ans_decode(data, None, mk_distribution_closure(stats))
+        .0
+        .split(|s| *s == end_of_alg_symbol)
+        .map(|alg| {
+            alg.iter()
+                .map(|s| ArcIntern::clone(&symbols[*s as usize]))
+                .collect_vec()
+        })
+        .collect_vec();
+
+    Some(algs)
 }
 
 fn mk_distribution_closure(stats: TableStats) -> impl Fn(&[u16]) -> Vec<u16> {
@@ -199,7 +292,9 @@ fn ans_decode(
     data: &[u8],
     max_symbols: Option<usize>,
     next_ranges: impl Fn(&[u16]) -> Vec<u16>,
-) -> Vec<u16> {
+) -> (Vec<u16>, usize) {
+    let len_before = data.len();
+
     let mut ranges = next_ranges(&[]);
 
     let (state, mut data) = data
@@ -255,7 +350,7 @@ fn ans_decode(
         ranges = next_ranges(&output);
     }
 
-    output
+    (output, len_before - data.len())
 }
 
 #[cfg(test)]
@@ -290,9 +385,12 @@ mod tests {
         let mut encoded = Vec::new();
         ans_encode(&mut encoded, &v, dist);
         println!("{encoded:?}");
-        let decoded = ans_decode(&encoded, Some(v.len()), dist);
+        let (decoded, taken) = ans_decode(&encoded, None, dist);
+        assert_eq!(taken, 4);
         assert_eq!(decoded, v);
-        let decoded = ans_decode(&encoded, None, dist);
+        encoded.extend_from_slice(&[1, 2, 3, 4, 5]);
+        let (decoded, taken) = ans_decode(&encoded, Some(v.len()), dist);
+        assert_eq!(taken, 4);
         assert_eq!(decoded, v);
     }
 }
