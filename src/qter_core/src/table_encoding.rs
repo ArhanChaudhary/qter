@@ -1,4 +1,140 @@
-use itertools::{EitherOrBoth, Itertools};
+use std::collections::{HashMap, HashSet};
+
+use internment::ArcIntern;
+use itertools::Itertools;
+
+struct TableStats {
+    frequencies: HashMap<ArcIntern<str>, u32>,
+    length_frequencies: HashMap<usize, u32>,
+    allowed_pairs: HashSet<(ArcIntern<str>, ArcIntern<str>)>,
+}
+
+/// Returns an encoded table or None if there are too many unique generators to be able to encode them (contact Henry)
+fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
+    // Statistical modelling of twisty puzzle algs:
+    //
+    // First, we're going to keep track of frequencies of different generators. I technically don't know but I highly doubt that generators for optimal solutions will be completely uniform. Also, if Arhan decides to pick algs with better finger tricks, this will take advantage of the distribution.
+    //
+    // Second, we're going to keep track of the distribution of alg lengths, allowing us to set the probability of the "end of alg" symbol appropriately.
+    //
+    // Third, if two generators composed together equal another generator or the identity, they can never exist next to each other in an optimally solved algorithm (U U' = I, U U2 = U'). We find this list of disallowed pairs dynamically so we don't have to assume anything about notation.
+    //
+    // The generators are assumed to be random according to this distribution with no other patterns.
+
+    let mut stats = algs.iter().fold(
+        TableStats {
+            frequencies: HashMap::new(),
+            length_frequencies: HashMap::new(),
+            allowed_pairs: HashSet::new(),
+        },
+        |mut stats, alg| {
+            *stats.length_frequencies.entry(alg.len()).or_insert(0) += 1;
+
+            for generator in alg {
+                *stats
+                    .frequencies
+                    .entry(ArcIntern::clone(generator))
+                    .or_insert(0) += 1;
+            }
+
+            for (a, b) in alg.iter().tuple_windows() {
+                let a = ArcIntern::clone(a);
+                let b = ArcIntern::clone(b);
+
+                if a < b {
+                    stats.allowed_pairs.insert((a, b));
+                } else {
+                    stats.allowed_pairs.insert((b, a));
+                }
+            }
+
+            stats
+        },
+    );
+
+    if stats.frequencies.len() > (1 << N) - 1 {
+        return None;
+    }
+
+    let mut stream = Vec::new();
+
+    let mut symbol_indices = HashMap::new();
+
+    stream.extend_from_slice(&(stats.frequencies.len() as u32).to_le_bytes());
+
+    for (i, (symbol, freq)) in stats.frequencies.iter().enumerate() {
+        symbol_indices.insert(ArcIntern::clone(symbol), i as State);
+        stream.extend_from_slice(&(symbol.len() as u32).to_le_bytes());
+        stream.extend_from_slice(&freq.to_le_bytes());
+    }
+
+    stream.extend_from_slice(&(stats.length_frequencies.len() as u32).to_le_bytes());
+
+    for (len, freq) in &stats.length_frequencies {
+        stream.extend_from_slice(&len.to_le_bytes());
+        stream.extend_from_slice(&freq.to_le_bytes());
+    }
+
+    let mut disallowed_pairs = HashSet::new();
+
+    for pair in stats
+        .frequencies
+        .keys()
+        .cartesian_product(stats.frequencies.keys())
+    {
+        if pair.1 > pair.0 {
+            continue;
+        }
+
+        let pair = (ArcIntern::clone(pair.0), ArcIntern::clone(pair.1));
+
+        if !stats.allowed_pairs.contains(&pair) {
+            disallowed_pairs.insert(pair);
+        }
+    }
+
+    stream.extend_from_slice(&(disallowed_pairs.len() as u32).to_le_bytes());
+
+    let mut dist = vec![1_u16; stats.frequencies.len()];
+    let mut range_left = (1 << N) - stats.frequencies.len() as u32;
+
+    for (i, dist_spot) in dist.iter_mut().enumerate() {
+        let range_to_take = range_left / (stats.frequencies.len() - i) as u32;
+        range_left -= range_to_take;
+        *dist_spot += range_to_take as u16;
+    }
+
+    let mut disallowed_pair_symbols = Vec::new();
+
+    for pair in disallowed_pairs {
+        disallowed_pair_symbols.push(*symbol_indices.get(&pair.0).unwrap());
+        disallowed_pair_symbols.push(*symbol_indices.get(&pair.1).unwrap());
+    }
+
+    ans_encode(&mut stream, &disallowed_pair_symbols, |_| dist.to_owned());
+
+    let end_of_alg_symbol = symbol_indices.len() as u16;
+
+    let mut symbols = Vec::new();
+
+    for (i, alg) in algs.iter().enumerate() {
+        if i != 0 {
+            symbols.push(end_of_alg_symbol);
+        }
+
+        for generator in alg {
+            symbols.push(*symbol_indices.get(generator).unwrap());
+        }
+    }
+
+    ans_encode(&mut stream, &symbols, mk_distribution_closure(stats));
+
+    Some(stream)
+}
+
+fn mk_distribution_closure(stats: TableStats) -> impl Fn(&[u16]) -> Vec<u16> {
+    |_| todo!()
+}
 
 const N: u32 = 2;
 
@@ -19,15 +155,8 @@ fn coding_function(state: State, symbol: u16, ranges: &[u16]) -> Option<State> {
     .ok()
 }
 
-fn ans_encode(
-    symbols: &[u16],
-    first_ranges: Vec<u16>,
-    next_ranges: impl Fn(u16) -> Vec<u16>,
-) -> Vec<u8> {
-    let mut ranges = match symbols.iter().rev().nth(1) {
-        Some(v) => next_ranges(*v),
-        None => first_ranges.to_owned(),
-    };
+fn ans_encode(stream: &mut Vec<u8>, mut symbols: &[u16], next_ranges: impl Fn(&[u16]) -> Vec<u16>) {
+    let ranges = next_ranges(symbols.split_last().map(|v| v.1).unwrap_or(&[]));
 
     let mut state = match symbols.last() {
         Some(last) => (0..State::MAX)
@@ -37,20 +166,11 @@ fn ans_encode(
             .unwrap(),
         None => 0,
     };
-    let mut stream = Vec::new();
 
-    println!("{state}");
+    let starts_at = stream.len();
 
-    for step in symbols
-        .iter()
-        .rev()
-        .zip_longest(symbols.iter().rev().skip(1))
-    {
-        let (symbol, ranges) = match step {
-            EitherOrBoth::Both(symbol, prev) => (symbol, next_ranges(*prev)),
-            EitherOrBoth::Left(symbol) => (symbol, first_ranges.to_owned()),
-            EitherOrBoth::Right(_) => unreachable!(),
-        };
+    while let Some((symbol, prev)) = symbols.split_last() {
+        let ranges = next_ranges(prev);
 
         loop {
             match coding_function(state, *symbol, &ranges) {
@@ -60,36 +180,34 @@ fn ans_encode(
                 }
                 None => {
                     stream.extend_from_slice(
-                        &((state & StateNextDown::MAX as State) as StateNextDown).to_le_bytes(),
+                        &((state & StateNextDown::MAX as State) as StateNextDown).to_be_bytes(),
                     );
                     state >>= StateNextDown::BITS;
                 }
             };
         }
 
-        println!("{state}");
+        symbols = prev;
     }
 
-    stream.extend_from_slice(&state.to_le_bytes());
+    stream.extend_from_slice(&state.to_be_bytes());
 
-    stream
+    stream[starts_at..].reverse();
 }
 
 fn ans_decode(
     data: &[u8],
-    first_ranges: Vec<u16>,
-    next_ranges: impl Fn(u16) -> Vec<u16>,
+    max_symbols: Option<usize>,
+    next_ranges: impl Fn(&[u16]) -> Vec<u16>,
 ) -> Vec<u16> {
-    let mut ranges = first_ranges;
+    let mut ranges = next_ranges(&[]);
 
-    let (mut data, state) = data
-        .split_last_chunk::<{ (State::BITS / 8) as usize }>()
+    let (state, mut data) = data
+        .split_first_chunk::<{ (State::BITS / 8) as usize }>()
         .unwrap();
 
     let mut state = State::from_le_bytes(*state);
     let mut output = Vec::new();
-
-    println!("{state}");
 
     let mask = (1 << N) - 1;
 
@@ -113,22 +231,28 @@ fn ans_decode(
 
         output.push(s);
 
-        state = ranges[s as usize] * (state >> N) + (state & mask) - cdf_val;
-
-        while state.ilog2() < StateNextDown::BITS {
-            match data.split_last_chunk::<{ (StateNextDown::BITS / 8) as usize }>() {
-                Some((new_data, v)) => {
-                    data = new_data;
-
-                    state <<= StateNextDown::BITS;
-                    state |= StateNextDown::from_le_bytes(*v) as State;
-                }
-                None => break 'decoding,
+        if let Some(max) = max_symbols {
+            if output.len() == max {
+                break;
             }
         }
-        println!("{state}");
 
-        ranges = next_ranges(s);
+        state = ranges[s as usize] * (state >> N) + (state & mask) - cdf_val;
+
+        while state == 0 || state.ilog2() < StateNextDown::BITS {
+            if let Some((v, new_data)) =
+                data.split_first_chunk::<{ (StateNextDown::BITS / 8) as usize }>()
+            {
+                data = new_data;
+
+                state <<= StateNextDown::BITS;
+                state |= StateNextDown::from_le_bytes(*v) as State;
+            } else {
+                break 'decoding;
+            }
+        }
+
+        ranges = next_ranges(&output);
     }
 
     output
@@ -141,26 +265,34 @@ mod tests {
     use super::ans_encode;
 
     #[test]
-    fn bruh() {
-        let v = vec![
+    fn test_encoding() {
+        let v = [
             0, 1, 0, 2, 0, 2, 1, 0, 1, 0, 2, 0, 2, 0, 1, 2, 0, 2, 0, 1, 0, 1, 2, 0,
         ];
 
-        let dist = |prev| {
-            if prev == 0 {
-                vec![0, 2, 2]
-            } else if prev == 1 {
-                vec![3, 0, 1]
-            } else if prev == 2 {
-                vec![3, 1, 0]
-            } else {
-                panic!("{prev}");
+        let dist = |found: &[u16]| match found.last() {
+            Some(prev) => {
+                if *prev == 0 {
+                    vec![0, 2, 2]
+                } else if *prev == 1 {
+                    vec![3, 0, 1]
+                } else if *prev == 2 {
+                    vec![3, 1, 0]
+                } else {
+                    panic!("{prev}");
+                }
+            }
+            None => {
+                vec![2, 1, 1]
             }
         };
 
-        let encoded = ans_encode(&v, vec![2, 1, 1], dist);
-        let decoded = ans_decode(&encoded, vec![2, 1, 1], dist);
-
+        let mut encoded = Vec::new();
+        ans_encode(&mut encoded, &v, dist);
+        println!("{encoded:?}");
+        let decoded = ans_decode(&encoded, Some(v.len()), dist);
+        assert_eq!(decoded, v);
+        let decoded = ans_decode(&encoded, None, dist);
         assert_eq!(decoded, v);
     }
 }
