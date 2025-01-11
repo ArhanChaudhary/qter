@@ -347,7 +347,7 @@ This section assumes moderate familiarity with an existing programming language,
 
 If you have experience working with a compiled programming language, you know that to run a program, you compile your source code into machine code that the computer processor then interprets and executes. The qter compilation pipeline works similarly.
 
-<img src="media/CompilationPipelineVert.svg" width="125" alt="A diagram of the qter compilation pipeline" align="right">
+<img src="media/CompilationPipelineVert.svg" width="500" alt="A diagram of the qter compilation pipeline" align="right">
 
 Qter's high level programming language is called QAT, or Qter Assembly Text.
 
