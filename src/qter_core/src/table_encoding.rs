@@ -6,11 +6,11 @@ use itertools::Itertools;
 struct TableStats {
     frequencies: HashMap<ArcIntern<str>, u32>,
     length_frequencies: HashMap<usize, u32>,
-    disallowed_pairs: HashSet<(ArcIntern<str>, ArcIntern<str>)>,
+    disallowed_pairs: HashSet<(u16, u16)>,
 }
 
 /// Returns an encoded table or None if there are too many unique generators to be able to encode them (contact Henry)
-pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
+pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
     // Statistical modelling of twisty puzzle algs:
     //
     // First, we're going to keep track of frequencies of different generators. I technically don't know but I highly doubt that generators for optimal solutions will be completely uniform. Also, if Arhan decides to pick algs with better finger tricks, this will take advantage of the distribution.
@@ -20,6 +20,8 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
     // Third, if two generators composed together equal another generator or the identity, they can never exist next to each other in an optimally solved algorithm (U U' = I, U U2 = U'). We find this list of disallowed pairs dynamically so we don't have to assume anything about notation. This list of disallowed pairs is assumed to be sparse.
     //
     // The generators are assumed to be random according to this distribution with no other patterns.
+
+    let mut symbol_indices = HashMap::new();
 
     let mut stats = algs.iter().fold(
         TableStats {
@@ -31,6 +33,11 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
             *stats.length_frequencies.entry(alg.len()).or_insert(0) += 1;
 
             for generator in alg {
+                if !symbol_indices.contains_key(generator) {
+                    let idx = symbol_indices.len() as u16;
+                    symbol_indices.insert(ArcIntern::clone(generator), idx);
+                }
+
                 *stats
                     .frequencies
                     .entry(ArcIntern::clone(generator))
@@ -39,13 +46,13 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
 
             // Note: `disallowed_pairs` will actually contain the set of allowed pairs and we will take the complement of the set later
             for (a, b) in alg.iter().tuple_windows() {
-                let a = ArcIntern::clone(a);
-                let b = ArcIntern::clone(b);
+                let a = symbol_indices.get(a).unwrap();
+                let b = symbol_indices.get(b).unwrap();
 
                 if a < b {
-                    stats.disallowed_pairs.insert((a, b));
+                    stats.disallowed_pairs.insert((*a, *b));
                 } else {
-                    stats.disallowed_pairs.insert((b, a));
+                    stats.disallowed_pairs.insert((*b, *a));
                 }
             }
 
@@ -59,16 +66,15 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
 
     let mut disallowed_pairs = HashSet::new();
 
-    for pair in stats
-        .frequencies
-        .keys()
-        .cartesian_product(stats.frequencies.keys())
+    for pair in symbol_indices
+        .values()
+        .cartesian_product(symbol_indices.values())
     {
-        if pair.1 > pair.0 {
+        if pair.1 < pair.0 {
             continue;
         }
 
-        let pair = (ArcIntern::clone(pair.0), ArcIntern::clone(pair.1));
+        let pair = (*pair.0, *pair.1);
 
         if !stats.disallowed_pairs.contains(&pair) {
             disallowed_pairs.insert(pair);
@@ -81,12 +87,11 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
 
     let mut stream = Vec::new();
 
-    let mut symbol_indices = HashMap::new();
-
     stream.extend_from_slice(&(stats.frequencies.len() as u32).to_le_bytes());
 
-    for (i, (symbol, freq)) in stats.frequencies.iter().enumerate() {
-        symbol_indices.insert(ArcIntern::clone(symbol), i as State);
+    for (symbol, _) in symbol_indices.iter().sorted_unstable_by_key(|(_, i)| **i) {
+        let freq = stats.frequencies.get(symbol).unwrap();
+
         stream.extend_from_slice(&(symbol.len() as u32).to_le_bytes());
         stream.extend_from_slice(symbol.as_bytes());
         stream.extend_from_slice(&freq.to_le_bytes());
@@ -106,8 +111,8 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
     let mut disallowed_pair_symbols = Vec::new();
 
     for pair in &stats.disallowed_pairs {
-        disallowed_pair_symbols.push(*symbol_indices.get(&pair.0).unwrap());
-        disallowed_pair_symbols.push(*symbol_indices.get(&pair.1).unwrap());
+        disallowed_pair_symbols.push(pair.0);
+        disallowed_pair_symbols.push(pair.1);
     }
 
     ans_encode(&mut stream, &disallowed_pair_symbols, |_| dist.to_owned());
@@ -126,9 +131,13 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<Vec<u8>> {
         }
     }
 
+    let before = stream.len();
+
     ans_encode(&mut stream, &symbols, mk_distribution_closure(stats));
 
-    Some(stream)
+    let after = stream.len();
+
+    Some((stream, after - before))
 }
 
 fn unweighted_ranges(generator_count: usize) -> Vec<u16> {
@@ -196,10 +205,7 @@ pub fn decode_table(mut data: &[u8]) -> Option<Vec<Vec<ArcIntern<str>>>> {
     let mut disallowed_pairs = HashSet::new();
 
     for (a, b) in disallowed_pairs_symbols.iter().tuples() {
-        disallowed_pairs.insert((
-            ArcIntern::clone(&symbols[*a as usize]),
-            ArcIntern::clone(&symbols[*b as usize]),
-        ));
+        disallowed_pairs.insert((*a, *b));
     }
 
     let stats = TableStats {
@@ -224,9 +230,91 @@ pub fn decode_table(mut data: &[u8]) -> Option<Vec<Vec<ArcIntern<str>>>> {
 }
 
 fn mk_distribution_closure(stats: TableStats) -> impl Fn(&[u16]) -> Vec<u16> {
-    let dist = unweighted_ranges(stats.frequencies.len() + 1);
+    let generator_count = stats.frequencies.len();
 
-    move |_| dist.to_owned()
+    let mut total_lens = 0;
+    let lens_cdf = stats
+        .length_frequencies
+        .into_iter()
+        .sorted_unstable_by(|a, b| b.0.cmp(&a.0))
+        .map(|v| {
+            let out = (v.0, (v.1, total_lens));
+            total_lens += v.1;
+            out
+        })
+        .collect::<HashMap<_, _>>();
+
+    println!(
+        "{:?}",
+        stats
+            .disallowed_pairs
+            .iter()
+            .sorted_unstable()
+            .collect_vec()
+    );
+
+    let end_of_alg_symbol = generator_count as u16;
+
+    move |found| {
+        let len = match found.iter().rposition(|v| *v == end_of_alg_symbol) {
+            Some(pos) => found.len() - pos - 1,
+            None => found.len(),
+        };
+
+        let mut dist = vec![0_u16; generator_count + 1];
+        let mut range_left = 1 << N;
+
+        if let Some((len_chance, lens_cdf)) = lens_cdf.get(&len) {
+            if *lens_cdf == 0 {
+                dist[end_of_alg_symbol as usize] = range_left;
+                return dist;
+            } else {
+                let amt_to_give = ((range_left as u32 * *len_chance / (*len_chance + *lens_cdf))
+                    as u16)
+                    .min(range_left - generator_count as u16);
+
+                dist[end_of_alg_symbol as usize] = amt_to_give;
+                range_left -= amt_to_give;
+            }
+        }
+
+        let mut generators_possible = 0;
+
+        for (sym, spot) in dist
+            .iter_mut()
+            .enumerate()
+            .map(|(i, v)| (i as u16, v))
+            .take(generator_count)
+        {
+            if let Some(last) = found.last() {
+                if stats.disallowed_pairs.contains(&if *last < sym {
+                    (*last, sym)
+                } else {
+                    (sym, *last)
+                }) {
+                    continue;
+                }
+            }
+
+            *spot = 1;
+            range_left -= 1;
+            generators_possible += 1;
+        }
+
+        for dist_spot in dist.iter_mut().take(generator_count) {
+            if *dist_spot == 0 {
+                continue;
+            }
+
+            let range_to_take =
+                ((range_left + generators_possible) / generators_possible).saturating_sub(1);
+            range_left -= range_to_take;
+            *dist_spot += range_to_take;
+            generators_possible -= 1;
+        }
+
+        dist
+    }
 }
 
 const N: u32 = 8;
@@ -430,7 +518,7 @@ mod tests {
             ",
         );
 
-        let encoded = encode_table(&algs).unwrap();
+        let encoded = encode_table(&algs).unwrap().0;
         println!("{encoded:?}");
         let decoded = decode_table(&encoded).unwrap();
         assert_eq!(algs, decoded);
@@ -516,16 +604,19 @@ R U R' U R U' R' U' R' F R F'";
 
         let algs = mk_algs_datastructure(spec);
 
-        let encoded = encode_table(&algs).unwrap();
+        let (encoded, data_without_header) = encode_table(&algs).unwrap();
         println!("{encoded:?}");
         let decoded = decode_table(&encoded).unwrap();
         assert_eq!(algs, decoded);
 
-        // panic!(
-        //     "{} → {} : {:.2}",
-        //     spec.len(),
-        //     encoded.len(),
-        //     encoded.len() as f64 / spec.len() as f64
-        // );
+        panic!(
+            "{} → {} : {:.2}\n{} → {} : {:.2}",
+            spec.len(),
+            encoded.len(),
+            1. - encoded.len() as f64 / spec.len() as f64,
+            spec.len(),
+            data_without_header,
+            1. - data_without_header as f64 / spec.len() as f64
+        );
     }
 }
