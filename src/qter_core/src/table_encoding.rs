@@ -104,20 +104,38 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
         stream.extend_from_slice(&freq.to_le_bytes());
     }
 
-    stream.extend_from_slice(&(stats.disallowed_pairs.len() as u32 * 2).to_le_bytes());
+    let mut disallowed_pair_table = HashMap::new();
 
-    let dist = unweighted_ranges(stats.frequencies.len());
+    for (a, b) in &stats.disallowed_pairs {
+        disallowed_pair_table.entry(a).or_insert(Vec::new()).push(b);
+    }
+
+    let end_of_alg_symbol = symbol_indices.len() as u16;
 
     let mut disallowed_pair_symbols = Vec::new();
 
-    for pair in &stats.disallowed_pairs {
-        disallowed_pair_symbols.push(pair.0);
-        disallowed_pair_symbols.push(pair.1);
+    for (i, entry) in disallowed_pair_table
+        .into_iter()
+        .sorted_unstable_by_key(|entry| entry.0)
+        .enumerate()
+    {
+        if i != 0 {
+            disallowed_pair_symbols.push(end_of_alg_symbol);
+        }
+
+        disallowed_pair_symbols.push(*entry.0);
+        for item in entry.1 {
+            disallowed_pair_symbols.push(*item);
+        }
     }
 
-    ans_encode(&mut stream, &disallowed_pair_symbols, |_| dist.to_owned());
+    stream.extend_from_slice(&(disallowed_pair_symbols.len() as u32).to_le_bytes());
 
-    let end_of_alg_symbol = symbol_indices.len() as u16;
+    ans_encode(
+        &mut stream,
+        &disallowed_pair_symbols,
+        disallowed_pair_symbols_distribution_closure(stats.frequencies.len()),
+    );
 
     let mut symbols = Vec::new();
 
@@ -196,16 +214,35 @@ pub fn decode_table(mut data: &[u8]) -> Option<Vec<Vec<ArcIntern<str>>>> {
     data = new_data;
     let disallowed_pair_count = u32::from_le_bytes(*disallowed_pair_count) as usize;
 
-    let dist = unweighted_ranges(frequencies.len());
-
-    let (disallowed_pairs_symbols, taken) =
-        ans_decode(data, Some(disallowed_pair_count), |_| dist.to_owned())?;
+    let (disallowed_pairs_symbols, taken) = ans_decode(
+        data,
+        Some(disallowed_pair_count),
+        disallowed_pair_symbols_distribution_closure(frequencies.len()),
+    )?;
     data = data.split_at(taken).1;
+
+    let end_of_alg_symbol = frequencies.len() as u16;
 
     let mut disallowed_pairs = HashSet::new();
 
-    for (a, b) in disallowed_pairs_symbols.iter().tuples() {
-        disallowed_pairs.insert((*a, *b));
+    for (item_a, disallowed_with) in disallowed_pairs_symbols.iter().batching(|v| {
+        let item = v.next()?;
+
+        let mut disallowed_with = vec![];
+
+        for v in v.by_ref() {
+            if *v == end_of_alg_symbol {
+                break;
+            }
+
+            disallowed_with.push(v);
+        }
+
+        Some((item, disallowed_with))
+    }) {
+        for item_b in disallowed_with {
+            disallowed_pairs.insert((*item_a, *item_b));
+        }
     }
 
     let stats = TableStats {
@@ -213,8 +250,6 @@ pub fn decode_table(mut data: &[u8]) -> Option<Vec<Vec<ArcIntern<str>>>> {
         length_frequencies,
         disallowed_pairs,
     };
-
-    let end_of_alg_symbol = stats.frequencies.len() as u16;
 
     let algs = ans_decode(data, None, mk_distribution_closure(stats))?
         .0
@@ -227,6 +262,32 @@ pub fn decode_table(mut data: &[u8]) -> Option<Vec<Vec<ArcIntern<str>>>> {
         .collect_vec();
 
     Some(algs)
+}
+
+fn disallowed_pair_symbols_distribution_closure(
+    generator_count: usize,
+) -> impl Fn(&[u16]) -> Vec<u16> {
+    let end_of_alg_symbol = generator_count as u16;
+
+    move |prev| {
+        let mut min_num_seeable = prev
+            .iter()
+            .rev()
+            .tuple_windows()
+            .find(|(_, b)| **b == end_of_alg_symbol)
+            .map(|v| *v.0 as usize)
+            .unwrap_or(0);
+
+        if prev.last() == Some(&end_of_alg_symbol) {
+            min_num_seeable += 1;
+        }
+
+        let mut dist = vec![0; min_num_seeable];
+
+        dist.extend_from_slice(&unweighted_ranges(generator_count - min_num_seeable + 1));
+
+        dist
+    }
 }
 
 fn mk_distribution_closure(stats: TableStats) -> impl Fn(&[u16]) -> Vec<u16> {
@@ -243,15 +304,6 @@ fn mk_distribution_closure(stats: TableStats) -> impl Fn(&[u16]) -> Vec<u16> {
             out
         })
         .collect::<HashMap<_, _>>();
-
-    println!(
-        "{:?}",
-        stats
-            .disallowed_pairs
-            .iter()
-            .sorted_unstable()
-            .collect_vec()
-    );
 
     let end_of_alg_symbol = generator_count as u16;
 
