@@ -1,4 +1,4 @@
-<!-- cspell:ignore nlogo promela scilab vcube benwh rokicki lgarron ditrus voltara infinidoge esqu1 Arhan Chaudhary Rovnyak korf twizzle metaprogramming cubies -->
+<!-- cspell:ignore nlogo promela scilab vcube benwh rokicki lgarron ditrus voltara infinidoge esqu1 trangium movecount Arhan Chaudhary Rovnyak korf twizzle metaprogramming cubies youtuber abelian -->
 <p align="center">
     <img src="media/CPU Logo.png" width="200" alt="The qter logo">
 </p>
@@ -96,19 +96,21 @@ loop {
   - [Other twisty puzzles](#other-twisty-puzzles)
 - [The QAT programming language](#the-qat-programming-language)
   - [Your first QAT program](#your-first-qat-program)
+  - [Global variables](#global-variables)
+  - [Basic instructions](#basic-instructions)
   - [Metaprogramming](#metaprogramming)
   - [Prelude](#prelude)
-  - [The stack](#the-stack)
+  - [Memory tapes](#memory-tapes)
 - [Computer architecture design](#computer-architecture-design)
   - [Rubik's cube theory](#rubiks-cube-theory)
   - [Cycles are registers](#cycles-are-registers)
   - [Conditional branching](#conditional-branching)
   - [The Rubik's cube is a computer](#the-rubiks-cube-is-a-computer)
-- [Technical details](#technical-details)
-  - [Cycle combination solver](#cycle-combination-solver)
-    - [Phase 1](#phase-1)
-    - [Phase 2](#phase-2)
-    - [Experimental phase 3 with GAP](#experimental-phase-3-with-gap)
+- [Cycle combination solver](#cycle-combination-solver)
+  - [Phase 1](#phase-1)
+  - [Phase 2](#phase-2)
+    - [Using Korf's algorithm](#using-korfs-algorithm)
+    - [Using GAP](#using-gap)
 - [About the authors](#about-the-authors)
 - [References](#references)
 - [Acknowledgements](#acknowledgements)
@@ -193,7 +195,7 @@ For other twisty puzzles, see [Other twisty puzzles](#other-twisty-puzzles).
 
 </ul>
 
-- `input <prompt> <algorithm> max-input <number>`
+- `input <string> <algorithm> max-input <number>`
 
 <ul>
 
@@ -215,7 +217,7 @@ If a negative input is meaningful to the program you are executing, you can inpu
 
 </ul>
 
-- `halt <message> [<algorithm> counting-until <positions>]`
+- `halt <string> [<algorithm> counting-until <positions>]`
 
 <ul>
 
@@ -271,7 +273,7 @@ this program requires two Rubik's cubes to execute. The instructions indicate pe
 
 The Q file format thus far is theoretically equivalent to a classical computer, as demonstrated in the [computer architecture design](#computer-architecture-design) section. This section details advanced instructions that the Q file format supports.
 
-- `print <message> [<algorithm> counting-until <positions>]`
+- `print <string> [<algorithm> counting-until <positions>]`
 
 <ul>
 
@@ -302,9 +304,9 @@ A: 3x3
 
 </ul>
 
-Talk about the stack here WIP (Henry you could write the rest of this section if you want)
+Talk about memory tapes here WIP (Henry you could write the rest of this section if you want)
 
-- `push`
+- `move-left <tape> <number>`
 
 <ul>
 
@@ -316,7 +318,7 @@ Talking points:
 
 </ul>
 
-- `pop`
+- `move-right <tape> <number>`
 
 <ul>
 
@@ -324,7 +326,7 @@ WIP
 
 </ul>
 
-- `switch-top`
+- `switch-tape <tape>`
 
 <ul>
 
@@ -339,35 +341,31 @@ WIP
 Talking points:
 
 - The `Puzzles` declaration accepts a hard-coded puzzle name or a PuzzleGeometry description
-- PuzzleGeometry is a format developed and designed by Tomas Rokicki that generates a puzzle definition from a simple description. You can read more about it [here](https://alpha.twizzle.net/explore/help.html) or use the format interactively on [Twizzle Explorer](https://alpha.twizzle.net/explore) (click "Config").
+- PuzzleGeometry is a format developed and designed by Tomas Rokicki that generates a puzzle definition from a simple description. You can read more about it [here](https://alpha.twizzle.net/explore/help.html) and are encouraged to experiment with the format interactively on [Twizzle Explorer](https://alpha.twizzle.net/explore) (click "Config").
 
 # The QAT programming language
 
-This section assumes moderate familiarity with an existing programming language, such as Python, JavaScript, or C.
+This section assumes moderate familiarity with an existing programming language, such as Python, JavaScript, or C. Once again, qter supports all types of twisty puzzles in the shape of a platonic solid. Since most people are most familiar with the 3x3x3 cube, we will introduce qter with the aforementioned from now on.
 
 ## Your first QAT program
 
-<img src="media/CompilationPipelineVert.svg" width="360" alt="A diagram of the qter compilation pipeline" align="left">
-
 If you have experience working with a compiled programming language, you know that to run a program, you compile your source code into machine code that the computer processor then interprets and executes. The qter compilation pipeline works similarly.
 
-Qter's high level programming language is called QAT, or Qter Assembly Text.
+<p align="center">
+  <img src="media/CompilationPipelineVert.svg" width="360" alt="A diagram of the qter compilation pipeline">
+</p>
 
-WIP
-
-Talking points:
-
-- bare bones QAT program without macros
-
-<ul>
+Qter's high level programming language is called QAT, or Qter Assembly Text. To run your first QAT program, you will first need to install Cargo (talk about installing Cargo) and then the qter compiler executable through the command line: `cargo install qter`. Once set up, create a file named `average.qat` with the following program code.
 
 ```janet
 .registers {
     A, B <- 3x3 builtin (90, 90)
 }
 
+    -- Calculate the average of two numbers
     input "First number:" A
     input "Second number:" B
+    print "Calculating average..."
 sum_loop:
     add A 1
     add B 89
@@ -386,10 +384,82 @@ stop:
     halt "The average is" B
 ```
 
+To compile this program, run `qter compile average.qat` to generate `average.q`. To execute it, run `qter interpret average.q` and enter your favorite two numbers into the prompts.
+
+## Global variables
+
+Every QAT program begins with a `.registers` statement, used to declare global variables. The statement in the above average program declares two global variables to be stored on a Rubik's cube of size 90. That is, additions operate modulo 90: incrementing a register of value 89 resets it back to 0, and decrementing a register of value 0 sets it to 89.
+
+The `builtin` keyword refers to the fact that valid register sizes are specified in a puzzle-specific preset. For the Rubik's cube, all builtin register sizes are in [src/qter_core/puzzles/3x3.txt](src/qter_core/puzzles/3x3.txt). Unlike traditional computers, qter is only able to operate with small and irregular register sizes.
+
+You can choose to use larger register sizes at the cost of requiring more puzzles. For example, 1260 is a valid builtin register size that needs an entire Rubik's cube to declare. If your program wants access to more than one register, it would have to use multiple Rubik's cubes for more memory.
+
+```janet
+.registers {
+    A <- 3x3 builtin (1260)
+    B <- 3x3 builtin (1260)
+    ...
+}
+```
+
+The `.registers` statement is also used to declare memory tapes, which help facilitate local variables and call stacks. This idea will be expanded upon in [Memory tapes](#memory-tapes).
+
+## Basic instructions
+
+The basic instructions of the QAT programming language mimic an assembly-like language. If you have already read [The Q file format](#the-q-file-format), notice the similarities with QAT.
+
+- `add <variable> <number>`
+
+<ul>
+
+Add a constant number to a variable. This is the only way to change the value of a variable.
+
 </ul>
 
-- guide on how to use the CLI
-- explain variables (.registers declaration), labels, and primitive instructions
+- `goto <label>`
+
+<ul>
+
+Jump to a label, an identifier used to mark a specific location within code. The syntax for declaring a label follows the common convention amongst assembly languages:
+
+```janet
+infinite_loop:
+    goto infinite_loop
+```
+
+</ul>
+
+- `solved-goto <variable> <label>`
+
+<ul>
+
+Jump to a label if the specified variable is zero. The name of this instruction is significant in the Q file format.
+
+</ul>
+
+- `input <string> <variable>`
+
+<ul>
+
+Store numeric user input into a variable.
+
+</ul>
+
+- `print <string> [<variable>]`
+
+<ul>
+
+Output a message, optionally followed by a variable's value.
+
+</ul>
+
+- `halt <string> [<variable>]`
+
+<ul>
+
+Terminate the program with a message, optionally followed by a variable's value.
+
+</ul>
 
 ## Metaprogramming
 
@@ -410,7 +480,7 @@ Talking points:
 - convenience macros like `inc`, `dec`, and control flow
 - [Link to prelude](src/qter_core/prelude.qat) and encourage its reference
 
-## The stack
+## Memory tapes
 
 WIP
 
@@ -473,13 +543,11 @@ Talking points:
 - dissect an example
 - works with any twisty puzzle
 
-# Technical details
-
-## Cycle combination solver
+# Cycle combination solver
 
 Qter's cycle combination solver computes the optimal computer architecture for a puzzle using any amount of cycles.
 
-### Phase 1
+## Phase 1
 
 WIP
 
@@ -489,16 +557,19 @@ Talking points
 - Find all ways to assign cubies to orbits, then find the max order using partitions and priority queue
 - Pareto front
 
-### Phase 2
+## Phase 2
 
 WIP
+
+### Using Korf's algorithm
 
 Talking points
 
 - Korf's algorithm
 - Symmetry and inverse reduction [[2](#ref-2)]
+- Trangium move determiner
 
-### Experimental phase 3 with GAP
+### Using GAP
 
 WIP
 
@@ -524,6 +595,7 @@ Talking points
 - [@lgarron](https://github.com/lgarron) and [@esqu1](https://github.com/esqu1) for reference Korf's algorithm implementations ([1](https://github.com/cubing/twsearch/blob/efb207e11162174360e3ae49aa552cda1313df81/src/rs/_internal/search/idf_search.rs#L340) and [2](https://github.com/esqu1/Rusty-Rubik/blob/1e32829e83c662816bd85f6c37d6f774a15e3aea/src/solver.rs#L123)).
 - [@ScriptRacoon](https://github.com/ScriptRacoon) for providing developmental [code](https://gist.github.com/ScriptRaccoon/c12c4884c116dead62a15a3d09732d5d) for phase 1.
 - [@rokicki](https://github.com/rokicki) for designing the [PuzzleGeometry format](https://alpha.twizzle.net/explore/help.html).
+- [@trangium](https://github.com/trangium) for providing the [Movecount Coefficient Calculator](https://trangium.github.io/MovecountCoefficient/).
 - [@benwh1](https://github.com/benwh1) and [@adrian154](https://github.com/adrian154) for miscellaneous puzzle theory insights.
 - [@DitrusNight](https://github.com/DitrusNight) for advising our programming language design.
 - [@Infinidoge](https://github.com/Infinidoge) for generously providing access to powerful hardware for the cycle combination solver.

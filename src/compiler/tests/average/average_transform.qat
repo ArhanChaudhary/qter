@@ -2,8 +2,10 @@
     A, B <- 3x3 builtin (90, 90)
 }
 
+    -- Calculate the average of two numbers
     input "First number:" A
     input "Second number:" B
+    print "Calculating average..."
 sum_loop:
     add A 1
     add B 89
