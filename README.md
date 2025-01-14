@@ -115,6 +115,68 @@ loop {
 - [References](#references)
 - [Acknowledgements](#acknowledgements)
 
+# How does qter work?
+
+First, we will assume that you are familiar with [standard move notation](https://jperm.net/3x3/moves) for a Rubik's cube.
+
+The most important thing for a computer to be able to do is represent numbers. Let's take a solved cube and call it "zero":
+
+<img src="media/u-0.png" width="49%" alt="A solved Rubik's cube"/>
+
+The fundamental unit of computation in qter is an _algorithm_, or a sequence of moves to apply to the cube. Let's see what happens if we apply the simplest algorithm, just turning the top face, and see what this buys us:
+
+<img src="media/u-1.png" width="49%" alt="A Rubik's cube after performing U"/>
+
+Now, let's call this state "one". Since applying the algorithm "U" transitioned the cube from state "zero" to state "one", perhaps applying "U" _again_ could transition us from state "one" to state "two":
+
+<img src="media/u-2.png" width="49%" alt="A Rubik's cube after performing U U"/>
+
+And again to state "three":
+
+<img src="media/u-3.png" width="49%" alt="A Rubik's cube after performing U U U"/>
+
+And again to state "four"?
+
+<img src="media/u-0.png" width="49%" alt="A Rubik's cube after performing U U U U"/>
+
+If we apply the algorithm "U" four times, we find that it returns back to state "zero". This means that we can't represent a _natural_ number with this scheme, but we should have expected that, because the Rubik's cube has a _finite_ number of states whereas the natural numbers have an _infinite_ number of states.
+
+This doesn't mean that we can't do math though, we just have to treat numbers as if they "wrap around" at four. This is analagous to how analog clocks work, the way that they wrap around at 12. The difference between our scheme and analog clocks is that we will consider the solved state to represent "zero" instead of "four".
+
+## Mathematics
+
+Is it valid to represent numbers in this way though? Let's consider adding "two" to "one". We reach the "two" state using the algorithm "U U", so if we apply that algorithm to the "one" state, we will find the cube in the same state as if we applied "(U) (U U)", or "U U U", which is exactly how we reach the state labelled "three". It's easy to see that associativity of moves makes addition valid in this scheme. What if we wanted to add "three" to "two"? We would expect a result of "five", but since the numbers wrap around upon reaching four, we would actually expect to reach the state of "one". You can try on your own Rubik's cube and see that it works.
+
+What if we want to perform subtraction? We know that addition is represented by a sequence of moves, so can we find a sequence of moves that adds a negative number? Let's consider the state that represents "one". If we subtract one, we would expect the cube to return to state "zero". The algorithm that brings the cube from state "one" to state "zero" is "U'". This is exactly the inverse of our initial "U" algorithm. If we want to subtract two, we can simply subtract one twice as before: "U' U'".
+
+You may notice that subtracting one is equivalent to adding three, because "U'" is equivalent to "U U U". It may seem like this impedes our ability to do math, but by working through an example one can see that it doesn't: Adding three to one gives four, but since four wraps around to zero, our result is actually zero, as if we subtracted one. In general, any number may be seen as positive or negative: -1 = 3, -2 = 2, and -3 = 1. You can manually verify this yourself if you like.
+
+## Can we do bigger numbers?
+
+If the biggest number qter could represent was three, it would not be very meaningful as a tool for computation. Thankfully, the Rubik's cube has 43 quintillion states, leaving us lots of room to do better than just four states. Consider the algorithm "U' R". We can play the same game using this algorithm. The solved cube represents zero, "U' R" represents one, "U' R U' R" represents two, etc. This algorithm performs a much more complicated action on the cube, so we should be able to represent more numbers. In fact, the maximum number we can represent this way is 104, wrapping around after 105 iterations. We would say that the algorithm has "order 105".
+
+There are still lots of cube states left; can we do better? Unfortunately, it's only possible to get to 1259, wrapping around on the 1260th iteration. You can try this using the algorithm "R U2 D' B D'". There exists a mathematical proof that the maximum order is 1260, accessible here: [[1](#ref-1)].
+
+## Branching
+
+The next thing that a computer must be able to do is _branch_, without it we can _only_ do addition and subtraction. If we want to perform loops or only execute code conditionally, the qter must be able to change what it does based on the state of the cube. For this, we introduce a "solved-goto" instruction. If you perform "U' R" on a cube a bunch of times without counting, it's essentially impossible for you to tell how many times you did the algorithm by _just_ looking at the cube. With one exception: If you did it _zero_ times, then the cube is solved and it's completely obvious that you did it zero times. Since we want qter code to be executable by humans, the "solved-goto" instruction asks you to go to a different location of the program _only_ if the cube is solved. 
+
+## Multiple numbers on one cube?
+
+If you think about what programs you could actually execute with just addition to a single number and a "jump if zero" instruction, it would be incredibly limited. What would be wonderful is if we could represent _multiple_ numbers on the cube all at once. If you're familiar with how to solve a cube layer by layer, you should know that it's possible for an algorithm to only affect a small fraction of the cube at once, for example just the last layer. Therefore, it should be possible to represent two numbers using two algorithms that affect distinct "areas" of the cube. The simplest example of this are the algorithms "U" and "D". You can see that "U" and "D" both allow representing numbers up to three, and since they affect different areas of the cube, we can represent _two different_ numbers on the cube at the _same time_. We call these "registers", as an analogy to the concept in classical computing.
+
+As described, "solved-goto" would only branch if the entire cube is solved, however since each algorithm affects a distinct area of the cube, it's possible for a human to determine whether a _single_ register is zero by inspecting whether a particular section of the cube is solved. In the Q format, we support this by each "solved-goto" instruction giving a list of pieces, all of which must be in their solved positions but not necessarily any more, for the branch to be taken.
+
+Can we do better than two registers of order four? In fact we can! If you try out the algorithms "R' F' L U' L U L F U' R" and "U F R' D' R2 F R' U' D", you can see that they affect different pieces and both have order 90. You may notice that they both rotate the same corner; this is not a problem because they are independently decodable even ignoring that corner. One of the biggest challenges in the development of qter has been finding sets of algorithms with high orders that are all independently decodable.
+
+If you're curious, the algorithms used in the Fibonacci program above are...
+
+<!-- This should probably be a table -->
+- "U L B' L B' U R' D U2 L2 F2" - Order 30
+- "D L' F L2 B L' F' L B' D' L'" - Order 18
+- "R' U' L' F2 L F U F R L U'" - Order 10
+- "B2 U2 L F' R B L2 D2 B R' F L" - Order 9
+
 # Physically running qter
 
 ## The Q file format
