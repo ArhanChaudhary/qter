@@ -388,7 +388,7 @@ To compile this program, run `qter compile average.qat` to generate `average.q`.
 
 ## Global variables
 
-Every QAT program begins with a `.registers` statement, used to declare global variables named registers. The statement in the above average program declares two global registers to be stored on a Rubik's cube of size 90. That is, additions operate modulo 90: incrementing a register of value 89 resets it back to 0, and decrementing a register of value 0 sets it to 89.
+Every QAT program begins with a `.registers` statement, used to declare global variables named registers. The statement in the above average program declares two global registers of size 90 to be stored on a Rubik's cube. That is, additions operate modulo 90: incrementing a register of value 89 resets it back to 0, and decrementing a register of value 0 sets it to 89.
 
 The `builtin` keyword refers to the fact that valid register sizes are specified in a puzzle-specific preset. For the Rubik's cube, all builtin register sizes are in [src/qter_core/puzzles/3x3.txt](src/qter_core/puzzles/3x3.txt). Unlike traditional computers, qter is only able to operate with small and irregular register sizes.
 
@@ -402,7 +402,7 @@ You can choose to use larger register sizes at the cost of requiring more puzzle
 }
 ```
 
-The `.registers` statement is also used to declare memory tapes, which help facilitate local variables and call stacks. This idea will be expanded upon in [Memory tapes](#memory-tapes).
+The `.registers` statement is also used to declare memory tapes, which help facilitate local variables, call stacks, and heap memory. This idea will be expanded upon in [Memory tapes](#memory-tapes).
 
 ## Basic instructions
 
@@ -441,7 +441,7 @@ Jump to a label if the specified variable is zero. The name of this instruction 
 
 <ul>
 
-Store numeric user input into a variable.
+Ask the user for input, which will be added to the given variable.
 
 </ul>
 
@@ -498,9 +498,9 @@ On the Rubik's Cube, every type of piece can only move to positions occupied by 
 
 So, the Rubik's cube has one orbit of twelve edge pieces and another orbit of eight corner pieces. We will refer to pieces as _cubies_ from now on.
 
-A Rubik's cube _move_ is defined by a manipulation of a single face, defined by the half-turn metric. That is, a 180 degree rotation of a face is considered a single move. To tersely express moves, we use the [standard move notation](https://jperm.net/3x3/moves). An _algorithm_ is a sequence of moves. For example the algorithm `F2 U'` indicates turning the front face 180 degrees followed by a 90 degree turn counterclockwise of the top face.
+A Rubik's cube _move_ is defined by a manipulation of a single face, defined by the half-turn metric. That is, a 180 degree rotation of a face is considered a single move. To express moves, we use the [standard move notation](https://jperm.net/3x3/moves). An _algorithm_ is a sequence of moves. For example the algorithm `F2 U'` indicates turning the front face 180 degrees followed by turning the top face 90 degrees counterclockwise.
 
-If you repeat an algorithm a finite number of times, you will always be brought back where you started. You may have already tried this yourself from the solved state: if you keep repeating an algorithm such as `R U` you will eventually re-solve the cube. The number of repetitions this takes is the algorithm's _order_, and the set of positioned visited by repeating the algorithm forms its _cycle_. In this example, since `R U` has to be repeated 105 times to be brought back to its original state, its order is 105.
+If you repeat an algorithm enough times, you will always be brought back where you started. You may have already tried this yourself from the solved state: if you keep repeating an algorithm such as `R U` you will eventually re-solve the cube. The number of repetitions this takes is the algorithm's _order_, and the set of positions visited by repeating the algorithm forms its _cycle_. In this example, since `R U` has to be repeated 105 times to be brought back to its original state, its order is 105.
 
 The proof for this introduces an important concept that will later be brought up again: [group theory](https://en.wikipedia.org/wiki/Group_theory). The set of moves on the Rubik's cube forms an algebraic structure called a _group_. Since there are only finitely many states a Rubik's cube can be in, this group is finite. It is an early theorem of group theory that every element (algorithm) of a finite group has finite order [[2](#ref-2)].
 
