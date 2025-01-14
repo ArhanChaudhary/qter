@@ -500,9 +500,9 @@ So, the Rubik's cube has one orbit of twelve edge pieces and another orbit of ei
 
 A Rubik's cube _move_ is defined by a manipulation of a single face, defined by the half-turn metric. That is, a 180 degree rotation of a face is considered a single move. To tersely express moves, we use the [standard move notation](https://jperm.net/3x3/moves). An _algorithm_ is a sequence of moves. For example the algorithm `F2 U'` indicates turning the front face 180 degrees followed by a 90 degree turn counterclockwise of the top face.
 
-If you repeat an algorithm a finite number of times, you will always be brought back where you started. You may have already tried this yourself from the solved state: if you keep repeating an algorithm such as `R U` you will eventually re-solve the cube. The number of repetitions this takes is called the algorithm's _order_. In this example, since `R U` has to be repeated 105 times to be brought back to its original state, its order is 105.
+If you repeat an algorithm a finite number of times, you will always be brought back where you started. You may have already tried this yourself from the solved state: if you keep repeating an algorithm such as `R U` you will eventually re-solve the cube. The number of repetitions this takes is the algorithm's _order_, and the set of positioned visited by repeating the algorithm forms its _cycle_. In this example, since `R U` has to be repeated 105 times to be brought back to its original state, its order is 105.
 
-The proof for this introduces an important concept that will later be brought up again: [group theory](https://en.wikipedia.org/wiki/Group_theory). The set of moves on a Rubik's cube forms an algebraic structure called a _group_. Since there are only finitely many states a Rubik's cube can be in, this group is finite. It is an early theorem of group theory that every element (algorithm) of a finite group has finite order [[2](#ref-2)].
+The proof for this introduces an important concept that will later be brought up again: [group theory](https://en.wikipedia.org/wiki/Group_theory). The set of moves on the Rubik's cube forms an algebraic structure called a _group_. Since there are only finitely many states a Rubik's cube can be in, this group is finite. It is an early theorem of group theory that every element (algorithm) of a finite group has finite order [[2](#ref-2)].
 
 ## Cycles are registers
 
@@ -566,7 +566,7 @@ Talking points
 
 - Korf's algorithm
 - Symmetry and inverse reduction [[3](#ref-3)]
-- Trangium move determiner
+- Trangium's algorithm evaluator
 
 ### Using GAP
 
@@ -594,8 +594,9 @@ Talking points
 
 - [@lgarron](https://github.com/lgarron) and [@esqu1](https://github.com/esqu1) for reference Korf's algorithm implementations ([1](https://github.com/cubing/twsearch/blob/efb207e11162174360e3ae49aa552cda1313df81/src/rs/_internal/search/idf_search.rs#L340) and [2](https://github.com/esqu1/Rusty-Rubik/blob/1e32829e83c662816bd85f6c37d6f774a15e3aea/src/solver.rs#L123)).
 - [@rokicki](https://github.com/rokicki) for designing the [PuzzleGeometry format](https://alpha.twizzle.net/explore/help.html).
+- [@Voltara](https://github.com/Voltara) for their [optimal solver](https://github.com/Voltara/vcube) used in phase 2.
 - [@ScriptRacoon](https://github.com/ScriptRacoon) for providing developmental [code](https://gist.github.com/ScriptRaccoon/c12c4884c116dead62a15a3d09732d5d) for phase 1.
-- [@trangium](https://github.com/trangium) for providing the [Movecount Coefficient Calculator](https://trangium.github.io/MovecountCoefficient/).
+- [@trangium](https://github.com/trangium) for their [Movecount Coefficient Calculator](https://trangium.github.io/MovecountCoefficient/).
 - [@benwh1](https://github.com/benwh1) and [@adrian154](https://github.com/adrian154) for miscellaneous puzzle theory insights.
 - [@DitrusNight](https://github.com/DitrusNight) for advising our programming language design.
 - [@Infinidoge](https://github.com/Infinidoge) for generously providing access to powerful hardware for the cycle combination solver.
