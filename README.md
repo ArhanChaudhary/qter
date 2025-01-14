@@ -102,7 +102,7 @@ loop {
   - [Prelude](#prelude)
   - [Memory tapes](#memory-tapes)
 - [Computer architecture design](#computer-architecture-design)
-  - [Rubik's cube theory](#rubiks-cube-theory)
+  - [Puzzle theory](#puzzle-theory)
   - [Cycles are registers](#cycles-are-registers)
   - [Conditional branching](#conditional-branching)
   - [The Rubik's cube is a computer](#the-rubiks-cube-is-a-computer)
@@ -195,7 +195,7 @@ For other twisty puzzles, see [Other twisty puzzles](#other-twisty-puzzles).
 
 </ul>
 
-- `input <string> <algorithm> max-input <number>`
+- `input <message> <algorithm> max-input <number>`
 
 <ul>
 
@@ -217,7 +217,7 @@ If a negative input is meaningful to the program you are executing, you can inpu
 
 </ul>
 
-- `halt <string> [<algorithm> counting-until <positions>]`
+- `halt <message> [<algorithm> counting-until <positions>]`
 
 <ul>
 
@@ -273,7 +273,7 @@ this program requires two Rubik's cubes to execute. The instructions indicate pe
 
 The Q file format thus far is theoretically equivalent to a classical computer, as demonstrated in the [computer architecture design](#computer-architecture-design) section. This section details advanced instructions that the Q file format supports.
 
-- `print <string> [<algorithm> counting-until <positions>]`
+- `print <message> [<algorithm> counting-until <positions>]`
 
 <ul>
 
@@ -388,7 +388,7 @@ To compile this program, run `qter compile average.qat` to generate `average.q`.
 
 ## Global variables
 
-Every QAT program begins with a `.registers` statement, used to declare global variables. The statement in the above average program declares two global variables to be stored on a Rubik's cube of size 90. That is, additions operate modulo 90: incrementing a register of value 89 resets it back to 0, and decrementing a register of value 0 sets it to 89.
+Every QAT program begins with a `.registers` statement, used to declare global variables named registers. The statement in the above average program declares two global registers to be stored on a Rubik's cube of size 90. That is, additions operate modulo 90: incrementing a register of value 89 resets it back to 0, and decrementing a register of value 0 sets it to 89.
 
 The `builtin` keyword refers to the fact that valid register sizes are specified in a puzzle-specific preset. For the Rubik's cube, all builtin register sizes are in [src/qter_core/puzzles/3x3.txt](src/qter_core/puzzles/3x3.txt). Unlike traditional computers, qter is only able to operate with small and irregular register sizes.
 
@@ -437,7 +437,7 @@ Jump to a label if the specified variable is zero. The name of this instruction 
 
 </ul>
 
-- `input <string> <variable>`
+- `input <message> <variable>`
 
 <ul>
 
@@ -445,7 +445,7 @@ Store numeric user input into a variable.
 
 </ul>
 
-- `print <string> [<variable>]`
+- `print <message> [<variable>]`
 
 <ul>
 
@@ -453,7 +453,7 @@ Output a message, optionally followed by a variable's value.
 
 </ul>
 
-- `halt <string> [<variable>]`
+- `halt <message> [<variable>]`
 
 <ul>
 
@@ -492,18 +492,17 @@ Talking points:
 
 Qter is similar in many ways to how modern computers work, yet at the same time esoteric by nature. This section will start with a light background of how Rubik's cubes work and then elaborate on the unique properties that make qter possible.
 
-## Rubik's cube theory
+## Puzzle theory
 
-WIP
+On the Rubik's Cube, every type of piece can only move to positions occupied by the same type of piece. These sets of disjoint positions are called _orbits_. The Rubik's cube has three types of pieces: edges, corners, and centers. Corner pieces can only move to corner positions and edge pieces can only move to edge positions. Disallowing rotations, center pieces are always in their solved positions because they cannot move. An important implication of this fact is that colors must be positioned around their centers to solve the Rubik's cube.
 
-Talking points:
+So, the Rubik's cube has one orbit of twelve edge pieces and another orbit of eight corner pieces. We will refer to pieces as _cubies_ from now on.
 
-- Define move as a manipulation of the cube and algorithm as a sequence of moves
-- Optionally reintroduce [standard move notation](https://jperm.net/3x3/moves)
-- Centers do not move
-- If you repeat a constant sequence of moves on the Rubik's cube starting from the solved state, you will eventually reach the solved state after enough repetitions & proof
-- The states that the repetitions of an algorithm visits before repeating form that algorithm's cycle
-- Define order as # of repetitions
+A Rubik's cube _move_ is defined by a manipulation of a single face, defined by the half-turn metric. That is, a 180 degree rotation of a face is considered a single move. To tersely express moves, we use the [standard move notation](https://jperm.net/3x3/moves). An _algorithm_ is a sequence of moves. For example the algorithm `F2 U'` indicates turning the front face 180 degrees followed by a 90 degree turn counterclockwise of the top face.
+
+If you repeat an algorithm a finite number of times, you will always be brought back where you started. You may have already tried this yourself from the solved state: if you keep repeating an algorithm such as `R U` you will eventually re-solve the cube. The number of repetitions this takes is called the algorithm's _order_. In this example, since `R U` has to be repeated 105 times to be brought back to its original state, its order is 105.
+
+The proof for this introduces an important concept that will later be brought up again: [group theory](https://en.wikipedia.org/wiki/Group_theory). The set of moves on a Rubik's cube forms an algebraic structure called a _group_. Since there are only finitely many states a Rubik's cube can be in, this group is finite. It is an early theorem of group theory that every element (algorithm) of a finite group has finite order [[2](#ref-2)].
 
 ## Cycles are registers
 
@@ -566,7 +565,7 @@ WIP
 Talking points
 
 - Korf's algorithm
-- Symmetry and inverse reduction [[2](#ref-2)]
+- Symmetry and inverse reduction [[3](#ref-3)]
 - Trangium move determiner
 
 ### Using GAP
@@ -588,13 +587,14 @@ Talking points
 # References
 <!-- cspell:disable -->
 [<span id="ref-1">1</span>] Bergvall, O., Hynning, E., Hedberg, M., Mickelin, J., & Masawe, P. (2010). On Rubik’s cube. _Report, KTH Royal Institute of Technology_ (pp. 65-79). \
-[<span id="ref-2">2</span>] Rokicki, T., Kociemba, H., Davidson, M., & Dethridge, J. (2014). The diameter of the rubik's cube group is twenty. _siam REVIEW, 56_(4), 645-670.
+[<span id="ref-2">2</span>] Chris Grossack (<https://math.stackexchange.com/users/655547/chris-grossack>), Prove cycling in a Rubik's cube, URL (version: 2019-12-11): <https://math.stackexchange.com/q/3472935> \
+[<span id="ref-3">3</span>] Rokicki, T., Kociemba, H., Davidson, M., & Dethridge, J. (2014). The diameter of the rubik's cube group is twenty. _siam REVIEW, 56_(4), 645-670.
 <!-- cspell:enable -->
 # Acknowledgements
 
 - [@lgarron](https://github.com/lgarron) and [@esqu1](https://github.com/esqu1) for reference Korf's algorithm implementations ([1](https://github.com/cubing/twsearch/blob/efb207e11162174360e3ae49aa552cda1313df81/src/rs/_internal/search/idf_search.rs#L340) and [2](https://github.com/esqu1/Rusty-Rubik/blob/1e32829e83c662816bd85f6c37d6f774a15e3aea/src/solver.rs#L123)).
-- [@ScriptRacoon](https://github.com/ScriptRacoon) for providing developmental [code](https://gist.github.com/ScriptRaccoon/c12c4884c116dead62a15a3d09732d5d) for phase 1.
 - [@rokicki](https://github.com/rokicki) for designing the [PuzzleGeometry format](https://alpha.twizzle.net/explore/help.html).
+- [@ScriptRacoon](https://github.com/ScriptRacoon) for providing developmental [code](https://gist.github.com/ScriptRaccoon/c12c4884c116dead62a15a3d09732d5d) for phase 1.
 - [@trangium](https://github.com/trangium) for providing the [Movecount Coefficient Calculator](https://trangium.github.io/MovecountCoefficient/).
 - [@benwh1](https://github.com/benwh1) and [@adrian154](https://github.com/adrian154) for miscellaneous puzzle theory insights.
 - [@DitrusNight](https://github.com/DitrusNight) for advising our programming language design.
