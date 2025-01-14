@@ -441,7 +441,7 @@ Jump to a label if the specified variable is zero. The name of this instruction 
 
 <ul>
 
-Ask the user for input, which will be added to the given variable.
+Ask the user for numeric input, which will be added to the given variable.
 
 </ul>
 
@@ -502,17 +502,25 @@ A Rubik's cube _move_ is defined by a manipulation of a single face, defined by 
 
 If you repeat an algorithm enough times, you will always be brought back where you started. You may have already tried this yourself from the solved state: if you keep repeating an algorithm such as `R U` you will eventually re-solve the cube. The number of repetitions this takes is the algorithm's _order_, and the set of positions visited by repeating the algorithm forms its _cycle_. In this example, since `R U` has to be repeated 105 times to be brought back to its original state, its order is 105.
 
-The proof for this introduces an important concept that will later be brought up again: [group theory](https://en.wikipedia.org/wiki/Group_theory). The set of moves on the Rubik's cube forms an algebraic structure called a _group_. Since there are only finitely many states a Rubik's cube can be in, this group is finite. It is an early theorem of group theory that every element (algorithm) of a finite group has finite order [[2](#ref-2)].
+The proof for this introduces an important concept that will later be brought up again, [group theory](https://en.wikipedia.org/wiki/Group_theory). The set of moves on the Rubik's cube forms an algebraic structure called a _group_. Since there are only finitely many states a Rubik's cube can be in, this group is finite. It is an early theorem of group theory that every element (algorithm) of a finite group has finite order [[2](#ref-2)].
 
 ## Cycles are registers
 
-WIP
+At its most basic level, _registers_ are units of storage that can be modified at will, and an essential building block to how computers work. Computer CPUs use registers to store small amounts of data during program execution.
 
-Talking points:
+Armed with puzzle theory background knowledge, you can understand the main idea of how qter works in three words: cycles are registers. In essence, the value of a register is the Nth step of the cycle's corresponding algorithm.
 
-- A register is a unit of storage in a computer. Think of it like memory — it can stores a value and update the value stored any time
-- Use the U cycle to demonstrate a register of order 4 meaning it returns to its original state with 4 moves. Emphasize mod 4
-- The value of this cycle's corresponding register, is the Nth step (or index) of the algorithm
+Let's explain what that means through an example. Here are all the states visited by the `U` cycle:
+
+<p float="left">
+  <img src="media/u-0.png" width="49%" alt="The solved Rubik's cube"/>
+  <img src="media/u-1.png" width="49%" alt="The Rubik's cube after performing U"/>
+  <img src="media/u-2.png" width="49%" alt="The Rubik's cube after performing U2"/>
+  <img src="media/u-3.png" width="49%" alt="The Rubik's cube after performing U'"/>
+</p>
+
+The `U` cycle takes four repetitions to re-solve the cube, therefore it has order four. We claim that this is structurally identical to a two bit register (a register of size four).
+
 - We have a way to increment a register by a constant
 - 1260 order is maximal [[1](#ref-1)] and not enough for any meaningful computation
 - Generalize the notion of a register to multiple cycles that coexist on the Rubik's cube
