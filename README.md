@@ -175,7 +175,7 @@ As described, "solved-goto" would only branch if the entire cube is solved, howe
 
 Can we do better than two registers of order four? In fact we can! If you try out the algorithms `R' F' L U' L U L F U' R` and `U F R' D' R2 F R' U' D`, you can see that they affect different pieces and both have order 90. You may notice that they both rotate the same corner; this is not a problem because they are independently decodable even ignoring that corner. One of the biggest challenges in the development of qter has been finding sets of algorithms with high orders that are all independently decodable.
 
-If you're curious; the algorithms used in the Fibonacci program above are...
+If you're curious; the registers used in the Fibonacci program above are...
 
 <!-- This should probably be a table -->
 - `U L B' L B' U R' D U2 L2 F2` - Order 30
