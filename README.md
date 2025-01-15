@@ -153,7 +153,7 @@ You may notice that subtracting one is equivalent to adding three, because `U'` 
 
 ## Can we do bigger numbers?
 
-If the biggest number qter could represent was three, it would not be an effective tool for computation. Thankfully, the Rubik's cube has 43 quintillion states, leaving us lots of room to do better than just four. Consider the algorithm `U' R`. We can play the same game using this algorithm. The solved cube represents zero, `U' R` represents one, `U' R U' R` represents two, etc. This algorithm performs a much more complicated action on the cube, so we should be able to represent more numbers. In fact, the maximum number we can represent this way is 104, wrapping around after 105 iterations. We would say that the algorithm has "order 105".
+If the biggest number qter could represent was three, it would not be an effective tool for computation. Thankfully, the Rubik's cube has 43 quintillion states, leaving us lots of room to do better than just four. Consider the algorithm `U R`. We can play the same game using this algorithm. The solved cube represents zero, `U R` represents one, `U R U R` represents two, etc. This algorithm performs a much more complicated action on the cube, so we should be able to represent more numbers. In fact, the maximum number we can represent this way is 104, wrapping around after 105 iterations. We would say that the algorithm has "order 105".
 
 There are still lots of cube states left; can we do better? Unfortunately, it's only possible to get to 1259, wrapping around on the 1260th iteration. You can try this using the algorithm `R U2 D' B D'`. There exists a mathematical proof that the maximum order is 1260, accessible here: [[1](#ref-1)].
 
@@ -161,7 +161,7 @@ There are still lots of cube states left; can we do better? Unfortunately, it's 
 
 The next thing that a computer must be able to do is _branch_, without it we can only do addition and subtraction. If we want to perform loops or only execute code conditionally, qter must be able to change what it does based on the state of the cube. For this, we introduce a "solved-goto" instruction.
 
-If you perform "U' R" on a cube a bunch of times without counting, it's essentially impossible for you to tell how many times you did the algorithm by _just looking_ at the cube. With one exception: If you did it _zero_ times, then the cube is solved and it's completely obvious that you did it zero times. Since we want qter code to be executable by humans, the "solved-goto" instruction asks you to go to a different location of the program _only_ if the cube is solved. In the Q format, you can see that "solved-goto" specifies the line number to jump to.
+If you perform "U R" on a cube a bunch of times without counting, it's essentially impossible for you to tell how many times you did the algorithm by _just looking_ at the cube. With one exception: If you did it _zero_ times, then the cube is solved and it's completely obvious that you did it zero times. Since we want qter code to be executable by humans, the "solved-goto" instruction asks you to go to a different location of the program _only_ if the cube is solved. In the Q format, you can see that "solved-goto" specifies the line number to jump to.
 
 ## Multiple numbers on one cube?
 
