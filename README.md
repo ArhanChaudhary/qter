@@ -139,7 +139,7 @@ And again to state "four"?
 
 <img src="media/u-0.png" width="49%" alt="A Rubik's cube after performing U U U U"/>
 
-If we apply the algorithm `U` four times, we find that it returns back to state "zero". This means that we can't represent a _natural_ number with this scheme. We should have expected that, because the Rubik's cube has a _finite_ number of states whereas the natural numbers have an _infinite_ number of states.
+If we apply the algorithm `U` four times, we find that it returns back to state "zero". This means that we can't represent every possible number with this scheme. We should have expected that, because the Rubik's cube has a _finite_ number of states whereas there are an _infinite_ amount of numbers.
 
 This doesn't mean that we can't do math though, we just have to treat numbers as if they "wrap around" at four. This is analagous to the way analog clocks wrap around after 12. The difference between our scheme and analog clocks is that we will consider the solved state to represent "zero" instead of "four".
 
