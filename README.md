@@ -121,23 +121,23 @@ First, we will assume that you are familiar with [standard move notation](https:
 
 The most important thing for a computer to be able to do is represent numbers. Let's take a solved cube and call it "zero":
 
-<img src="media/State Zero.png" width="49%" alt="A solved Rubik's cube"/>
+<img src="media/State Zero.png" width="33%" alt="A solved Rubik's cube"/>
 
 The fundamental unit of computation in qter is an _algorithm_, or a sequence of moves to apply to the cube. Let's see what happens if we apply the simplest algorithm, just turning the top face, and see what this buys us:
 
-<img src="media/State One.png" width="49%" alt="A Rubik's cube after performing U"/>
+<img src="media/State One.png" width="33%" alt="A Rubik's cube after performing U"/>
 
 Now, let's call this state "one". Since applying the algorithm `U` transitioned the cube from state "zero" to state "one", perhaps applying "U" _again_ could transition us from state "one" to state "two":
 
-<img src="media/State Two.png" width="49%" alt="A Rubik's cube after performing U U"/>
+<img src="media/State Two.png" width="33%" alt="A Rubik's cube after performing U U"/>
 
 And again to state "three":
 
-<img src="media/State Three.png" width="49%" alt="A Rubik's cube after performing U U U"/>
+<img src="media/State Three.png" width="33%" alt="A Rubik's cube after performing U U U"/>
 
 And again to state "four"?
 
-<img src="media/State Four.png" width="49%" alt="A Rubik's cube after performing U U U U"/>
+<img src="media/State Four.png" width="33%" alt="A Rubik's cube after performing U U U U"/>
 
 If we apply the algorithm `U` four times, we find that it returns back to state "zero". This means that we can't represent every possible number with this scheme. We should have expected that, because the Rubik's cube has a _finite_ number of states whereas there are an _infinite_ amount of numbers.
 
