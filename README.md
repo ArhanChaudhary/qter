@@ -1,6 +1,6 @@
 <!-- cspell:ignore nlogo promela scilab vcube benwh rokicki lgarron ditrus voltara infinidoge esqu1 trangium movecount Arhan Chaudhary Rovnyak korf twizzle metaprogramming cubies youtuber abelian -->
 <p align="center">
-    <img src="media/CPU Logo.png" width="200" alt="The qter logo">
+    <img src="media/Header.png" width="400" alt="The qter logo">
 </p>
 <hr>
 
@@ -121,23 +121,23 @@ First, we will assume that you are familiar with [standard move notation](https:
 
 The most important thing for a computer to be able to do is represent numbers. Let's take a solved cube and call it "zero":
 
-<img src="media/u-0.png" width="49%" alt="A solved Rubik's cube"/>
+<img src="media/State Zero.png" width="49%" alt="A solved Rubik's cube"/>
 
 The fundamental unit of computation in qter is an _algorithm_, or a sequence of moves to apply to the cube. Let's see what happens if we apply the simplest algorithm, just turning the top face, and see what this buys us:
 
-<img src="media/u-1.png" width="49%" alt="A Rubik's cube after performing U"/>
+<img src="media/State One.png" width="49%" alt="A Rubik's cube after performing U"/>
 
 Now, let's call this state "one". Since applying the algorithm `U` transitioned the cube from state "zero" to state "one", perhaps applying "U" _again_ could transition us from state "one" to state "two":
 
-<img src="media/u-2.png" width="49%" alt="A Rubik's cube after performing U U"/>
+<img src="media/State Two.png" width="49%" alt="A Rubik's cube after performing U U"/>
 
 And again to state "three":
 
-<img src="media/u-3.png" width="49%" alt="A Rubik's cube after performing U U U"/>
+<img src="media/State Three.png" width="49%" alt="A Rubik's cube after performing U U U"/>
 
 And again to state "four"?
 
-<img src="media/u-0.png" width="49%" alt="A Rubik's cube after performing U U U U"/>
+<img src="media/State Four.png" width="49%" alt="A Rubik's cube after performing U U U U"/>
 
 If we apply the algorithm `U` four times, we find that it returns back to state "zero". This means that we can't represent every possible number with this scheme. We should have expected that, because the Rubik's cube has a _finite_ number of states whereas there are an _infinite_ amount of numbers.
 
@@ -581,10 +581,7 @@ Armed with puzzle theory background knowledge, you can understand the main idea 
 Let's explain what that means through an example. Here are all the states visited by the `U` cycle:
 
 <p float="left">
-  <img src="media/u-0.png" width="49%" alt="The solved Rubik's cube"/>
-  <img src="media/u-1.png" width="49%" alt="The Rubik's cube after performing U"/>
-  <img src="media/u-2.png" width="49%" alt="The Rubik's cube after performing U2"/>
-  <img src="media/u-3.png" width="49%" alt="The Rubik's cube after performing U'"/>
+  <img src="media/U States.png" width="49%" alt="The states visited by U"/>
 </p>
 
 The `U` cycle takes four repetitions to re-solve the cube, therefore it has order four. We claim that this is structurally identical to a two bit register (a register of size four).
