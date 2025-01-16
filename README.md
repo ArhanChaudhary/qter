@@ -1,6 +1,6 @@
 <!-- cspell:ignore nlogo promela scilab vcube benwh rokicki lgarron ditrus voltara infinidoge esqu1 trangium movecount Arhan Chaudhary Rovnyak korf twizzle metaprogramming cubies youtuber abelian -->
 <p align="center">
-    <img src="media/Header.png" width="400" alt="The qter logo">
+    <img src="media/Header.png" width="60%" alt="The qter logo">
 </p>
 <hr>
 
