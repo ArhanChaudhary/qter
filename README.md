@@ -1,4 +1,4 @@
-<!-- cspell:ignore nlogo promela scilab vcube benwh rokicki lgarron ditrus voltara infinidoge esqu1 trangium movecount Arhan Chaudhary Rovnyak korf twizzle metaprogramming cubies youtuber abelian -->
+<!-- cspell:ignore nlogo promela scilab vcube benwh rokicki lgarron ditrus voltara infinidoge esqu1 trangium movecount Arhan Chaudhary Rovnyak korf twizzle metaprogramming cubies youtuber abelian nxopt -->
 <p align="center">
     <img src="media/Header.png" width="60%" alt="The qter logo">
 </p>
@@ -89,10 +89,14 @@ loop {
 
 ### Table of Contents
 
+- [How does qter work?](#how-does-qter-work)
+  - [Mathematics](#mathematics)
+  - [Can we do bigger numbers?](#can-we-do-bigger-numbers)
+  - [Branching](#branching)
+  - [Multiple numbers on one cube?](#multiple-numbers-on-one-cube)
 - [Physically running qter](#physically-running-qter)
   - [The Q file format](#the-q-file-format)
   - [Logical instructions](#logical-instructions)
-  - [Advanced instructions](#advanced-instructions)
   - [Other twisty puzzles](#other-twisty-puzzles)
 - [The QAT programming language](#the-qat-programming-language)
   - [Your first QAT program](#your-first-qat-program)
@@ -100,12 +104,7 @@ loop {
   - [Basic instructions](#basic-instructions)
   - [Metaprogramming](#metaprogramming)
   - [Prelude](#prelude)
-  - [Memory tapes](#memory-tapes)
-- [Computer architecture design](#computer-architecture-design)
-  - [Puzzle theory](#puzzle-theory)
-  - [Cycles are registers](#cycles-are-registers)
-  - [Conditional branching](#conditional-branching)
-  - [The Rubik's cube is a computer](#the-rubiks-cube-is-a-computer)
+- [Memory tapes](#memory-tapes)
 - [Cycle combination solver](#cycle-combination-solver)
   - [Phase 1](#phase-1)
   - [Phase 2](#phase-2)
@@ -127,7 +126,7 @@ The fundamental unit of computation in qter is an _algorithm_, or a sequence of 
 
 <img src="media/State One.png" width="33%" alt="A Rubik's cube after performing U"/>
 
-Now, let's call this state "one". Since applying the algorithm `U` transitioned the cube from state "zero" to state "one", perhaps applying "U" _again_ could transition us from state "one" to state "two":
+Now, let's call this state "one". Since applying the algorithm `U` transitioned the cube from state "zero" to state "one", perhaps applying `U` _again_ could transition us from state "one" to state "two":
 
 <img src="media/State Two.png" width="33%" alt="A Rubik's cube after performing U U"/>
 
@@ -135,17 +134,17 @@ And again to state "three":
 
 <img src="media/State Three.png" width="33%" alt="A Rubik's cube after performing U U U"/>
 
-And again to state "four"?
+And... again to state "four"?
 
 <img src="media/State Four.png" width="33%" alt="A Rubik's cube after performing U U U U"/>
 
 If we apply the algorithm `U` four times, we find that it returns back to state "zero". This means that we can't represent every possible number with this scheme. We should have expected that, because the Rubik's cube has a _finite_ number of states whereas there are an _infinite_ amount of numbers.
 
-This doesn't mean that we can't do math though, we just have to treat numbers as if they "wrap around" at four. This is analagous to the way analog clocks wrap around after 12. The difference between our scheme and analog clocks is that we will consider the solved state to represent "zero" instead of "four".
+This doesn't mean that we can't do math though, we just have to treat numbers as if they "wrap around" at four. This is analogous to the way analog clocks wrap around after twelve. The difference between our scheme and analog clocks is that we will consider the solved state to represent "zero" instead of "four".
 
 ## Mathematics
 
-Is it valid to represent numbers in this way though? Let's consider adding "two" to "one". We reach the "two" state using the algorithm `U U`, so if we apply that algorithm to the "one" state, we will find the cube in the same state as if we applied `(U) (U U)`, or `U U U`, which is exactly how we reach the state labelled "three". It's easy to see that associativity of moves makes addition valid in this scheme. What if we wanted to add "three" to "two"? We would expect a result of "five", but since the numbers wrap around upon reaching four, we would actually expect to reach the state of "one". You can try on your own Rubik's cube and see that it works.
+Can we justify this way of representing numbers? Let's consider adding "two" to "one". We reach the "two" state using the algorithm `U U`, so if we apply that algorithm to the "one" state, we will find the cube in the same state as if we applied `(U) (U U)`, or `U U U`, which is exactly how we reach the state labelled "three". It's easy to see that associativity of moves makes addition valid in this scheme. What if we wanted to add "three" to "two"? We would expect a result of "five", but since the numbers wrap around upon reaching four, we would actually expect to reach the state of "one". You can try on your own Rubik's cube and see that it works.
 
 What if we want to perform subtraction? We know that addition is performed using an algorithm, so can we find an algorithm that adds a negative number? Let's consider the state that represents "one". If we subtract one, we would expect the cube to return to state "zero". The algorithm that brings the cube from state "one" to state "zero" is `U'`. This is exactly the inverse of our initial `U` algorithm. If we want to subtract two, we can simply subtract one twice as before: `U' U'`.
 
@@ -153,35 +152,36 @@ You may notice that subtracting one is equivalent to adding three, because `U'` 
 
 ## Can we do bigger numbers?
 
-If the biggest number qter could represent was three, it would not be an effective tool for computation. Thankfully, the Rubik's cube has 43 quintillion states, leaving us lots of room to do better than just four. Consider the algorithm `U R`. We can play the same game using this algorithm. The solved cube represents zero, `U R` represents one, `U R U R` represents two, etc. This algorithm performs a much more complicated action on the cube, so we should be able to represent more numbers. In fact, the maximum number we can represent this way is 104, wrapping around after 105 iterations. We would say that the algorithm has "order 105".
+If the biggest number qter could represent was three, it would not be an effective tool for computation. Thankfully, the Rubik's cube has 43 quintillion states, leaving us lots of room to do better than just four. Consider the algorithm `R U`. We can play the same game using this algorithm. The solved cube represents zero, `R U` represents one, `R U R U` represents two, etc. This algorithm performs a much more complicated action on the cube, so we should be able to represent more numbers. In fact, the maximum number we can represent this way is 104, wrapping around after 105 iterations. We would say that the algorithm has "order 105".
 
 There are still lots of cube states left; can we do better? Unfortunately, it's only possible to get to 1259, wrapping around on the 1260th iteration. You can try this using the algorithm `R U2 D' B D'`. There exists a mathematical proof that the maximum order is 1260, accessible here: [[1](#ref-1)].
 
 ## Branching
 
-The next thing that a computer must be able to do is _branch_, without it we can only do addition and subtraction. If we want to perform loops or only execute code conditionally, qter must be able to change what it does based on the state of the cube. For this, we introduce a "solved-goto" instruction.
+The next thing that a computer must be able to do is _branch_, without it we can only do addition and subtraction and nothing else. If we want to perform loops or only execute code conditionally, qter must be able to change what it does based on the state of the cube. For this, we introduce a "solved-goto" instruction.
 
-If you perform "U R" on a cube a bunch of times without counting, it's essentially impossible for you to tell how many times you did the algorithm by _just looking_ at the cube. With one exception: If you did it _zero_ times, then the cube is solved and it's completely obvious that you did it zero times. Since we want qter code to be executable by humans, the "solved-goto" instruction asks you to go to a different location of the program _only_ if the cube is solved. In the Q format, you can see that "solved-goto" specifies the line number to jump to.
+If you perform "R U" on a cube a bunch of times without counting, it's essentially impossible for you to tell how many times you did the algorithm by _just looking_ at the cube. With one exception: If you did it _zero_ times, then the cube is solved and it's completely obvious that you did it zero times. Since we want qter code to be executable by humans, the "solved-goto" instruction asks you to go to a different location of the program _only_ if the cube is solved. In the Q format, you can see that "solved-goto" specifies the line number to jump to.
 
 ## Multiple numbers on one cube?
 
-If you think about what programs you could actually execute with just a single number and a "jump if zero" instruction, it would be almost nothing. What would be wonderful is if we could represent _multiple_ numbers on the cube all at once.
+If you think about what programs you could actually execute with just a single number and a "jump if zero" instruction, it would be almost nothing. What would be wonderful is if we could represent _multiple_ numbers on the cube at the same time.
 
 If you're familiar with how to solve a cube layer by layer, you should know that it's possible for an algorithm to affect only a small section of the cube at once, for example just the last layer. Therefore, it should be possible to represent two numbers using two algorithms that affect distinct "areas" of the cube.
 
 The simplest example of this concept are the algorithms `U` and `D`. You can see that `U` and `D` both allow representing numbers up to three, and since they affect different areas of the cube, we can represent _two different_ numbers on the cube at the _same time_. We call these "registers", as an analogy to the concept in classical computing.
 
-As described, "solved-goto" would only branch if the entire cube is solved, however since each algorithm affects a distinct area of the cube, it's possible for a human to determine whether a _single_ register is zero, by inspecting whether a particular section of the cube is solved. In the Q format, we support this by each "solved-goto" instruction giving a list of pieces, all of which must be in their solved positions for the branch to be taken, but not necessarily any more.
+As described, "solved-goto" would only branch if the entire cube is solved, however since each algorithm affects a distinct area of the cube, it's possible for a human to determine whether a _single_ register is zero, by inspecting whether a particular section of the cube is solved. In the Q format, we support this by each "solved-goto" instruction giving a list of positions, all of which must have their solved piece for the branch to be taken, but not necessarily any more.
 
-Can we do better than two registers of order four? In fact we can! If you try out the algorithms `R' F' L U' L U L F U' R` and `U F R' D' R2 F R' U' D`, you can see that they affect different pieces and both have order 90. You may notice that they both rotate the same corner; this is not a problem because they are independently decodable even ignoring that corner. One of the biggest challenges in the development of qter has been finding sets of algorithms with high orders that are all independently decodable.
+Can we do better than two registers with four states? In fact we can! If you try out the algorithms `R' F' L U' L U L F U' R` and `U F R' D' R2 F R' U' D`, you can see that they affect different pieces and both have order ninety. You may notice that they both rotate the same corner; this is not a problem because they are independently decodable even ignoring that corner. One of the biggest challenges in the development of qter has been finding sets of algorithms with high orders that are all independently decodable.
 
-If you're curious; the registers used in the Fibonacci program above are...
+If you're curious, the Fibonacci program uses these four registers:
 
-<!-- This should probably be a table -->
-- `U L B' L B' U R' D U2 L2 F2` - Order 30
-- `D L' F L2 B L' F' L B' D' L'` - Order 18
-- `R' U' L' F2 L F U F R L U'` - Order 10
-- `B2 U2 L F' R B L2 D2 B R' F L` - Order 9
+| Order | Algorithm |
+| ----- | --------- |
+| 30 | `U L B' L B' U R' D U2 L2 F2` |
+| 18 | `D L' F L2 B L' F' L B' D' L'` |
+| 10 | `R' U' L' F2 L F U F R L U'` |
+| 9 | `B2 U2 L F' R B L2 D2 B R' F L` |
 
 # Physically running qter
 
@@ -316,31 +316,6 @@ A: 3x3
 
 </ul>
 
-- `switch <letter>`
-
-<ul>
-
-Put down your current puzzle and pick up a different one, labeled by letter in the `Puzzles` declaration. It is important that you do not rotate the puzzle when setting it aside or picking it back up. For example:
-
-```l
-Puzzles
-A: 3x3
-B: 3x3
-
-1 | U
-2 | switch B
-3 | R
-...
-```
-
-this program requires two Rubik's cubes to execute. The instructions indicate performing `U` on the first Rubik's cube and then `R` on the second. When the program starts, you are expected to be holding the first cube in the list.
-
-</ul>
-
-## Advanced instructions
-
-The Q file format thus far is theoretically equivalent to a classical computer, as demonstrated in the [computer architecture design](#computer-architecture-design) section. This section details advanced instructions that the Q file format supports.
-
 - `print <message> [<algorithm> counting-until <positions>]`
 
 <ul>
@@ -372,33 +347,24 @@ A: 3x3
 
 </ul>
 
-Talk about memory tapes here WIP (Henry you could write the rest of this section if you want)
-
-- `move-left <tape> <number>`
+- `switch <letter>`
 
 <ul>
 
-WIP
+Put down your current puzzle and pick up a different one, labeled by letter in the `Puzzles` declaration. It is important that you do not rotate the puzzle when setting it aside or picking it back up. For example:
 
-Talking points:
+```l
+Puzzles
+A: 3x3
+B: 3x3
 
-- Will need many puzzles
+1 | U
+2 | switch B
+3 | R
+...
+```
 
-</ul>
-
-- `move-right <tape> <number>`
-
-<ul>
-
-WIP
-
-</ul>
-
-- `switch-tape <tape>`
-
-<ul>
-
-WIP
+This program requires two Rubik's cubes to execute. The instructions indicate performing `U` on the first Rubik's cube and then `R` on the second. When the program starts, you are expected to be holding the first cube in the list.
 
 </ul>
 
@@ -548,19 +514,39 @@ Talking points:
 - convenience macros like `inc`, `dec`, and control flow
 - [Link to prelude](src/qter_core/prelude.qat) and encourage its reference
 
-## Memory tapes
+# Memory tapes
+
+Henry you could write the rest of this section if you want
+
+- `move-left <tape> <number>`
+
+<ul>
 
 WIP
 
-Talking points:
+</ul>
 
-- functions and recursion
+- `move-right <tape> <number>`
 
-# Computer architecture design
+<ul>
 
-Qter is similar in many ways to how modern computers work, yet at the same time esoteric by nature. This section will start with a light background of how Rubik's cubes work and then elaborate on the unique properties that make qter possible.
+WIP
 
-## Puzzle theory
+</ul>
+
+- `switch-tape <tape>`
+
+<ul>
+
+WIP
+
+</ul>
+
+# Cycle combination solver
+
+(This section is a huge WIP)
+
+Qter's cycle combination solver computes the optimal computer architecture for a puzzle using any amount of cycles.
 
 On the Rubik's Cube, every type of piece can only move to positions occupied by the same type of piece. These sets of disjoint positions are called _orbits_. The Rubik's cube has three types of pieces: edges, corners, and centers. Corner pieces can only move to corner positions and edge pieces can only move to edge positions. Disallowing rotations, center pieces are always in their solved positions because they cannot move. An important implication of this fact is that colors must be positioned around their centers to solve the Rubik's cube.
 
@@ -571,8 +557,6 @@ A Rubik's cube _move_ is defined by a manipulation of a single face, defined by 
 If you repeat an algorithm enough times, you will always be brought back where you started. You may have already tried this yourself from the solved state: if you keep repeating an algorithm such as `R U` you will eventually re-solve the cube. The number of repetitions this takes is the algorithm's _order_, and the set of positions visited by repeating the algorithm forms its _cycle_. In this example, since `R U` has to be repeated 105 times to be brought back to its original state, its order is 105.
 
 The proof for this introduces an important concept that will later be brought up again, [group theory](https://en.wikipedia.org/wiki/Group_theory). The set of moves on the Rubik's cube forms an algebraic structure called a _group_. Since there are only finitely many states a Rubik's cube can be in, this group is finite. It is an early theorem of group theory that every element (algorithm) of a finite group has finite order [[2](#ref-2)].
-
-## Cycles are registers
 
 At its most basic level, _registers_ are units of storage that can be modified at will, and an essential building block to how computers work. Computer CPUs use registers to store small amounts of data during program execution.
 
@@ -591,33 +575,6 @@ The `U` cycle takes four repetitions to re-solve the cube, therefore it has orde
 - Generalize the notion of a register to multiple cycles that coexist on the Rubik's cube
 - The set of pieces affected by a given cycle must not interfere with the set of pieces affected by any other cycle. Helpful to think no longer in terms of moves but in cycles as in these pieces may be moved but they are restored. If the pieces were to interfere, then this would mean modifying the value of one register has a side effect of modifying the value of another unintended register.
 - More registers mean more states 90*90 > 1260
-
-## Conditional branching
-
-WIP
-
-Talking points:
-
-- We have defined a way to represent a register on a Rubik's cube, but how does this bring us closer to a computer?
-- We are limited in what we can do if the only operation our computer is able to perform on its memory is adding a constant
-- Allow conditionally executing code
-- Recall from U cycle, when the pieces of a cycle are solved, the register value is 0 because there are zero repetitions of the algorithm
-- A piece is solved if the colors on each of its faces match the center of the corresponding side of a Rubik's cube
-- If a register value is zero, then we conditionally execute some code, if not, execute some other code
-
-## The Rubik's cube is a computer
-
-WIP
-
-Talking points:
-
-- store instruction memory separate to the cube
-- dissect an example
-- works with any twisty puzzle
-
-# Cycle combination solver
-
-Qter's cycle combination solver computes the optimal computer architecture for a puzzle using any amount of cycles.
 
 ## Phase 1
 
@@ -665,11 +622,11 @@ Talking points
 <!-- cspell:enable -->
 # Acknowledgements
 
-- [@lgarron](https://github.com/lgarron) and [@esqu1](https://github.com/esqu1) for reference Korf's algorithm implementations ([1](https://github.com/cubing/twsearch/blob/efb207e11162174360e3ae49aa552cda1313df81/src/rs/_internal/search/idf_search.rs#L340) and [2](https://github.com/esqu1/Rusty-Rubik/blob/1e32829e83c662816bd85f6c37d6f774a15e3aea/src/solver.rs#L123)).
-- [@rokicki](https://github.com/rokicki) for designing the [PuzzleGeometry format](https://alpha.twizzle.net/explore/help.html).
-- [@Voltara](https://github.com/Voltara) for their [optimal solver](https://github.com/Voltara/vcube) used in phase 2.
+- [@rokicki](https://github.com/rokicki) for personally advising design from [nxopt](https://github.com/rokicki/cube20src/blob/master/nxopt.md) in phase 2. Also for creating the [PuzzleGeometry format](https://alpha.twizzle.net/explore/help.html).
+- [@lgarron](https://github.com/lgarron) and [@esqu1](https://github.com/esqu1) for reference Korf's algorithm implementations in Rust ([1](https://github.com/cubing/twsearch/blob/efb207e11162174360e3ae49aa552cda1313df81/src/rs/_internal/search/idf_search.rs#L340) and [2](https://github.com/esqu1/Rusty-Rubik/blob/1e32829e83c662816bd85f6c37d6f774a15e3aea/src/solver.rs#L123)).
 - [@ScriptRacoon](https://github.com/ScriptRacoon) for providing developmental [code](https://gist.github.com/ScriptRaccoon/c12c4884c116dead62a15a3d09732d5d) for phase 1.
 - [@trangium](https://github.com/trangium) for their [Movecount Coefficient Calculator](https://trangium.github.io/MovecountCoefficient/).
+- [@Voltara](https://github.com/Voltara) for their [optimal solver](https://github.com/Voltara/vcube) used to compress algorithms.
 - [@benwh1](https://github.com/benwh1) and [@adrian154](https://github.com/adrian154) for miscellaneous puzzle theory insights.
 - [@DitrusNight](https://github.com/DitrusNight) for advising our programming language design.
 - [@Infinidoge](https://github.com/Infinidoge) for generously providing access to powerful hardware for the cycle combination solver.

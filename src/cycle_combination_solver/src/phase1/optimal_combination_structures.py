@@ -17,6 +17,7 @@ import math
 import operator
 import functools
 import timeit
+import puzzle_orbit_definitions
 from common_types import (
     OrientationStatus,
     OrientationSumConstraint,
@@ -718,59 +719,9 @@ def cycle_combination_objs_stats(cycle_combination_objs):
 
 def main():
     start = timeit.default_timer()
-    # cycle_combinations = optimal_cycle_combinations(
-    #     puzzle_orbit_definition=puzzle_orbit_definitions.PUZZLE_4x4,
-    #     num_cycles=1,
-    # )
-    puzzle_orbit_definition = PuzzleOrbitDefinition(
-        orbits=(
-            Orbit(
-                name="corners",
-                cubie_count=8,
-                orientation_status=OrientationStatus.CanOrient(
-                    count=3, sum_constraint=OrientationSumConstraint.ZERO
-                ),
-            ),
-            Orbit(
-                name="wings1",
-                cubie_count=24,
-                orientation_status=OrientationStatus.CannotOrient(),
-            ),
-            Orbit(
-                name="wings2",
-                cubie_count=24,
-                orientation_status=OrientationStatus.CannotOrient(),
-            ),
-            Orbit(
-                name="centers1;1",
-                cubie_count=24,
-                orientation_status=OrientationStatus.CannotOrient(),
-            ),
-            Orbit(
-                name="centers1;2",
-                cubie_count=24,
-                orientation_status=OrientationStatus.CannotOrient(),
-            ),
-            Orbit(
-                name="centers2;1",
-                cubie_count=24,
-                orientation_status=OrientationStatus.CannotOrient(),
-            ),
-            Orbit(
-                name="centers2;2",
-                cubie_count=24,
-                orientation_status=OrientationStatus.CannotOrient(),
-            ),
-        ),
-        even_parity_constraints=(),
-    )
-
-    cycle_combinations = highest_order_cycles_from_cubie_counts(
-        cycle_cubie_counts=(8, 24, 24, 24, 24, 24, 24),
-        puzzle_orbit_definition=puzzle_orbit_definition,
-        even_parity_constraints_helper=EvenParityConstraintsHelper.from_puzzle_orbit_definition(
-            puzzle_orbit_definition
-        ),
+    cycle_combinations = optimal_cycle_combinations(
+        puzzle_orbit_definition=puzzle_orbit_definitions.PUZZLE_3x3,
+        num_cycles=2,
     )
     print(timeit.default_timer() - start)
     print(recursive_shared_cycle_combinations.cache_info())
