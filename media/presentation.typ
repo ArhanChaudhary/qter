@@ -580,7 +580,7 @@
     #v(30pt)
     This is formed from:
     - LCM 56 on edges: 4 cycle, another 4 cycle, and 7 cycle
-    - LCM 45 on corners: 3 cycle and 5 cycle
+    - LCM 45 on corners: 9 cycle and 15 cycle
     - LCM(45, 56) = 1260
 ])
 
