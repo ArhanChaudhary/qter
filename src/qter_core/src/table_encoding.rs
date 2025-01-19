@@ -7,7 +7,7 @@ use internment::ArcIntern;
 use itertools::Itertools;
 
 struct TableStats {
-    frequencies: HashMap<ArcIntern<str>, u32>,
+    frequencies: Vec<u32>,
     length_frequencies: HashMap<usize, u32>,
     disallowed_pairs: HashSet<(u16, u16)>,
 }
@@ -28,7 +28,7 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
 
     let mut stats = algs.iter().fold(
         TableStats {
-            frequencies: HashMap::new(),
+            frequencies: Vec::new(),
             length_frequencies: HashMap::new(),
             disallowed_pairs: HashSet::new(),
         },
@@ -36,15 +36,17 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
             *stats.length_frequencies.entry(alg.len()).or_insert(0) += 1;
 
             for generator in alg {
-                if !symbol_indices.contains_key(generator) {
-                    let idx = symbol_indices.len() as u16;
-                    symbol_indices.insert(ArcIntern::clone(generator), idx);
-                }
+                let idx = match symbol_indices.get(generator) {
+                    None => {
+                        let idx = symbol_indices.len() as u16;
+                        symbol_indices.insert(ArcIntern::clone(generator), idx);
+                        stats.frequencies.push(0);
+                        idx
+                    }
+                    Some(idx) => *idx,
+                };
 
-                *stats
-                    .frequencies
-                    .entry(ArcIntern::clone(generator))
-                    .or_insert(0) += 1;
+                stats.frequencies[idx as usize] += 1;
             }
 
             // Note: `disallowed_pairs` will actually contain the set of allowed pairs and we will take the complement of the set later
@@ -92,8 +94,8 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
 
     stream.extend_from_slice(&(stats.frequencies.len() as u32).to_le_bytes());
 
-    for (symbol, _) in symbol_indices.iter().sorted_unstable_by_key(|(_, i)| **i) {
-        let freq = stats.frequencies.get(symbol).unwrap();
+    for (symbol, idx) in symbol_indices.iter().sorted_unstable_by_key(|(_, i)| **i) {
+        let freq = stats.frequencies[*idx as usize];
 
         stream.extend_from_slice(&(symbol.len() as u32).to_le_bytes());
         stream.extend_from_slice(symbol.as_bytes());
@@ -190,13 +192,52 @@ fn rest_unweighted(ranges: &mut [u16], mut range_left: usize) {
     }
 }
 
+fn rest_weighted(ranges: &mut [u16], mut range_left: usize, distribution: &[u32]) {
+    let mut total_weight = 0;
+    let mut amt_to_set = 0;
+
+    ranges.iter_mut().enumerate().for_each(|(i, v)| {
+        if *v != 0 {
+            *v = 1;
+
+            total_weight += distribution[i] as usize;
+            amt_to_set += 1;
+        }
+    });
+
+    for (i, dist_spot) in ranges
+        .iter_mut()
+        .enumerate()
+        .sorted_unstable_by_key(|(i, _)| distribution[*i])
+    {
+        if *dist_spot == 0 {
+            continue;
+        }
+
+        let range_available = range_left + amt_to_set;
+
+        let range_to_take =
+            (range_available * distribution[i] as usize / total_weight).saturating_sub(1);
+        println!(
+            "{range_available} * {} / {total_weight} - 1 = {range_to_take}; {range_left} → {}",
+            distribution[i],
+            range_left - range_to_take
+        );
+        range_left -= range_to_take;
+        *dist_spot += range_to_take as u16;
+        total_weight -= distribution[i] as usize;
+        amt_to_set -= 1;
+    }
+    println!("{ranges:?}");
+}
+
 /// Decodes a table and returns None if it can't be decoded
 pub fn decode_table(mut data: &[u8]) -> Option<Vec<Vec<ArcIntern<str>>>> {
     let (symbol_count, new_data) = data.split_first_chunk::<4>()?;
     data = new_data;
 
     let mut symbols = Vec::new();
-    let mut frequencies = HashMap::new();
+    let mut frequencies = Vec::new();
 
     for _ in 0..u32::from_le_bytes(*symbol_count) {
         let (symbol_len, new_data) = data.split_first_chunk::<4>()?;
@@ -209,7 +250,7 @@ pub fn decode_table(mut data: &[u8]) -> Option<Vec<Vec<ArcIntern<str>>>> {
 
         let (freq, new_data) = data.split_first_chunk::<4>()?;
         data = new_data;
-        frequencies.insert(generator, u32::from_le_bytes(*freq));
+        frequencies.push(u32::from_le_bytes(*freq));
     }
 
     let mut length_frequencies = HashMap::new();
@@ -397,7 +438,11 @@ fn mk_distribution_closure(stats: TableStats) -> impl FnMut(Option<u16>, &mut [u
             range_left -= 1;
         }
 
-        rest_unweighted(&mut out[..end_of_alg_symbol as usize], range_left as usize)
+        rest_weighted(
+            &mut out[..end_of_alg_symbol as usize],
+            range_left as usize,
+            &stats.frequencies,
+        )
     }
 }
 
@@ -426,6 +471,7 @@ fn ans_encode(
     symbol_count: usize,
     mut next_ranges: impl FnMut(Option<u16>, &mut [u16]),
 ) {
+    println!("Encoding");
     let mut ranges = vec![0; symbol_count * symbols.len()];
 
     (iter::once(None).chain(symbols.iter().copied().map(Some)))
@@ -620,6 +666,7 @@ mod tests {
         println!("{encoded:?}");
         let decoded = decode_table(&encoded).unwrap();
         assert_eq!(algs, decoded);
+        // panic!()
     }
 
     #[test]
