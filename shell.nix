@@ -27,7 +27,9 @@ pkgs.mkShell {
       };
     }))
 
-    python3
+    (python3.withPackages (p: with p; [
+      sympy
+    ]))
     python312Packages.python-lsp-server
   ]);
 
