@@ -58,6 +58,16 @@ CubiePartition = collections.namedtuple(
     ],
 )
 
+PrimePower = collections.namedtuple(
+    "PrimePower",
+    ["value", "pieces"],
+)
+
+PrimeCombo = collections.namedtuple(
+    "PrimePower",
+    ["order", "values", "piece_counts"],
+)
+
 
 # EvenParityConstraintsHelper = collections.namedtuple(
 #     "EvenParityConstraintsHelper",
@@ -171,6 +181,7 @@ def unique_permutations(iterable, skip, r=None):
                 previous = p
                 yield p
 
+
 def p_adic_valuation(n, p):
     """
     Calculate the [p-adic valuation](https://en.wikipedia.org/wiki/P-adic_valuation).
@@ -250,7 +261,11 @@ def optimal_cycle_combinations(puzzle_orbit_definition, num_cycles, cache_clear=
             seen_cycle_cubie_counts = set()
             # TODO: permuting can be done within integer_partitions itself
             for all_permuted_partition_cubie_counts in itertools.product(
-                *map(unique_permutations, all_partition_cubie_counts, [x == 0 for x in range(len(used_cubie_counts))])
+                *map(
+                    unique_permutations,
+                    all_partition_cubie_counts,
+                    [x == 0 for x in range(len(used_cubie_counts))],
+                )
             ):
                 all_cycle_cubie_counts = []
                 continue_outer = False
@@ -298,7 +313,7 @@ def optimal_cycle_combinations(puzzle_orbit_definition, num_cycles, cache_clear=
                         continue
                     # just because we sort the parititons earlier doesnt mean the
                     # orders will be sorted
-                    #print('OOOOOOOOOOOO',shared_cycle_combination)
+                    # print('OOOOOOOOOOOO',shared_cycle_combination)
                     descending_order_cycle_combination = sorted(
                         shared_cycle_combination,
                         key=lambda cycle: (
@@ -452,55 +467,75 @@ def recursive_shared_cycle_combinations(
         )
     )
 
-def prime_powers_below_n(n,max_orient):
+
+def prime_powers_below_n(n, max_orient):
     prime_powers = []
-    for prime in primerange(n+1):
+
+    for prime in primerange(n + 1):
         if len(max_orient) > prime and max_orient[prime] > 0:
             orient = prime
             piece_check = prime
-            prime_powers.append([[1,0],[prime,0]])
+            prime_powers.append(
+                (
+                    PrimePower(value=1, pieces=0),
+                    PrimePower(value=prime, pieces=0),
+                )
+            )
         else:
             orient = 1
             piece_check = prime**2
-            prime_powers.append([[1,0],[prime,prime]])
+            prime_powers.append(
+                (
+                    PrimePower(value=1, pieces=0),
+                    PrimePower(value=prime, pieces=prime),
+                )
+            )
 
         while piece_check <= n:
-            prime_powers[-1].append([orient*piece_check,piece_check])
+            prime_powers[-1] += (
+                PrimePower(value=orient * piece_check, pieces=piece_check),
+            )
             piece_check *= prime
             if orient > 1 and piece_check > max_orient[prime]:
                 piece_check *= orient
                 orient = 1
 
-    #print(n,prime_powers)
     return prime_powers
 
 
-def possible_order_list(total_pieces,partition_max,max_orient):
-
-    prime_powers = prime_powers_below_n(partition_max,max_orient)
+def possible_order_list(total_pieces, partition_max, max_orient):
+    prime_powers = prime_powers_below_n(partition_max, max_orient)
 
     paths = []
-    stack = [[len(prime_powers)-1,0,1,[],[]]]
+    stack = [[len(prime_powers) - 1, 0, 1, [], []]]
 
     while stack:
         i, piece_count, product, powers, pieces = stack.pop()
-        if i == -1 or prime_powers[i][1][1] + piece_count > total_pieces:
-            paths.append([product, powers, pieces])
+        if i == -1 or prime_powers[i][1].pieces + piece_count > total_pieces:
+            paths.append(PrimeCombo(product, powers, pieces))
             continue
 
         for p in prime_powers[i]:
-            
-            new_pieces = piece_count + p[1]
-            if p[1] > 0 and p[1] % 2 == 0 and True: # False for 4x4, True else
+            new_pieces = piece_count + p.pieces
+            if p.pieces > 0 and p.pieces % 2 == 0 and True:  # False for 4x4, True else
                 new_pieces += 2
             if new_pieces <= total_pieces:
-                if p[0] == 1:
-                    stack.append([i-1,new_pieces,product,powers, pieces])
+                if p.value == 1:
+                    stack.append([i - 1, new_pieces, product, powers, pieces])
                 else:
-                    stack.append([i-1,new_pieces,product*p[0],powers + [p[0]], pieces + [p[1]]])
+                    stack.append(
+                        [
+                            i - 1,
+                            new_pieces,
+                            product * p.value,
+                            powers + [p.value],
+                            pieces + [p.pieces],
+                        ]
+                    )
 
-    paths = sorted(paths, key=lambda x: x[0], reverse=True)
+    paths = sorted(paths, key=lambda x: x.order, reverse=True)
     return paths
+
 
 # TODO(pri 3/5): on bigger cubes where phase 2 is not applicable, do special
 # optimizations that make this faster. only find the highest order
@@ -509,11 +544,10 @@ def possible_order_list(total_pieces,partition_max,max_orient):
 def highest_order_cycles_from_cubie_counts(
     cycle_cubie_counts, puzzle_orbit_definition, even_parity_constraints_helper
 ):
-    
     shared_cycles = []
     share_states = []
     free_share_count = 0
-    max_orient = [0]*4
+    max_orient = [0] * 4
     for i, cubie_count in enumerate(cycle_cubie_counts):
         if (
             cubie_count == 0
@@ -522,15 +556,20 @@ def highest_order_cycles_from_cubie_counts(
             == OrientationStatus.CannotOrient()
         ):
             share_states.append(ShareState.CANNOT_SHARE_ORIENTATION)
-        elif cubie_count == 1 :
+        elif cubie_count == 1:
             share_states.append(ShareState.MUST_SHARE_ORIENTATION)
+            max_orient[puzzle_orbit_definition.orbits[i].orientation_status.count] = 1
         else:
             share_states.append(ShareState.FREE)
             free_share_count += 1
-            max_orient[puzzle_orbit_definition.orbits[i].orientation_status.count] = cubie_count
+            max_orient[puzzle_orbit_definition.orbits[i].orientation_status.count] = (
+                cubie_count
+            )
 
-    possible_prime_powers = possible_order_list(sum(cycle_cubie_counts),max(cycle_cubie_counts),max_orient)
-    
+    possible_prime_powers = possible_order_list(
+        sum(cycle_cubie_counts), max(cycle_cubie_counts), max_orient
+    )
+
     for free_share in itertools.product(
         (False, True),
         repeat=free_share_count,
@@ -549,67 +588,95 @@ def highest_order_cycles_from_cubie_counts(
                     share.append(True)
 
         for prime_powers in possible_prime_powers:
-            #print(cycle_cubie_counts,'test',prime_powers[0])
+            # print(cycle_cubie_counts,'test',prime_powers[0])
             test_partitions = []
-            
-            stack = [[0,[0]*len(cycle_cubie_counts),[1]*len(cycle_cubie_counts),[[] for x in cycle_cubie_counts]]]
+
+            stack = [
+                [
+                    0,
+                    [0] * len(cycle_cubie_counts),
+                    [1] * len(cycle_cubie_counts),
+                    [[] for x in cycle_cubie_counts],
+                ]
+            ]
             while stack:
-                #print(stack[-1])
+                # print(stack[-1])
                 p, orbit_sums, orbit_products, assignments = stack.pop()
 
-                if p == len(prime_powers[1]):
-                    test_partitions.append([orbit_products,assignments])
+                if p == len(prime_powers.values):
+                    test_partitions.append([orbit_products, assignments])
                     continue
 
                 for i in range(len(orbit_sums)):
-                    if isinstance(puzzle_orbit_definition.orbits[i].orientation_status, OrientationStatus.CanOrient) and prime_powers[1][p] % puzzle_orbit_definition.orbits[i].orientation_status.count == 0:
-                        new_cycle = prime_powers[2][p]
+                    if (
+                        isinstance(
+                            puzzle_orbit_definition.orbits[i].orientation_status,
+                            OrientationStatus.CanOrient,
+                        )
+                        and prime_powers.values[p]
+                        % puzzle_orbit_definition.orbits[i].orientation_status.count
+                        == 0
+                    ):
+                        new_cycle = prime_powers.piece_counts[p]
                     else:
-                        new_cycle = prime_powers[1][p]
+                        new_cycle = prime_powers.values[p]
 
                     if new_cycle + orbit_sums[i] <= cycle_cubie_counts[i]:
-                        stack.append([p+1,orbit_sums.copy(),orbit_products.copy(),copy.deepcopy(assignments)])
+                        stack.append(
+                            [
+                                p + 1,
+                                orbit_sums.copy(),
+                                orbit_products.copy(),
+                                copy.deepcopy(assignments),
+                            ]
+                        )
                         stack[-1][1][i] += new_cycle
-                        stack[-1][2][i] *= prime_powers[1][p]
+                        stack[-1][2][i] *= prime_powers.values[p]
                         if new_cycle > 0:
                             stack[-1][3][i].append(new_cycle)
 
-            #print(test_partitions)
+            # print(test_partitions)
             for test_partition in test_partitions:
-                        
                 all_reduced_integer_partitions = []
-                #print(test_partition)
+                # print(test_partition)
                 for i in range(len(cycle_cubie_counts)):
-                    all_reduced_integer_partitions.append(reduced_integer_partitions(
-                        cycle_cubie_counts[i],
-                        i,
-                        tuple(test_partition[1][i]),
-                        test_partition[0][i],
-                        share[i],
-                        puzzle_orbit_definition,
-                        even_parity_constraints_helper,
-                    ))
+                    all_reduced_integer_partitions.append(
+                        reduced_integer_partitions(
+                            cycle_cubie_counts[i],
+                            i,
+                            tuple(test_partition[1][i]),
+                            test_partition[0][i],
+                            share[i],
+                            puzzle_orbit_definition,
+                            even_parity_constraints_helper,
+                        )
+                    )
 
                     if len(all_reduced_integer_partitions[-1]) == 0:
                         all_reduced_integer_partitions = []
                         break
-                
+
                 if len(all_reduced_integer_partitions) > 0:
-                    #print(all_reduced_integer_partitions)
+                    # print(all_reduced_integer_partitions)
 
                     partition_obj_path = [None] * len(all_reduced_integer_partitions)
 
                     stack = [(len(all_reduced_integer_partitions) - 1, 1, None, 0)]
                     while stack:
-                        i, running_order, partition_obj, next_even_parity_constraint_index = (
-                            stack.pop()
-                        )
+                        (
+                            i,
+                            running_order,
+                            partition_obj,
+                            next_even_parity_constraint_index,
+                        ) = stack.pop()
                         if partition_obj is not None:
                             partition_obj_path[i + 1] = partition_obj
                         continue_outer = False
                         while (
                             next_even_parity_constraint_index
-                            < len(even_parity_constraints_helper.first_constraint_indicies)
+                            < len(
+                                even_parity_constraints_helper.first_constraint_indicies
+                            )
                             and i + 1
                             == even_parity_constraints_helper.first_constraint_indicies[
                                 next_even_parity_constraint_index
@@ -654,12 +721,12 @@ def highest_order_cycles_from_cubie_counts(
                                 partition_objs=partition_obj_path.copy(),
                             )
                         )
-                    
+
             if len(shared_cycles) > 0:
                 break
-                
-    #print(shared_cycles)
-    #print(cycle_cubie_counts,len(shared_cycles))
+
+    # print(shared_cycles)
+    # print(cycle_cubie_counts,len(shared_cycles))
     return shared_cycles
 
 
@@ -675,13 +742,15 @@ def reduced_integer_partitions(
 ):
     orbit = puzzle_orbit_definition.orbits[orbit_index]
     partition_objs = []
-    for remaining_partition in integer_partitions(cycle_cubie_count-sum(starting_partition)):
+    for remaining_partition in integer_partitions(
+        cycle_cubie_count - sum(starting_partition)
+    ):
         partition = tuple(remaining_partition + starting_partition)
         if s:
             partition = (1,) + partition
         order = math.lcm(*partition)
-        
-        #print('bbb',partition)
+
+        # print('bbb',partition)
         always_orient = None
         critical_orient = None
         if isinstance(orbit.orientation_status, OrientationStatus.CanOrient):
@@ -811,7 +880,7 @@ def main():
     start = timeit.default_timer()
     cycle_combinations = optimal_cycle_combinations(
         puzzle_orbit_definition=puzzle_orbit_definitions.PUZZLE_3x3,
-        num_cycles=2,
+        num_cycles=4,
     )
     print(timeit.default_timer() - start)
     print(recursive_shared_cycle_combinations.cache_info())
