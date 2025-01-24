@@ -747,6 +747,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "puzzle_geometry"
+version = "0.1.0"
+
+[[package]]
 name = "qter_core"
 version = "0.1.0"
 dependencies = [
