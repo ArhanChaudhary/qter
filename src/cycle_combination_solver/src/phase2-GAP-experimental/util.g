@@ -83,7 +83,7 @@ PermutationSpeffz := function(perm)
 end;
 
 
-LiftClassesEANonsolvCentralOfOrder := function( Npcgs, cl,hom,pcisom,solvtriv, order )
+LiftClassesEANonsolvCentralOfStructure := function( Npcgs, cl,hom,pcisom,solvtriv, structure )
 local  classes,            # classes to be constructed, the result
         field,             # field over which <Npcgs> is a vector space
         o,
@@ -251,7 +251,7 @@ local  classes,            # classes to be constructed, the result
 
   if Length(com.factorspace)=0 then
     ## classes :=[[h,stabrad,stabfacgens,stabfacimg,subsz,stabrsubsz]];
-    if Order(h) = order then
+    if CycleStructurePerm(h) = structure then
       classes := [h];
     else
       classes := [];
@@ -272,7 +272,7 @@ local  classes,            # classes to be constructed, the result
   ##Assert(3,c[6]
   ##  =Size(Group(Concatenation(c[2],DenominatorOfModuloPcgs(Npcgs)))));
 
-      if Order(c) = order then
+      if CycleStructurePerm(c) = structure then
         Add(classes,c);
       fi;
     od;
@@ -283,7 +283,7 @@ local  classes,            # classes to be constructed, the result
 end;
 
 
-LiftClassesEATrivRepOfOrder := function( Npcgs, cl, fants,hom, pcisom,solvtriv, order)
+LiftClassesEATrivRepOfStructure := function( Npcgs, cl, fants,hom, pcisom,solvtriv, structure)
     local  h,field,one,gens,imgs,M,bas,
            c,i,npcgsact,usent,dim,found,nsgens,nsimgs,mo,
            pcgsimgs,
@@ -605,7 +605,7 @@ if miss<>1 then
 #if rsgens<>InducedPcgsByGenerators(FamilyPcgs(Range(pcisom)),rsgens) then
 #  Error("nonpcgs!");
 #fi;
-    if Order(a) = order then
+    if CycleStructurePerm(a) = structure then
       Add(newo,a);
     fi;
   od;
@@ -613,7 +613,7 @@ if miss<>1 then
 end;
 
 
-LiftClassesEANonsolvGeneralOfOrder := function(Npcgs, cl, hom, pcisom,solvtriv, order)
+LiftClassesEANonsolvGeneralOfStructure := function(Npcgs, cl, hom, pcisom,solvtriv, structure)
     local  classes,    # classes to be constructed, the result
            correctingelement,
            field,      # field over which <N> is a vector space
@@ -748,7 +748,7 @@ LiftClassesEANonsolvGeneralOfOrder := function(Npcgs, cl, hom, pcisom,solvtriv, 
 
 ##     Add(classes,c);
     c := h * rep;
-    if Order(c) = order then
+    if CycleStructurePerm(c) = structure then
       Add(classes,c);
     fi;
   od;
@@ -758,7 +758,7 @@ LiftClassesEANonsolvGeneralOfOrder := function(Npcgs, cl, hom, pcisom,solvtriv, 
 end;
 
 
-ConjugacyClassesOfOrderViaRadical := function (G, order)
+ConjugacyClassesOfStructureViaRadical := function (G, structure)
 local ##r,        #radical
       f,        # G/r
       hom,      # G->f
@@ -905,7 +905,7 @@ local ##r,        #radical
         Info(InfoHomClass,3,"central step");
         ##new:=LiftClassesEANonsolvCentral(mpcgs,i,hom,pcisom,solvtriv);
         if d = Length(ser.depths) then
-          new:=LiftClassesEANonsolvCentralOfOrder(mpcgs,i,hom,pcisom,solvtriv,order);
+          new:=LiftClassesEANonsolvCentralOfStructure(mpcgs,i,hom,pcisom,solvtriv,structure);
         else
           new:=LiftClassesEANonsolvCentral(mpcgs,i,hom,pcisom,solvtriv);
         fi;
@@ -913,14 +913,14 @@ local ##r,        #radical
         # special case for trivial representative
         ##new:=LiftClassesEATrivRep(mpcgs,i,fants,hom,pcisom,solvtriv);
         if d = Length(ser.depths) then
-          new:=LiftClassesEATrivRepOfOrder(mpcgs,i,fants,hom,pcisom,solvtriv,order);
+          new:=LiftClassesEATrivRepOfStructure(mpcgs,i,fants,hom,pcisom,solvtriv,structure);
         else
           new:=LiftClassesEATrivRep(mpcgs,i,fants,hom,pcisom,solvtriv);
         fi;
         if new=fail then
           ##new:=LiftClassesEANonsolvGeneral(mpcgs,i,hom,pcisom,solvtriv);
           if d = Length(ser.depths) then
-            new:=LiftClassesEANonsolvGeneralOfOrder(mpcgs,i,hom,pcisom,solvtriv,order);
+            new:=LiftClassesEANonsolvGeneralOfStructure(mpcgs,i,hom,pcisom,solvtriv,structure);
           else
             new:=LiftClassesEANonsolvGeneral(mpcgs,i,hom,pcisom,solvtriv);
           fi;
@@ -929,7 +929,7 @@ local ##r,        #radical
         ##new:=LiftClassesEANonsolvGeneral(mpcgs,i,hom,pcisom,solvtriv);
       ##fi;
       elif d = Length(ser.depths) then
-        new:=LiftClassesEANonsolvGeneralOfOrder(mpcgs,i,hom,pcisom,solvtriv,order);
+        new:=LiftClassesEANonsolvGeneralOfStructure(mpcgs,i,hom,pcisom,solvtriv,structure);
       else
         new:=LiftClassesEANonsolvGeneral(mpcgs,i,hom,pcisom,solvtriv);
       fi;
@@ -983,24 +983,24 @@ local ##r,        #radical
   return cl;
 end;
 
-ConjugacyClassesOfOrder := function( G, order )
+ConjugacyClassesOfStructure := function( G, structure )
 local cl;
   cl:=ConjugacyClassesForSmallGroup(G);
   if cl<>fail then
     ##return cl;
-    return Filtered(cl, c -> Order(Representative(c))=order);
+    return Filtered(cl, c -> Order(Representative(c))=structure);
   elif IsSolvableGroup( G ) and CanEasilyComputePcgs(G) then
     ##return ConjugacyClassesForSolvableGroup(G);
-    return Filtered(ConjugacyClassesForSolvableGroup(G), c -> Order(Representative(c))=order);
+    return Filtered(ConjugacyClassesForSolvableGroup(G), c -> Order(Representative(c))=structure);
   elif IsNonabelianSimpleGroup( G ) then
     cl:=ClassesFromClassical(G);
     if cl=fail then
       cl:=ConjugacyClassesByRandomSearch( G );
     fi;
     ##return cl;
-    return Filtered(cl, c -> Order(Representative(c))=order);
+    return Filtered(cl, c -> Order(Representative(c))=structure);
   else
     ##return ConjugacyClassesViaRadical(G);
-    return ConjugacyClassesOfOrderViaRadical(G, order);
+    return ConjugacyClassesOfStructureViaRadical(G, structure);
   fi;
 end;
