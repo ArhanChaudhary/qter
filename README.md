@@ -90,10 +90,11 @@ loop {
 ### Table of Contents
 
 - [How does qter work?](#how-does-qter-work)
-  - [Mathematics](#mathematics)
-  - [Can we do bigger numbers?](#can-we-do-bigger-numbers)
+  - [Introduction](#introduction)
+  - [Addition](#addition)
+  - [Bigger numbers](#bigger-numbers)
   - [Branching](#branching)
-  - [Multiple numbers on one cube?](#multiple-numbers-on-one-cube)
+  - [Multiple numbers](#multiple-numbers)
 - [Physically running qter](#physically-running-qter)
   - [The Q file format](#the-q-file-format)
   - [Logical instructions](#logical-instructions)
@@ -115,6 +116,8 @@ loop {
 - [Acknowledgements](#acknowledgements)
 
 # How does qter work?
+
+## Introduction
 
 First, we will assume that you are familiar with [standard move notation](https://jperm.net/3x3/moves) for a Rubik's cube.
 
@@ -142,7 +145,7 @@ If we apply the algorithm `U` four times, we find that it returns back to state 
 
 This doesn't mean that we can't do math though, we just have to treat numbers as if they "wrap around" at four. This is analogous to the way analog clocks wrap around after twelve. The difference between our scheme and analog clocks is that we will consider the solved state to represent "zero" instead of "four".
 
-## Mathematics
+## Addition
 
 Can we justify this way of representing numbers? Let's consider adding "two" to "one". We reach the "two" state using the algorithm `U U`, so if we apply that algorithm to the "one" state, we will find the cube in the same state as if we applied `(U) (U U)`, or `U U U`, which is exactly how we reach the state labelled "three". It's easy to see that associativity of moves makes addition valid in this scheme. What if we wanted to add "three" to "two"? We would expect a result of "five", but since the numbers wrap around upon reaching four, we would actually expect to reach the state of "one". You can try on your own Rubik's cube and see that it works.
 
@@ -150,7 +153,7 @@ What if we want to perform subtraction? We know that addition is performed using
 
 You may notice that subtracting one is equivalent to adding three, because `U'` is equivalent to `U U U`. It may seem like this impedes our ability to do math, but by working through an example one can see that it doesn't: Adding three to one gives four, but since four wraps around to zero, our result is actually zero, as if we subtracted one. In general, any number may be seen as positive or negative: -1 = 3, -2 = 2, and -3 = 1. You can manually verify this yourself if you like.
 
-## Can we do bigger numbers?
+## Bigger numbers
 
 If the biggest number qter could represent was three, it would not be an effective tool for computation. Thankfully, the Rubik's cube has 43 quintillion states, leaving us lots of room to do better than just four. Consider the algorithm `R U`. We can play the same game using this algorithm. The solved cube represents zero, `R U` represents one, `R U R U` represents two, etc. This algorithm performs a much more complicated action on the cube, so we should be able to represent more numbers. In fact, the maximum number we can represent this way is 104, wrapping around after 105 iterations. We would say that the algorithm has "order 105".
 
@@ -162,7 +165,7 @@ The next thing that a computer must be able to do is _branch_, without it we can
 
 If you perform "R U" on a cube a bunch of times without counting, it's essentially impossible for you to tell how many times you did the algorithm by _just looking_ at the cube. With one exception: If you did it _zero_ times, then the cube is solved and it's completely obvious that you did it zero times. Since we want qter code to be executable by humans, the "solved-goto" instruction asks you to go to a different location of the program _only_ if the cube is solved. In the Q format, you can see that "solved-goto" specifies the line number to jump to.
 
-## Multiple numbers on one cube?
+## Multiple numbers
 
 If you think about what programs you could actually execute with just a single number and a "jump if zero" instruction, it would be almost nothing. What would be wonderful is if we could represent _multiple_ numbers on the cube at the same time.
 
@@ -629,4 +632,5 @@ Talking points
 - [@Voltara](https://github.com/Voltara) for their [optimal solver](https://github.com/Voltara/vcube) used to compress algorithms.
 - [@benwh1](https://github.com/benwh1) and [@adrian154](https://github.com/adrian154) for miscellaneous puzzle theory insights.
 - [@DitrusNight](https://github.com/DitrusNight) for advising our programming language design.
-- [@Infinidoge](https://github.com/Infinidoge) for generously providing access to powerful hardware for the cycle combination solver.
+- [@Phineas1500](https://github.com/Phineas1500) for encouragement and outreach.
+- [@Infinidoge](https://github.com/Infinidoge) for generously providing access to powerful hardware.
