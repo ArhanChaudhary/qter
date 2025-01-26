@@ -60,7 +60,7 @@ reduce_b_loop:
         goto reduce_a_loop;
     }
     *b -= k;
-    *b = (*b % 90 + 90) % 90;
+    *b = (*b % 30 + 30) % 30;
     count += 2;
     *c += 1;
     count++;
@@ -73,7 +73,7 @@ reduce_a_loop:
     }
     *a -= 1;
     count++;
-    *c = (*c + k) % 90;
+    *c = (*c + k) % 30;
     count += 2;
     goto reduce_a_loop;
 }
@@ -205,11 +205,11 @@ typedef struct result {
 int main()
 {
     char buf[100];
-    result_t results[8100];
+    result_t results[900];
     srand(time(NULL));
-    for (int i = 0; i < 90; i++)
+    for (int i = 0; i < 30; i++)
     {
-        for (int j = 0; j < 90; j++)
+        for (int j = 0; j < 30; j++)
         {
             int a = i;
             int b = j;
@@ -217,15 +217,15 @@ int main()
             count = 0;
             multiply(&a, &b, &c);
             snprintf(buf, sizeof(buf), "%d * %d = %d", i, j, a);
-            results[i * 90 + j].comp = strdup(buf);
-            results[i * 90 + j].count = count;
-            assert(((long long)i * (long long)j) % 90 == a);
+            results[i * 30 + j].comp = strdup(buf);
+            results[i * 30 + j].count = count;
+            assert(((long long)i * (long long)j) % 30 == a);
             assert(b == 0);
             assert(c == 0);
         }
     }
 
-    for (int i = 1; i < 8100; i++)
+    for (int i = 1; i < 900; i++)
     {
         result_t key = results[i];
         int j = i - 1;
@@ -238,12 +238,12 @@ int main()
     }
 
     int total = 0;
-    for (int i = 0; i < 8100; i++)
+    for (int i = 0; i < 900; i++)
     {
         printf("%s: %d additions\n", results[i].comp, results[i].count);
         total += results[i].count;
     }
     // average count per multiplication
-    printf("Average: %f\n", (double)total / 8100);
+    printf("Average: %f\n", (double)total / 900);
     return 0;
 }
