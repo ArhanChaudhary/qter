@@ -6,6 +6,7 @@
 - Look into fixing a corner for even cubes/other puzzles
 - QAT Macros
 - Memory tapes
+- Dynamically shuffle sub-cycles with syntax X ← A\*B\*C\*D, Y ← E\*F\*G\*H
 - Function calls
 - Directory of testing programs instead of hardcoding into Rust
 - Translate multiplication program to QAT
