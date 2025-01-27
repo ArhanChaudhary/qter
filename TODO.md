@@ -15,6 +15,7 @@
 - ⭐Optimize additions using the precomputed tables
 - ⭐`A%2` syntax
 - QAT Macros
+  - Actual expansion
   - `after` syntax
   - Lua stuff
 - Memory tapes
