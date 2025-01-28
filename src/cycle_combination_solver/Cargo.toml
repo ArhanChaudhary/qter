@@ -16,3 +16,6 @@ num-traits = "0.2.19"
 
 [lints]
 workspace = true
+
+[features]
+slow-tests = []

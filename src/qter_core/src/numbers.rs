@@ -2,6 +2,7 @@
 use std::{
     cmp::Ordering,
     fmt::{Debug, Display},
+    iter::{Product, Sum},
     marker::PhantomData,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign},
     str::FromStr,
@@ -209,7 +210,7 @@ macro_rules! impl_signed_variants {
             fn $name(self, rhs: Int<U>) -> Int<I> {
                 let $a = self.value;
                 let $b = rhs.value;
-                Int::from_inner($unsigned_code)
+                Int::from_inner($signed_code)
             }
         }
 
@@ -249,7 +250,7 @@ macro_rules! impl_signed_variants {
     };
 }
 
-impl_signed_variants!(Add, add, AddAssign, add_assign,|a, b| signed a + b, unsigned a + b);
+impl_signed_variants!(Add, add, AddAssign, add_assign, |a, b| signed a + b, unsigned a + b);
 impl_signed_variants!(Mul, mul, MulAssign, mul_assign, |a, b| signed a * b, unsigned a * b);
 impl_signed_variants!(Sub, sub, SubAssign, sub_assign, |a, b| signed a - b, unsigned {
     let v = a - b;
@@ -329,5 +330,53 @@ impl<Signed> Neg for Int<Signed> {
             value: -self.value,
             phantom: PhantomData,
         }
+    }
+}
+
+impl Sum for Int<U> {
+    fn sum<V: Iterator<Item = Self>>(iter: V) -> Self {
+        let mut accumulator = Int::<U>::zero();
+
+        for item in iter {
+            accumulator += item;
+        }
+
+        accumulator
+    }
+}
+
+impl Sum for Int<I> {
+    fn sum<V: Iterator<Item = Self>>(iter: V) -> Self {
+        let mut accumulator = Int::<I>::zero();
+
+        for item in iter {
+            accumulator += item;
+        }
+
+        accumulator
+    }
+}
+
+impl Product for Int<U> {
+    fn product<V: Iterator<Item = Self>>(iter: V) -> Self {
+        let mut accumulator = Int::<U>::zero();
+
+        for item in iter {
+            accumulator *= item;
+        }
+
+        accumulator
+    }
+}
+
+impl Product for Int<I> {
+    fn product<V: Iterator<Item = Self>>(iter: V) -> Self {
+        let mut accumulator = Int::<I>::zero();
+
+        for item in iter {
+            accumulator *= item;
+        }
+
+        accumulator
     }
 }

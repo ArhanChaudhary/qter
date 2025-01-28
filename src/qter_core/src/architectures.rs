@@ -171,9 +171,26 @@ pub struct Permutation {
     cycles: OnceLock<Vec<Vec<usize>>>,
 }
 
+impl core::fmt::Display for Permutation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.cycles().iter().fold(String::new(), |mut a, v| {
+            a.push('(');
+            a.push_str(
+                &v.iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", "),
+            );
+            a.push(')');
+
+            a
+        }))
+    }
+}
+
 impl core::fmt::Debug for Permutation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Permutation")
+        write!(f, "{self}")
     }
 }
 

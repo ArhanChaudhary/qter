@@ -227,7 +227,7 @@ impl<T: core::hash::Hash> core::hash::Hash for WithSpan<T> {
 }
 
 /// Represents a sequence of moves to apply to a puzzle in the `Program`
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct PermutePuzzle {
     group: Arc<PermutationGroup>,
     permutation: Permutation,
@@ -317,6 +317,23 @@ impl PermutePuzzle {
     }
 }
 
+impl core::fmt::Debug for PermutePuzzle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PermutePuzzle")
+            .field("permutation", &self.permutation)
+            // .field(
+            //     "generators",
+            //     &self
+            //         .generators
+            //         .iter()
+            //         .map(|v| &**v)
+            //         .intersperse(" ")
+            //         .collect::<String>(),
+            // )
+            .finish_non_exhaustive()
+    }
+}
+
 /// The facelets needed for `solved-goto`
 #[derive(Debug, Clone)]
 pub enum Facelets {
@@ -372,6 +389,7 @@ pub enum Instruction {
 }
 
 /// A qter program
+#[derive(Debug)]
 pub struct Program {
     /// A list of theoretical registers along with their orders
     pub theoretical: Vec<WithSpan<Int<U>>>,

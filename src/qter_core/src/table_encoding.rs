@@ -218,17 +218,11 @@ fn rest_weighted(ranges: &mut [u16], mut range_left: usize, distribution: &[u32]
 
         let range_to_take =
             (range_available * distribution[i] as usize / total_weight).saturating_sub(1);
-        println!(
-            "{range_available} * {} / {total_weight} - 1 = {range_to_take}; {range_left} → {}",
-            distribution[i],
-            range_left - range_to_take
-        );
         range_left -= range_to_take;
         *dist_spot += range_to_take as u16;
         total_weight -= distribution[i] as usize;
         amt_to_set -= 1;
     }
-    println!("{ranges:?}");
 }
 
 /// Decodes a table and returns None if it can't be decoded
@@ -471,7 +465,6 @@ fn ans_encode(
     symbol_count: usize,
     mut next_ranges: impl FnMut(Option<u16>, &mut [u16]),
 ) {
-    println!("Encoding");
     let mut ranges = vec![0; symbol_count * symbols.len()];
 
     (iter::once(None).chain(symbols.iter().copied().map(Some)))
@@ -754,14 +747,14 @@ R U R' U R U' R' U' R' F R F'";
         let decoded = decode_table(&encoded).unwrap();
         assert_eq!(algs, decoded);
 
-        panic!(
-            "{} → {} : {:.2}\n{} → {} : {:.2}",
-            spec.len(),
-            encoded.len(),
-            1. - encoded.len() as f64 / spec.len() as f64,
-            spec.len(),
-            data_without_header,
-            1. - data_without_header as f64 / spec.len() as f64
-        );
+        // panic!(
+        //     "{} → {} : {:.2}\n{} → {} : {:.2}",
+        //     spec.len(),
+        //     encoded.len(),
+        //     1. - encoded.len() as f64 / spec.len() as f64,
+        //     spec.len(),
+        //     data_without_header,
+        //     1. - data_without_header as f64 / spec.len() as f64
+        // );
     }
 }

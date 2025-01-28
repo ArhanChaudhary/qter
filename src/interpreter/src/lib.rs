@@ -479,7 +479,7 @@ mod tests {
     use internment::ArcIntern;
     use qter_core::{architectures::PuzzleDefinition, Int, PermutePuzzle, RegisterGenerator, U};
 
-    use crate::{Interpreter, PausedState, Puzzle};
+    use crate::{ExecutionState, Interpreter, PausedState, Puzzle};
 
     #[test]
     fn facelets_solved() {
@@ -494,7 +494,7 @@ mod tests {
 
         group
             .group
-            .compose_generators_into(&mut cube.state, [ArcIntern::from_ref("U")].iter())
+            .compose_generators_into(&mut cube.state, [ArcIntern::from("U")].iter())
             .unwrap();
 
         assert!(cube.facelets_solved(&[0, 12, 15, 7, 40]));
@@ -512,7 +512,7 @@ mod tests {
 
         let permutation = PermutePuzzle::new_from_generators(
             Arc::clone(&group.group),
-            vec![ArcIntern::from_ref("U")],
+            vec![ArcIntern::from("U")],
         )
         .unwrap();
 
@@ -571,6 +571,7 @@ mod tests {
         );
 
         for i in 0..24 {
+            println!("{i}");
             for j in 0..210 {
                 assert_eq!(
                     cube.decode(&b_facelets, &b_permutation).unwrap(),

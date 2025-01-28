@@ -545,6 +545,7 @@ mod tests {
     use crate::phase2::{cube, parser};
     use itertools::{repeat_n, Itertools};
 
+    #[cfg(feature = "slow-tests")]
     #[test]
     fn test_custom_permutation_index() {
         for cubies in 1..=10 {

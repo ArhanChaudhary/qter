@@ -31,6 +31,7 @@ mod tests {
     use solver::IDASolver;
     use std::time::Instant;
 
+    #[cfg(feature = "slow-tests")]
     #[test]
     fn test_cycle_type() {
         let cycle_type = CycleType {
