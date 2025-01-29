@@ -1,6 +1,8 @@
 mod puzzles;
+use std::{cmp::Ordering, mem};
+
 use itertools::Itertools;
-use nalgebra::{Matrix2, Matrix3x2, Vector3};
+use nalgebra::{Matrix2, Matrix3, Matrix3x2, Rotation3, Unit, Vector3};
 pub use puzzles::*;
 
 mod puzzle_geometry;
@@ -11,7 +13,7 @@ mod defaults;
 mod options;
 
 // Margin of error to consider points "equal"
-const E: f64 = 0.000001;
+const E: f64 = 1e-9;
 
 type PuzzleDescriptionString<'a> = &'a str;
 
@@ -23,23 +25,57 @@ pub enum Error {
     FaceNotConvex(Face),
     #[error("The face forms a line or a point rather than a plane: {0:?}")]
     FaceIsDegenerate(Face),
+    #[error(
+        "The puzzle does not have {1}-fold rotational symmetry as expected by the cut line: {0:?}"
+    )]
+    PuzzleLacksExpectedSymmetry(Vector3<f64>, u8),
+    #[error("The puzzle does not have any rotational symmetry along the cut line: {0:?}")]
+    PuzzleLacksSymmetry(Vector3<f64>),
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Point(Vector3<f64>);
 
-#[derive(Clone, Copy, Debug)]
-pub struct Cut {
-    // Direction is normal to the cut plane and the magnitude is the spacing between the cut planes
-    pub normal: Vector3<f64>,
-    // Cut like a 2x2 or 3x3? If false, the origin is cut, like a 2x2. If true, the origin is halfway between two cuts, like a 3x3.
-    pub phase: bool,
+#[derive(Clone, Debug)]
+pub struct CutAxis<'a> {
+    /// The names for slices forward of the cut plane
+    pub forward_name: &'a str,
+    /// The names for slices backward of the cut plane
+    pub backward_name: &'a str,
+    /// The expected degree of symmetry of the cut. If this is `None`, the symmetry will be auto detected.
+    /// Otherwise, this symmetry will be verified and used.
+    pub expected_symmetry: Option<u8>,
+    /// Direction is normal to the cut plane
+    pub normal: Unit<Vector3<f64>>,
+    /// The distances away from the origin for all of the slices
+    pub distances: Vec<f64>,
+}
+
+fn rotation_of_degree(axis: Vector3<f64>, symm: u8) -> Matrix3<f64> {
+    Rotation3::from_axis_angle(
+        &Unit::new_normalize(axis),
+        core::f64::consts::TAU / (symm as f64),
+    )
+    .into()
 }
 
 #[derive(Clone, Debug)]
 pub struct Face(pub Vec<Point>);
 
 impl Face {
+    /// Rotate the face around the origin with the given axis and symmetry
+    pub fn rotated(mut self, axis: Vector3<f64>, symmetry: u8) -> Face {
+        assert_ne!(symmetry, 0);
+
+        let rotation = rotation_of_degree(axis, symmetry);
+
+        for point in &mut self.0 {
+            point.0 = rotation * point.0;
+        }
+
+        self
+    }
+
     fn is_valid(&self) -> Result<(), Error> {
         // TEST DEGENERACY
 
@@ -62,7 +98,7 @@ impl Face {
 
         // TEST COPLANAR
 
-        // These two vectors define a 2d subspace that all points in the face should lie in
+        // These two vectors define a 3D subspace that all points in the face should lie in
         let basis1 = self.0[1].0 - origin;
         let basis2 = self.0[2].0 - origin;
 
@@ -108,30 +144,196 @@ impl Face {
 
         Ok(())
     }
+
+    fn edge_cloud(&self) -> Vec<(Vector3<f64>, Vector3<f64>)> {
+        let mut cloud = Vec::new();
+
+        for (vertex1, vertex2) in self.0.iter().cycle().tuple_windows().take(self.0.len()) {
+            cloud.push((vertex1.0, vertex2.0));
+        }
+
+        cloud
+    }
+
+    fn epsilon_eq(&self, other: &Face) -> bool {
+        edge_cloud_eq(&self.edge_cloud(), &other.edge_cloud())
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct Polyhedron(pub Vec<Face>);
 
 #[derive(Clone, Debug)]
-pub struct PuzzleDefinition {
+pub struct PuzzleDefinition<'a> {
     pub polyhedron: Polyhedron,
-    pub cuts: Vec<Cut>,
+    pub cut_axes: Vec<CutAxis<'a>>,
 }
 
-pub fn puzzle_geometry(puzzle: PuzzleDefinition) -> Result<(), Error> {
-    for face in &puzzle.polyhedron.0 {
-        face.is_valid()?;
+impl<'a> PuzzleDefinition<'a> {
+    pub fn geometry(mut self) -> Result<(), Error> {
+        for face in &self.polyhedron.0 {
+            face.is_valid()?;
+        }
+
+        self.find_symmetries()?;
+
+        Ok(())
     }
 
-    Ok(())
+    fn find_symmetries(&mut self) -> Result<(), Error> {
+        let cloud = self.edge_cloud();
+        let mut into = cloud.to_owned();
+
+        for cut in &mut self.cut_axes {
+            match cut.expected_symmetry {
+                Some(symm) => {
+                    let matrix = rotation_of_degree(*cut.normal, symm);
+
+                    if !try_symmetry(&cloud, &mut into, matrix) {
+                        return Err(Error::PuzzleLacksExpectedSymmetry(*cut.normal, symm));
+                    }
+                }
+                None => {
+                    let mut min_symm = 1_u8;
+                    let mut trying_symm = 1_u8;
+
+                    loop {
+                        trying_symm = match trying_symm.checked_add(min_symm) {
+                            Some(new_symm) => new_symm,
+                            None => break,
+                        };
+
+                        let matrix = rotation_of_degree(*cut.normal, trying_symm);
+
+                        if try_symmetry(&cloud, &mut into, matrix) {
+                            min_symm = trying_symm;
+                        }
+                    }
+
+                    cut.expected_symmetry = Some(min_symm);
+                }
+            }
+
+            if cut.expected_symmetry.unwrap() <= 1 {
+                return Err(Error::PuzzleLacksSymmetry(*cut.normal));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// A sorted list of sorted points, used for structural equality
+    fn edge_cloud(&self) -> Vec<(Vector3<f64>, Vector3<f64>)> {
+        let mut cloud = Vec::new();
+
+        for cut_axis in &self.cut_axes {
+            // Cuts must also have the correct symmetry, but they are automatically rotationally symmetric with themselves
+            for cut in &cut_axis.distances {
+                let cut_spot = *cut_axis.normal * *cut;
+                cloud.push((cut_spot, -cut_spot));
+            }
+        }
+
+        for face in &self.polyhedron.0 {
+            cloud.extend_from_slice(&face.edge_cloud());
+        }
+
+        sort_edge_cloud(&mut cloud);
+
+        cloud
+    }
+}
+
+fn try_symmetry(
+    cloud: &[(Vector3<f64>, Vector3<f64>)],
+    into: &mut [(Vector3<f64>, Vector3<f64>)],
+    matrix: Matrix3<f64>,
+) -> bool {
+    into.copy_from_slice(cloud);
+
+    for point in into.iter_mut().flat_map(|(a, b)| [a, b]) {
+        *point = matrix * *point;
+    }
+
+    sort_edge_cloud(into);
+
+    edge_cloud_eq(cloud, into)
+}
+
+fn sort_edge_cloud(cloud: &mut [(Vector3<f64>, Vector3<f64>)]) {
+    for (a, b) in &mut *cloud {
+        let ordering = a
+            .iter()
+            .zip(b.iter())
+            .map(|(x1, x2)| {
+                if (x1 - x2).abs() < E {
+                    return Ordering::Equal;
+                }
+
+                x1.total_cmp(x2)
+            })
+            .find_or_last(|v| !matches!(v, Ordering::Equal))
+            .unwrap();
+
+        if matches!(ordering, Ordering::Greater) {
+            mem::swap(a, b);
+        }
+    }
+
+    cloud.sort_unstable_by(|(a1, b1), (a2, b2)| {
+        a1.as_slice()
+            .iter()
+            .zip(a2.as_slice().iter())
+            .chain(b1.as_slice().iter().zip(b2.as_slice().iter()))
+            .map(|(x1, x2)| {
+                if (x1 - x2).abs() < E {
+                    return Ordering::Equal;
+                }
+
+                x1.total_cmp(x2)
+            })
+            .find_or_last(|v| !matches!(v, Ordering::Equal))
+            .unwrap()
+    });
+}
+
+fn edge_cloud_eq(
+    cloud1: &[(Vector3<f64>, Vector3<f64>)],
+    cloud2: &[(Vector3<f64>, Vector3<f64>)],
+) -> bool {
+    // let mut found_in_second_cloud = vec![false; cloud1.len()];
+
+    // 'next_point: for (a1, b1) in cloud1 {
+    //     for (i, (a2, b2)) in cloud2
+    //         .iter()
+    //         .enumerate()
+    //         .zip(&found_in_second_cloud)
+    //         .filter(|v| !v.1)
+    //         .map(|v| v.0)
+    //     {
+    //         if (a1.metric_distance(a2) < E && b1.metric_distance(b2) < E)
+    //             || (a1.metric_distance(b2) < E && b1.metric_distance(a2) < E)
+    //         {
+    //             found_in_second_cloud[i] = true;
+    //             continue 'next_point;
+    //         }
+    //     }
+
+    //     return false;
+    // }
+
+    // true
+    cloud1
+        .iter()
+        .zip(cloud2)
+        .all(|((a1, b1), (a2, b2))| (a1.metric_distance(a2) < E) && (b1.metric_distance(b2) < E))
 }
 
 #[cfg(test)]
 mod tests {
-    use nalgebra::Vector3;
+    use nalgebra::{Unit, Vector3};
 
-    use crate::{Error, Face, Point};
+    use crate::{CutAxis, Error, Face, Point, Polyhedron, PuzzleDefinition, CUBE};
 
     #[test]
     fn degeneracy() {
@@ -209,5 +411,66 @@ mod tests {
         .is_valid();
 
         assert!(matches!(valid, Ok(())));
+    }
+
+    #[test]
+    fn symmetries_simple() {
+        let mut one_face = PuzzleDefinition {
+            polyhedron: Polyhedron(vec![Face(vec![
+                Point(Vector3::new(1., 0., 1.)),
+                Point(Vector3::new(-1., 0., 1.)),
+                Point(Vector3::new(-1., 0., -1.)),
+                Point(Vector3::new(1., 0., -1.)),
+            ])]),
+            cut_axes: vec![CutAxis {
+                forward_name: "F",
+                backward_name: "B",
+                expected_symmetry: None,
+                normal: Unit::new_normalize(Vector3::new(1., 0., 0.)),
+                distances: vec![0.5],
+            }],
+        };
+
+        one_face.find_symmetries().unwrap();
+
+        for cut_axis in one_face.cut_axes {
+            assert_eq!(cut_axis.expected_symmetry, Some(2));
+        }
+    }
+
+    #[test]
+    fn symmetries() {
+        let mut three_by_three = PuzzleDefinition {
+            polyhedron: CUBE.to_owned(),
+            cut_axes: vec![
+                CutAxis {
+                    forward_name: "R",
+                    backward_name: "L",
+                    expected_symmetry: None,
+                    normal: Unit::new_normalize(Vector3::new(1., 0., 0.)),
+                    distances: vec![1. / 3.],
+                },
+                CutAxis {
+                    forward_name: "U",
+                    backward_name: "D",
+                    expected_symmetry: None,
+                    normal: Unit::new_normalize(Vector3::new(0., 1., 0.)),
+                    distances: vec![1. / 3.],
+                },
+                CutAxis {
+                    forward_name: "F",
+                    backward_name: "B",
+                    expected_symmetry: None,
+                    normal: Unit::new_normalize(Vector3::new(0., 0., 1.)),
+                    distances: vec![1. / 3.],
+                },
+            ],
+        };
+
+        three_by_three.find_symmetries().unwrap();
+
+        for cut_axis in three_by_three.cut_axes {
+            assert_eq!(cut_axis.expected_symmetry, Some(4));
+        }
     }
 }

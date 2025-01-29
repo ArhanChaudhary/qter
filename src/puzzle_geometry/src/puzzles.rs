@@ -1,4 +1,30 @@
-use crate::PuzzleDescriptionString;
+use std::sync::LazyLock;
+
+use nalgebra::Vector3;
+
+use crate::{Face, Point, Polyhedron, PuzzleDescriptionString};
+
+pub static CUBE: LazyLock<Polyhedron> = LazyLock::new(|| {
+    let up = Face(vec![
+        Point(Vector3::new(1., 1., 1.)),
+        Point(Vector3::new(-1., 1., 1.)),
+        Point(Vector3::new(-1., 1., -1.)),
+        Point(Vector3::new(1., 1., -1.)),
+    ]);
+
+    let right = up.to_owned().rotated(Vector3::new(1., 0., 0.), 4);
+    let down = right.to_owned().rotated(Vector3::new(1., 0., 0.), 4);
+    let left = down.to_owned().rotated(Vector3::new(1., 0., 0.), 4);
+
+    let front = up.to_owned().rotated(Vector3::new(0., 0., 1.), 4);
+    let back = up.to_owned().rotated(Vector3::new(0., 0., -1.), 4);
+
+    Polyhedron(vec![up, right, down, left, front, back])
+});
+
+pub static SHAPES: phf::Map<&'static str, &LazyLock<Polyhedron>> = phf::phf_map! {
+    "c" => &CUBE,
+};
 
 pub static PUZZLES: phf::Map<&'static str, PuzzleDescriptionString> = phf::phf_map! {
     "2x2x2" => "c f 0",
