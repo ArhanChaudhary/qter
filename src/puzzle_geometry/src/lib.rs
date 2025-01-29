@@ -37,11 +37,18 @@ pub enum Error {
 pub struct Point(Vector3<f64>);
 
 #[derive(Clone, Debug)]
-pub struct CutAxis<'a> {
+pub struct CutAxisNames<'a> {
     /// The names for slices forward of the cut plane
     pub forward_name: &'a str,
     /// The names for slices backward of the cut plane
     pub backward_name: &'a str,
+    /// The name of the odd slice in the middle
+    pub middle_name: &'a str,
+}
+
+#[derive(Clone, Debug)]
+pub struct CutAxis<'a> {
+    pub names: CutAxisNames<'a>,
     /// The expected degree of symmetry of the cut. If this is `None`, the symmetry will be auto detected.
     /// Otherwise, this symmetry will be verified and used.
     pub expected_symmetry: Option<u8>,
