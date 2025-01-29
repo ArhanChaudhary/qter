@@ -326,7 +326,7 @@ fn edge_cloud_eq(
 mod tests {
     use nalgebra::{Unit, Vector3};
 
-    use crate::{CutAxis, Error, Face, Point, Polyhedron, PuzzleDefinition, CUBE};
+    use crate::{CutAxis, CutAxisNames, Error, Face, Point, Polyhedron, PuzzleDefinition, CUBE};
 
     #[test]
     fn degeneracy() {
@@ -416,8 +416,11 @@ mod tests {
                 Point(Vector3::new(1., 0., -1.)),
             ])]),
             cut_axes: vec![CutAxis {
-                forward_name: "F",
-                backward_name: "B",
+                names: CutAxisNames {
+                    forward_name: "F",
+                    middle_name: "S",
+                    backward_name: "B",
+                },
                 expected_symmetry: None,
                 normal: Unit::new_normalize(Vector3::new(1., 0., 0.)),
                 distances: vec![0.5],
@@ -437,22 +440,31 @@ mod tests {
             polyhedron: CUBE.to_owned(),
             cut_axes: vec![
                 CutAxis {
-                    forward_name: "R",
-                    backward_name: "L",
+                    names: CutAxisNames {
+                        forward_name: "R",
+                        middle_name: "M",
+                        backward_name: "L",
+                    },
                     expected_symmetry: None,
                     normal: Unit::new_normalize(Vector3::new(1., 0., 0.)),
                     distances: vec![1. / 3.],
                 },
                 CutAxis {
-                    forward_name: "U",
-                    backward_name: "D",
+                    names: CutAxisNames {
+                        forward_name: "U",
+                        middle_name: "E",
+                        backward_name: "D",
+                    },
                     expected_symmetry: None,
                     normal: Unit::new_normalize(Vector3::new(0., 1., 0.)),
                     distances: vec![1. / 3.],
                 },
                 CutAxis {
-                    forward_name: "F",
-                    backward_name: "B",
+                    names: CutAxisNames {
+                        forward_name: "F",
+                        middle_name: "S",
+                        backward_name: "B",
+                    },
                     expected_symmetry: None,
                     normal: Unit::new_normalize(Vector3::new(0., 0., 1.)),
                     distances: vec![1. / 3.],
