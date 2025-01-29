@@ -1,14 +1,10 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+mod puzzles;
+pub use puzzles::*;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+mod puzzle_geometry;
+pub use puzzle_geometry::*;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+mod defaults;
+mod options;
+
+type PuzzleDescriptionString<'a> = &'a str;

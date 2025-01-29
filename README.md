@@ -378,7 +378,7 @@ WIP
 Talking points:
 
 - The `Puzzles` declaration accepts a hard-coded puzzle name or a PuzzleGeometry description
-- PuzzleGeometry is a format developed and designed by Tomas Rokicki that generates a puzzle definition from a simple description. You can read more about it [here](https://alpha.twizzle.net/explore/help.html) and are encouraged to experiment with the format interactively on [Twizzle Explorer](https://alpha.twizzle.net/explore) (click "Config").
+- PuzzleGeometry is a format developed and designed by Tomas Rokicki that generates a puzzle definition from a simple description. You can read more about it [here](https://alpha.twizzle.net/explore/help.html#puzzlegeometry) and are encouraged to experiment with the format interactively on [Twizzle Explorer](https://alpha.twizzle.net/explore) (click "Config").
 
 # The QAT programming language
 
@@ -625,7 +625,7 @@ Talking points
 <!-- cspell:enable -->
 # Acknowledgements
 
-- [@rokicki](https://github.com/rokicki) for personally advising design from [nxopt](https://github.com/rokicki/cube20src/blob/master/nxopt.md) in phase 2. Also for creating the [PuzzleGeometry format](https://alpha.twizzle.net/explore/help.html).
+- [@rokicki](https://github.com/rokicki) for personally advising design from [nxopt](https://github.com/rokicki/cube20src/blob/master/nxopt.md) in phase 2 and creating the [PuzzleGeometry format](https://alpha.twizzle.net/explore/help.html#puzzlegeometry).
 - [@lgarron](https://github.com/lgarron) and [@esqu1](https://github.com/esqu1) for reference Korf's algorithm implementations in Rust ([1](https://github.com/cubing/twsearch/blob/efb207e11162174360e3ae49aa552cda1313df81/src/rs/_internal/search/idf_search.rs#L340) and [2](https://github.com/esqu1/Rusty-Rubik/blob/1e32829e83c662816bd85f6c37d6f774a15e3aea/src/solver.rs#L123)).
 - [@ScriptRacoon](https://github.com/ScriptRacoon) for providing developmental [code](https://gist.github.com/ScriptRaccoon/c12c4884c116dead62a15a3d09732d5d) for phase 1.
 - [@trangium](https://github.com/trangium) for their [Movecount Coefficient Calculator](https://trangium.github.io/MovecountCoefficient/).

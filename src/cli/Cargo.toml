@@ -9,6 +9,7 @@ color-eyre = "0.6"
 qter_core = { path = "../qter_core" }
 compiler = { path = "../compiler" }
 interpreter = { path = "../interpreter" }
+puzzle_geometry = { path = "../puzzle_geometry" }
 internment = { version = "0.8", features = [ "arc" ] }
 
 [lints]
