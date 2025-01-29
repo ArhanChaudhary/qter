@@ -229,9 +229,17 @@ impl<'a> PuzzleDefinition<'a> {
         for cut_axis in &self.cut_axes {
             // Cuts must also have the correct symmetry, but they are automatically rotationally symmetric with themselves
             for cut in &cut_axis.distances {
+                // Cannot make a cut at distance zero
+                if *cut < E {
+                    continue;
+                }
+
                 let cut_spot = *cut_axis.normal * *cut;
                 cloud.push((cut_spot, -cut_spot));
             }
+
+            // In the case of just a cut through the middle, this will still ensure symmetry
+            cloud.push((*cut_axis.normal, -*cut_axis.normal));
         }
 
         for face in &self.polyhedron.0 {
@@ -301,28 +309,6 @@ fn edge_cloud_eq(
     cloud1: &[(Vector3<f64>, Vector3<f64>)],
     cloud2: &[(Vector3<f64>, Vector3<f64>)],
 ) -> bool {
-    // let mut found_in_second_cloud = vec![false; cloud1.len()];
-
-    // 'next_point: for (a1, b1) in cloud1 {
-    //     for (i, (a2, b2)) in cloud2
-    //         .iter()
-    //         .enumerate()
-    //         .zip(&found_in_second_cloud)
-    //         .filter(|v| !v.1)
-    //         .map(|v| v.0)
-    //     {
-    //         if (a1.metric_distance(a2) < E && b1.metric_distance(b2) < E)
-    //             || (a1.metric_distance(b2) < E && b1.metric_distance(a2) < E)
-    //         {
-    //             found_in_second_cloud[i] = true;
-    //             continue 'next_point;
-    //         }
-    //     }
-
-    //     return false;
-    // }
-
-    // true
     cloud1
         .iter()
         .zip(cloud2)
