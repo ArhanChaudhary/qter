@@ -1,12 +1,14 @@
 mod puzzles;
-use std::{cmp::Ordering, mem};
+use std::{cmp::Ordering, collections::HashMap, mem};
 
+use internment::ArcIntern;
 use itertools::Itertools;
 use nalgebra::{Matrix2, Matrix3, Matrix3x2, Rotation3, Unit, Vector3};
 pub use puzzles::*;
 
 mod puzzle_geometry;
 pub use puzzle_geometry::*;
+use qter_core::architectures::PermutationGroup;
 use thiserror::Error;
 
 mod defaults;
@@ -176,15 +178,50 @@ pub struct PuzzleDefinition<'a> {
     pub cut_axes: Vec<CutAxis<'a>>,
 }
 
+#[derive(Clone, Debug)]
+pub struct PuzzleGeometry {}
+
+impl PuzzleGeometry {
+    /// Get the puzzle as a permutation group over facelets
+    pub fn permutation_group(&self) -> &PermutationGroup {
+        todo!()
+    }
+
+    /// Get the puzzle as a permutation and orientation group over pieces
+    pub fn piece_perm_and_ori_group(&self) -> &PiecePermAndOriGroup {
+        todo!()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct PiecePermAndOriGroup {}
+
+impl PiecePermAndOriGroup {
+    /// For each type of piece, return a list of (amount of the piece type, orientation mod)
+    pub fn pieces(&self) -> &[(usize, u8)] {
+        todo!()
+    }
+
+    /// Get the set of available moves on the puzzle
+    pub fn moves(&self) -> &HashMap<ArcIntern<str>, PuzzleState> {
+        todo!()
+    }
+
+    /// Get the list of symmetries obeyed by the puzzle
+    pub fn symmetries(&self) -> &[PuzzleState] {
+        todo!()
+    }
+}
+
 impl<'a> PuzzleDefinition<'a> {
-    pub fn geometry(mut self) -> Result<(), Error> {
+    pub fn geometry(mut self) -> Result<PuzzleGeometry, Error> {
         for face in &self.polyhedron.0 {
             face.is_valid()?;
         }
 
         self.find_symmetries()?;
 
-        Ok(())
+        Ok(PuzzleGeometry {})
     }
 
     fn find_symmetries(&mut self) -> Result<(), Error> {
@@ -232,6 +269,8 @@ impl<'a> PuzzleDefinition<'a> {
     /// A sorted list of sorted points, used for structural equality
     fn edge_cloud(&self) -> Vec<(Vector3<f64>, Vector3<f64>)> {
         let mut cloud = Vec::new();
+
+        // TODO: Handle these cuts separately, mixing them in with the edges won't work in general
 
         for cut_axis in &self.cut_axes {
             // Cuts must also have the correct symmetry, but they are automatically rotationally symmetric with themselves

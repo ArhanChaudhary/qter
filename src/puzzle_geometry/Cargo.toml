@@ -7,7 +7,9 @@ edition = "2021"
 workspace = true
 
 [dependencies]
+qter_core = { path = "../qter_core" }
 phf = { version = "0.11.3", features = ["macros"] }
+internment = { version = "0.8", features = [ "arc" ] }
 nalgebra = "0.33"
 thiserror = "2.0"
 itertools = "0.13"

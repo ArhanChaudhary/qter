@@ -890,9 +890,11 @@ dependencies = [
 name = "puzzle_geometry"
 version = "0.1.0"
 dependencies = [
+ "internment",
  "itertools 0.13.0",
  "nalgebra",
  "phf",
+ "qter_core",
  "thiserror",
 ]
 
