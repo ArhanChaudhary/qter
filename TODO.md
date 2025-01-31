@@ -6,6 +6,14 @@
 
 - Port PuzzleGeometry to Rust
 - Phase 2
+  - standard symmetry
+  - inverse symmetry
+  - canonical sequence ordering
+    - prevent same face
+    - antipode ordering
+    - sequence symmetry
+  - multithreading
+  - find all solutions at depth
   - tANS table compression
 - Phase 1
 - Look into fixing a corner for even cubes/other puzzles

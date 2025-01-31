@@ -140,7 +140,6 @@ pub fn generate_pruning_table_corners(tag: &str, cycle_type: &CycleType<u8>) -> 
 mod tests {
     use super::*;
 
-    #[cfg(feature = "slow-tests")]
     #[test]
     fn test_correct_values() {
         let pruning_tables = PruningTables::from(

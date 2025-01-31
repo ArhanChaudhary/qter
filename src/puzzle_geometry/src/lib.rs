@@ -1,18 +1,14 @@
-mod puzzles;
-use std::{cmp::Ordering, collections::HashMap, mem};
-
-use internment::ArcIntern;
+use cycle_combination_solver::phase2;
 use itertools::Itertools;
 use nalgebra::{Matrix2, Matrix3, Matrix3x2, Rotation3, Unit, Vector3};
-pub use puzzles::*;
+use qter_core::architectures::PermutationGroup;
+use std::{cmp::Ordering, mem};
+use thiserror::Error;
 
 mod puzzle_geometry;
 pub use puzzle_geometry::*;
-use qter_core::architectures::PermutationGroup;
-use thiserror::Error;
-
-mod defaults;
-mod options;
+mod puzzles;
+pub use puzzles::*;
 
 // Margin of error to consider points "equal"
 const E: f64 = 1e-9;
@@ -203,12 +199,12 @@ impl PiecePermAndOriGroup {
     }
 
     /// Get the set of available moves on the puzzle
-    pub fn moves(&self) -> &HashMap<ArcIntern<str>, PuzzleState> {
+    pub fn moves(&self) -> &[phase2::puzzle::Move<phase2::puzzle::HeapStorage>] {
         todo!()
     }
 
     /// Get the list of symmetries obeyed by the puzzle
-    pub fn symmetries(&self) -> &[PuzzleState] {
+    pub fn symmetries(&self) -> &[phase2::puzzle::PuzzleState<phase2::puzzle::HeapStorage>] {
         todo!()
     }
 }

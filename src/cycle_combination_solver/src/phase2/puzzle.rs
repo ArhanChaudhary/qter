@@ -1,268 +1,199 @@
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
-use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
+use std::hint::unreachable_unchecked;
 
-use std::collections::{HashMap, HashSet};
-use std::hash::Hash;
-use std::ops::{Add, Rem};
-use std::sync::LazyLock;
-
-use super::cube;
-
-/**
-pub struct CubeState {
-}
-is an example for a 3x3
-
-have a macro to generate these states?
-*/
-
-trait PuzzleMove {}
-
-/// General trait to describe a twisty puzzle.
-trait Puzzle {
-    type M;
-
-    // Initializes this puzzle in its solved state.
-    fn new() -> Self;
-
-    fn get_all_moves() -> HashSet<Self::M>;
-
-    // Generally, for puzzles like NxN puzzles, all available moves are allowed.
-    // However, for bandaging puzzles such as the Bandaged Cube and Square-1, certain
-    // moves will restrict others from being allowed.
-    fn get_allowed_moves(&self) -> HashSet<Self::M>;
-
-    fn make_move(&self, m: Self::M) -> Self;
-    fn make_move_mut(&mut self, m: Self::M) -> &Self;
+pub struct PuzzleDef<S: Storage = HeapStorage> {
+    pub name: String,
+    pub orbit_defs: Vec<OrbitDef>,
+    pub moves: Vec<Move<S>>,
 }
 
-#[derive(Clone)]
-// TODO: twsearch representation of state
-struct Cube3 {
-    cp: [u8; cube::CORNERS],
-    co: [u8; cube::CORNERS],
-    ep: [u8; cube::EDGES],
-    eo: [u8; cube::EDGES],
+pub type Cube3Storage = StackStorage<40>;
+pub type Cube4Storage = StackStorage<112>;
+pub type LargePuzzleStorage = StackStorage<256>;
+pub type LargerPuzzleStorage = StackStorage<512>;
+
+pub struct StackStorage<const N: usize>;
+pub struct HeapStorage;
+
+pub trait Storage {
+    type Buf: AsRef<[u8]> + AsMut<[u8]>;
 }
 
-// pub struct Cube4 {
-//     cp: [u8; 8],
-//     co: [i8; 8],
-//     wings1: [u8; 24],
-//     xcenters1: [u8; 24],
-// }
-
-// pub struct Cube5 {
-//     // corners are always the same...
-//     wings1: [u8; 24],
-//     midges_ep: [u8; 12],
-//     midges_eo: [i8; 12],
-//     xcenters1: [u8; 24],
-//     pluscenters1: [u8; 24],
-// }
-
-// pub struct Cube6 {
-//     //...
-//     wings1: [u8; 24],
-//     wings2: [u8; 24],
-//     // ...
-// }
-
-// pub struct Cube335 {
-//     pub cp: [u8, 8],
-//     // actually in cuboids, where 90 degree rotation isn't allowed, orientation doesn't
-//     // matter
-//     pub
-// }
-
-// macro_rules! define_cube {
-//     ($dim:literal) => {
-//         pub struct Cube$dim {
-//             pub cp: [u8; 8],
-//             pub co: [i8; 8],
-
-//         }
-//     }
-// }
-
-#[derive(Debug, EnumIter, Eq, PartialEq, Hash, Copy, Clone, FromPrimitive)]
-enum CubeAxis {
-    U,
-    D,
-    L,
-    R,
-    F,
-    B,
+impl<const N: usize> Storage for StackStorage<N> {
+    type Buf = [u8; N];
+}
+impl Storage for HeapStorage {
+    type Buf = Box<[u8]>;
 }
 
-// rotations?
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-struct CubeMove {
-    axis: u8,
-    depth: u8,
-    rotation: u8,
+enum OrbitStateStorage<S: Storage> {
+    Stack(S::Buf),
+    Heap(S::Buf),
 }
 
-impl PuzzleMove for CubeMove {}
+#[repr(transparent)]
+pub struct PuzzleState<S: Storage> {
+    orbit_states: OrbitStateStorage<S>,
+}
 
-impl Default for Cube3 {
-    fn default() -> Self {
-        Self {
-            cp: const {
-                let mut arr = [0; cube::CORNERS];
-                let mut i = 0;
-                while i < cube::CORNERS {
-                    arr[i] = i as u8;
-                    i += 1;
+pub struct Move<S: Storage> {
+    // put this first to avoid the memory offset when dereferencing
+    pub r#move: PuzzleState<S>,
+    pub name: String,
+}
+
+pub struct OrbitDef {
+    pub size: u8,
+    pub orientation_mod: u8,
+    pub name: String,
+}
+
+impl<S: Storage> PuzzleDef<S> {
+    fn get_move(&self, name: &str) -> Option<&Move<S>> {
+        self.r#moves.iter().find(|def| def.name == name)
+    }
+}
+
+pub trait PuzzleStateCore<S: Storage>
+where
+    PuzzleState<S>: PuzzleStateCore<S>,
+{
+    fn solved(orbit_defs: &[OrbitDef]) -> Self;
+    fn from_orbit_states(orbit_states: S::Buf) -> Self;
+    fn orbit_states(&self) -> &S::Buf;
+    fn orbit_states_mut(&mut self) -> &mut S::Buf;
+
+    fn replace_mul(&mut self, move_a: &Move<S>, move_b: &Move<S>, orbit_defs: &[OrbitDef]) {
+        let a = move_a.r#move.orbit_states().as_ref();
+        let b = move_b.r#move.orbit_states().as_ref();
+        let mut base = 0;
+        for &OrbitDef {
+            name: _,
+            size,
+            orientation_mod,
+        } in orbit_defs
+        {
+            let size = size as usize;
+            if orientation_mod > 1 {
+                for j in 0..size {
+                    unsafe {
+                        let pos = a.get_unchecked(base + *b.get_unchecked(base + j) as usize);
+                        let a_ori =
+                            a.get_unchecked(base + *b.get_unchecked(base + j) as usize + size);
+                        let b_ori = b.get_unchecked(base + j + size);
+                        *self.orbit_states_mut().as_mut().get_unchecked_mut(base + j) = *pos;
+                        *self
+                            .orbit_states_mut()
+                            .as_mut()
+                            .get_unchecked_mut(base + j + size) =
+                            (*a_ori + *b_ori) % orientation_mod;
+                    }
                 }
-                arr
-            },
-            co: [0_u8; cube::CORNERS],
-            ep: const {
-                let mut arr = [0; cube::EDGES];
-                let mut i = 0;
-                while i < cube::CORNERS {
-                    arr[i] = i as u8;
-                    i += 1;
+            } else {
+                for j in 0..size {
+                    unsafe {
+                        let pos = *a.get_unchecked(base + *b.get_unchecked(base + j) as usize);
+                        *self.orbit_states_mut().as_mut().get_unchecked_mut(base + j) = pos;
+                        *self
+                            .orbit_states_mut()
+                            .as_mut()
+                            .get_unchecked_mut(base + j + size) = 0;
+                    }
                 }
-                arr
-            },
-            eo: [0_u8; cube::EDGES],
+            }
+            base += size * 2;
         }
     }
 }
 
-// move actions?
-
-fn apply_permutation<T: Clone + Copy, const N: usize>(
-    og_state: [T; N],
-    delta: &[usize; N],
-    count: u8,
-) -> [T; N] {
-    let mut new_array = og_state;
-    for _ in 0..count {
-        for i in 0..N {
-            new_array[delta[i]] = og_state[i];
+impl<const N: usize> PuzzleStateCore<StackStorage<N>> for PuzzleState<StackStorage<N>> {
+    fn solved(orbit_defs: &[OrbitDef]) -> Self {
+        let mut orbit_states = [0_u8; N];
+        let mut base = 0;
+        for &OrbitDef { size, .. } in orbit_defs.iter() {
+            for j in 0..size {
+                orbit_states[base as usize + j as usize] = j;
+            }
+            base += 2 * size;
+        }
+        PuzzleState {
+            orbit_states: OrbitStateStorage::Stack(orbit_states),
         }
     }
-    new_array
-}
 
-fn apply_orientation<T: Clone + Copy + Add<Output = T> + Rem<Output = T>, const N: usize>(
-    og_state: [T; N],
-    delta: &[T; N],
-    num_orientations: T,
-    count: u8,
-) -> [T; N] {
-    let mut new_array = og_state;
-    for _ in 0..count {
-        for i in 0..N {
-            new_array[i] = (og_state[i] + delta[i]) % num_orientations;
+    fn from_orbit_states(orbit_states: [u8; N]) -> Self {
+        PuzzleState {
+            orbit_states: OrbitStateStorage::Stack(orbit_states),
         }
     }
-    new_array
-}
 
-impl Puzzle for Cube3 {
-    type M = CubeMove;
-
-    fn new() -> Self {
-        Cube3::default()
+    fn orbit_states(&self) -> &[u8; N] {
+        match &self.orbit_states {
+            OrbitStateStorage::Stack(orbit_states) => orbit_states,
+            _ => unsafe { unreachable_unchecked() },
+        }
     }
 
-    fn get_all_moves() -> HashSet<Self::M> {
-        let mut all_moves = HashSet::new();
-        for axis in CubeAxis::iter() {
-            for rotation in 0..3 {
-                all_moves.insert(CubeMove {
-                    axis: axis as u8,
-                    depth: 1,
-                    rotation,
-                });
+    fn orbit_states_mut(&mut self) -> &mut [u8; N] {
+        match &mut self.orbit_states {
+            OrbitStateStorage::Stack(orbit_states) => orbit_states,
+            _ => unsafe { unreachable_unchecked() },
+        }
+    }
+}
+
+impl PuzzleStateCore<HeapStorage> for PuzzleState<HeapStorage> {
+    fn solved(orbit_defs: &[OrbitDef]) -> Self {
+        let mut orbit_states = Vec::new();
+        for &OrbitDef { size, .. } in orbit_defs.iter() {
+            for j in 0..size {
+                orbit_states.push(j);
             }
         }
-        all_moves
-    }
-
-    fn get_allowed_moves(&self) -> HashSet<Self::M> {
-        <Self as Puzzle>::get_all_moves()
-    }
-
-    fn make_move(&self, m: CubeMove) -> Self {
-        let axis = <CubeAxis as FromPrimitive>::from_u8(m.axis).unwrap();
-        Cube3 {
-            cp: apply_permutation(self.cp, CP_DELTAS.get(&axis).unwrap(), m.rotation),
-            co: apply_orientation(self.co, CO_DELTAS.get(&axis).unwrap(), 3, m.rotation),
-            ep: apply_permutation(self.ep, EP_DELTAS.get(&axis).unwrap(), m.rotation),
-            eo: apply_orientation(self.eo, EO_DELTAS.get(&axis).unwrap(), 2, m.rotation),
+        PuzzleState {
+            orbit_states: OrbitStateStorage::Heap(orbit_states.into_boxed_slice()),
         }
     }
 
-    fn make_move_mut(&mut self, m: CubeMove) -> &Self {
-        *self = self.make_move(m);
-        self
-    }
-}
-
-macro_rules! hashmap {
-    ($cnt:ty,$($key:expr => $value:expr),+ ,) => {
-        {
-            let mut m = HashMap::<CubeAxis, $cnt>::new();
-            $(
-                m.insert($key, $value);
-            )+
-            m
+    fn from_orbit_states(orbit_states: Box<[u8]>) -> Self {
+        PuzzleState {
+            orbit_states: OrbitStateStorage::Heap(orbit_states),
         }
-    };
+    }
+
+    fn orbit_states(&self) -> &Box<[u8]> {
+        match &self.orbit_states {
+            OrbitStateStorage::Heap(orbit_states) => orbit_states,
+            _ => unsafe { unreachable_unchecked() },
+        }
+    }
+
+    fn orbit_states_mut(&mut self) -> &mut Box<[u8]> {
+        match &mut self.orbit_states {
+            OrbitStateStorage::Heap(orbit_states) => orbit_states,
+            _ => unsafe { unreachable_unchecked() },
+        }
+    }
 }
 
-static CP_DELTAS: LazyLock<HashMap<CubeAxis, [usize; cube::CORNERS]>> = LazyLock::new(|| {
-    hashmap! {
-        [usize; cube::CORNERS],
-        CubeAxis::U => [1, 2, 3, 0, 4, 5, 6, 7],
-        CubeAxis::D => [0, 1, 2, 3, 5, 6, 7, 4],
-        CubeAxis::R => [0, 6, 1, 3, 4, 2, 5, 7],
-        CubeAxis::L => [3, 1, 2, 4, 7, 5, 6, 0],
-        CubeAxis::F => [0, 1, 5, 2, 3, 4, 6, 7],
-        CubeAxis::B => [7, 0, 2, 3, 4, 5, 1, 6],
-    }
-});
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::phase2::defs::CUBE3_DEF;
 
-static CO_DELTAS: LazyLock<HashMap<CubeAxis, [u8; cube::CORNERS]>> = LazyLock::new(|| {
-    hashmap! {
-        [u8; cube::CORNERS],
-        CubeAxis::U => [0, 0, 0, 0, 0, 0, 0, 0],
-        CubeAxis::D => [0, 0, 0, 0, 0, 0, 0, 0],
-        CubeAxis::R => [0, 2, 1, 0, 0, 2, 1, 0],
-        CubeAxis::L => [1, 0, 0, 2, 1, 0, 0, 2],
-        CubeAxis::F =>[0, 0, 2, 1, 2, 1, 0, 0],
-        CubeAxis::B => [2, 1, 0, 0, 0, 0, 2, 1],
-    }
-});
+    #[test]
+    fn test_composition() {
+        let cube3_def = &*CUBE3_DEF;
+        let mut solved = PuzzleState::<Cube3Storage>::solved(&cube3_def.orbit_defs);
+        let r_move = cube3_def.get_move("R").unwrap();
+        let f_move = cube3_def.get_move("F").unwrap();
+        solved.replace_mul(r_move, f_move, &cube3_def.orbit_defs);
 
-static EP_DELTAS: LazyLock<HashMap<CubeAxis, [usize; cube::EDGES]>> = LazyLock::new(|| {
-    hashmap! {
-        [usize; cube::EDGES],
-        CubeAxis::U =>[1, 2, 3, 0, 4, 5, 6, 7, 8, 9, 10, 11],
-        CubeAxis::D =>[0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 8],
-        CubeAxis::R =>[0, 5, 2, 3, 4, 9, 1, 7, 8, 6, 10, 11],
-        CubeAxis::L =>[0, 1, 2, 7, 3, 5, 6, 11, 8, 9, 10, 4],
-        CubeAxis::F =>[0, 1, 6, 3, 4, 5, 8, 2, 7, 9, 10, 11],
-        CubeAxis::B =>[4, 1, 2, 3, 10, 0, 6, 7, 8, 9, 5, 11],
+        assert_eq!(
+            solved.orbit_states(),
+            &[
+                9, 3, 7, 2, 1, 5, 6, 0, 8, 4, 10, 11, 1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 6, 1, 0,
+                4, 2, 5, 3, 7, 2, 2, 2, 1, 1, 0, 1, 0,
+            ][..]
+        );
     }
-});
-
-static EO_DELTAS: LazyLock<HashMap<CubeAxis, [u8; cube::EDGES]>> = LazyLock::new(|| {
-    hashmap! {
-        [u8; cube::EDGES],
-        CubeAxis::U =>[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        CubeAxis::D =>[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        CubeAxis::R =>[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        CubeAxis::L =>[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        CubeAxis::F =>[0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0],
-        CubeAxis::B =>[1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0],
-    }
-});
+}

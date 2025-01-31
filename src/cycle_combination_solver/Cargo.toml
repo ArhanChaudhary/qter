@@ -7,15 +7,6 @@ edition = "2021"
 integer-partitions = "0.1.1"
 memoize = "0.4.2"
 pareto_front = "1.0.1"
-regex = "1.11.1"
-strum = "0.26.3"
-strum_macros = "0.26.4"
-itertools = "0.14.0"
-num-derive = "0.4.2"
-num-traits = "0.2.19"
 
 [lints]
 workspace = true
-
-[features]
-slow-tests = []
