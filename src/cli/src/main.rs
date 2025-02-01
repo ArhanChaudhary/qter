@@ -5,7 +5,6 @@ use color_eyre::eyre::eyre;
 use compiler::compile;
 use internment::ArcIntern;
 use interpreter::{Interpreter, PausedState};
-use puzzle_geometry::{PuzzleDescription, PUZZLES};
 use qter_core::{Int, I};
 
 /// Compiles and interprets qter programs
@@ -31,11 +30,6 @@ enum Commands {
     Test {
         /// Which file to test; must be a .qat file
         file: PathBuf,
-    },
-    /// Execute a PuzzleGeometry command
-    PuzzleGeometry {
-        /// The puzzle to execute
-        puzzle_description_string: String,
     },
 }
 
@@ -108,16 +102,6 @@ fn main() -> color_eyre::Result<()> {
         }
         Commands::Debug { file: _ } => todo!(),
         Commands::Test { file: _ } => todo!(),
-        Commands::PuzzleGeometry {
-            puzzle_description_string,
-        } => {
-            let puzzle = PUZZLES
-                .get(&puzzle_description_string)
-                .copied()
-                .unwrap_or(&puzzle_description_string);
-            let puzzle_description = PuzzleDescription::from(puzzle)
-                .map_err(|e| eyre!(e))?;
-        }
     }
 
     Ok(())

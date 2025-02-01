@@ -1,37 +1,44 @@
-{ pkgs ? import <nixpkgs> { } }:
+{
+  pkgs ? import <nixpkgs> { },
+}:
 
 let
-  rust_overlay = import (builtins.fetchTarball {
-    url = "https://github.com/oxalica/rust-overlay/archive/a16b9a7cac7f4d39a84234d62e91890370c57d76.tar.gz";
-    sha256 = "sha256:05xyk469bj6zkvkk4gmc58rkiyavamn4xhfglwkdqlanqiyfwdfz";
-  });
+  rust_overlay = import (
+    builtins.fetchTarball {
+      url = "https://github.com/oxalica/rust-overlay/archive/83284068670d5ae4a43641c4afb150f3446be70d.tar.gz";
+      sha256 = "sha256:0z5cym494khqy3pxfwfq89nb2981v8q8wb4kxn04i6qj34gjp8ab";
+    }
+  );
   pkgs = import <nixpkgs> { overlays = [ rust_overlay ]; };
-  rust = pkgs.rust-bin.stable."1.81.0".default.override {
-    extensions = [ "rust-src" ];
+  rust = pkgs.rust-bin.nightly."2025-01-28".default.override {
+    extensions = [ "rust-src" "rust-analyzer" ];
   };
 in
 pkgs.mkShell {
-  buildInputs = [
-    rust
-  ] ++ (with pkgs; [
-    pkg-config
-    rust-analyzer
-    sccache
+  buildInputs =
+    [
+      rust
+    ]
+    ++ (with pkgs; [
+      pkg-config
+      sccache
 
-    (gap.overrideAttrs (o: {
-      version = "4.13.1";
-      patches = [ ];
-      src = fetchurl {
-        url = "https://github.com/gap-system/gap/releases/download/v4.13.1/gap-4.13.1.tar.gz";
-        sha256 = "sha256-l5Tb26b7mY4KLQqoziH8iEitPT+cyZk7C44gvn4dvro=";
-      };
-    }))
+      (gap.overrideAttrs (o: {
+        version = "4.13.1";
+        patches = [ ];
+        src = fetchurl {
+          url = "https://github.com/gap-system/gap/releases/download/v4.13.1/gap-4.13.1.tar.gz";
+          sha256 = "sha256-l5Tb26b7mY4KLQqoziH8iEitPT+cyZk7C44gvn4dvro=";
+        };
+      }))
 
-    (python3.withPackages (p: with p; [
-      sympy
-    ]))
-    python312Packages.python-lsp-server
-  ]);
+      (python3.withPackages (
+        p: with p; [
+          sympy
+        ]
+      ))
+      python312Packages.python-lsp-server
+    ]);
 
   RUST_BACKTRACE = 1;
   RUSTC_WRAPPER = "sccache";
