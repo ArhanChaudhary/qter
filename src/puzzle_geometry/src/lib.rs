@@ -8,6 +8,10 @@ use thiserror::Error;
 mod edge_cloud;
 pub mod puzzles;
 
+// Note... X is considered left-right, Y is considered up-down, and Z is considered front-back
+//
+// (minecraft style)
+
 // Margin of error to consider points "equal"
 const E: f64 = 1e-9;
 
@@ -32,6 +36,14 @@ pub enum Error {
 #[derive(Clone, Copy, Debug)]
 pub struct Point(Vector3<f64>);
 
+impl Point {
+    fn rotated(self, axis: Vector3<f64>, symmetry: u8) -> Point {
+        let rotation = rotation_of_degree(axis, symmetry);
+
+        Point(rotation * self.0)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct CutAxisNames<'a> {
     /// The names for slices forward of the cut plane
@@ -55,6 +67,8 @@ pub struct CutAxis<'a> {
 }
 
 fn rotation_of_degree(axis: Vector3<f64>, symm: u8) -> Matrix3<f64> {
+    assert_ne!(symm, 0);
+
     Rotation3::from_axis_angle(
         &Unit::new_normalize(axis),
         core::f64::consts::TAU / (symm as f64),
@@ -68,8 +82,6 @@ pub struct Face(pub Vec<Point>);
 impl Face {
     /// Rotate the face around the origin with the given axis and symmetry
     pub fn rotated(mut self, axis: Vector3<f64>, symmetry: u8) -> Face {
-        assert_ne!(symmetry, 0);
-
         let rotation = rotation_of_degree(axis, symmetry);
 
         for point in &mut self.0 {
@@ -155,7 +167,7 @@ impl Face {
             cloud.push((vertex1.0, vertex2.0));
         }
 
-        EdgeCloud::new(cloud, vec![])
+        EdgeCloud::new(vec![cloud])
     }
 
     fn epsilon_eq(&self, other: &Face) -> bool {
@@ -272,39 +284,40 @@ impl<'a> PuzzleDefinition<'a> {
     fn edge_cloud(&self) -> EdgeCloud {
         let mut edges = Vec::new();
         let mut cuts = Vec::new();
+        let mut zero_axes = Vec::new();
 
         // TODO: Handle these cuts separately, mixing them in with the edges won't work in general
 
         for cut_axis in &self.cut_axes {
             // Cuts must also have the correct symmetry, but they are automatically rotationally symmetric with themselves
             for cut in &cut_axis.distances {
-                // Cannot make a cut at distance zero
                 if *cut < E {
+                    // In the case of just a cut through the middle, this will still ensure symmetry.
+                    // We can't push this directly because the direction will be inaccessible if the magnitude is zero and zero cuts in different directions will count
+                    zero_axes.push((*cut_axis.normal, -*cut_axis.normal));
                     continue;
                 }
 
                 let cut_spot = *cut_axis.normal * *cut;
                 cuts.push((cut_spot, -cut_spot));
             }
-
-            // In the case of just a cut through the middle, this will still ensure symmetry
-            cuts.push((*cut_axis.normal, -*cut_axis.normal));
         }
 
         for face in &self.polyhedron.0 {
-            edges.extend_from_slice(face.edge_cloud().edges());
+            edges.extend_from_slice(&face.edge_cloud().sections()[0]);
         }
 
-        EdgeCloud::new(edges, cuts)
+        EdgeCloud::new(vec![zero_axes, cuts, edges])
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use nalgebra::{Unit, Vector3};
+    use nalgebra::{Rotation3, Unit, Vector3};
 
     use crate::{
-        puzzles::CUBE, CutAxis, CutAxisNames, Error, Face, Point, Polyhedron, PuzzleDefinition,
+        puzzles::{CUBE, TETRAHEDRON},
+        CutAxis, CutAxisNames, Error, Face, Point, Polyhedron, PuzzleDefinition,
     };
 
     #[test]
@@ -414,7 +427,7 @@ mod tests {
     }
 
     #[test]
-    fn symmetries() {
+    fn symmetries_3x3() {
         let mut three_by_three = PuzzleDefinition {
             polyhedron: CUBE.to_owned(),
             cut_axes: vec![
@@ -455,6 +468,162 @@ mod tests {
 
         for cut_axis in three_by_three.cut_axes {
             assert_eq!(cut_axis.expected_symmetry, Some(4));
+        }
+    }
+
+    #[test]
+    fn symmetries_scuffed_3x3() {
+        let mut three_by_three = PuzzleDefinition {
+            polyhedron: CUBE.to_owned(),
+            cut_axes: vec![
+                CutAxis {
+                    names: CutAxisNames {
+                        forward_name: "R",
+                        middle_name: "M",
+                        backward_name: "L",
+                    },
+                    expected_symmetry: None,
+                    normal: Unit::new_normalize(Vector3::new(1., 0., 0.)),
+                    distances: vec![1. / 3.],
+                },
+                CutAxis {
+                    names: CutAxisNames {
+                        forward_name: "F",
+                        middle_name: "S",
+                        backward_name: "B",
+                    },
+                    expected_symmetry: None,
+                    normal: Unit::new_normalize(Vector3::new(0., 0., 1.)),
+                    distances: vec![1. / 3.],
+                },
+            ],
+        };
+
+        three_by_three.find_symmetries().unwrap();
+
+        for cut_axis in three_by_three.cut_axes {
+            assert_eq!(cut_axis.expected_symmetry, Some(2));
+        }
+    }
+
+    #[test]
+    fn symmetries_skewb() {
+        let mut skewb = PuzzleDefinition {
+            polyhedron: CUBE.to_owned(),
+            cut_axes: vec![
+                CutAxis {
+                    names: CutAxisNames {
+                        forward_name: "R",
+                        middle_name: "M",
+                        backward_name: "L",
+                    },
+                    expected_symmetry: None,
+                    normal: Unit::new_normalize(Vector3::new(1., 1., 1.)),
+                    distances: vec![0.],
+                },
+                CutAxis {
+                    names: CutAxisNames {
+                        forward_name: "U",
+                        middle_name: "E",
+                        backward_name: "D",
+                    },
+                    expected_symmetry: None,
+                    normal: Unit::new_normalize(Vector3::new(-1., 1., 1.)),
+                    distances: vec![0.],
+                },
+                CutAxis {
+                    names: CutAxisNames {
+                        forward_name: "F",
+                        middle_name: "S",
+                        backward_name: "B",
+                    },
+                    expected_symmetry: None,
+                    normal: Unit::new_normalize(Vector3::new(1., 1., -1.)),
+                    distances: vec![0.],
+                },
+                CutAxis {
+                    names: CutAxisNames {
+                        forward_name: "1",
+                        middle_name: "2",
+                        backward_name: "3",
+                    },
+                    expected_symmetry: None,
+                    normal: Unit::new_normalize(Vector3::new(-1., 1., -1.)),
+                    distances: vec![0.],
+                },
+            ],
+        };
+
+        skewb.find_symmetries().unwrap();
+
+        for cut_axis in skewb.cut_axes {
+            assert_eq!(cut_axis.expected_symmetry, Some(3));
+        }
+    }
+
+    #[test]
+    fn symmetries_pyraminx() {
+        let up = Point(Vector3::new(0., 1., 0.));
+
+        let down_1 = Point(
+            Rotation3::from_axis_angle(
+                &Unit::new_normalize(Vector3::new(1., 0., 0.)),
+                (-1. / 3_f64).acos(),
+            ) * up.0,
+        );
+        let down_2 = down_1.rotated(Vector3::new(0., 1., 0.), 3);
+        let down_3 = down_2.rotated(Vector3::new(0., 1., 0.), 3);
+
+        let mut pyraminx = PuzzleDefinition {
+            polyhedron: TETRAHEDRON.to_owned(),
+            cut_axes: vec![
+                CutAxis {
+                    names: CutAxisNames {
+                        forward_name: "R",
+                        middle_name: "M",
+                        backward_name: "L",
+                    },
+                    expected_symmetry: None,
+                    normal: Unit::new_normalize(up.0),
+                    distances: vec![0., 0.5],
+                },
+                CutAxis {
+                    names: CutAxisNames {
+                        forward_name: "U",
+                        middle_name: "E",
+                        backward_name: "D",
+                    },
+                    expected_symmetry: None,
+                    normal: Unit::new_normalize(down_1.0),
+                    distances: vec![0., 0.5],
+                },
+                CutAxis {
+                    names: CutAxisNames {
+                        forward_name: "F",
+                        middle_name: "S",
+                        backward_name: "B",
+                    },
+                    expected_symmetry: None,
+                    normal: Unit::new_normalize(down_2.0),
+                    distances: vec![0., 0.5],
+                },
+                CutAxis {
+                    names: CutAxisNames {
+                        forward_name: "1",
+                        middle_name: "2",
+                        backward_name: "3",
+                    },
+                    expected_symmetry: None,
+                    normal: Unit::new_normalize(down_3.0),
+                    distances: vec![0., 0.5],
+                },
+            ],
+        };
+
+        pyraminx.find_symmetries().unwrap();
+
+        for cut_axis in pyraminx.cut_axes {
+            assert_eq!(cut_axis.expected_symmetry, Some(3));
         }
     }
 }

@@ -7,36 +7,38 @@ use crate::E;
 
 #[derive(Clone, Debug)]
 pub struct EdgeCloud {
-    edges: Vec<(Vector3<f64>, Vector3<f64>)>,
-    cuts: Vec<(Vector3<f64>, Vector3<f64>)>,
+    sections: Vec<Vec<(Vector3<f64>, Vector3<f64>)>>,
 }
 
 impl EdgeCloud {
-    pub fn new(
-        mut edges: Vec<(Vector3<f64>, Vector3<f64>)>,
-        mut cuts: Vec<(Vector3<f64>, Vector3<f64>)>,
-    ) -> EdgeCloud {
-        sort_edge_cloud(&mut edges);
-        sort_edge_cloud(&mut cuts);
+    pub fn new(mut sections: Vec<Vec<(Vector3<f64>, Vector3<f64>)>>) -> EdgeCloud {
+        for section in &mut sections {
+            sort_edge_cloud(section);
+        }
 
-        EdgeCloud { edges, cuts }
+        EdgeCloud { sections }
     }
 
     pub fn try_symmetry(&self, into: &mut EdgeCloud, matrix: Matrix3<f64>) -> bool {
-        try_symmetry(&self.cuts, &mut into.cuts, matrix)
-            && try_symmetry(&self.edges, &mut into.edges, matrix)
+        self.sections
+            .iter()
+            .zip(into.sections.iter_mut())
+            .all(|(section, into)| try_symmetry(section, into, matrix))
     }
 
     pub fn epsilon_eq(&self, other: &EdgeCloud) -> bool {
-        edge_cloud_eq(&self.cuts, &other.cuts) && edge_cloud_eq(&self.edges, &other.edges)
+        if self.sections.len() != other.sections.len() {
+            return false;
+        }
+
+        self.sections
+            .iter()
+            .zip(other.sections.iter())
+            .all(|(section, other)| edge_cloud_eq(section, other))
     }
 
-    pub fn edges(&self) -> &[(Vector3<f64>, Vector3<f64>)] {
-        &self.edges
-    }
-
-    pub fn cuts(&self) -> &[(Vector3<f64>, Vector3<f64>)] {
-        &self.cuts
+    pub fn sections(&self) -> &[Vec<(Vector3<f64>, Vector3<f64>)>] {
+        &self.sections
     }
 }
 

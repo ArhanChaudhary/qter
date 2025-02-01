@@ -1,8 +1,35 @@
 use std::sync::LazyLock;
 
-use nalgebra::Vector3;
+use nalgebra::{Rotation3, Unit, Vector3};
 
 use crate::{Face, Point, Polyhedron, PuzzleDescriptionString};
+
+pub static TETRAHEDRON: LazyLock<Polyhedron> = LazyLock::new(|| {
+    let up = Point(Vector3::new(0., 1., 0.));
+
+    let down_1 = Point(
+        Rotation3::from_axis_angle(
+            &Unit::new_normalize(Vector3::new(1., 0., 0.)),
+            (-1. / 3_f64).acos(),
+        ) * up.0,
+    );
+    let down_2 = down_1.rotated(Vector3::new(0., 1., 0.), 3);
+    let down_3 = down_2.rotated(Vector3::new(0., 1., 0.), 3);
+
+    println!("{}", up.0.metric_distance(&down_1.0));
+    println!("{}", up.0.metric_distance(&down_2.0));
+    println!("{}", up.0.metric_distance(&down_3.0));
+    println!("{}", down_1.0.metric_distance(&down_2.0));
+    println!("{}", down_1.0.metric_distance(&down_3.0));
+    println!("{}", down_2.0.metric_distance(&down_3.0));
+
+    Polyhedron(vec![
+        Face(vec![up, down_1, down_2]),
+        Face(vec![up, down_2, down_3]),
+        Face(vec![up, down_3, down_1]),
+        Face(vec![down_1, down_2, down_3]),
+    ])
+});
 
 pub static CUBE: LazyLock<Polyhedron> = LazyLock::new(|| {
     let up = Face(vec![
@@ -24,6 +51,7 @@ pub static CUBE: LazyLock<Polyhedron> = LazyLock::new(|| {
 
 pub static SHAPES: phf::Map<&'static str, &LazyLock<Polyhedron>> = phf::phf_map! {
     "c" => &CUBE,
+    "t" => &TETRAHEDRON,
 };
 
 pub static PUZZLES: phf::Map<&'static str, PuzzleDescriptionString> = phf::phf_map! {
