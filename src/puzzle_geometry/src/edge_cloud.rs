@@ -1,0 +1,104 @@
+use std::{cmp::Ordering, mem};
+
+use itertools::Itertools;
+use nalgebra::{Matrix3, Vector3};
+
+use crate::E;
+
+#[derive(Clone, Debug)]
+pub struct EdgeCloud {
+    edges: Vec<(Vector3<f64>, Vector3<f64>)>,
+    cuts: Vec<(Vector3<f64>, Vector3<f64>)>,
+}
+
+impl EdgeCloud {
+    pub fn new(
+        mut edges: Vec<(Vector3<f64>, Vector3<f64>)>,
+        mut cuts: Vec<(Vector3<f64>, Vector3<f64>)>,
+    ) -> EdgeCloud {
+        sort_edge_cloud(&mut edges);
+        sort_edge_cloud(&mut cuts);
+
+        EdgeCloud { edges, cuts }
+    }
+
+    pub fn try_symmetry(&self, into: &mut EdgeCloud, matrix: Matrix3<f64>) -> bool {
+        try_symmetry(&self.cuts, &mut into.cuts, matrix)
+            && try_symmetry(&self.edges, &mut into.edges, matrix)
+    }
+
+    pub fn epsilon_eq(&self, other: &EdgeCloud) -> bool {
+        edge_cloud_eq(&self.cuts, &other.cuts) && edge_cloud_eq(&self.edges, &other.edges)
+    }
+
+    pub fn edges(&self) -> &[(Vector3<f64>, Vector3<f64>)] {
+        &self.edges
+    }
+
+    pub fn cuts(&self) -> &[(Vector3<f64>, Vector3<f64>)] {
+        &self.cuts
+    }
+}
+
+fn try_symmetry(
+    cloud: &[(Vector3<f64>, Vector3<f64>)],
+    into: &mut [(Vector3<f64>, Vector3<f64>)],
+    matrix: Matrix3<f64>,
+) -> bool {
+    into.copy_from_slice(cloud);
+
+    for point in into.iter_mut().flat_map(|(a, b)| [a, b]) {
+        *point = matrix * *point;
+    }
+
+    sort_edge_cloud(into);
+
+    edge_cloud_eq(cloud, into)
+}
+
+fn sort_edge_cloud(cloud: &mut [(Vector3<f64>, Vector3<f64>)]) {
+    for (a, b) in &mut *cloud {
+        let ordering = a
+            .iter()
+            .zip(b.iter())
+            .map(|(x1, x2)| {
+                if (x1 - x2).abs() < E {
+                    return Ordering::Equal;
+                }
+
+                x1.total_cmp(x2)
+            })
+            .find_or_last(|v| !matches!(v, Ordering::Equal))
+            .unwrap();
+
+        if matches!(ordering, Ordering::Greater) {
+            mem::swap(a, b);
+        }
+    }
+
+    cloud.sort_unstable_by(|(a1, b1), (a2, b2)| {
+        a1.as_slice()
+            .iter()
+            .zip(a2.as_slice().iter())
+            .chain(b1.as_slice().iter().zip(b2.as_slice().iter()))
+            .map(|(x1, x2)| {
+                if (x1 - x2).abs() < E {
+                    return Ordering::Equal;
+                }
+
+                x1.total_cmp(x2)
+            })
+            .find_or_last(|v| !matches!(v, Ordering::Equal))
+            .unwrap()
+    });
+}
+
+fn edge_cloud_eq(
+    cloud1: &[(Vector3<f64>, Vector3<f64>)],
+    cloud2: &[(Vector3<f64>, Vector3<f64>)],
+) -> bool {
+    cloud1
+        .iter()
+        .zip(cloud2)
+        .all(|((a1, b1), (a2, b2))| (a1.metric_distance(a2) < E) && (b1.metric_distance(b2) < E))
+}

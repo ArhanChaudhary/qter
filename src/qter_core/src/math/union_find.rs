@@ -172,7 +172,6 @@ impl<S: SetInfo> UnionFind<S> {
             mem::swap(&mut a_result, &mut b_result);
         }
 
-        let a_size = a_result.set_size;
         let a_idx = a_result.root_idx;
         let b_size = b_result.set_size;
         let b_idx = b_result.root_idx;

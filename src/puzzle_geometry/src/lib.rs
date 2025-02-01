@@ -1,10 +1,11 @@
 use cycle_combination_solver::phase2;
+use edge_cloud::EdgeCloud;
 use itertools::Itertools;
 use nalgebra::{Matrix2, Matrix3, Matrix3x2, Rotation3, Unit, Vector3};
 use qter_core::architectures::PermutationGroup;
-use std::{cmp::Ordering, mem};
 use thiserror::Error;
 
+mod edge_cloud;
 mod puzzle_geometry;
 pub use puzzle_geometry::*;
 mod puzzles;
@@ -150,18 +151,18 @@ impl Face {
         Ok(())
     }
 
-    fn edge_cloud(&self) -> Vec<(Vector3<f64>, Vector3<f64>)> {
+    fn edge_cloud(&self) -> EdgeCloud {
         let mut cloud = Vec::new();
 
         for (vertex1, vertex2) in self.0.iter().cycle().tuple_windows().take(self.0.len()) {
             cloud.push((vertex1.0, vertex2.0));
         }
 
-        cloud
+        EdgeCloud::new(cloud, vec![])
     }
 
     fn epsilon_eq(&self, other: &Face) -> bool {
-        edge_cloud_eq(&self.edge_cloud(), &other.edge_cloud())
+        self.edge_cloud().epsilon_eq(&other.edge_cloud())
     }
 }
 
@@ -229,7 +230,7 @@ impl<'a> PuzzleDefinition<'a> {
                 Some(symm) => {
                     let matrix = rotation_of_degree(*cut.normal, symm);
 
-                    if !try_symmetry(&cloud, &mut into, matrix) {
+                    if !cloud.try_symmetry(&mut into, matrix) {
                         return Err(Error::PuzzleLacksExpectedSymmetry(*cut.normal, symm));
                     }
                 }
@@ -245,7 +246,7 @@ impl<'a> PuzzleDefinition<'a> {
 
                         let matrix = rotation_of_degree(*cut.normal, trying_symm);
 
-                        if try_symmetry(&cloud, &mut into, matrix) {
+                        if cloud.try_symmetry(&mut into, matrix) {
                             min_symm = trying_symm;
                         }
                     }
@@ -263,8 +264,9 @@ impl<'a> PuzzleDefinition<'a> {
     }
 
     /// A sorted list of sorted points, used for structural equality
-    fn edge_cloud(&self) -> Vec<(Vector3<f64>, Vector3<f64>)> {
-        let mut cloud = Vec::new();
+    fn edge_cloud(&self) -> EdgeCloud {
+        let mut edges = Vec::new();
+        let mut cuts = Vec::new();
 
         // TODO: Handle these cuts separately, mixing them in with the edges won't work in general
 
@@ -277,84 +279,19 @@ impl<'a> PuzzleDefinition<'a> {
                 }
 
                 let cut_spot = *cut_axis.normal * *cut;
-                cloud.push((cut_spot, -cut_spot));
+                cuts.push((cut_spot, -cut_spot));
             }
 
             // In the case of just a cut through the middle, this will still ensure symmetry
-            cloud.push((*cut_axis.normal, -*cut_axis.normal));
+            cuts.push((*cut_axis.normal, -*cut_axis.normal));
         }
 
         for face in &self.polyhedron.0 {
-            cloud.extend_from_slice(&face.edge_cloud());
+            edges.extend_from_slice(face.edge_cloud().edges());
         }
 
-        sort_edge_cloud(&mut cloud);
-
-        cloud
+        EdgeCloud::new(edges, cuts)
     }
-}
-
-fn try_symmetry(
-    cloud: &[(Vector3<f64>, Vector3<f64>)],
-    into: &mut [(Vector3<f64>, Vector3<f64>)],
-    matrix: Matrix3<f64>,
-) -> bool {
-    into.copy_from_slice(cloud);
-
-    for point in into.iter_mut().flat_map(|(a, b)| [a, b]) {
-        *point = matrix * *point;
-    }
-
-    sort_edge_cloud(into);
-
-    edge_cloud_eq(cloud, into)
-}
-
-fn sort_edge_cloud(cloud: &mut [(Vector3<f64>, Vector3<f64>)]) {
-    for (a, b) in &mut *cloud {
-        let ordering = a
-            .iter()
-            .zip(b.iter())
-            .map(|(x1, x2)| {
-                if (x1 - x2).abs() < E {
-                    return Ordering::Equal;
-                }
-
-                x1.total_cmp(x2)
-            })
-            .find_or_last(|v| !matches!(v, Ordering::Equal))
-            .unwrap();
-
-        if matches!(ordering, Ordering::Greater) {
-            mem::swap(a, b);
-        }
-    }
-
-    cloud.sort_unstable_by(|(a1, b1), (a2, b2)| {
-        a1.as_slice()
-            .iter()
-            .zip(a2.as_slice().iter())
-            .chain(b1.as_slice().iter().zip(b2.as_slice().iter()))
-            .map(|(x1, x2)| {
-                if (x1 - x2).abs() < E {
-                    return Ordering::Equal;
-                }
-
-                x1.total_cmp(x2)
-            })
-            .find_or_last(|v| !matches!(v, Ordering::Equal))
-            .unwrap()
-    });
-}
-
-fn edge_cloud_eq(
-    cloud1: &[(Vector3<f64>, Vector3<f64>)],
-    cloud2: &[(Vector3<f64>, Vector3<f64>)],
-) -> bool {
-    cloud1
-        .iter()
-        .zip(cloud2)
-        .all(|((a1, b1), (a2, b2))| (a1.metric_distance(a2) < E) && (b1.metric_distance(b2) < E))
 }
 
 #[cfg(test)]
