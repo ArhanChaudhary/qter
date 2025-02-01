@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashSet, sync::Arc};
+use std::{collections::HashSet, sync::Arc};
 
 use internment::ArcIntern;
 use itertools::Itertools;
@@ -6,118 +6,55 @@ use itertools::Itertools;
 use crate::{
     architectures::{CycleGenerator, CycleGeneratorSubcycle, Permutation, PermutationGroup},
     discrete_math::{lcm, length_of_substring_that_this_string_is_n_repeated_copies_of},
+    union_find::{SetInfo, UnionFind},
     Int,
 };
 
-#[derive(Debug)]
-enum UnionFindEntry {
-    RootOfSet {
-        // For weighted union-find
-        weight: usize,
-        // Which algorithms share the facelets in this set?
-        contains_facelets_from: HashSet<usize>,
-    },
-    OwnedBy(RefCell<usize>),
-}
+struct FaceletSources(HashSet<usize>);
 
-/// A union-find for which facelets belong to which algorithm
-#[derive(Debug)]
-struct UnionFindOfCycles {
-    sets: Vec<UnionFindEntry>,
-}
+impl SetInfo for FaceletSources {
+    type PathInfo = ();
 
-impl UnionFindOfCycles {
-    /// Returns the index of the root entry representing the facelet's orbit as well as the number of facelets and the set of algorithms that contribute to the facelet's orbit
-    fn find(&self, facelet: usize) -> (usize, (usize, &HashSet<usize>)) {
-        match &self.sets[facelet] {
-            UnionFindEntry::RootOfSet {
-                weight,
-                contains_facelets_from,
-            } => (facelet, (*weight, contains_facelets_from)),
-            UnionFindEntry::OwnedBy(parent_idx) => {
-                let ret = self.find(*parent_idx.borrow());
-                *(parent_idx.borrow_mut()) = ret.0;
-                ret
-            }
-        }
+    const ALLOW_WEIGHTED: bool = true;
+
+    fn merge(&mut self, new_child: Self) -> Self::PathInfo {
+        self.0.extend(new_child.0)
     }
 
-    // Unions two facelets along with the sets of algorithms that they belong to
-    fn union(&mut self, a: usize, b: usize) {
-        let (root_a, (weight_a, sets_a)) = self.find(a);
-        let (root_b, (weight_b, sets_b)) = self.find(b);
+    fn join_paths(_path: &mut Self::PathInfo, _path_of_parent: &Self::PathInfo) {}
+}
 
-        let mut combined_sets = sets_a.to_owned();
-        combined_sets.extend(sets_b);
+/// Calculate the orbits of all of the facelets along with which algorithms contribute to the orbit
+fn find_orbits(facelet_count: usize, permutations: &[Permutation]) -> UnionFind<FaceletSources> {
+    // Initialize the union-find
+    let mut sets = vec![];
 
-        if root_a == root_b {
-            return;
+    for facelet in 0..facelet_count {
+        // For each facelet, find which algorithms move it and add them to the set
+        let mut contains_facelets_from = HashSet::new();
+
+        for (i, permutation) in permutations.iter().enumerate() {
+            if permutation.mapping()[facelet] != facelet {
+                contains_facelets_from.insert(i);
+            }
         }
 
-        if weight_a > weight_b {
-            match &mut self.sets[root_a] {
-                UnionFindEntry::RootOfSet {
-                    weight,
-                    contains_facelets_from,
-                } => {
-                    *weight += weight_b;
-                    *contains_facelets_from = combined_sets;
-                }
-                UnionFindEntry::OwnedBy(_) => unreachable!(),
-            }
-
-            self.sets[root_b] = UnionFindEntry::OwnedBy(RefCell::new(root_a));
-        } else {
-            match &mut self.sets[root_b] {
-                UnionFindEntry::RootOfSet {
-                    weight,
-                    contains_facelets_from,
-                } => {
-                    *weight += weight_a;
-                    *contains_facelets_from = combined_sets;
-                }
-                UnionFindEntry::OwnedBy(_) => unreachable!(),
-            }
-
-            self.sets[root_a] = UnionFindEntry::OwnedBy(RefCell::new(root_b));
-        }
+        sets.push(FaceletSources(contains_facelets_from))
     }
 
-    /// Calculate the orbits of all of the facelets along with which algorithms contribute to the orbit
-    fn find_orbits(facelet_count: usize, permutations: &[Permutation]) -> UnionFindOfCycles {
-        // Initialize the union-find
-        let mut sets = vec![];
+    let mut union_find = UnionFind::new_with_initial_set_info(sets);
 
+    // Union all facelets that share the same orbit
+    for permutation in permutations {
         for facelet in 0..facelet_count {
-            // For each facelet, find which algorithms move it and add them to the set
-            let mut contains_facelets_from = HashSet::new();
+            let goes_to = permutation.mapping()[facelet];
 
-            for (i, permutation) in permutations.iter().enumerate() {
-                if permutation.mapping()[facelet] != facelet {
-                    contains_facelets_from.insert(i);
-                }
-            }
-
-            sets.push(UnionFindEntry::RootOfSet {
-                weight: 1,
-                contains_facelets_from,
-            })
+            // They have the same orbit if one is mapped to the other
+            union_find.union(facelet, goes_to);
         }
-
-        let mut union_find = UnionFindOfCycles { sets };
-
-        // Union all facelets that share the same orbit
-        for permutation in permutations {
-            for facelet in 0..facelet_count {
-                let goes_to = permutation.mapping()[facelet];
-
-                // They have the same orbit if one is mapped to the other
-                union_find.union(facelet, goes_to);
-            }
-        }
-
-        union_find
     }
+
+    union_find
 }
 
 /// Convert the algorithms into a list of cycle generators and a list of shared facelets
@@ -135,7 +72,7 @@ pub fn algorithms_to_cycle_generators(
     }
 
     // Find the orbits of all of the facelets in the subgroup generated by `permutations`
-    let orbits = UnionFindOfCycles::find_orbits(group.facelet_count(), &permutations);
+    let orbits = find_orbits(group.facelet_count(), &permutations);
 
     let mut shared_facelets = vec![];
 
@@ -148,7 +85,7 @@ pub fn algorithms_to_cycle_generators(
                 let mut unshared_cycles = vec![];
 
                 for cycle in permutation.cycles() {
-                    if orbits.find(cycle[0]).1 .1.len() > 1 {
+                    if orbits.find(cycle[0]).set_meta().0.len() > 1 {
                         shared_facelets.extend_from_slice(cycle);
                         continue;
                     }

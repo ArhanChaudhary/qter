@@ -5,17 +5,16 @@ use std::{
 };
 
 pub mod architectures;
-pub mod discrete_math;
-mod numbers;
+mod math;
 mod puzzle_parser;
 mod shared_facelet_detection;
 pub mod table_encoding;
 
-pub use numbers::*;
+use discrete_math::length_of_substring_that_this_string_is_n_repeated_copies_of;
+pub use math::*;
 
 use architectures::{Architecture, Permutation, PermutationGroup};
 // Use a huge integers for orders to allow crazy things like examinx
-use discrete_math::length_of_substring_that_this_string_is_n_repeated_copies_of;
 use internment::ArcIntern;
 use pest::{Position, RuleType};
 
