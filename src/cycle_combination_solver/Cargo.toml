@@ -7,6 +7,7 @@ edition = "2021"
 integer-partitions = "0.1.1"
 memoize = "0.4.2"
 pareto_front = "1.0.1"
+rstest = "0.24.0"
 
 [lints]
 workspace = true

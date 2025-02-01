@@ -100,3 +100,4 @@ pub static PUZZLES: phf::Map<&'static str, PuzzleDescriptionString> = phf::phf_m
     "megaminx + chopasaurus" => "d f 0.61803398875 v 0",
     "starminx combo" => "d f 0.23606797749979 v 0.937962370425399",
 };
+

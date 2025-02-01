@@ -1,3 +1,9 @@
+#[derive(Default)]
+pub struct CycleType<T> {
+    pub corner_partition: Vec<(T, bool)>,
+    pub edge_partition: Vec<(T, bool)>,
+}
+
 pub fn induces_oriented_partition(
     perm: &[u8],
     ori: &[i8],

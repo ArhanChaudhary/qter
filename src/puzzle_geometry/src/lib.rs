@@ -6,10 +6,7 @@ use qter_core::architectures::PermutationGroup;
 use thiserror::Error;
 
 mod edge_cloud;
-mod puzzle_geometry;
-pub use puzzle_geometry::*;
-mod puzzles;
-pub use puzzles::*;
+pub mod puzzles;
 
 // Margin of error to consider points "equal"
 const E: f64 = 1e-9;
@@ -185,27 +182,35 @@ impl PuzzleGeometry {
     }
 
     /// Get the puzzle as a permutation and orientation group over pieces
-    pub fn piece_perm_and_ori_group(&self) -> &PiecePermAndOriGroup {
+    pub fn piece_perm_and_ori_group<S: phase2::puzzle::Storage>(&self) -> &PiecePermAndOriGroup<S> {
         todo!()
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct PiecePermAndOriGroup {}
+pub struct PiecePermAndOriGroup<S: phase2::puzzle::Storage> {
+    _marker: std::marker::PhantomData<S>,
+}
 
-impl PiecePermAndOriGroup {
+pub trait PuzzleGeometryInterface<S: phase2::puzzle::Storage> {
+    fn pieces(&self) -> &[(usize, u8)];
+    fn moves(&self) -> &[phase2::puzzle::Move<S>];
+    fn symmetries(&self) -> &[phase2::puzzle::PuzzleState<S>];
+}
+
+impl<S: phase2::puzzle::Storage> PuzzleGeometryInterface<S> for PiecePermAndOriGroup<S> {
     /// For each type of piece, return a list of (amount of the piece type, orientation mod)
-    pub fn pieces(&self) -> &[(usize, u8)] {
+    fn pieces(&self) -> &[(usize, u8)] {
         todo!()
     }
 
     /// Get the set of available moves on the puzzle
-    pub fn moves(&self) -> &[phase2::puzzle::Move<phase2::puzzle::HeapStorage>] {
+    fn moves(&self) -> &[phase2::puzzle::Move<S>] {
         todo!()
     }
 
     /// Get the list of symmetries obeyed by the puzzle
-    pub fn symmetries(&self) -> &[phase2::puzzle::PuzzleState<phase2::puzzle::HeapStorage>] {
+    fn symmetries(&self) -> &[phase2::puzzle::PuzzleState<S>] {
         todo!()
     }
 }
@@ -298,7 +303,9 @@ impl<'a> PuzzleDefinition<'a> {
 mod tests {
     use nalgebra::{Unit, Vector3};
 
-    use crate::{CutAxis, CutAxisNames, Error, Face, Point, Polyhedron, PuzzleDefinition, CUBE};
+    use crate::{
+        puzzles::CUBE, CutAxis, CutAxisNames, Error, Face, Point, Polyhedron, PuzzleDefinition,
+    };
 
     #[test]
     fn degeneracy() {
