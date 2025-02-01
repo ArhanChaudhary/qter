@@ -1,7 +1,7 @@
 use cycle_combination_solver::phase2;
 use edge_cloud::EdgeCloud;
 use itertools::Itertools;
-use nalgebra::{Matrix2, Matrix3, Matrix3x2, Rotation3, Unit, Vector3};
+use nalgebra::{Matrix3, Matrix3x2, Rotation3, Unit, Vector3};
 use qter_core::architectures::PermutationGroup;
 use thiserror::Error;
 
@@ -21,8 +21,6 @@ type PuzzleDescriptionString<'a> = &'a str;
 pub enum Error {
     #[error("The vertices of the face are not coplanar: {0:?}")]
     FaceNotCoplanar(Face),
-    #[error("The face is not convex: {0:?}")]
-    FaceNotConvex(Face),
     #[error("The face forms a line or a point rather than a plane: {0:?}")]
     FaceIsDegenerate(Face),
     #[error(
@@ -129,32 +127,6 @@ impl Face {
             if (plane_proj * offsetted).metric_distance(&offsetted) >= E {
                 return Err(Error::FaceNotCoplanar(self.to_owned()));
             }
-        }
-
-        // TEST CONVEXITY
-
-        // All pairs of three points must all be either be either left turns or right turns
-        if !self
-            .0
-            .iter()
-            .map(|point| make_2d * (point.0 - origin))
-            .cycle()
-            .tuple_windows()
-            .take(self.0.len())
-            .filter_map(|(a, b, c)| {
-                let v = Matrix2::from_columns(&[a - b, c - b])
-                    .determinant()
-                    .signum();
-
-                if v == 0. {
-                    None
-                } else {
-                    Some(v)
-                }
-            })
-            .all_equal()
-        {
-            return Err(Error::FaceNotConvex(self.to_owned()));
         }
 
         Ok(())
@@ -358,40 +330,6 @@ mod tests {
             Point(Vector3::new(1., 1., 0.)),
             Point(Vector3::new(1., 0., 0.)),
             Point(Vector3::new(1., 0., 1.)),
-        ])
-        .is_valid();
-
-        assert!(matches!(valid, Ok(())));
-    }
-
-    #[test]
-    fn not_convex() {
-        let valid = Face(vec![
-            Point(Vector3::new(1., 1., 1.)),
-            Point(Vector3::new(1., 0., 0.)),
-            Point(Vector3::new(1., 1., 0.)),
-            Point(Vector3::new(1., 0., 1.)),
-        ])
-        .is_valid();
-
-        assert!(matches!(valid, Err(Error::FaceNotConvex(_))));
-
-        let valid = Face(vec![
-            Point(Vector3::new(1., 1., 1.)),
-            Point(Vector3::new(1., 1., 0.)),
-            Point(Vector3::new(1., 0.8, 0.8)),
-            Point(Vector3::new(1., 0., 1.)),
-        ])
-        .is_valid();
-
-        assert!(matches!(valid, Err(Error::FaceNotConvex(_))));
-
-        // Verify left turns and right turns
-        let valid = Face(vec![
-            Point(Vector3::new(1., 0., 1.)),
-            Point(Vector3::new(1., 0., 0.)),
-            Point(Vector3::new(1., 1., 0.)),
-            Point(Vector3::new(1., 1., 1.)),
         ])
         .is_valid();
 
