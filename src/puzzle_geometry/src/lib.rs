@@ -167,7 +167,7 @@ impl PuzzleGeometry {
     }
 
     /// Get the puzzle as a permutation and orientation group over pieces
-    pub fn piece_perm_and_ori_group<S: phase2_puzzle::PuzzleStorage>(
+    pub fn piece_perm_and_ori_group<S: phase2_puzzle::PuzzleStateInterface>(
         &self,
     ) -> &PiecePermAndOriGroup<S> {
         todo!()
@@ -175,17 +175,17 @@ impl PuzzleGeometry {
 }
 
 #[derive(Clone, Debug)]
-pub struct PiecePermAndOriGroup<S: phase2_puzzle::PuzzleStorage> {
+pub struct PiecePermAndOriGroup<S: phase2_puzzle::PuzzleStateInterface> {
     _marker: std::marker::PhantomData<S>,
 }
 
-pub trait PuzzleGeometryCore<S: phase2_puzzle::PuzzleStorage> {
+pub trait PuzzleGeometryCore<S: phase2_puzzle::PuzzleStateInterface> {
     fn pieces(&self) -> Vec<(usize, u8)>;
     fn moves(&self) -> Vec<phase2_puzzle::Move<S>>;
-    fn symmetries(&self) -> Vec<phase2_puzzle::PuzzleState<S>>;
+    fn symmetries(&self) -> Vec<S>;
 }
 
-impl<S: phase2_puzzle::PuzzleStorage> PuzzleGeometryCore<S> for PiecePermAndOriGroup<S> {
+impl<S: phase2_puzzle::PuzzleStateInterface> PuzzleGeometryCore<S> for PiecePermAndOriGroup<S> {
     /// For each type of piece, return a list of (amount of the piece type, orientation mod)
     fn pieces(&self) -> Vec<(usize, u8)> {
         todo!()
@@ -197,7 +197,7 @@ impl<S: phase2_puzzle::PuzzleStorage> PuzzleGeometryCore<S> for PiecePermAndOriG
     }
 
     /// Get the list of symmetries obeyed by the puzzle
-    fn symmetries(&self) -> Vec<phase2_puzzle::PuzzleState<S>> {
+    fn symmetries(&self) -> Vec<S> {
         todo!()
     }
 }
