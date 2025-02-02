@@ -19,62 +19,6 @@ impl<T> PuzzleStorage for SimdPuzzle<T> {
     type Buf = T;
 }
 
-pub trait PuzzleStateInterfaceSlice<S: SliceStorage>: PuzzleStateInterface<S> {
-    fn orbit_states(&self) -> &S::Buf;
-    fn orbit_states_mut(&mut self) -> &mut S::Buf;
-
-    fn replace_compose(&mut self, move_a: &Move<S>, move_b: &Move<S>, orbit_defs: &[OrbitDef]) {
-        let a = move_a.delta.orbit_states.as_ref();
-        let b = move_b.delta.orbit_states.as_ref();
-        let orbit_states_mut = self.orbit_states_mut().as_mut();
-        let mut base = 0;
-        for &OrbitDef {
-            size,
-            orientation_mod,
-        } in orbit_defs
-        {
-            let size = size as usize;
-            if orientation_mod > 1 {
-                for i in 0..size {
-                    let base_i = base + i;
-                    unsafe {
-                        let pos = a.get_unchecked(base + *b.get_unchecked(base_i) as usize);
-                        let a_ori =
-                            a.get_unchecked(base + *b.get_unchecked(base_i) as usize + size);
-                        let b_ori = b.get_unchecked(base_i + size);
-                        *orbit_states_mut.get_unchecked_mut(base_i) = *pos;
-                        *orbit_states_mut.get_unchecked_mut(base_i + size) =
-                            (*a_ori + *b_ori) % orientation_mod;
-                    }
-                }
-            } else {
-                for i in 0..size {
-                    let base_i = base + i;
-                    unsafe {
-                        let pos = *a.get_unchecked(base + *b.get_unchecked(base_i) as usize);
-                        *orbit_states_mut.get_unchecked_mut(base_i) = pos;
-                        *orbit_states_mut.get_unchecked_mut(base_i + size) = 0;
-                    }
-                }
-            }
-            base += size * 2;
-        }
-    }
-}
-
-impl<S: SliceStorage> PuzzleStateInterfaceSlice<S> for PuzzleState<S>
-where
-    PuzzleState<S>: PuzzleStateInterface<S>,
-{
-    fn orbit_states(&self) -> &S::Buf {
-        &self.orbit_states
-    }
-
-    fn orbit_states_mut(&mut self) -> &mut S::Buf {
-        &mut self.orbit_states
-    }
-}
-
 impl<const N: usize> PuzzleStateInterface<StackPuzzle<N>> for PuzzleState<StackPuzzle<N>> {
     fn solved(orbit_defs: &[OrbitDef]) -> Self {
         let mut orbit_states = [0_u8; N];
@@ -100,9 +44,7 @@ impl<const N: usize> PuzzleStateInterface<StackPuzzle<N>> for PuzzleState<StackP
         move_b: &Move<StackPuzzle<N>>,
         orbit_defs: &[OrbitDef],
     ) {
-        <Self as PuzzleStateInterfaceSlice<StackPuzzle<N>>>::replace_compose(
-            self, move_a, move_b, orbit_defs,
-        );
+        self.replace_compose(move_a, move_b, orbit_defs);
     }
 }
 
@@ -133,9 +75,7 @@ impl PuzzleStateInterface<HeapPuzzle> for PuzzleState<HeapPuzzle> {
         move_b: &Move<HeapPuzzle>,
         orbit_defs: &[OrbitDef],
     ) {
-        <Self as PuzzleStateInterfaceSlice<HeapPuzzle>>::replace_compose(
-            self, move_a, move_b, orbit_defs,
-        );
+        self.replace_compose(move_a, move_b, orbit_defs);
     }
 }
 
@@ -167,7 +107,7 @@ mod tests {
         let mut solved = PuzzleState::solved(&cube3_def.orbit_defs);
         let r_move = cube3_def.get_move("R").unwrap();
         let f_move = cube3_def.get_move("F").unwrap();
-        PuzzleStateInterface::replace_compose(&mut solved, r_move, f_move, &cube3_def.orbit_defs);
+        solved.replace_compose(r_move, f_move, &cube3_def.orbit_defs);
         solved
     }
 
@@ -182,14 +122,14 @@ mod tests {
     #[rstest]
     fn test_composition_stack(compose_expected: &[u8]) {
         let compose_actual = compose_r_f::<StackPuzzle<40>>();
-        assert_eq!(compose_actual.orbit_states(), compose_expected);
+        assert_eq!(compose_actual.orbit_states, compose_expected);
     }
 
     #[rstest]
     fn test_composition_heap(compose_expected: &[u8]) {
         let compose_actual = compose_r_f::<HeapPuzzle>();
         assert_eq!(
-            compose_actual.orbit_states().iter().as_slice(),
+            compose_actual.orbit_states.iter().as_slice(),
             compose_expected
         );
     }
