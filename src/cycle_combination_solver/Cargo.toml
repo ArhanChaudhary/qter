@@ -13,3 +13,7 @@ rstest = "0.24.0"
 
 [lints]
 workspace = true
+
+[features]
+avx512vl = []
+avx512vbmi = []

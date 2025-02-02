@@ -79,6 +79,48 @@ impl PuzzleStateInterface<HeapPuzzle> for PuzzleState<HeapPuzzle> {
     }
 }
 
+// struct SupportedSimd<const N: usize>(Simd<u8, N>);
+
+// impl<const N: usize> Deref for SupportedSimd<N> {
+//     type Target = Simd<u8, N>;
+
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+
+pub fn supports_dyn_shuffle<const N: usize>() -> bool {
+    match N {
+        #[cfg(all(
+            any(
+                target_arch = "aarch64",
+                target_arch = "arm64ec",
+                all(target_arch = "arm", target_feature = "v7")
+            ),
+            target_feature = "neon",
+            target_endian = "little"
+        ))]
+        8 => true,
+        #[cfg(target_feature = "ssse3")]
+        16 => true,
+        #[cfg(target_feature = "simd128")]
+        16 => true,
+        #[cfg(all(
+            any(target_arch = "aarch64", target_arch = "arm64ec"),
+            target_feature = "neon",
+            target_endian = "little"
+        ))]
+        16 => true,
+        #[cfg(all(target_feature = "avx2", not(target_feature = "avx512vbmi")))]
+        32 => true,
+        #[cfg(all(target_feature = "avx512vl", target_feature = "avx512vbmi"))]
+        32 => true,
+        // #[cfg(target_feature = "avx512vbmi")]
+        // 64 => transize(x86::_mm512_permutexvar_epi8, self, idxs),
+        _ => false,
+    }
+}
+
 pub struct PuzzleDef<S: PuzzleStorage> {
     pub name: String,
     pub orbit_defs: Vec<OrbitDef>,
@@ -94,7 +136,7 @@ impl<S: PuzzleStorage> PuzzleDef<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::phase2::defs::cube3_def;
+    use crate::phase2::defs::{cube3_def, Cube3PuzzleSimd};
     use rstest::*;
 
     fn compose_r_f<S>() -> PuzzleState<S>
@@ -102,7 +144,6 @@ mod tests {
         S: PuzzleStorage,
         PuzzleState<S>: PuzzleStateInterface<S>,
     {
-        // let mut solved = PuzzleState::<StackPuzzle<CUBE3_STACK>>::solved(&cube3_def.orbit_defs);
         let cube3_def = cube3_def::<S>();
         let mut solved = PuzzleState::solved(&cube3_def.orbit_defs);
         let r_move = cube3_def.get_move("R").unwrap();
@@ -132,5 +173,16 @@ mod tests {
             compose_actual.orbit_states.iter().as_slice(),
             compose_expected
         );
+    }
+
+    #[rstest]
+    fn test_composition_simd(compose_expected: &[u8]) {
+        let compose_actual = compose_r_f::<Cube3PuzzleSimd>();
+        println!(
+            "{:?}, {:?}",
+            compose_actual.orbit_states.ep, compose_actual.orbit_states.cp
+        );
+        println!("{:?}", compose_expected);
+        // assert_eq!(compose_actual.orbit_states, compose_expected);
     }
 }
