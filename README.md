@@ -106,11 +106,11 @@ loop {
   - [Metaprogramming](#metaprogramming)
   - [Prelude](#prelude)
 - [Memory tapes](#memory-tapes)
-- [Cycle combination solver](#cycle-combination-solver)
-  - [Phase 1](#phase-1)
-  - [Phase 2](#phase-2)
-    - [Using Korf's algorithm](#using-korfs-algorithm)
-    - [Using GAP](#using-gap)
+- [Technical details](#technical-details)
+  - [Cycle combination solver](#cycle-combination-solver)
+    - [Phase 1](#phase-1)
+    - [Phase 2](#phase-2)
+  - [Puzzle geometry](#puzzle-geometry)
 - [About the authors](#about-the-authors)
 - [References](#references)
 - [Acknowledgements](#acknowledgements)
@@ -545,7 +545,9 @@ WIP
 
 </ul>
 
-# Cycle combination solver
+# Technical details
+
+## Cycle combination solver
 
 (This section is a huge WIP)
 
@@ -579,7 +581,7 @@ The `U` cycle takes four repetitions to re-solve the cube, therefore it has orde
 - The set of pieces affected by a given cycle must not interfere with the set of pieces affected by any other cycle. Helpful to think no longer in terms of moves but in cycles as in these pieces may be moved but they are restored. If the pieces were to interfere, then this would mean modifying the value of one register has a side effect of modifying the value of another unintended register.
 - More registers mean more states 90*90 > 1260
 
-## Phase 1
+### Phase 1
 
 WIP
 
@@ -589,11 +591,11 @@ Talking points
 - Find all ways to assign cubies to orbits, then find the max order using partitions and priority queue
 - Pareto front
 
-## Phase 2
+### Phase 2
 
 WIP
 
-### Using Korf's algorithm
+Using Korf's algorithm
 
 Talking points
 
@@ -601,7 +603,7 @@ Talking points
 - Symmetry and inverse reduction [[3](#ref-3)]
 - Trangium's algorithm evaluator
 
-### Using GAP
+Using GAP
 
 WIP
 
@@ -610,6 +612,8 @@ Talking points
 - Stabilizers
 - Conjugacy classes
 - Fork of optimal solver
+
+## Puzzle geometry
 
 # About the authors
 

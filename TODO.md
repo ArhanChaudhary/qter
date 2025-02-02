@@ -4,13 +4,13 @@
 
 ## SCC
 
-- Port PuzzleGeometry to Rust
 - Phase 2
   - standard symmetry
   - inverse symmetry
-  - canonical sequence ordering
-    - prevent same face
-    - antipode ordering
+  - canonical sequences
+    - commutative ordering FSM
+      - prevent same face
+      - prevent antipodes
     - sequence symmetry
   - multithreading
   - find all solutions at depth
