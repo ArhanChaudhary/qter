@@ -1,53 +1,29 @@
-pub struct PuzzleDef<S: Storage = HeapStorage> {
-    pub name: String,
-    pub orbit_defs: Vec<OrbitDef>,
-    pub moves: Vec<Move<S>>,
-}
+use qter_core::phase2_puzzle::{
+    Move, OrbitDef, PuzzleState, PuzzleStateInterface, PuzzleStorage, SliceStorage,
+};
+use std::marker::PhantomData;
 
-pub struct StackStorage<const N: usize>;
-pub struct HeapStorage;
+pub struct StackPuzzle<const N: usize>;
+pub struct HeapPuzzle;
+pub struct SimdPuzzle<T>(PhantomData<T>);
 
-pub trait Storage {
-    type Buf: AsRef<[u8]> + AsMut<[u8]>;
-}
-
-impl<const N: usize> Storage for StackStorage<N> {
+impl<const N: usize> SliceStorage for StackPuzzle<N> {
     type Buf = [u8; N];
 }
-impl Storage for HeapStorage {
+
+impl SliceStorage for HeapPuzzle {
     type Buf = Box<[u8]>;
 }
 
-#[repr(transparent)]
-pub struct PuzzleState<S: Storage> {
-    orbit_states: S::Buf,
+impl<T> PuzzleStorage for SimdPuzzle<T> {
+    type Buf = T;
 }
 
-pub struct Move<S: Storage> {
-    // put this first to avoid the memory offset when dereferencing
-    pub delta: PuzzleState<S>,
-    pub name: String,
-}
-
-pub struct OrbitDef {
-    pub size: u8,
-    pub orientation_mod: u8,
-    pub name: String,
-}
-
-impl<S: Storage> PuzzleDef<S> {
-    fn get_move(&self, name: &str) -> Option<&Move<S>> {
-        self.moves.iter().find(|def| def.name == name)
-    }
-}
-
-pub trait PuzzleStateCore<S: Storage> {
-    fn solved(orbit_defs: &[OrbitDef]) -> Self;
-    fn from_orbit_states(orbit_states: S::Buf) -> Self;
+pub trait PuzzleStateInterfaceSlice<S: SliceStorage>: PuzzleStateInterface<S> {
     fn orbit_states(&self) -> &S::Buf;
     fn orbit_states_mut(&mut self) -> &mut S::Buf;
 
-    fn replace_mul(&mut self, move_a: &Move<S>, move_b: &Move<S>, orbit_defs: &[OrbitDef]) {
+    fn replace_compose(&mut self, move_a: &Move<S>, move_b: &Move<S>, orbit_defs: &[OrbitDef]) {
         let a = move_a.delta.orbit_states.as_ref();
         let b = move_b.delta.orbit_states.as_ref();
         let orbit_states_mut = self.orbit_states_mut().as_mut();
@@ -55,7 +31,6 @@ pub trait PuzzleStateCore<S: Storage> {
         for &OrbitDef {
             size,
             orientation_mod,
-            name: _,
         } in orbit_defs
         {
             let size = size as usize;
@@ -87,7 +62,20 @@ pub trait PuzzleStateCore<S: Storage> {
     }
 }
 
-impl<const N: usize> PuzzleStateCore<StackStorage<N>> for PuzzleState<StackStorage<N>> {
+impl<S: SliceStorage> PuzzleStateInterfaceSlice<S> for PuzzleState<S>
+where
+    PuzzleState<S>: PuzzleStateInterface<S>,
+{
+    fn orbit_states(&self) -> &S::Buf {
+        &self.orbit_states
+    }
+
+    fn orbit_states_mut(&mut self) -> &mut S::Buf {
+        &mut self.orbit_states
+    }
+}
+
+impl<const N: usize> PuzzleStateInterface<StackPuzzle<N>> for PuzzleState<StackPuzzle<N>> {
     fn solved(orbit_defs: &[OrbitDef]) -> Self {
         let mut orbit_states = [0_u8; N];
         let mut base = 0;
@@ -100,20 +88,25 @@ impl<const N: usize> PuzzleStateCore<StackStorage<N>> for PuzzleState<StackStora
         PuzzleState { orbit_states }
     }
 
-    fn from_orbit_states(orbit_states: [u8; N]) -> Self {
-        PuzzleState { orbit_states }
+    fn from_orbit_states(slice: &[u8]) -> Self {
+        PuzzleState {
+            orbit_states: slice.try_into().unwrap(),
+        }
     }
 
-    fn orbit_states(&self) -> &[u8; N] {
-        &self.orbit_states
-    }
-
-    fn orbit_states_mut(&mut self) -> &mut [u8; N] {
-        &mut self.orbit_states
+    fn replace_compose(
+        &mut self,
+        move_a: &Move<StackPuzzle<N>>,
+        move_b: &Move<StackPuzzle<N>>,
+        orbit_defs: &[OrbitDef],
+    ) {
+        <Self as PuzzleStateInterfaceSlice<StackPuzzle<N>>>::replace_compose(
+            self, move_a, move_b, orbit_defs,
+        );
     }
 }
 
-impl PuzzleStateCore<HeapStorage> for PuzzleState<HeapStorage> {
+impl PuzzleStateInterface<HeapPuzzle> for PuzzleState<HeapPuzzle> {
     fn solved(orbit_defs: &[OrbitDef]) -> Self {
         let mut orbit_states = vec![0_u8; orbit_defs.iter().map(|def| def.size as usize * 2).sum()];
         let mut base = 0;
@@ -128,59 +121,76 @@ impl PuzzleStateCore<HeapStorage> for PuzzleState<HeapStorage> {
         }
     }
 
-    fn from_orbit_states(orbit_states: Box<[u8]>) -> Self {
-        PuzzleState { orbit_states }
+    fn from_orbit_states(slice: &[u8]) -> Self {
+        PuzzleState {
+            orbit_states: slice.into(),
+        }
     }
 
-    fn orbit_states(&self) -> &Box<[u8]> {
-        &self.orbit_states
+    fn replace_compose(
+        &mut self,
+        move_a: &Move<HeapPuzzle>,
+        move_b: &Move<HeapPuzzle>,
+        orbit_defs: &[OrbitDef],
+    ) {
+        <Self as PuzzleStateInterfaceSlice<HeapPuzzle>>::replace_compose(
+            self, move_a, move_b, orbit_defs,
+        );
     }
+}
 
-    fn orbit_states_mut(&mut self) -> &mut Box<[u8]> {
-        &mut self.orbit_states
+pub struct PuzzleDef<S: PuzzleStorage> {
+    pub name: String,
+    pub orbit_defs: Vec<OrbitDef>,
+    pub moves: Vec<Move<S>>,
+}
+
+impl<S: PuzzleStorage> PuzzleDef<S> {
+    fn get_move(&self, name: &str) -> Option<&Move<S>> {
+        self.moves.iter().find(|def| def.name == name)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
-    // use crate::phase2::defs::CUBE3_DEF;
-    // use rstest::*;
+    use super::*;
+    use crate::phase2::defs::cube3_def;
+    use rstest::*;
 
-    // #[fixture]
-    // fn cube3_def() -> &'static PuzzleDef<Cube3Storage> {
-    //     &*CUBE3_DEF
-    // }
+    fn compose_r_f<S>() -> PuzzleState<S>
+    where
+        S: PuzzleStorage,
+        PuzzleState<S>: PuzzleStateInterface<S>,
+    {
+        // let mut solved = PuzzleState::<StackPuzzle<CUBE3_STACK>>::solved(&cube3_def.orbit_defs);
+        let cube3_def = cube3_def::<S>();
+        let mut solved = PuzzleState::solved(&cube3_def.orbit_defs);
+        let r_move = cube3_def.get_move("R").unwrap();
+        let f_move = cube3_def.get_move("F").unwrap();
+        PuzzleStateInterface::replace_compose(&mut solved, r_move, f_move, &cube3_def.orbit_defs);
+        solved
+    }
 
-    // #[rstest]
-    // fn test_composition(cube3_def: &PuzzleDef<Cube3Storage>) {
-    //     let mut solved = PuzzleState::<Cube3Storage>::solved(&cube3_def.orbit_defs);
-    //     let r_move = cube3_def.get_move("R").unwrap();
-    //     let f_move = cube3_def.get_move("F").unwrap();
-    //     solved.replace_mul(r_move, f_move, &cube3_def.orbit_defs);
+    #[fixture]
+    fn compose_expected() -> &'static [u8] {
+        &[
+            9, 3, 7, 2, 1, 5, 6, 0, 8, 4, 10, 11, 1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 6, 1, 0, 4,
+            2, 5, 3, 7, 2, 2, 2, 1, 1, 0, 1, 0,
+        ]
+    }
 
-    //     assert_eq!(
-    //         solved.orbit_states(),
-    //         &[
-    //             9, 3, 7, 2, 1, 5, 6, 0, 8, 4, 10, 11, 1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 6, 1, 0,
-    //             4, 2, 5, 3, 7, 2, 2, 2, 1, 1, 0, 1, 0,
-    //         ][..]
-    //     );
-    // }
+    #[rstest]
+    fn test_composition_stack(compose_expected: &[u8]) {
+        let compose_actual = compose_r_f::<StackPuzzle<40>>();
+        assert_eq!(compose_actual.orbit_states(), compose_expected);
+    }
 
-    // #[rstest]
-    // fn test_composition_heap(cube3_def: &PuzzleDef<Cube3Storage>) {
-    //     let mut solved = PuzzleState::<HeapStorage>::solved(&cube3_def.orbit_defs);
-    //     let r_move = cube3_def.get_move("R").unwrap();
-    //     let f_move = cube3_def.get_move("F").unwrap();
-    //     solved.replace_mul(r_move, f_move, &cube3_def.orbit_defs);
-
-    //     assert_eq!(
-    //         solved.orbit_states(),
-    //         &[
-    //             9, 3, 7, 2, 1, 5, 6, 0, 8, 4, 10, 11, 1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 6, 1, 0,
-    //             4, 2, 5, 3, 7, 2, 2, 2, 1, 1, 0, 1, 0,
-    //         ][..]
-    //     );
-    // }
+    #[rstest]
+    fn test_composition_heap(compose_expected: &[u8]) {
+        let compose_actual = compose_r_f::<HeapPuzzle>();
+        assert_eq!(
+            compose_actual.orbit_states().iter().as_slice(),
+            compose_expected
+        );
+    }
 }

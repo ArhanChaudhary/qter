@@ -1,8 +1,9 @@
-use cycle_combination_solver::phase2;
+#![feature(portable_simd)]
+
 use edge_cloud::EdgeCloud;
 use itertools::Itertools;
 use nalgebra::{Matrix3, Matrix3x2, Rotation3, Unit, Vector3};
-use qter_core::architectures::PermutationGroup;
+use qter_core::{architectures::PermutationGroup, phase2_puzzle};
 use thiserror::Error;
 
 mod edge_cloud;
@@ -166,40 +167,42 @@ impl PuzzleGeometry {
     }
 
     /// Get the puzzle as a permutation and orientation group over pieces
-    pub fn piece_perm_and_ori_group<S: phase2::puzzle::Storage>(&self) -> &PiecePermAndOriGroup<S> {
+    pub fn piece_perm_and_ori_group<S: phase2_puzzle::PuzzleStorage>(
+        &self,
+    ) -> &PiecePermAndOriGroup<S> {
         todo!()
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct PiecePermAndOriGroup<S: phase2::puzzle::Storage> {
+pub struct PiecePermAndOriGroup<S: phase2_puzzle::PuzzleStorage> {
     _marker: std::marker::PhantomData<S>,
 }
 
-pub trait PuzzleGeometryInterface<S: phase2::puzzle::Storage> {
-    fn pieces(&self) -> &[(usize, u8)];
-    fn moves(&self) -> &[phase2::puzzle::Move<S>];
-    fn symmetries(&self) -> &[phase2::puzzle::PuzzleState<S>];
+pub trait PuzzleGeometryCore<S: phase2_puzzle::PuzzleStorage> {
+    fn pieces(&self) -> Vec<(usize, u8)>;
+    fn moves(&self) -> Vec<phase2_puzzle::Move<S>>;
+    fn symmetries(&self) -> Vec<phase2_puzzle::PuzzleState<S>>;
 }
 
-impl<S: phase2::puzzle::Storage> PuzzleGeometryInterface<S> for PiecePermAndOriGroup<S> {
+impl<S: phase2_puzzle::PuzzleStorage> PuzzleGeometryCore<S> for PiecePermAndOriGroup<S> {
     /// For each type of piece, return a list of (amount of the piece type, orientation mod)
-    fn pieces(&self) -> &[(usize, u8)] {
+    fn pieces(&self) -> Vec<(usize, u8)> {
         todo!()
     }
 
     /// Get the set of available moves on the puzzle
-    fn moves(&self) -> &[phase2::puzzle::Move<S>] {
+    fn moves(&self) -> Vec<phase2_puzzle::Move<S>> {
         todo!()
     }
 
     /// Get the list of symmetries obeyed by the puzzle
-    fn symmetries(&self) -> &[phase2::puzzle::PuzzleState<S>] {
+    fn symmetries(&self) -> Vec<phase2_puzzle::PuzzleState<S>> {
         todo!()
     }
 }
 
-impl<'a> PuzzleDefinition<'a> {
+impl PuzzleDefinition<'_> {
     pub fn geometry(mut self) -> Result<PuzzleGeometry, Error> {
         for face in &self.polyhedron.0 {
             face.is_valid()?;

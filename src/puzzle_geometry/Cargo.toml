@@ -8,7 +8,6 @@ workspace = true
 
 [dependencies]
 qter_core = { path = "../qter_core" }
-cycle_combination_solver = { path = "../cycle_combination_solver" }
 phf = { version = "0.11.3", features = ["macros"] }
 internment = { version = "0.8", features = ["arc"] }
 nalgebra = "0.33"

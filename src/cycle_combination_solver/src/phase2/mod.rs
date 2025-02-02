@@ -1,5 +1,5 @@
-pub mod puzzle;
 pub mod defs;
+pub mod puzzle;
 
 #[cfg(test)]
 mod tests {
