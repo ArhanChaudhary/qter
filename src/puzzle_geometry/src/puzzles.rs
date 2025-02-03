@@ -1,6 +1,6 @@
 use crate::{Face, Point, Polyhedron, PuzzleDescriptionString, PuzzleGeometryCore};
 use nalgebra::{Rotation3, Unit, Vector3};
-use qter_core::phase2_puzzle::{Move, PuzzleStateInterface};
+use qter_core::phase2_puzzle::{Move, PuzzleState};
 use std::{marker::PhantomData, sync::LazyLock};
 
 pub static TETRAHEDRON: LazyLock<Polyhedron> = LazyLock::new(|| {
@@ -121,56 +121,56 @@ pub static PUZZLES: phf::Map<&'static str, PuzzleDescriptionString> = phf::phf_m
     "starminx combo" => "d f 0.23606797749979 v 0.937962370425399",
 };
 
-pub struct Cube3PuzzleGeometry<S: PuzzleStateInterface>(pub PhantomData<S>);
+pub struct Cube3PuzzleGeometry<P: PuzzleState>(pub PhantomData<P>);
 
-impl<S> PuzzleGeometryCore<S> for Cube3PuzzleGeometry<S>
+impl<P> PuzzleGeometryCore<P> for Cube3PuzzleGeometry<P>
 where
-    S: PuzzleStateInterface,
+    P: PuzzleState,
 {
     fn pieces(&self) -> Vec<(usize, u8)> {
         vec![(12, 2), (8, 3)]
     }
 
-    fn moves(&self) -> Vec<Move<S>> {
+    fn moves(&self) -> Vec<Move<P>> {
         vec![
             Move {
                 name: "F".to_owned(),
-                delta: S::from_orbit_states(&[
+                delta: P::from_orbit_states(&[
                     9, 0, 2, 3, 1, 5, 6, 7, 8, 4, 10, 11, 1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 6, 0,
                     2, 1, 4, 5, 3, 7, 2, 1, 0, 2, 0, 0, 1, 0,
                 ]),
             },
             Move {
                 name: "B".to_owned(),
-                delta: S::from_orbit_states(&[
+                delta: P::from_orbit_states(&[
                     0, 1, 5, 3, 4, 6, 10, 7, 8, 9, 2, 11, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1,
                     4, 3, 7, 2, 6, 5, 0, 0, 1, 0, 2, 2, 0, 1,
                 ]),
             },
             Move {
                 name: "D".to_owned(),
-                delta: S::from_orbit_states(&[
+                delta: P::from_orbit_states(&[
                     0, 8, 2, 1, 4, 3, 6, 7, 5, 9, 10, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3,
                     2, 7, 1, 5, 6, 4, 0, 0, 0, 0, 0, 0, 0, 0,
                 ]),
             },
             Move {
                 name: "U".to_owned(),
-                delta: S::from_orbit_states(&[
+                delta: P::from_orbit_states(&[
                     0, 1, 2, 3, 4, 5, 6, 10, 8, 7, 11, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1,
                     5, 3, 4, 6, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0,
                 ]),
             },
             Move {
                 name: "L".to_owned(),
-                delta: S::from_orbit_states(&[
+                delta: P::from_orbit_states(&[
                     0, 1, 2, 3, 11, 5, 8, 7, 4, 9, 10, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
                     2, 6, 4, 7, 5, 3, 0, 0, 0, 1, 0, 1, 2, 2,
                 ]),
             },
             Move {
                 name: "R".to_owned(),
-                delta: S::from_orbit_states(&[
+                delta: P::from_orbit_states(&[
                     3, 1, 7, 2, 4, 5, 6, 0, 8, 9, 10, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 4,
                     0, 3, 2, 5, 6, 7, 1, 2, 2, 0, 1, 0, 0, 0,
                 ]),
@@ -178,8 +178,8 @@ where
         ]
     }
 
-    fn symmetries(&self) -> Vec<S> {
-        vec![S::from_orbit_states(&[
+    fn symmetries(&self) -> Vec<P> {
+        vec![P::from_orbit_states(&[
             4, 8, 0, 9, 6, 10, 2, 11, 5, 7, 1, 3, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 0, 3, 5,
             7, 6, 2, 1, 1, 2, 1, 2, 2, 1, 2, 1,
         ])]

@@ -1,4 +1,3 @@
-pub mod defs;
 pub mod puzzle;
 
 #[cfg(test)]

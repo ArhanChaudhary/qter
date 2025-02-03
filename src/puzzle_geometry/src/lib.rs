@@ -1,5 +1,7 @@
 #![feature(portable_simd)]
 
+use std::marker::PhantomData;
+
 use edge_cloud::EdgeCloud;
 use itertools::Itertools;
 use nalgebra::{Matrix3, Matrix3x2, Rotation3, Unit, Vector3};
@@ -167,37 +169,37 @@ impl PuzzleGeometry {
     }
 
     /// Get the puzzle as a permutation and orientation group over pieces
-    pub fn piece_perm_and_ori_group<S: phase2_puzzle::PuzzleStateInterface>(
+    pub fn piece_perm_and_ori_group<P: phase2_puzzle::PuzzleState>(
         &self,
-    ) -> &PiecePermAndOriGroup<S> {
+    ) -> &PiecePermAndOriGroup<P> {
         todo!()
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct PiecePermAndOriGroup<S: phase2_puzzle::PuzzleStateInterface> {
-    _marker: std::marker::PhantomData<S>,
+pub struct PiecePermAndOriGroup<P: phase2_puzzle::PuzzleState> {
+    _marker: PhantomData<P>,
 }
 
-pub trait PuzzleGeometryCore<S: phase2_puzzle::PuzzleStateInterface> {
+pub trait PuzzleGeometryCore<P: phase2_puzzle::PuzzleState> {
     fn pieces(&self) -> Vec<(usize, u8)>;
-    fn moves(&self) -> Vec<phase2_puzzle::Move<S>>;
-    fn symmetries(&self) -> Vec<S>;
+    fn moves(&self) -> Vec<phase2_puzzle::Move<P>>;
+    fn symmetries(&self) -> Vec<P>;
 }
 
-impl<S: phase2_puzzle::PuzzleStateInterface> PuzzleGeometryCore<S> for PiecePermAndOriGroup<S> {
+impl<P: phase2_puzzle::PuzzleState> PuzzleGeometryCore<P> for PiecePermAndOriGroup<P> {
     /// For each type of piece, return a list of (amount of the piece type, orientation mod)
     fn pieces(&self) -> Vec<(usize, u8)> {
         todo!()
     }
 
     /// Get the set of available moves on the puzzle
-    fn moves(&self) -> Vec<phase2_puzzle::Move<S>> {
+    fn moves(&self) -> Vec<phase2_puzzle::Move<P>> {
         todo!()
     }
 
     /// Get the list of symmetries obeyed by the puzzle
-    fn symmetries(&self) -> Vec<S> {
+    fn symmetries(&self) -> Vec<P> {
         todo!()
     }
 }
