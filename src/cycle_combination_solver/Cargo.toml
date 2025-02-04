@@ -9,6 +9,7 @@ memoize = "0.4.2"
 pareto_front = "1.0.1"
 puzzle_geometry = { version = "0.1.0", path = "../puzzle_geometry" }
 qter_core = { version = "0.1.0", path = "../qter_core" }
+thiserror = "2.0.11"
 
 [build-dependencies]
 cfg_aliases = "0.2.1"

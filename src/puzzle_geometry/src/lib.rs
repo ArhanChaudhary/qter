@@ -1,11 +1,7 @@
-#![feature(portable_simd)]
-
-use std::marker::PhantomData;
-
 use edge_cloud::EdgeCloud;
 use itertools::Itertools;
 use nalgebra::{Matrix3, Matrix3x2, Rotation3, Unit, Vector3};
-use qter_core::{architectures::PermutationGroup, phase2_puzzle};
+use qter_core::architectures::PermutationGroup;
 use thiserror::Error;
 
 mod edge_cloud;
@@ -154,7 +150,7 @@ impl Face {
 pub struct Polyhedron(pub Vec<Face>);
 
 #[derive(Clone, Debug)]
-pub struct PuzzleDefinition<'a> {
+pub struct PuzzleGeometryDefinition<'a> {
     pub polyhedron: Polyhedron,
     pub cut_axes: Vec<CutAxis<'a>>,
 }
@@ -169,42 +165,115 @@ impl PuzzleGeometry {
     }
 
     /// Get the puzzle as a permutation and orientation group over pieces
-    pub fn piece_perm_and_ori_group<P: phase2_puzzle::PuzzleState>(
-        &self,
-    ) -> &PiecePermAndOriGroup<P> {
+    pub fn ksolve_rep(&self) -> &KSolve {
         todo!()
     }
 }
 
+/// A representation of a puzzle in the KSolve format. We choose to remain
+/// consistent with KSolve format and terminology because it is the
+/// lingua-franca of the puzzle theory community. twsearch, another popular
+/// puzzle software suite, also uses the KSolve format.
 #[derive(Clone, Debug)]
-pub struct PiecePermAndOriGroup<P: phase2_puzzle::PuzzleState> {
-    _marker: PhantomData<P>,
+pub struct KSolve {
+    name: String,
+    sets: Vec<KSolveSet>,
+    moves: Vec<KSolveMove>,
+    symmetries: Vec<KSolveMove>,
 }
 
-pub trait PuzzleGeometryCore<P: phase2_puzzle::PuzzleState> {
-    fn pieces(&self) -> Vec<(usize, u8)>;
-    fn moves(&self) -> Vec<phase2_puzzle::Move<P>>;
-    fn symmetries(&self) -> Vec<P>;
+/// A piece orbit, or "Set" to remain consistent with the KSolve terminology
+#[derive(Clone, Debug)]
+pub struct KSolveSet {
+    name: String,
+    piece_count: u16,
+    orientation_count: u8,
 }
 
-impl<P: phase2_puzzle::PuzzleState> PuzzleGeometryCore<P> for PiecePermAndOriGroup<P> {
-    /// For each type of piece, return a list of (amount of the piece type, orientation mod)
-    fn pieces(&self) -> Vec<(usize, u8)> {
-        todo!()
+/// A transformation of a puzzle. A list of (permutation vector, orientation
+/// vector)
+pub type KSolveTransformation = Vec<Vec<(u16, u8)>>;
+
+#[derive(Clone, Debug)]
+pub struct KSolveMove {
+    name: String,
+    transformation: KSolveTransformation,
+}
+
+impl KSolve {
+    /// Get the name of the puzzle
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Get the sets of pieces on the puzzle
+    pub fn sets(&self) -> &[KSolveSet] {
+        &self.sets
     }
 
     /// Get the set of available moves on the puzzle
-    fn moves(&self) -> Vec<phase2_puzzle::Move<P>> {
-        todo!()
+    pub fn moves(&self) -> &[KSolveMove] {
+        &self.moves
     }
 
     /// Get the list of symmetries obeyed by the puzzle
-    fn symmetries(&self) -> Vec<P> {
-        todo!()
+    /// TODO: how should reflection symmetries be represented?
+    pub fn symmetries(&self) -> &[KSolveMove] {
+        &self.symmetries
+    }
+
+    /// Get the solved state of the puzzle
+    pub fn solved(&self) -> KSolveTransformation {
+        self.sets
+            .iter()
+            .map(|ksolve_set| {
+                (1..=ksolve_set.piece_count)
+                    .zip(std::iter::repeat(0))
+                    .collect()
+            })
+            .collect()
     }
 }
 
-impl PuzzleDefinition<'_> {
+impl KSolveSet {
+    /// Get the name of the set
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Get the number of pieces in the set
+    pub fn piece_count(&self) -> u16 {
+        self.piece_count
+    }
+
+    /// Get the orientation modulo of the set
+    pub fn orientation_count(&self) -> u8 {
+        self.orientation_count
+    }
+}
+
+impl KSolveMove {
+    /// Get the name of the move
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Get the transformation of the move
+    pub fn transformation(&self) -> &KSolveTransformation {
+        &self.transformation
+    }
+
+    /// Convenience method for converting KSolve's 1-indexed permutation vectors
+    /// to 0-indexed permutation vectors
+    pub fn zero_indexed_transformation(&self) -> KSolveTransformation {
+        self.transformation
+            .iter()
+            .map(|perm_and_ori| perm_and_ori.iter().map(|&(p, o)| (p - 1, o)).collect())
+            .collect()
+    }
+}
+
+impl PuzzleGeometryDefinition<'_> {
     pub fn geometry(mut self) -> Result<PuzzleGeometry, Error> {
         for face in &self.polyhedron.0 {
             face.is_valid()?;
@@ -294,7 +363,7 @@ mod tests {
 
     use crate::{
         puzzles::{CUBE, TETRAHEDRON},
-        CutAxis, CutAxisNames, Error, Face, Point, Polyhedron, PuzzleDefinition,
+        CutAxis, CutAxisNames, Error, Face, Point, Polyhedron, PuzzleGeometryDefinition,
     };
 
     #[test]
@@ -343,7 +412,7 @@ mod tests {
 
     #[test]
     fn symmetries_simple() {
-        let mut one_face = PuzzleDefinition {
+        let mut one_face = PuzzleGeometryDefinition {
             polyhedron: Polyhedron(vec![Face(vec![
                 Point(Vector3::new(1., 0., 1.)),
                 Point(Vector3::new(-1., 0., 1.)),
@@ -371,7 +440,7 @@ mod tests {
 
     #[test]
     fn symmetries_3x3() {
-        let mut three_by_three = PuzzleDefinition {
+        let mut three_by_three = PuzzleGeometryDefinition {
             polyhedron: CUBE.to_owned(),
             cut_axes: vec![
                 CutAxis {
@@ -416,7 +485,7 @@ mod tests {
 
     #[test]
     fn symmetries_scuffed_3x3() {
-        let mut three_by_three = PuzzleDefinition {
+        let mut three_by_three = PuzzleGeometryDefinition {
             polyhedron: CUBE.to_owned(),
             cut_axes: vec![
                 CutAxis {
@@ -451,7 +520,7 @@ mod tests {
 
     #[test]
     fn symmetries_skewb() {
-        let mut skewb = PuzzleDefinition {
+        let mut skewb = PuzzleGeometryDefinition {
             polyhedron: CUBE.to_owned(),
             cut_axes: vec![
                 CutAxis {
@@ -517,7 +586,7 @@ mod tests {
         let down_2 = down_1.rotated(Vector3::new(0., 1., 0.), 3);
         let down_3 = down_2.rotated(Vector3::new(0., 1., 0.), 3);
 
-        let mut pyraminx = PuzzleDefinition {
+        let mut pyraminx = PuzzleGeometryDefinition {
             polyhedron: TETRAHEDRON.to_owned(),
             cut_axes: vec![
                 CutAxis {

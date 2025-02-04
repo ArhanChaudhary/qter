@@ -1,7 +1,3 @@
-//! Contains utility methods of various puzzle solving methods.
-//!
-//! Includes iterative deepening A* (IDA*).
-
 use super::cube::{CubeState, MoveSequence};
 use super::pruning::PruningTables;
 use super::{cube, CycleType};

@@ -1,63 +1,85 @@
-use puzzle_geometry::PuzzleGeometryCore;
-use qter_core::phase2_puzzle::{Move, OrbitDef, PuzzleState};
-use std::simd::{u8x16, u8x8, Simd};
+use puzzle_geometry::KSolveMove;
+use std::simd::{u8x16, u8x8};
 
-pub struct PuzzleDef<P: PuzzleState> {
-    pub name: String,
-    pub orbit_defs: Vec<OrbitDef>,
-    pub moves: Vec<Move<P>>,
-}
+use super::from_ksolve::{slice_try_from_ksolve, KSolveConversionError};
 
-impl<P: PuzzleState> PuzzleDef<P> {
-    pub fn from_puzzle_geometry(puzzle_geometry: impl PuzzleGeometryCore<P>) -> Self {
-        PuzzleDef {
-            name: "3x3x3".to_owned(),
-            orbit_defs: puzzle_geometry
-                .pieces()
-                .iter()
-                .map(|&(size, orientation_mod)| OrbitDef {
-                    size: size as u8,
-                    orientation_mod,
-                })
-                .collect(),
-            moves: puzzle_geometry.moves(),
-        }
-    }
+pub trait PuzzleState: for<'a> TryFrom<&'a KSolveMove> {
+    type PuzzleMeta;
 
-    pub fn get_move(&self, name: &str) -> Option<&Move<P>> {
-        self.moves.iter().find(|def| def.name == name)
-    }
+    fn solved(puzzle_meta: &Self::PuzzleMeta) -> Self;
+    fn replace_compose(&mut self, move_a: &Self, move_b: &Self, puzzle_meta: &Self::PuzzleMeta);
 }
 
 pub struct StackPuzzle<const N: usize>([u8; N]);
 pub struct HeapPuzzle(Box<[u8]>);
+
+pub struct PuzzleDef<P: PuzzleState> {
+    pub moves: Vec<Move<P>>,
+    pub orbit_defs: Vec<OrbitDef>,
+    pub name: String,
+}
+
+#[repr(C)]
+pub struct Move<P: PuzzleState> {
+    pub transformation: P,
+    pub name: String,
+}
+
+pub struct OrbitDef {
+    pub piece_count: u8,
+    pub orientation_count: u8,
+}
+
+impl<P: PuzzleState> PuzzleDef<P> {
+    pub fn find_move(&self, name: &str) -> Option<&Move<P>> {
+        self.moves.iter().find(|def| def.name == name)
+    }
+}
+
+impl<const N: usize> TryFrom<&KSolveMove> for StackPuzzle<N> {
+    type Error = KSolveConversionError;
+
+    fn try_from(ksolve_move: &KSolveMove) -> Result<Self, Self::Error> {
+        let mut orbit_states = [0_u8; N];
+        slice_try_from_ksolve(ksolve_move, &mut orbit_states)?;
+        Ok(StackPuzzle(orbit_states))
+    }
+}
+
+impl TryFrom<&KSolveMove> for HeapPuzzle {
+    type Error = KSolveConversionError;
+
+    fn try_from(ksolve_move: &KSolveMove) -> Result<Self, Self::Error> {
+        let mut orbit_states = vec![
+            0_u8;
+            ksolve_move
+                .zero_indexed_transformation()
+                .iter()
+                .map(|perm_and_ori| perm_and_ori.len() * 2)
+                .sum()
+        ]
+        .into_boxed_slice();
+        slice_try_from_ksolve(ksolve_move, &mut orbit_states)?;
+        Ok(HeapPuzzle(orbit_states))
+    }
+}
 
 impl<const N: usize> PuzzleState for StackPuzzle<N> {
     type PuzzleMeta = Vec<OrbitDef>;
 
     fn solved(orbit_defs: &Vec<OrbitDef>) -> Self {
         let mut orbit_states = [0_u8; N];
-        let mut base = 0;
-        for &OrbitDef { size, .. } in orbit_defs.iter() {
-            for j in 1..size {
-                orbit_states[base as usize + j as usize] = j;
-            }
-            base += 2 * size;
-        }
+        slice_solved(orbit_defs, &mut orbit_states);
         StackPuzzle(orbit_states)
-    }
-
-    fn from_orbit_states(slice: &[u8]) -> Self {
-        StackPuzzle(slice.try_into().unwrap())
     }
 
     fn replace_compose(
         &mut self,
         move_a: &StackPuzzle<N>,
         move_b: &StackPuzzle<N>,
-        orbit_defs: &Vec<OrbitDef>,
+        puzzle_meta: &Vec<OrbitDef>,
     ) {
-        slice_replace_compose(&mut self.0, &move_a.0, &move_b.0, orbit_defs);
+        slice_replace_compose(&mut self.0, &move_a.0, &move_b.0, puzzle_meta);
     }
 }
 
@@ -65,20 +87,15 @@ impl PuzzleState for HeapPuzzle {
     type PuzzleMeta = Vec<OrbitDef>;
 
     fn solved(puzzle_meta: &Vec<OrbitDef>) -> Self {
-        let mut orbit_states =
-            vec![0_u8; puzzle_meta.iter().map(|def| def.size as usize * 2).sum()];
-        let mut base = 0;
-        for &OrbitDef { size, .. } in puzzle_meta.iter() {
-            for j in 1..size {
-                orbit_states[base as usize + j as usize] = j;
-            }
-            base += 2 * size;
-        }
+        let mut orbit_states = vec![
+            0_u8;
+            puzzle_meta
+                .iter()
+                .map(|def| def.piece_count as usize * 2)
+                .sum()
+        ];
+        slice_solved(puzzle_meta, &mut orbit_states);
         HeapPuzzle(orbit_states.into_boxed_slice())
-    }
-
-    fn from_orbit_states(slice: &[u8]) -> Self {
-        HeapPuzzle(slice.into())
     }
 
     fn replace_compose(
@@ -91,16 +108,24 @@ impl PuzzleState for HeapPuzzle {
     }
 }
 
-fn slice_replace_compose(
-    orbit_states_mut: &mut [u8],
-    a: &[u8],
-    b: &[u8],
-    puzzle_meta: &[OrbitDef],
-) {
+fn slice_solved(orbit_defs: &[OrbitDef], buf: &mut [u8]) {
+    let mut base = 0;
+    for &OrbitDef {
+        piece_count: size, ..
+    } in orbit_defs.iter()
+    {
+        for j in 1..size {
+            buf[base as usize + j as usize] = j;
+        }
+        base += 2 * size;
+    }
+}
+
+fn slice_replace_compose(orbit_states_mut: &mut [u8], a: &[u8], b: &[u8], orbit_defs: &[OrbitDef]) {
     debug_assert_eq!(
-        puzzle_meta
+        orbit_defs
             .iter()
-            .map(|v| (v.size as usize) * 2)
+            .map(|v| (v.piece_count as usize) * 2)
             .sum::<usize>(),
         orbit_states_mut.len()
     );
@@ -109,34 +134,35 @@ fn slice_replace_compose(
 
     let mut base = 0;
     for &OrbitDef {
-        size,
-        orientation_mod,
-    } in puzzle_meta
+        piece_count,
+        orientation_count,
+    } in orbit_defs
     {
-        let size = size as usize;
-        if orientation_mod > 1 {
-            for i in 0..size {
+        let piece_count = piece_count as usize;
+        if orientation_count > 1 {
+            for i in 0..piece_count {
                 let base_i = base + i;
                 unsafe {
                     let pos = a.get_unchecked(base + *b.get_unchecked(base_i) as usize);
-                    let a_ori = a.get_unchecked(base + *b.get_unchecked(base_i) as usize + size);
-                    let b_ori = b.get_unchecked(base_i + size);
+                    let a_ori =
+                        a.get_unchecked(base + *b.get_unchecked(base_i) as usize + piece_count);
+                    let b_ori = b.get_unchecked(base_i + piece_count);
                     *orbit_states_mut.get_unchecked_mut(base_i) = *pos;
-                    *orbit_states_mut.get_unchecked_mut(base_i + size) =
-                        (*a_ori + *b_ori) % orientation_mod;
+                    *orbit_states_mut.get_unchecked_mut(base_i + piece_count) =
+                        (*a_ori + *b_ori) % orientation_count;
                 }
             }
         } else {
-            for i in 0..size {
+            for i in 0..piece_count {
                 let base_i = base + i;
                 unsafe {
                     let pos = *a.get_unchecked(base + *b.get_unchecked(base_i) as usize);
                     *orbit_states_mut.get_unchecked_mut(base_i) = pos;
-                    *orbit_states_mut.get_unchecked_mut(base_i + size) = 0;
+                    *orbit_states_mut.get_unchecked_mut(base_i + piece_count) = 0;
                 }
             }
         }
-        base += size * 2;
+        base += piece_count * 2;
     }
 }
 
@@ -149,8 +175,8 @@ pub struct Cube3Simd {
     pub co: u8x8,
 }
 
-const EO_MOD_SWIZZLE: u8x16 = Simd::from_array([0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-const CO_MOD_SWIZZLE: u8x8 = Simd::from_array([0, 1, 2, 0, 1, 2, 0, 0]);
+const EO_MOD_SWIZZLE: u8x16 = u8x16::from_array([0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+const CO_MOD_SWIZZLE: u8x8 = u8x8::from_array([0, 1, 2, 0, 1, 2, 0, 0]);
 
 impl PuzzleState for Cube3Simd {
     type PuzzleMeta = ();
@@ -163,18 +189,8 @@ impl PuzzleState for Cube3Simd {
         Cube3Simd { ep, eo, cp, co }
     }
 
-    fn from_orbit_states(slice: &[u8]) -> Self {
-        let mut ep = u8x16::splat(0);
-        ep.as_mut_array()[..12].copy_from_slice(&slice[..12]);
-        let mut eo = u8x16::splat(0);
-        eo.as_mut_array()[..12].copy_from_slice(&slice[12..24]);
-        let cp = slice[24..32].try_into().unwrap();
-        let co = slice[32..40].try_into().unwrap();
-        Cube3Simd { ep, eo, cp, co }
-    }
-
     fn replace_compose(&mut self, move_a: &Cube3Simd, move_b: &Cube3Simd, _puzzle_meta: &()) {
-        // FIXME: it is unclear for now if it will later be more efficient or
+        // TODO: it is unclear for now if it will later be more efficient or
         // not to combine orientation/permutation into a single simd vector
         self.ep = move_a.ep.swizzle_dyn(move_b.ep);
         self.eo = EO_MOD_SWIZZLE.swizzle_dyn(move_a.eo.swizzle_dyn(move_b.ep) + move_b.eo);
@@ -185,12 +201,64 @@ impl PuzzleState for Cube3Simd {
     }
 }
 
+impl TryFrom<&KSolveMove> for Cube3Simd {
+    type Error = KSolveConversionError;
+
+    fn try_from(ksolve_move: &KSolveMove) -> Result<Self, Self::Error> {
+        let transformations = ksolve_move.zero_indexed_transformation();
+        if transformations.len() != 2 {
+            return Err(KSolveConversionError::InvalidSetCount(
+                2,
+                transformations.len(),
+            ));
+        }
+        let (edges_transformation, corners_transformation) =
+            match (transformations[0].len(), transformations[1].len()) {
+                (12, 8) => (&transformations[0], &transformations[1]),
+                (8, 12) => (&transformations[1], &transformations[0]),
+                (12, _) => {
+                    return Err(KSolveConversionError::InvalidPieceCount(
+                        8,
+                        transformations[1].len(),
+                    ));
+                }
+                _ => {
+                    return Err(KSolveConversionError::InvalidPieceCount(
+                        12,
+                        transformations[0].len(),
+                    ));
+                }
+            };
+
+        let mut ep = u8x16::splat(0);
+        let mut eo = u8x16::splat(0);
+
+        for (i, &(perm, orientation)) in edges_transformation.iter().enumerate() {
+            ep[i] = perm
+                .try_into()
+                .map_err(|_| KSolveConversionError::PermutationOutOfRange(perm))?;
+            eo[i] = orientation;
+        }
+
+        let mut cp = u8x8::splat(0);
+        let mut co = u8x8::splat(0);
+
+        for (i, &(perm, orientation)) in corners_transformation.iter().enumerate() {
+            cp[i] = perm
+                .try_into()
+                .map_err(|_| KSolveConversionError::PermutationOutOfRange(perm))?;
+            co[i] = orientation;
+        }
+
+        Ok(Cube3Simd { ep, eo, cp, co })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     extern crate test;
     use super::*;
-    use puzzle_geometry::puzzles::Cube3PuzzleGeometry;
-    use std::marker::PhantomData;
+    use puzzle_geometry::puzzles::KPUZZLE_3X3;
     use test::Bencher;
 
     static COMPOSE_R_F: [u8; 40] = [
@@ -200,31 +268,39 @@ mod tests {
 
     #[test]
     fn test_composition_stack() {
-        let cube3_def = PuzzleDef::from_puzzle_geometry(Cube3PuzzleGeometry(PhantomData));
+        let cube3_def = PuzzleDef::<StackPuzzle<40>>::try_from(&*KPUZZLE_3X3).unwrap();
         let mut solved = StackPuzzle::<40>::solved(&cube3_def.orbit_defs);
-        let r_move = cube3_def.get_move("R").unwrap();
-        let f_move = cube3_def.get_move("F").unwrap();
-        solved.replace_compose(&r_move.delta, &f_move.delta, &cube3_def.orbit_defs);
+        let r_move = cube3_def.find_move("R").unwrap();
+        let f_move = cube3_def.find_move("F").unwrap();
+        solved.replace_compose(
+            &r_move.transformation,
+            &f_move.transformation,
+            &cube3_def.orbit_defs,
+        );
         assert_eq!(solved.0, COMPOSE_R_F);
     }
 
     #[test]
     fn test_composition_heap() {
-        let cube3_def = PuzzleDef::from_puzzle_geometry(Cube3PuzzleGeometry(PhantomData));
+        let cube3_def = PuzzleDef::<HeapPuzzle>::try_from(&*KPUZZLE_3X3).unwrap();
         let mut solved = HeapPuzzle::solved(&cube3_def.orbit_defs);
-        let r_move = cube3_def.get_move("R").unwrap();
-        let f_move = cube3_def.get_move("F").unwrap();
-        solved.replace_compose(&r_move.delta, &f_move.delta, &cube3_def.orbit_defs);
+        let r_move = cube3_def.find_move("R").unwrap();
+        let f_move = cube3_def.find_move("F").unwrap();
+        solved.replace_compose(
+            &r_move.transformation,
+            &f_move.transformation,
+            &cube3_def.orbit_defs,
+        );
         assert_eq!(solved.0.iter().as_slice(), COMPOSE_R_F);
     }
 
     #[test]
     fn test_composition_simd() {
-        let cube3_def = PuzzleDef::from_puzzle_geometry(Cube3PuzzleGeometry(PhantomData));
+        let cube3_def = PuzzleDef::<Cube3Simd>::try_from(&*KPUZZLE_3X3).unwrap();
         let mut solved = Cube3Simd::solved(&());
-        let r_move = cube3_def.get_move("R").unwrap();
-        let f_move = cube3_def.get_move("F").unwrap();
-        solved.replace_compose(&r_move.delta, &f_move.delta, &());
+        let r_move = cube3_def.find_move("R").unwrap();
+        let f_move = cube3_def.find_move("F").unwrap();
+        solved.replace_compose(&r_move.transformation, &f_move.transformation, &());
         assert_eq!(&solved.ep.as_array()[..12], &COMPOSE_R_F[..12]);
         assert_eq!(&solved.eo.as_array()[..12], &COMPOSE_R_F[12..24]);
         assert_eq!(solved.cp.as_array(), &COMPOSE_R_F[24..32]);
@@ -233,14 +309,14 @@ mod tests {
 
     #[bench]
     fn bench_compose(b: &mut Bencher) {
-        let cube3_def = PuzzleDef::from_puzzle_geometry(Cube3PuzzleGeometry(PhantomData));
+        let cube3_def = PuzzleDef::<Cube3Simd>::try_from(&*KPUZZLE_3X3).unwrap();
         let mut solved = Cube3Simd::solved(&());
-        let r_move = cube3_def.get_move("R").unwrap();
-        let f_move = cube3_def.get_move("F").unwrap();
+        let r_move = cube3_def.find_move("R").unwrap();
+        let f_move = cube3_def.find_move("F").unwrap();
         b.iter(|| {
             test::black_box(&mut solved).replace_compose(
-                test::black_box(&r_move.delta),
-                test::black_box(&f_move.delta),
+                test::black_box(&r_move.transformation),
+                test::black_box(&f_move.transformation),
                 &(),
             );
         });

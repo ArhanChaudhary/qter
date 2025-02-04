@@ -1,3 +1,4 @@
+pub mod from_ksolve;
 pub mod puzzle;
 
 #[cfg(test)]

@@ -60,7 +60,7 @@ pub struct FindResult<'a, S: SetInfo> {
     path_meta: Ref<'a, Option<S::PathInfo>>,
 }
 
-impl<'a, S: SetInfo> FindResult<'a, S> {
+impl<S: SetInfo> FindResult<'_, S> {
     /// Returns the index of the element representing the root of the set
     pub fn root_idx(&self) -> usize {
         self.root_idx

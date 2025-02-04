@@ -1,7 +1,6 @@
-use crate::{Face, Point, Polyhedron, PuzzleDescriptionString, PuzzleGeometryCore};
+use crate::{Face, KSolve, KSolveMove, KSolveSet, Point, Polyhedron, PuzzleDescriptionString};
 use nalgebra::{Rotation3, Unit, Vector3};
-use qter_core::phase2_puzzle::{Move, PuzzleState};
-use std::{marker::PhantomData, sync::LazyLock};
+use std::sync::LazyLock;
 
 pub static TETRAHEDRON: LazyLock<Polyhedron> = LazyLock::new(|| {
     let up = Point(Vector3::new(0., 1., 0.));
@@ -121,68 +120,223 @@ pub static PUZZLES: phf::Map<&'static str, PuzzleDescriptionString> = phf::phf_m
     "starminx combo" => "d f 0.23606797749979 v 0.937962370425399",
 };
 
-pub struct Cube3PuzzleGeometry<P: PuzzleState>(pub PhantomData<P>);
-
-impl<P> PuzzleGeometryCore<P> for Cube3PuzzleGeometry<P>
-where
-    P: PuzzleState,
-{
-    fn pieces(&self) -> Vec<(usize, u8)> {
-        vec![(12, 2), (8, 3)]
-    }
-
-    fn moves(&self) -> Vec<Move<P>> {
-        vec![
-            Move {
-                name: "F".to_owned(),
-                delta: P::from_orbit_states(&[
-                    9, 0, 2, 3, 1, 5, 6, 7, 8, 4, 10, 11, 1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 6, 0,
-                    2, 1, 4, 5, 3, 7, 2, 1, 0, 2, 0, 0, 1, 0,
-                ]),
-            },
-            Move {
-                name: "B".to_owned(),
-                delta: P::from_orbit_states(&[
-                    0, 1, 5, 3, 4, 6, 10, 7, 8, 9, 2, 11, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1,
-                    4, 3, 7, 2, 6, 5, 0, 0, 1, 0, 2, 2, 0, 1,
-                ]),
-            },
-            Move {
-                name: "D".to_owned(),
-                delta: P::from_orbit_states(&[
-                    0, 8, 2, 1, 4, 3, 6, 7, 5, 9, 10, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3,
-                    2, 7, 1, 5, 6, 4, 0, 0, 0, 0, 0, 0, 0, 0,
-                ]),
-            },
-            Move {
-                name: "U".to_owned(),
-                delta: P::from_orbit_states(&[
-                    0, 1, 2, 3, 4, 5, 6, 10, 8, 7, 11, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1,
-                    5, 3, 4, 6, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0,
-                ]),
-            },
-            Move {
-                name: "L".to_owned(),
-                delta: P::from_orbit_states(&[
-                    0, 1, 2, 3, 11, 5, 8, 7, 4, 9, 10, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-                    2, 6, 4, 7, 5, 3, 0, 0, 0, 1, 0, 1, 2, 2,
-                ]),
-            },
-            Move {
-                name: "R".to_owned(),
-                delta: P::from_orbit_states(&[
-                    3, 1, 7, 2, 4, 5, 6, 0, 8, 9, 10, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 4,
-                    0, 3, 2, 5, 6, 7, 1, 2, 2, 0, 1, 0, 0, 0,
-                ]),
-            },
-        ]
-    }
-
-    fn symmetries(&self) -> Vec<P> {
-        vec![P::from_orbit_states(&[
-            4, 8, 0, 9, 6, 10, 2, 11, 5, 7, 1, 3, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 4, 0, 3, 5,
-            7, 6, 2, 1, 1, 2, 1, 2, 2, 1, 2, 1,
-        ])]
-        // Rest will be added in later
-    }
-}
+pub static KPUZZLE_3X3: LazyLock<KSolve> = LazyLock::new(|| KSolve {
+    name: "3x3x3".to_owned(),
+    sets: vec![
+        KSolveSet {
+            name: "Edges".to_owned(),
+            piece_count: 12,
+            orientation_count: 2,
+        },
+        KSolveSet {
+            name: "Corners".to_owned(),
+            piece_count: 8,
+            orientation_count: 3,
+        },
+    ],
+    moves: vec![
+        KSolveMove {
+            name: "F".to_owned(),
+            transformation: vec![
+                vec![
+                    (10, 1),
+                    (1, 1),
+                    (3, 0),
+                    (4, 0),
+                    (2, 1),
+                    (6, 0),
+                    (7, 0),
+                    (8, 0),
+                    (9, 0),
+                    (5, 1),
+                    (11, 0),
+                    (12, 0),
+                ],
+                vec![
+                    (7, 2),
+                    (1, 1),
+                    (3, 0),
+                    (2, 2),
+                    (5, 0),
+                    (6, 0),
+                    (4, 1),
+                    (8, 0),
+                ],
+            ],
+        },
+        KSolveMove {
+            name: "B".to_owned(),
+            transformation: vec![
+                vec![
+                    (1, 0),
+                    (2, 0),
+                    (6, 1),
+                    (4, 0),
+                    (5, 0),
+                    (7, 1),
+                    (11, 1),
+                    (8, 0),
+                    (9, 0),
+                    (10, 0),
+                    (3, 1),
+                    (12, 0),
+                ],
+                vec![
+                    (1, 0),
+                    (2, 0),
+                    (5, 1),
+                    (4, 0),
+                    (8, 2),
+                    (3, 2),
+                    (7, 0),
+                    (6, 1),
+                ],
+            ],
+        },
+        KSolveMove {
+            name: "D".to_owned(),
+            transformation: vec![
+                vec![
+                    (1, 0),
+                    (9, 0),
+                    (3, 0),
+                    (2, 0),
+                    (5, 0),
+                    (4, 0),
+                    (7, 0),
+                    (8, 0),
+                    (6, 0),
+                    (10, 0),
+                    (11, 0),
+                    (12, 0),
+                ],
+                vec![
+                    (1, 0),
+                    (4, 0),
+                    (3, 0),
+                    (8, 0),
+                    (2, 0),
+                    (6, 0),
+                    (7, 0),
+                    (5, 0),
+                ],
+            ],
+        },
+        KSolveMove {
+            name: "U".to_owned(),
+            transformation: vec![
+                vec![
+                    (1, 0),
+                    (2, 0),
+                    (3, 0),
+                    (4, 0),
+                    (5, 0),
+                    (6, 0),
+                    (7, 0),
+                    (11, 0),
+                    (9, 0),
+                    (8, 0),
+                    (12, 0),
+                    (10, 0),
+                ],
+                vec![
+                    (3, 0),
+                    (2, 0),
+                    (6, 0),
+                    (4, 0),
+                    (5, 0),
+                    (7, 0),
+                    (1, 0),
+                    (8, 0),
+                ],
+            ],
+        },
+        KSolveMove {
+            name: "L".to_owned(),
+            transformation: vec![
+                vec![
+                    (1, 0),
+                    (2, 0),
+                    (3, 0),
+                    (4, 0),
+                    (12, 0),
+                    (6, 0),
+                    (9, 0),
+                    (8, 0),
+                    (5, 0),
+                    (10, 0),
+                    (11, 0),
+                    (7, 0),
+                ],
+                vec![
+                    (1, 0),
+                    (2, 0),
+                    (3, 0),
+                    (7, 1),
+                    (5, 0),
+                    (8, 1),
+                    (6, 2),
+                    (4, 2),
+                ],
+            ],
+        },
+        KSolveMove {
+            name: "R".to_owned(),
+            transformation: vec![
+                vec![
+                    (4, 0),
+                    (2, 0),
+                    (8, 0),
+                    (3, 0),
+                    (5, 0),
+                    (6, 0),
+                    (7, 0),
+                    (1, 0),
+                    (9, 0),
+                    (10, 0),
+                    (11, 0),
+                    (12, 0),
+                ],
+                vec![
+                    (2, 1),
+                    (5, 2),
+                    (1, 2),
+                    (4, 0),
+                    (3, 1),
+                    (6, 0),
+                    (7, 0),
+                    (8, 0),
+                ],
+            ],
+        },
+    ],
+    symmetries: vec![KSolveMove {
+        name: "S_U4".to_owned(),
+        transformation: vec![
+            vec![
+                (5, 1),
+                (9, 0),
+                (1, 1),
+                (10, 0),
+                (7, 1),
+                (11, 0),
+                (3, 1),
+                (12, 0),
+                (6, 0),
+                (8, 0),
+                (2, 0),
+                (4, 0),
+            ],
+            vec![
+                (5, 1),
+                (1, 2),
+                (4, 1),
+                (6, 2),
+                (8, 2),
+                (7, 1),
+                (3, 2),
+                (2, 1),
+            ],
+        ],
+    }],
+});
