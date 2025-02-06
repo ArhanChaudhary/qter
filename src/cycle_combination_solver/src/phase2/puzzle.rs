@@ -1,4 +1,4 @@
-use puzzle_geometry::ksolve::{KSolve, KSolveMove};
+use puzzle_geometry::ksolve::{KSolve, KSolveMove, KSolveSet};
 use std::{
     num::NonZeroU8,
     simd::{u8x16, u8x8},
@@ -18,9 +18,9 @@ where
     /// Compose two puzzle states in place
     fn replace_compose(&mut self, a: &Self, b: &Self, puzzle_meta: &Self::PuzzleMeta);
     /// Create a puzzle state from a ksolve move without checking if the move is
-    /// part of KSolve
+    /// part of the original KSolve
     fn from_ksolve_meta_unchecked(
-        ksolve: &KSolve,
+        ksolve_sets: &[KSolveSet],
         ksolve_move: &KSolveMove,
     ) -> Result<Self, KSolveConversionError>;
     /// Create a puzzle state from a ksolve move, checking if move is part of
@@ -38,7 +38,7 @@ where
                 "KSolveMove not in KSolve".to_owned(),
             ))
         } else {
-            Self::from_ksolve_meta_unchecked(ksolve, ksolve_move)
+            Self::from_ksolve_meta_unchecked(ksolve.sets(), ksolve_move)
         }
     }
 }
@@ -67,10 +67,10 @@ pub struct OrbitDef {
 pub enum KSolveConversionError {
     #[error("Phase 2 does not currently support puzzles with set sizes larger than 255, but it will in the future")]
     SetSizeTooBig,
-    #[error("Invalid ksolve meta: {0}")]
-    InvalidKSolveMeta(String),
     #[error("Not enough buffer space to convert move")]
     NotEnoughBufferSpace,
+    #[error("Invalid ksolve meta: {0}")]
+    InvalidKSolveMeta(String),
 }
 
 impl<const N: usize> PuzzleState for StackPuzzle<N> {
@@ -92,11 +92,11 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
     }
 
     fn from_ksolve_meta_unchecked(
-        ksolve: &KSolve,
+        ksolve_sets: &[KSolveSet],
         ksolve_move: &KSolveMove,
     ) -> Result<Self, KSolveConversionError> {
         let mut orbit_states = [0_u8; N];
-        ksolve_meta_to_slice_unchecked(ksolve, ksolve_move, &mut orbit_states)?;
+        ksolve_meta_to_slice_unchecked(ksolve_sets, ksolve_move, &mut orbit_states)?;
         Ok(StackPuzzle(orbit_states))
     }
 }
@@ -109,7 +109,7 @@ impl PuzzleState for HeapPuzzle {
             0_u8;
             orbit_defs
                 .iter()
-                .map(|def| def.piece_count.get() as usize * 2)
+                .map(|orbit_def| orbit_def.piece_count.get() as usize * 2)
                 .sum()
         ];
         slice_solved(orbit_defs, &mut orbit_states)?;
@@ -121,7 +121,7 @@ impl PuzzleState for HeapPuzzle {
     }
 
     fn from_ksolve_meta_unchecked(
-        ksolve: &KSolve,
+        ksolve_sets: &[KSolveSet],
         ksolve_move: &KSolveMove,
     ) -> Result<Self, KSolveConversionError> {
         let mut orbit_states = vec![
@@ -133,7 +133,7 @@ impl PuzzleState for HeapPuzzle {
                 .sum()
         ]
         .into_boxed_slice();
-        ksolve_meta_to_slice_unchecked(ksolve, ksolve_move, &mut orbit_states)?;
+        ksolve_meta_to_slice_unchecked(ksolve_sets, ksolve_move, &mut orbit_states)?;
         Ok(HeapPuzzle(orbit_states))
     }
 }
@@ -154,7 +154,7 @@ fn slice_replace_compose(orbit_states_mut: &mut [u8], a: &[u8], b: &[u8], orbit_
     debug_assert_eq!(
         orbit_defs
             .iter()
-            .map(|v| (v.piece_count.get() as usize) * 2)
+            .map(|orbit_def| (orbit_def.piece_count.get() as usize) * 2)
             .sum::<usize>(),
         orbit_states_mut.len()
     );
@@ -196,7 +196,7 @@ fn slice_replace_compose(orbit_states_mut: &mut [u8], a: &[u8], b: &[u8], orbit_
 }
 
 fn ksolve_meta_to_slice_unchecked(
-    ksolve: &KSolve,
+    ksolve_sets: &[KSolveSet],
     ksolve_move: &KSolveMove,
     buf: &mut [u8],
 ) -> Result<(), KSolveConversionError> {
@@ -204,7 +204,7 @@ fn ksolve_meta_to_slice_unchecked(
     for (transformation, ksolve_set) in ksolve_move
         .zero_indexed_transformation()
         .iter()
-        .zip(ksolve.sets())
+        .zip(ksolve_sets.iter())
     {
         let piece_count = ksolve_set.piece_count().get() as usize;
         for j in 0..piece_count {
@@ -248,7 +248,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
             .map(|ksolve_move| {
                 Ok(Move {
                     name: ksolve_move.name().to_owned(),
-                    transformation: P::from_ksolve_meta_unchecked(ksolve, ksolve_move)?,
+                    transformation: P::from_ksolve_meta_unchecked(ksolve.sets(), ksolve_move)?,
                 })
             })
             .collect::<Result<_, KSolveConversionError>>()?;
@@ -296,22 +296,23 @@ impl PuzzleState for Cube3Simd {
     }
 
     fn from_ksolve_meta_unchecked(
-        ksolve: &KSolve,
+        ksolve_sets: &[KSolveSet],
         ksolve_move: &KSolveMove,
     ) -> Result<Self, KSolveConversionError> {
-        if ksolve.sets().len() != 2 {
+        if ksolve_sets.len() != 2 {
             return Err(KSolveConversionError::InvalidKSolveMeta(format!(
-                "Expected 2 sets in KSolve, found {}",
-                ksolve.sets().len()
+                "Expected 2 sets, found {}",
+                ksolve_sets.len()
             )));
         }
+
         // TODO: how should a set ordering be enforced for identical sets? This
         // will be an issue in the future because the fields for identical sets
         // will be named in the struct. For now, we will just check the set
         // name, this is done over here in the 3x3x3 despite sets not being
         // identical to maintain consistency. This will probably fail a few test
         // cases in the future.
-        let maybe_edges_set = &ksolve.sets()[0];
+        let maybe_edges_set = &ksolve_sets[0];
         match (
             maybe_edges_set.name(),
             maybe_edges_set.piece_count().get(),
@@ -325,7 +326,7 @@ impl PuzzleState for Cube3Simd {
             }
         }
 
-        let maybe_corners_set = &ksolve.sets()[1];
+        let maybe_corners_set = &ksolve_sets[1];
         match (
             maybe_corners_set.name(),
             maybe_corners_set.piece_count().get(),
