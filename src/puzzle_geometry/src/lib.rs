@@ -1,11 +1,13 @@
 use edge_cloud::EdgeCloud;
 use itertools::Itertools;
+use ksolve::KSolve;
 use nalgebra::{Matrix3, Matrix3x2, Rotation3, Unit, Vector3};
 use qter_core::architectures::PermutationGroup;
 use thiserror::Error;
 
 mod edge_cloud;
-pub mod puzzles;
+pub mod ksolve;
+pub mod shapes;
 
 // Note... X is considered left-right, Y is considered up-down, and Z is considered front-back
 //
@@ -164,116 +166,16 @@ impl PuzzleGeometry {
         todo!()
     }
 
-    /// Get the puzzle as a permutation and orientation group over pieces
-    pub fn ksolve_rep(&self) -> &KSolve {
+    /// Get the puzzle in its KSolve representation
+    pub fn ksolve(&self) -> &KSolve {
+        // Note: the KSolve permutation vector is **1-indexed**. See the test
+        // cases for examples. It also exposes `zero_indexed_transformation` as
+        // a convenience method.
         todo!()
     }
 }
 
-/// A representation of a puzzle in the KSolve format. We choose to remain
-/// consistent with KSolve format and terminology because it is the
-/// lingua-franca of the puzzle theory community. twsearch, another popular
-/// puzzle software suite, also uses the KSolve format.
-#[derive(Clone, Debug)]
-pub struct KSolve {
-    name: String,
-    sets: Vec<KSolveSet>,
-    moves: Vec<KSolveMove>,
-    symmetries: Vec<KSolveMove>,
-}
-
-/// A piece orbit, or "Set" to remain consistent with the KSolve terminology
-#[derive(Clone, Debug)]
-pub struct KSolveSet {
-    name: String,
-    piece_count: u16,
-    orientation_count: u8,
-}
-
-/// A transformation of a puzzle. A list of (permutation vector, orientation
-/// vector)
-pub type KSolveTransformation = Vec<Vec<(u16, u8)>>;
-
-#[derive(Clone, Debug)]
-pub struct KSolveMove {
-    name: String,
-    transformation: KSolveTransformation,
-}
-
-impl KSolve {
-    /// Get the name of the puzzle
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// Get the sets of pieces on the puzzle
-    pub fn sets(&self) -> &[KSolveSet] {
-        &self.sets
-    }
-
-    /// Get the set of available moves on the puzzle
-    pub fn moves(&self) -> &[KSolveMove] {
-        &self.moves
-    }
-
-    /// Get the list of symmetries obeyed by the puzzle
-    /// TODO: how should reflection symmetries be represented?
-    pub fn symmetries(&self) -> &[KSolveMove] {
-        &self.symmetries
-    }
-
-    /// Get the solved state of the puzzle
-    pub fn solved(&self) -> KSolveTransformation {
-        self.sets
-            .iter()
-            .map(|ksolve_set| {
-                (1..=ksolve_set.piece_count)
-                    .zip(std::iter::repeat(0))
-                    .collect()
-            })
-            .collect()
-    }
-}
-
-impl KSolveSet {
-    /// Get the name of the set
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// Get the number of pieces in the set
-    pub fn piece_count(&self) -> u16 {
-        self.piece_count
-    }
-
-    /// Get the orientation modulo of the set
-    pub fn orientation_count(&self) -> u8 {
-        self.orientation_count
-    }
-}
-
-impl KSolveMove {
-    /// Get the name of the move
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// Get the transformation of the move
-    pub fn transformation(&self) -> &KSolveTransformation {
-        &self.transformation
-    }
-
-    /// Convenience method for converting KSolve's 1-indexed permutation vectors
-    /// to 0-indexed permutation vectors
-    pub fn zero_indexed_transformation(&self) -> KSolveTransformation {
-        self.transformation
-            .iter()
-            .map(|perm_and_ori| perm_and_ori.iter().map(|&(p, o)| (p - 1, o)).collect())
-            .collect()
-    }
-}
-
-impl PuzzleGeometryDefinition<'_> {
+impl<'a> PuzzleGeometryDefinition<'a> {
     pub fn geometry(mut self) -> Result<PuzzleGeometry, Error> {
         for face in &self.polyhedron.0 {
             face.is_valid()?;
@@ -359,12 +261,11 @@ impl PuzzleGeometryDefinition<'_> {
 
 #[cfg(test)]
 mod tests {
-    use nalgebra::{Rotation3, Unit, Vector3};
-
     use crate::{
-        puzzles::{CUBE, TETRAHEDRON},
+        shapes::{CUBE, TETRAHEDRON},
         CutAxis, CutAxisNames, Error, Face, Point, Polyhedron, PuzzleGeometryDefinition,
     };
+    use nalgebra::{Rotation3, Unit, Vector3};
 
     #[test]
     fn degeneracy() {
