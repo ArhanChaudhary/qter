@@ -88,14 +88,6 @@ impl KSolveSet {
 }
 
 impl KSolveMove {
-    /// Create a new KSolve move
-    pub fn new(name: String, transformation: KSolveTransformation) -> Self {
-        Self {
-            name,
-            transformation,
-        }
-    }
-
     /// Get the name of the move
     pub fn name(&self) -> &str {
         &self.name
