@@ -202,7 +202,7 @@ impl TryFrom<KSolveFields> for KSolve {
     }
 }
 
-fn nonzero_perm(transformation: Vec<Vec<(u16, u8)>>) -> Vec<Vec<(NonZeroU16, u8)>> {
+pub fn nonzero_perm(transformation: Vec<Vec<(u16, u8)>>) -> KSolveTransformation {
     transformation
         .iter()
         .map(|perm_and_ori| {
