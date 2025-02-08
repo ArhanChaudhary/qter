@@ -27,12 +27,12 @@ pub struct KSolveSet {
 
 /// A transformation of a KSolve puzzle. A list of (permutation vector,
 /// orientation vector)
-pub type KSolveTransformation = Vec<Vec<(u16, u8)>>;
+pub type KSolveTransformation = Vec<Vec<(NonZeroU16, u8)>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct KSolveMove {
-    name: String,
     transformation: KSolveTransformation,
+    name: String,
 }
 
 impl KSolve {
@@ -63,6 +63,7 @@ impl KSolve {
             .iter()
             .map(|ksolve_set| {
                 (1..=ksolve_set.piece_count.get())
+                    .map(|i| i.try_into().unwrap())
                     .zip(std::iter::repeat(0))
                     .collect()
             })
@@ -100,10 +101,15 @@ impl KSolveMove {
 
     /// Convenience method for converting KSolve's 1-indexed permutation vectors
     /// to 0-indexed permutation vectors
-    pub fn zero_indexed_transformation(&self) -> KSolveTransformation {
+    pub fn zero_indexed_transformation(&self) -> Vec<Vec<(u16, u8)>> {
         self.transformation
             .iter()
-            .map(|perm_and_ori| perm_and_ori.iter().map(|&(p, o)| (p - 1, o)).collect())
+            .map(|perm_and_ori| {
+                perm_and_ori
+                    .iter()
+                    .map(|&(p, o)| (p.get() - 1, o))
+                    .collect()
+            })
             .collect()
     }
 }
@@ -170,15 +176,12 @@ impl TryFrom<KSolveFields> for KSolve {
                         ));
                     }
 
-                    match perm
-                        .checked_sub(1)
-                        .and_then(|i| covered_perms.get_mut(i as usize))
-                    {
+                    match covered_perms.get_mut((perm.get() - 1) as usize) {
                         Some(i) => *i = true,
                         None => {
                             return Err(KSolveConstructionError::PermutationOutOfRange(
                                 expected_piece_count,
-                                perm,
+                                perm.get(),
                             ))
                         }
                     }
@@ -199,6 +202,18 @@ impl TryFrom<KSolveFields> for KSolve {
     }
 }
 
+fn nonzero_perm(transformation: Vec<Vec<(u16, u8)>>) -> Vec<Vec<(NonZeroU16, u8)>> {
+    transformation
+        .iter()
+        .map(|perm_and_ori| {
+            perm_and_ori
+                .iter()
+                .map(|&(p, o)| (p.try_into().unwrap(), o))
+                .collect()
+        })
+        .collect()
+}
+
 pub static KPUZZLE_3X3: LazyLock<KSolve> = LazyLock::new(|| KSolve {
     name: "3x3x3".to_owned(),
     sets: vec![
@@ -216,7 +231,7 @@ pub static KPUZZLE_3X3: LazyLock<KSolve> = LazyLock::new(|| KSolve {
     moves: vec![
         KSolveMove {
             name: "F".to_owned(),
-            transformation: vec![
+            transformation: nonzero_perm(vec![
                 vec![
                     (10, 1),
                     (1, 1),
@@ -241,11 +256,11 @@ pub static KPUZZLE_3X3: LazyLock<KSolve> = LazyLock::new(|| KSolve {
                     (4, 1),
                     (8, 0),
                 ],
-            ],
+            ]),
         },
         KSolveMove {
             name: "B".to_owned(),
-            transformation: vec![
+            transformation: nonzero_perm(vec![
                 vec![
                     (1, 0),
                     (2, 0),
@@ -270,11 +285,11 @@ pub static KPUZZLE_3X3: LazyLock<KSolve> = LazyLock::new(|| KSolve {
                     (7, 0),
                     (6, 1),
                 ],
-            ],
+            ]),
         },
         KSolveMove {
             name: "D".to_owned(),
-            transformation: vec![
+            transformation: nonzero_perm(vec![
                 vec![
                     (1, 0),
                     (9, 0),
@@ -299,11 +314,11 @@ pub static KPUZZLE_3X3: LazyLock<KSolve> = LazyLock::new(|| KSolve {
                     (7, 0),
                     (5, 0),
                 ],
-            ],
+            ]),
         },
         KSolveMove {
             name: "U".to_owned(),
-            transformation: vec![
+            transformation: nonzero_perm(vec![
                 vec![
                     (1, 0),
                     (2, 0),
@@ -328,11 +343,11 @@ pub static KPUZZLE_3X3: LazyLock<KSolve> = LazyLock::new(|| KSolve {
                     (1, 0),
                     (8, 0),
                 ],
-            ],
+            ]),
         },
         KSolveMove {
             name: "L".to_owned(),
-            transformation: vec![
+            transformation: nonzero_perm(vec![
                 vec![
                     (1, 0),
                     (2, 0),
@@ -357,11 +372,11 @@ pub static KPUZZLE_3X3: LazyLock<KSolve> = LazyLock::new(|| KSolve {
                     (6, 2),
                     (4, 2),
                 ],
-            ],
+            ]),
         },
         KSolveMove {
             name: "R".to_owned(),
-            transformation: vec![
+            transformation: nonzero_perm(vec![
                 vec![
                     (4, 0),
                     (2, 0),
@@ -386,12 +401,13 @@ pub static KPUZZLE_3X3: LazyLock<KSolve> = LazyLock::new(|| KSolve {
                     (7, 0),
                     (8, 0),
                 ],
-            ],
+            ]),
         },
     ],
+    // will add more later
     symmetries: vec![KSolveMove {
         name: "S_U4".to_owned(),
-        transformation: vec![
+        transformation: nonzero_perm(vec![
             vec![
                 (5, 1),
                 (9, 0),
@@ -416,7 +432,7 @@ pub static KPUZZLE_3X3: LazyLock<KSolve> = LazyLock::new(|| KSolve {
                 (3, 2),
                 (2, 1),
             ],
-        ],
+        ]),
     }],
 });
 
@@ -425,22 +441,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_kpuzzle_3x3() {
+    #[should_panic]
+    fn test_nonzero_perm() {
+        nonzero_perm(vec![
+            vec![(0, 0), (2, 0), (3, 0)],
+            vec![(1, 0), (2, 0), (3, 0), (4, 0)],
+        ]);
+    }
+
+    #[test]
+    fn test_solved_3x3() {
         let kpuzzle_3x3 = &*KPUZZLE_3X3;
         let solved = kpuzzle_3x3.solved();
 
         assert_eq!(solved.len(), 2);
 
         let expected_edges = &(1..=12)
+            .map(|i| i.try_into().unwrap())
             .zip(std::iter::repeat(0))
-            .collect::<Vec<(u16, u8)>>();
+            .collect::<Vec<(NonZeroU16, u8)>>();
         let actual_edges = &solved[0];
 
         assert_eq!(expected_edges, actual_edges);
 
         let expected_corners = &(1..=8)
+            .map(|i| i.try_into().unwrap())
             .zip(std::iter::repeat(0))
-            .collect::<Vec<(u16, u8)>>();
+            .collect::<Vec<(NonZeroU16, u8)>>();
         let actual_corners = &solved[1];
 
         assert_eq!(expected_corners, actual_corners);
@@ -457,7 +484,7 @@ mod tests {
             .map(|perm_and_ori| {
                 perm_and_ori
                     .iter()
-                    .map(|&(p, o)| (p - 1, o))
+                    .map(|&(p, o)| (p.get() - 1, o))
                     .collect::<Vec<(u16, u8)>>()
             })
             .collect::<Vec<_>>();
@@ -472,50 +499,50 @@ mod tests {
     #[test]
     fn test_valid_construction() {
         let ksolve_fields = KSolveFields {
-            name: "zombiejesus".to_owned(),
+            name: "hasta".to_owned(),
             sets: vec![
                 KSolveSet {
-                    name: "cha cha".to_owned(),
+                    name: "la vista".to_owned(),
                     piece_count: 3.try_into().unwrap(),
                     orientation_count: 5.try_into().unwrap(),
                 },
                 KSolveSet {
-                    name: "real smooth".to_owned(),
+                    name: "baby".to_owned(),
                     piece_count: 4.try_into().unwrap(),
                     orientation_count: 5.try_into().unwrap(),
                 },
             ],
             moves: vec![KSolveMove {
                 name: "F".to_owned(),
-                transformation: vec![
+                transformation: nonzero_perm(vec![
                     vec![(1, 0), (2, 0), (3, 0)],
                     vec![(1, 0), (2, 0), (3, 0), (4, 0)],
-                ],
+                ]),
             }],
             symmetries: vec![],
         };
 
         let ksolve = KSolve::try_from(ksolve_fields).unwrap();
         let expected = KSolve {
-            name: "zombiejesus".to_owned(),
+            name: "hasta".to_owned(),
             sets: vec![
                 KSolveSet {
-                    name: "cha cha".to_string(),
+                    name: "la vista".to_string(),
                     piece_count: 3.try_into().unwrap(),
                     orientation_count: 5.try_into().unwrap(),
                 },
                 KSolveSet {
-                    name: "real smooth".to_string(),
+                    name: "baby".to_string(),
                     piece_count: 4.try_into().unwrap(),
                     orientation_count: 5.try_into().unwrap(),
                 },
             ],
             moves: vec![KSolveMove {
                 name: "F".to_string(),
-                transformation: vec![
+                transformation: nonzero_perm(vec![
                     vec![(1, 0), (2, 0), (3, 0)],
                     vec![(1, 0), (2, 0), (3, 0), (4, 0)],
-                ],
+                ]),
             }],
             symmetries: vec![],
         };
@@ -541,7 +568,7 @@ mod tests {
             ],
             moves: vec![KSolveMove {
                 name: "F".to_owned(),
-                transformation: vec![vec![(1, 0), (2, 0), (3, 0)]],
+                transformation: nonzero_perm(vec![vec![(1, 0), (2, 0), (3, 0)]]),
             }],
             symmetries: vec![],
         };
@@ -570,7 +597,7 @@ mod tests {
             ],
             moves: vec![KSolveMove {
                 name: "F".to_owned(),
-                transformation: vec![vec![(1, 0), (2, 0), (3, 0), (4, 0)], vec![]],
+                transformation: nonzero_perm(vec![vec![(1, 0), (2, 0), (3, 0), (4, 0)], vec![]]),
             }],
             symmetries: vec![],
         };
@@ -599,10 +626,10 @@ mod tests {
             ],
             moves: vec![KSolveMove {
                 name: "F".to_owned(),
-                transformation: vec![
+                transformation: nonzero_perm(vec![
                     vec![(1, 0), (2, 0), (3, 0)],
                     vec![(1, 0), (2, 5), (3, 0), (4, 0)],
-                ],
+                ]),
             }],
             symmetries: vec![],
         };
@@ -631,10 +658,10 @@ mod tests {
             ],
             moves: vec![KSolveMove {
                 name: "F".to_owned(),
-                transformation: vec![
+                transformation: nonzero_perm(vec![
                     vec![(1, 0), (2, 0), (3, 0)],
                     vec![(1, 0), (5, 0), (3, 0), (4, 0)],
-                ],
+                ]),
             }],
             symmetries: vec![],
         };
@@ -642,35 +669,6 @@ mod tests {
         assert!(matches!(
             KSolve::try_from(ksolve_fields),
             Err(KSolveConstructionError::PermutationOutOfRange(4, 5))
-        ));
-
-        let ksolve_fields = KSolveFields {
-            name: "hasta".to_owned(),
-            sets: vec![
-                KSolveSet {
-                    name: "la vista".to_owned(),
-                    piece_count: 3.try_into().unwrap(),
-                    orientation_count: 5.try_into().unwrap(),
-                },
-                KSolveSet {
-                    name: "baby".to_owned(),
-                    piece_count: 4.try_into().unwrap(),
-                    orientation_count: 5.try_into().unwrap(),
-                },
-            ],
-            moves: vec![KSolveMove {
-                name: "F".to_owned(),
-                transformation: vec![
-                    vec![(0, 0), (2, 0), (3, 0)],
-                    vec![(1, 0), (2, 0), (3, 0), (4, 0)],
-                ],
-            }],
-            symmetries: vec![],
-        };
-
-        assert!(matches!(
-            KSolve::try_from(ksolve_fields),
-            Err(KSolveConstructionError::PermutationOutOfRange(3, 0))
         ));
     }
 
@@ -692,10 +690,10 @@ mod tests {
             ],
             moves: vec![KSolveMove {
                 name: "F".to_owned(),
-                transformation: vec![
+                transformation: nonzero_perm(vec![
                     vec![(1, 0), (2, 0), (3, 0)],
                     vec![(1, 0), (2, 0), (2, 0), (4, 0)],
-                ],
+                ]),
             }],
             symmetries: vec![],
         };
