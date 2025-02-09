@@ -34,9 +34,8 @@
 - Function macro
 - Directory of testing programs instead of hardcoding into Rust
   - Inline testing in the QAT format
-<!-- Aren't these two are the same thing -->
-- Translate multiplication program to QAT
 - Henry's efficient multiplication program
+- "[repeat|print|halt] until _ solved" syntax
 
 ## Interpreter/CLI
 
@@ -56,6 +55,6 @@
 
 ## Robot
 
-- ⭐Find calibration algs
+- ⭐Find calibration algorithms
 - Computer vision algorithm
 - The webapp and rust program that will run the Q program

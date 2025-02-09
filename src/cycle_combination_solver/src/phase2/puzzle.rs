@@ -8,16 +8,10 @@ use thiserror::Error;
 
 pub trait PuzzleState
 where
-    Self: Sized + Clone,
+    Self: Sized,
 {
     type ComposeMeta;
 
-    /// Compose two puzzle states, prefer to use replace_compose if possible
-    fn compose(&self, a: &Self, compose_meta: &Self::ComposeMeta) -> Self {
-        let mut result = self.clone();
-        result.replace_compose(self, a, compose_meta);
-        result
-    }
     /// Compose two puzzle states in place
     fn replace_compose(&mut self, a: &Self, b: &Self, compose_meta: &Self::ComposeMeta);
     /// Get the implmentor's orbit definition specification, or None if any
@@ -32,9 +26,12 @@ where
 }
 
 #[derive(Clone)]
-pub struct StackPuzzle<const N: usize>([u8; N]);
+pub struct StackPuzzle<const N: usize>(pub [u8; N]);
+
 #[derive(Clone)]
-pub struct HeapPuzzle(Box<[u8]>);
+pub struct HeapPuzzle(pub Box<[u8]>);
+
+pub type StackCube3 = StackPuzzle<40>;
 
 pub struct PuzzleDef<P: PuzzleState> {
     pub moves: Vec<Move<P>>,
@@ -412,7 +409,7 @@ mod tests {
 
     #[test]
     fn test_composition_stack() {
-        let cube3_def: PuzzleDef<StackPuzzle<40>> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let cube3_def: PuzzleDef<StackCube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let mut solved = cube3_def.solved_state().unwrap();
         let r_move = cube3_def.find_move("R").unwrap();
         let f_move = cube3_def.find_move("F").unwrap();
@@ -452,22 +449,84 @@ mod tests {
     }
 
     #[test]
-    fn test_s_u4_symmetry() {
-        let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let s_u4_symmetry = cube3_def.find_symmetry("S_U4").unwrap();
+    fn test_many_compositions() {
+        let cube3_def: PuzzleDef<StackCube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let r_move = cube3_def.find_move("R").unwrap();
+        let f_move = cube3_def.find_move("F").unwrap();
 
         let mut result = cube3_def.solved_state().unwrap();
-        for _ in 0..4 {
-            result = result.compose(&s_u4_symmetry.puzzle_state, &cube3_def.sorted_orbit_defs);
+        let mut prev_result = result.clone();
+        for _ in 0..105 {
+            prev_result.replace_compose(
+                &result,
+                &r_move.puzzle_state,
+                &cube3_def.sorted_orbit_defs,
+            );
+            result.replace_compose(
+                &prev_result,
+                &f_move.puzzle_state,
+                &cube3_def.sorted_orbit_defs,
+            );
         }
 
         let solved = cube3_def.solved_state().unwrap();
         assert_eq!(result.0, solved.0);
     }
 
+    #[test]
+    fn test_s_u4_symmetry() {
+        let cube3_def: PuzzleDef<StackCube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let s_u4_symmetry = cube3_def.find_symmetry("S_U4").unwrap();
+
+        let mut result = cube3_def.solved_state().unwrap();
+        let mut prev_result = result.clone();
+        for _ in 0..4 {
+            prev_result.replace_compose(
+                &result,
+                &s_u4_symmetry.puzzle_state,
+                &cube3_def.sorted_orbit_defs,
+            );
+            std::mem::swap(&mut result, &mut prev_result);
+        }
+
+        let solved = cube3_def.solved_state().unwrap();
+        assert_eq!(result.0, solved.0);
+    }
+
+    // TODO: add this test when puzzle geometry is able to generate KSolve
+    // puzzles with set sizes larger than 255
+    // #[test]
+    // fn test_set_size_too_big() {
+    //     let cube3_def =
+    //     assert!(matches!(
+    //         cube3_def,
+    //         Err(KSolveConversionError::SetSizeTooBig)
+    //     ));
+    // }
+
+    #[test]
+    fn test_not_enough_buffer_space() {
+        let cube3_def = PuzzleDef::<StackPuzzle<39>>::try_from(&*KPUZZLE_3X3);
+        assert!(matches!(
+            cube3_def,
+            Err(KSolveConversionError::NotEnoughBufferSpace)
+        ));
+    }
+
+    // TODO: add this test when either puzzle geometry exposes another KSolve
+    // definition other than KPUZZLE_3X3 or when there is another simd puzzle
+    // #[test]
+    // fn test_invalid_orbit_defs() {
+    //     let cube3_def =
+    //     assert!(matches!(
+    //         cube3_def,
+    //         Err(KSolveConversionError::InvalidOrbitDefs(_, _))
+    //     ));
+    // }
+
     #[bench]
     fn bench_compose_stack(b: &mut Bencher) {
-        let cube3_def: PuzzleDef<StackPuzzle<40>> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let cube3_def: PuzzleDef<StackCube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let mut solved = cube3_def.solved_state().unwrap();
         let r_move = cube3_def.find_move("R").unwrap();
         let f_move = cube3_def.find_move("F").unwrap();

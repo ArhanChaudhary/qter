@@ -20,3 +20,7 @@ workspace = true
 [features]
 avx512vl = []
 avx512vbmi = []
+
+[[bin]]
+name = "delete_this_later"
+path = "src/phase2/main.rs"
