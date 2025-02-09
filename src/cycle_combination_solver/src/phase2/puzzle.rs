@@ -1,4 +1,4 @@
-use puzzle_geometry::ksolve::KSolve;
+use puzzle_geometry::ksolve::{KSolve, KSolveMove};
 use std::{
     num::NonZeroU8,
     simd::{u8x16, u8x8},
@@ -8,17 +8,18 @@ use thiserror::Error;
 
 pub trait PuzzleState
 where
-    Self: Sized,
+    Self: Sized + Clone,
 {
-    type ReplaceComposeMeta;
+    type ComposeMeta;
 
+    /// Compose two puzzle states, prefer to use replace_compose if possible
+    fn compose(&self, a: &Self, compose_meta: &Self::ComposeMeta) -> Self {
+        let mut result = self.clone();
+        result.replace_compose(self, a, compose_meta);
+        result
+    }
     /// Compose two puzzle states in place
-    fn replace_compose(
-        &mut self,
-        a: &Self,
-        b: &Self,
-        replace_compose_meta: &Self::ReplaceComposeMeta,
-    );
+    fn replace_compose(&mut self, a: &Self, b: &Self, compose_meta: &Self::ComposeMeta);
     /// Get the implmentor's orbit definition specification, or None if any
     /// orbit definition is allowed
     fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]>;
@@ -30,11 +31,14 @@ where
     ) -> Result<Self, KSolveConversionError>;
 }
 
+#[derive(Clone)]
 pub struct StackPuzzle<const N: usize>([u8; N]);
+#[derive(Clone)]
 pub struct HeapPuzzle(Box<[u8]>);
 
 pub struct PuzzleDef<P: PuzzleState> {
     pub moves: Vec<Move<P>>,
+    pub symmetries: Vec<Move<P>>,
     pub sorted_orbit_defs: Vec<OrbitDef>,
     pub name: String,
 }
@@ -60,8 +64,114 @@ pub enum KSolveConversionError {
     InvalidOrbitDefs(Vec<OrbitDef>, Vec<OrbitDef>),
 }
 
+impl<P: PuzzleState> PuzzleDef<P> {
+    pub fn find_move(&self, name: &str) -> Option<&Move<P>> {
+        self.moves.iter().find(|def| def.name == name)
+    }
+
+    pub fn find_symmetry(&self, name: &str) -> Option<&Move<P>> {
+        self.symmetries.iter().find(|def| def.name == name)
+    }
+
+    pub fn solved_state(&self) -> Result<P, KSolveConversionError> {
+        let sorted_transformations = self
+            .sorted_orbit_defs
+            .iter()
+            .map(|orbit_def| {
+                (0..orbit_def.piece_count.get())
+                    .map(|i| (i, 0))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        P::from_sorted_transformations_unchecked(&self.sorted_orbit_defs, &sorted_transformations)
+    }
+}
+
+impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
+    type Error = KSolveConversionError;
+
+    fn try_from(ksolve: &KSolve) -> Result<Self, Self::Error> {
+        let mut sorted_orbit_defs: Vec<OrbitDef> = ksolve
+            .sets()
+            .iter()
+            .map(|ksolve_set| {
+                Ok(OrbitDef {
+                    piece_count: ksolve_set
+                        .piece_count()
+                        .try_into()
+                        .map_err(|_| KSolveConversionError::SetSizeTooBig)?,
+                    orientation_count: ksolve_set.orientation_count(),
+                })
+            })
+            .collect::<Result<_, KSolveConversionError>>()?;
+        sorted_orbit_defs.sort_by_key(|orbit_def| orbit_def.piece_count);
+
+        if let Some(expected_sorted_orbit_defs) = P::expected_sorted_orbit_defs() {
+            if sorted_orbit_defs != expected_sorted_orbit_defs {
+                return Err(KSolveConversionError::InvalidOrbitDefs(
+                    expected_sorted_orbit_defs.to_vec(),
+                    sorted_orbit_defs,
+                ));
+            }
+        }
+
+        let moves: Vec<Move<P>> = ksolve
+            .moves()
+            .iter()
+            .map(|ksolve_move| {
+                Move::try_from_ksolve_move_and_orbit_defs(ksolve_move, &sorted_orbit_defs[..])
+            })
+            .collect::<Result<_, KSolveConversionError>>()?;
+
+        let symmetries: Vec<Move<P>> = ksolve
+            .symmetries()
+            .iter()
+            .map(|ksolve_move| {
+                Move::try_from_ksolve_move_and_orbit_defs(ksolve_move, &sorted_orbit_defs[..])
+            })
+            .collect::<Result<_, KSolveConversionError>>()?;
+
+        Ok(PuzzleDef {
+            moves,
+            symmetries,
+            sorted_orbit_defs,
+            name: ksolve.name().to_owned(),
+        })
+    }
+}
+
+impl<P: PuzzleState> Move<P> {
+    fn try_from_ksolve_move_and_orbit_defs(
+        ksolve_move: &KSolveMove,
+        sorted_orbit_defs: &[OrbitDef],
+    ) -> Result<Self, KSolveConversionError> {
+        let mut sorted_transformations = ksolve_move
+            .transformation()
+            .iter()
+            .map(|perm_and_ori| {
+                perm_and_ori
+                    .iter()
+                    .map(|&(perm, orientation)| {
+                        // we can unwrap because sorted_orbit_defs exists
+                        ((perm.get() - 1).try_into().unwrap(), orientation)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        sorted_transformations.sort_by_key(|a| a.len());
+
+        let puzzle_state =
+            P::from_sorted_transformations_unchecked(sorted_orbit_defs, &sorted_transformations)?;
+
+        Ok(Move {
+            name: ksolve_move.name().to_owned(),
+            puzzle_state,
+        })
+    }
+}
+
 impl<const N: usize> PuzzleState for StackPuzzle<N> {
-    type ReplaceComposeMeta = Vec<OrbitDef>;
+    type ComposeMeta = Vec<OrbitDef>;
 
     fn replace_compose(
         &mut self,
@@ -91,15 +201,10 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
 }
 
 impl PuzzleState for HeapPuzzle {
-    type ReplaceComposeMeta = Vec<OrbitDef>;
+    type ComposeMeta = Vec<OrbitDef>;
 
-    fn replace_compose(
-        &mut self,
-        a: &HeapPuzzle,
-        b: &HeapPuzzle,
-        replace_compose_meta: &Vec<OrbitDef>,
-    ) {
-        slice_replace_compose(&mut self.0, &a.0, &b.0, replace_compose_meta);
+    fn replace_compose(&mut self, a: &HeapPuzzle, b: &HeapPuzzle, compose_meta: &Vec<OrbitDef>) {
+        slice_replace_compose(&mut self.0, &a.0, &b.0, compose_meta);
     }
 
     fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]> {
@@ -197,94 +302,9 @@ fn ksolve_move_to_slice_unchecked(
     Ok(())
 }
 
-impl<P: PuzzleState> PuzzleDef<P> {
-    pub fn find_move(&self, name: &str) -> Option<&Move<P>> {
-        self.moves.iter().find(|def| def.name == name)
-    }
-
-    pub fn solved_state(&self) -> Result<P, KSolveConversionError> {
-        let sorted_transformations = self
-            .sorted_orbit_defs
-            .iter()
-            .map(|orbit_def| {
-                (0..orbit_def.piece_count.get())
-                    .map(|i| (i, 0))
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-        P::from_sorted_transformations_unchecked(&self.sorted_orbit_defs, &sorted_transformations)
-    }
-}
-
-impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
-    type Error = KSolveConversionError;
-
-    fn try_from(ksolve: &KSolve) -> Result<Self, Self::Error> {
-        let mut sorted_orbit_defs: Vec<OrbitDef> = ksolve
-            .sets()
-            .iter()
-            .map(|ksolve_set| {
-                Ok(OrbitDef {
-                    piece_count: ksolve_set
-                        .piece_count()
-                        .try_into()
-                        .map_err(|_| KSolveConversionError::SetSizeTooBig)?,
-                    orientation_count: ksolve_set.orientation_count(),
-                })
-            })
-            .collect::<Result<_, KSolveConversionError>>()?;
-        sorted_orbit_defs.sort_by_key(|orbit_def| orbit_def.piece_count);
-
-        if let Some(expected_orbit_defs) = P::expected_sorted_orbit_defs() {
-            if sorted_orbit_defs != expected_orbit_defs {
-                return Err(KSolveConversionError::InvalidOrbitDefs(
-                    expected_orbit_defs.to_vec(),
-                    sorted_orbit_defs,
-                ));
-            }
-        }
-
-        let moves: Vec<Move<P>> = ksolve
-            .moves()
-            .iter()
-            .map(|ksolve_move| {
-                let mut sorted_transformations = ksolve_move
-                    .transformation()
-                    .iter()
-                    .map(|perm_and_ori| {
-                        perm_and_ori
-                            .iter()
-                            .map(|&(perm, orientation)| {
-                                // we can unwrap because sorted_orbit_defs
-                                // executed without error
-                                ((perm.get() - 1).try_into().unwrap(), orientation)
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                    .collect::<Vec<_>>();
-                sorted_transformations.sort_by_key(|a| a.len());
-                let puzzle_state = P::from_sorted_transformations_unchecked(
-                    &sorted_orbit_defs,
-                    &sorted_transformations,
-                )?;
-                // TODO: validate here!
-                Ok(Move {
-                    name: ksolve_move.name().to_owned(),
-                    puzzle_state,
-                })
-            })
-            .collect::<Result<_, KSolveConversionError>>()?;
-
-        Ok(PuzzleDef {
-            moves,
-            sorted_orbit_defs,
-            name: ksolve.name().to_owned(),
-        })
-    }
-}
-
 // TODO: Utilize #[cfg(simd8)] #[cfg(simd16)] and #[cfg(simd32)] for differing
 // implementations
+#[derive(Clone)]
 pub struct StackCube3Simd {
     pub ep: u8x16,
     pub eo: u8x16,
@@ -309,9 +329,9 @@ static CUBE_3_SORTED_ORBIT_DEFS: LazyLock<Vec<OrbitDef>> = LazyLock::new(|| {
 });
 
 impl PuzzleState for StackCube3Simd {
-    type ReplaceComposeMeta = ();
+    type ComposeMeta = ();
 
-    fn replace_compose(&mut self, a: &Self, b: &Self, _replace_compose_meta: &()) {
+    fn replace_compose(&mut self, a: &Self, b: &Self, _compose_meta: &()) {
         // TODO: it is unclear for now if it will later be more efficient or
         // not to combine orientation/permutation into a single simd vector
         self.ep = a.ep.swizzle_dyn(b.ep);
@@ -429,6 +449,20 @@ mod tests {
         assert_eq!(solved.co.as_array(), &COMPOSE_R_F[8..16]);
         assert_eq!(&solved.ep.as_array()[..12], &COMPOSE_R_F[16..28]);
         assert_eq!(&solved.eo.as_array()[..12], &COMPOSE_R_F[28..40]);
+    }
+
+    #[test]
+    fn test_s_u4_symmetry() {
+        let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let s_u4_symmetry = cube3_def.find_symmetry("S_U4").unwrap();
+
+        let mut result = cube3_def.solved_state().unwrap();
+        for _ in 0..4 {
+            result = result.compose(&s_u4_symmetry.puzzle_state, &cube3_def.sorted_orbit_defs);
+        }
+
+        let solved = cube3_def.solved_state().unwrap();
+        assert_eq!(result.0, solved.0);
     }
 
     #[bench]
