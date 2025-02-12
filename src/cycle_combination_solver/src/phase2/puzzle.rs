@@ -11,16 +11,11 @@ pub trait PuzzleState
 where
     Self: Sized + Clone + PartialEq + Debug,
 {
-    type ComposeMeta<'a>;
     type GoalMeta<'a>;
 
     /// Get the implmentor's orbit definition specification, or None if any
     /// orbit definition is allowed
     fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]>;
-    /// Create a compose meta type from sorted orbit definitions. The strange
-    /// function signature is nessessary
-    fn compose_meta_from_sorted_orbit_defs(sorted_orbit_defs: &[OrbitDef])
-        -> Self::ComposeMeta<'_>;
     /// Create a puzzle state from a sorted transformation without checking if
     /// it belongs to orbit defs
     fn from_sorted_transformations_unchecked(
@@ -28,7 +23,7 @@ where
         sorted_transformations: &[Vec<(u8, u8)>],
     ) -> Result<Self, KSolveConversionError>;
     /// Compose two puzzle states in place
-    fn replace_compose(&mut self, a: &Self, b: &Self, compose_meta: Self::ComposeMeta<'_>);
+    fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: &[OrbitDef]);
     /// The goal state for IDA* search
     fn is_goal(&self, goal_meta: Self::GoalMeta<'_>) -> bool;
 }
@@ -181,7 +176,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                 move_1.puzzle_state.replace_compose(
                     &move_2.puzzle_state,
                     &base_move.puzzle_state,
-                    P::compose_meta_from_sorted_orbit_defs(&sorted_orbit_defs),
+                    &sorted_orbit_defs,
                 );
                 if move_1.puzzle_state == solved {
                     break;
@@ -228,18 +223,10 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
 }
 
 impl<const N: usize> PuzzleState for StackPuzzle<N> {
-    // type ComposeMeta = Vec<OrbitDef>;
-    type ComposeMeta<'a> = &'a [OrbitDef];
     type GoalMeta<'a> = &'a mut [u8];
 
     fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]> {
         None
-    }
-
-    fn compose_meta_from_sorted_orbit_defs(
-        sorted_orbit_defs: &[OrbitDef],
-    ) -> Self::ComposeMeta<'_> {
-        sorted_orbit_defs
     }
 
     fn from_sorted_transformations_unchecked(
@@ -270,17 +257,10 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
 }
 
 impl PuzzleState for HeapPuzzle {
-    type ComposeMeta<'a> = &'a [OrbitDef];
     type GoalMeta<'a> = &'a mut [u8];
 
     fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]> {
         None
-    }
-
-    fn compose_meta_from_sorted_orbit_defs(
-        sorted_orbit_defs: &[OrbitDef],
-    ) -> Self::ComposeMeta<'_> {
-        sorted_orbit_defs
     }
 
     fn from_sorted_transformations_unchecked(
@@ -422,16 +402,10 @@ static CUBE_3_SORTED_ORBIT_DEFS: LazyLock<Vec<OrbitDef>> = LazyLock::new(|| {
 });
 
 impl PuzzleState for StackCube3Simd {
-    type ComposeMeta<'a> = ();
     type GoalMeta<'a> = ();
 
     fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]> {
         Some(CUBE_3_SORTED_ORBIT_DEFS.as_slice())
-    }
-
-    fn compose_meta_from_sorted_orbit_defs(
-        _sorted_orbit_defs: &[OrbitDef],
-    ) -> Self::ComposeMeta<'_> {
     }
 
     fn from_sorted_transformations_unchecked(
@@ -459,7 +433,7 @@ impl PuzzleState for StackCube3Simd {
         Ok(StackCube3Simd { ep, eo, cp, co })
     }
 
-    fn replace_compose(&mut self, a: &Self, b: &Self, _compose_meta: ()) {
+    fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: &[OrbitDef]) {
         // TODO: it is unclear for now if it will later be more efficient or
         // not to combine orientation/permutation into a single simd vector
         self.ep = a.ep.swizzle_dyn(b.ep);
@@ -572,11 +546,7 @@ mod tests {
         let mut prev_result = puzzle_state.clone();
         for name in moves.split_whitespace() {
             let m = puzzle_def.find_move(name).unwrap();
-            prev_result.replace_compose(
-                &result,
-                &m.puzzle_state,
-                P::compose_meta_from_sorted_orbit_defs(&puzzle_def.sorted_orbit_defs),
-            );
+            prev_result.replace_compose(&result, &m.puzzle_state, &puzzle_def.sorted_orbit_defs);
             std::mem::swap(&mut result, &mut prev_result);
         }
         result
@@ -616,7 +586,11 @@ mod tests {
         let mut solved = cube3_def.solved_state().unwrap();
         let r_move = cube3_def.find_move("R").unwrap();
         let f_move = cube3_def.find_move("F").unwrap();
-        solved.replace_compose(&r_move.puzzle_state, &f_move.puzzle_state, ());
+        solved.replace_compose(
+            &r_move.puzzle_state,
+            &f_move.puzzle_state,
+            &cube3_def.sorted_orbit_defs,
+        );
         assert_eq!(solved.cp.as_array(), &COMPOSE_R_F[..8]);
         assert_eq!(solved.co.as_array(), &COMPOSE_R_F[8..16]);
         assert_eq!(&solved.ep.as_array()[..12], &COMPOSE_R_F[16..28]);
@@ -678,7 +652,7 @@ mod tests {
             prev_result.replace_compose(
                 &result,
                 &s_u4_symmetry.puzzle_state,
-                P::compose_meta_from_sorted_orbit_defs(&cube3_def.sorted_orbit_defs),
+                &cube3_def.sorted_orbit_defs,
             );
             std::mem::swap(&mut result, &mut prev_result);
         }
@@ -696,9 +670,13 @@ mod tests {
 
     fn expanded_move<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let solved = cube3_def.solved_state().unwrap();
-        let also_solved = apply_moves(cube3_def, solved.clone(), "R R' D2 D2 U U U2 F B' F' B");
-        assert_eq!(also_solved, solved);
+        let actual_solved = cube3_def.solved_state().unwrap();
+        let expected_solved = apply_moves(
+            cube3_def,
+            actual_solved.clone(),
+            "R R' D2 D2 U U U2 F B' F' B",
+        );
+        assert_eq!(actual_solved, expected_solved);
     }
 
     #[test]
@@ -748,7 +726,7 @@ mod tests {
             test::black_box(&mut solved).replace_compose(
                 test::black_box(&r_move.puzzle_state),
                 test::black_box(&f_move.puzzle_state),
-                (),
+                &cube3_def.sorted_orbit_defs,
             );
         });
     }
