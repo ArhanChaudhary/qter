@@ -623,6 +623,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "movecount_coefficient"
+version = "0.1.0"
+
+[[package]]
 name = "nalgebra"
 version = "0.33.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
