@@ -4,58 +4,6 @@ pub struct CycleType<T> {
     pub edge_partition: Vec<(T, bool)>,
 }
 
-pub fn induces_oriented_partition(
-    perm: &[u8],
-    ori: &[i8],
-    // cycle_type: &CycleType<u8>,
-    partition: &[(u8, bool)],
-    orientation_count: i8,
-    multi_bv: &mut [u8],
-) -> bool {
-    // TODO: get this working for any piece orbit
-    // reuse memory
-    multi_bv.fill(0);
-    // visited corners is LSB, covered_cycle_lengths is 2nd LSB
-    let mut covered_cycles_count = 0;
-    for i in 0..perm.len() {
-        if multi_bv[i] & 1 != 0 {
-            continue;
-        }
-        multi_bv[i] |= 1;
-        let mut actual_cycle_length = 1;
-        let mut corner = perm[i] as usize;
-        let mut orientation_sum = ori[corner];
-
-        while corner != i {
-            actual_cycle_length += 1;
-            multi_bv[corner] |= 1;
-            corner = perm[corner] as usize;
-            orientation_sum += ori[corner];
-        }
-
-        let actual_orients = orientation_sum % orientation_count != 0;
-        if actual_cycle_length == 1 && !actual_orients {
-            continue;
-        }
-        let Some(valid_cycle_index) = partition.iter().enumerate().position(
-            |(j, &(expected_cycle_length, expected_orients))| {
-                expected_cycle_length == actual_cycle_length
-                    && expected_orients == actual_orients
-                    && (multi_bv[j] & 2 == 0)
-            },
-        ) else {
-            return false;
-        };
-        multi_bv[valid_cycle_index] |= 2;
-        covered_cycles_count += 1;
-        // cannot possibly return true if this runs
-        if covered_cycles_count > partition.len() {
-            return false;
-        }
-    }
-    covered_cycles_count == partition.len()
-}
-
 impl CubeState {
     pub fn induces_corner_cycle_type(
         &self,
