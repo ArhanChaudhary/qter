@@ -147,15 +147,15 @@
   import cetz.draw : *
 
   let faces = faces.split(" ").map(v => v.split("").filter(n => colors.keys().contains(n)).map(n => colors.at(n)))
-  
+
   set-style(stroke: palette.background)
-  
+
   group({
     translate(offset)
     scale(scale-amt)
 
     let ortho-squish = 1 / (2*calc.cos(30deg))
-    
+
     let transforms = (
       {
         scale(x: 1, y: ortho-squish)
@@ -173,11 +173,11 @@
         rotate(135deg)
       }
     );
-  
+
     for (facelets, transform) in faces.zip(transforms) {
       group({
         transform
-        
+
         for i in range(0, 3) {
           for j in range(0, 3) {
             rect((i + 0.03, j + 0.03), (i + 0.97, j + 0.97), radius: .2, fill: facelets.at(2 - i + j * 3))
@@ -202,7 +202,7 @@
       #text(size: 15pt)[```l
       Puzzles
       A: 3x3
-      
+
       1  | input "First number"
                  R' F' L U' L U L F U' R
                  max-input 90
@@ -223,7 +223,7 @@
       13 | halt "The average is"
                 D' U R F' R2 D R F' U'
                 counting-until DFR FR
-  
+
       ```]
     ])
   ]
@@ -251,10 +251,10 @@
         $"\"Three\""$,
         $"\"Four?\""$,
       ).at(slide - 1)
-      
+
       cetz.canvas({
         import cetz.draw : *
-        
+
         cube(state, scale-amt: 1.5)
         content((-10, 1), text(size: 30pt)[$alg$], anchor: "west")
         circle((7, 0), radius: 0)
@@ -277,10 +277,10 @@
         $"\"One\""$,
         $"\"Three\""$,
       ).at(slide - 1)
-      
+
       cetz.canvas({
         import cetz.draw : *
-        
+
         cube(state, scale-amt: 1.5)
         content((-10, 1), text(size: 30pt)[$alg$], anchor: "west")
         circle((7, 0), radius: 0)
@@ -292,7 +292,7 @@
 #mono-slide(title: [Bigger numbers?], content: [
   #align(right + horizon, cetz.canvas({
     import cetz.draw : *
-    
+
     content((-12, 1), $("Right") ("Up")$, anchor: "west")
     cube("rrrrrrwww gggwwowwo ryygggggg", scale-amt: 1.5)
     circle((7, 0), radius: 0)
@@ -302,7 +302,7 @@
 #mono-slide(title: [Conditional jump?], content: [
   #align(right + horizon, cetz.canvas({
     import cetz.draw : *
-    
+
     content((-12, 1), $(("Right") ("Up")) × ?$, anchor: "west")
     cube("oybrroyrr oywwwrwwr ggwbggywb", scale-amt: 1.5)
     circle((7, 0), radius: 0)
@@ -312,7 +312,7 @@
 #mono-slide(title: [Conditional jump?], content: [
   #align(right + horizon, cetz.canvas({
     import cetz.draw : *
-    
+
     content((-12, 1), $(("Right") ("Up")) × 0 $, anchor: "west")
     cube("rrrrrrrrr wwwwwwwww ggggggggg", scale-amt: 1.5)
     circle((7, 0), radius: 0)
@@ -322,7 +322,7 @@
 #mono-slide(title: [Multiple registers?], content: [
   #align(right + horizon, cetz.canvas({
     import cetz.draw : *
-    
+
     content((-12, 1), $("Up") ("Down")$, anchor: "west")
     cube("rrrrrrrrr gggwwwggg yyygggyyy", scale-amt: 1.5)
     circle((7, 0), radius: 0)
@@ -354,7 +354,7 @@
 #mono-slide(title: [What about solved-goto?], content: [
   #align(right + horizon, cetz.canvas({
     import cetz.draw : *
-    
+
     content((-14, 1), $"Register \"Up\" is zero"$, anchor: "west")
     cube("rrrrrrrrr wwwwwwggg ggggggyyy", scale-amt: 1.5)
     circle((7, 0), radius: 0)
@@ -366,10 +366,10 @@
     import cetz.draw : *
 
     content((1.6, 5), [solved-goto UF UFR 8])
-    
+
     content((-5.3, 3), $"Branch taken"$, anchor: "west")
     cube("nnnnrnnrr nwwnwnnnn gnnngnnnn", scale-amt: 1.5)
-        
+
     content((-5.3 + 9.3, 3), $"Branch not taken"$, anchor: "west")
     cube("nnnnrnnrw nwgnwnnnn rnnngnnnn", scale-amt: 1.5, offset: (10, 0))
   }))
@@ -497,7 +497,7 @@
   picture: [
     #alternatives-fn(start: 0, count: 6, i => {
       let i = i - 1
-      
+
       cetz.canvas({
         import cetz.draw : *
 
@@ -547,7 +547,7 @@
           dec $current
           move-left $tape
         }
-        
+
         while not-solved $to {
           dec $to
           inc $current
@@ -579,9 +579,9 @@
     #pause
     #v(30pt)
     This is formed from:
-    - LCM 56 on edges: 4 cycle, another 4 cycle, and 7 cycle
+    - LCM 28 on edges: 4 cycle, another 4 cycle, and 7 cycle
     - LCM 45 on corners: 9 cycle and 15 cycle
-    - LCM(45, 56) = 1260
+    - LCM(45, 28) = 1260
 ])
 
 #mono-slide(

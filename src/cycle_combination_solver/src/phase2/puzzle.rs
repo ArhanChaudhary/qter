@@ -1,18 +1,13 @@
 use puzzle_geometry::ksolve::KSolve;
-use std::{
-    fmt::Debug,
-    num::NonZeroU8,
-    simd::{u8x16, u8x8},
-    sync::LazyLock,
-};
+use std::{fmt::Debug, num::NonZeroU8};
 use thiserror::Error;
+
+pub mod simdcube;
 
 pub trait PuzzleState
 where
     Self: Sized + Clone + PartialEq + Debug,
 {
-    type GoalMeta<'a>;
-
     /// Get the implmentor's orbit definition specification, or None if any
     /// orbit definition is allowed
     fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]>;
@@ -25,7 +20,12 @@ where
     /// Compose two puzzle states in place
     fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: &[OrbitDef]);
     /// The goal state for IDA* search
-    fn is_goal(&self, goal_meta: Self::GoalMeta<'_>) -> bool;
+    fn induces_sorted_cycle_type(
+        &self,
+        sorted_cycle_type: &[OrientedPartition],
+        sorted_orbit_defs: &[OrbitDef],
+        multi_bv: &mut [u8],
+    ) -> bool;
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -67,10 +67,7 @@ pub struct OrbitDef {
     pub orientation_count: NonZeroU8,
 }
 
-pub struct PartitionType {
-    pub corner_partition: Vec<(u8, bool)>,
-    pub edge_partition: Vec<(u8, bool)>,
-}
+pub type OrientedPartition = Vec<(NonZeroU8, bool)>;
 
 impl<P: PuzzleState> PuzzleDef<P> {
     pub fn find_move(&self, name: &str) -> Option<&Move<P>> {
@@ -117,7 +114,8 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                 })
             })
             .collect::<Result<_, KSolveConversionError>>()?;
-        sorted_orbit_defs.sort_by_key(|orbit_def| orbit_def.piece_count);
+        sorted_orbit_defs
+            .sort_by_key(|orbit_def| (orbit_def.piece_count, orbit_def.orientation_count));
 
         if let Some(expected_sorted_orbit_defs) = P::expected_sorted_orbit_defs() {
             if sorted_orbit_defs != expected_sorted_orbit_defs {
@@ -150,6 +148,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                         .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>();
+            // TODO: sorting should take orientation_count into account
             sorted_transformations.sort_by_key(|a| a.len());
 
             let puzzle_state = P::from_sorted_transformations_unchecked(
@@ -172,7 +171,9 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
             let mut move_2 = base_move.clone();
 
             let mut move_powers: Vec<P> = vec![];
-            for _ in 0..1_000_000 {
+            const MAX_MOVE_POWER: usize = 1_000_000;
+
+            for _ in 0..MAX_MOVE_POWER {
                 move_1.puzzle_state.replace_compose(
                     &move_2.puzzle_state,
                     &base_move.puzzle_state,
@@ -185,12 +186,13 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                 std::mem::swap(&mut move_1, &mut move_2);
             }
 
-            if move_powers.len() == 1_000_000 {
+            if move_powers.len() == MAX_MOVE_POWER {
                 return Err(KSolveConversionError::MoveOrderTooHigh);
             }
 
             let base_name = base_move.name.clone();
             moves.push(base_move);
+
             let order = move_powers.len() as isize + 2;
             for (j, expanded_puzzle_state) in move_powers.into_iter().enumerate() {
                 let mut twist: isize = j as isize + 2;
@@ -198,13 +200,11 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                     twist -= order;
                 }
                 let mut expanded_name = base_name.clone();
-                if twist != 1 {
-                    if twist != -1 {
-                        expanded_name.push_str(&twist.abs().to_string());
-                    }
-                    if twist < 0 {
-                        expanded_name.push('\'');
-                    }
+                if twist != -1 {
+                    expanded_name.push_str(&twist.abs().to_string());
+                }
+                if twist < 0 {
+                    expanded_name.push('\'');
                 }
                 moves.push(Move {
                     puzzle_state: expanded_puzzle_state,
@@ -223,8 +223,6 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
 }
 
 impl<const N: usize> PuzzleState for StackPuzzle<N> {
-    type GoalMeta<'a> = &'a mut [u8];
-
     fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]> {
         None
     }
@@ -246,19 +244,22 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
         &mut self,
         a: &StackPuzzle<N>,
         b: &StackPuzzle<N>,
-        puzzle_meta: &[OrbitDef],
+        sorted_orbit_defs: &[OrbitDef],
     ) {
-        replace_compose_slice(&mut self.0, &a.0, &b.0, puzzle_meta);
+        replace_compose_slice(&mut self.0, &a.0, &b.0, sorted_orbit_defs);
     }
 
-    fn is_goal(&self, goal_meta: &mut [u8]) -> bool {
-        is_goal_slice(&self.0, goal_meta)
+    fn induces_sorted_cycle_type(
+        &self,
+        sorted_cycle_type: &[OrientedPartition],
+        sorted_orbit_defs: &[OrbitDef],
+        multi_bv: &mut [u8],
+    ) -> bool {
+        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
     }
 }
 
 impl PuzzleState for HeapPuzzle {
-    type GoalMeta<'a> = &'a mut [u8];
-
     fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]> {
         None
     }
@@ -283,12 +284,17 @@ impl PuzzleState for HeapPuzzle {
         Ok(HeapPuzzle(orbit_states))
     }
 
-    fn replace_compose(&mut self, a: &HeapPuzzle, b: &HeapPuzzle, compose_meta: &[OrbitDef]) {
-        replace_compose_slice(&mut self.0, &a.0, &b.0, compose_meta);
+    fn replace_compose(&mut self, a: &HeapPuzzle, b: &HeapPuzzle, sorted_orbit_defs: &[OrbitDef]) {
+        replace_compose_slice(&mut self.0, &a.0, &b.0, sorted_orbit_defs);
     }
 
-    fn is_goal(&self, goal_meta: &mut [u8]) -> bool {
-        is_goal_slice(&self.0, goal_meta)
+    fn induces_sorted_cycle_type(
+        &self,
+        sorted_cycle_type: &[OrientedPartition],
+        sorted_orbit_defs: &[OrbitDef],
+        multi_bv: &mut [u8],
+    ) -> bool {
+        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
     }
 }
 
@@ -338,6 +344,7 @@ fn replace_compose_slice(
         if orientation_count == 1.try_into().unwrap() {
             for i in 0..piece_count {
                 let base_i = base + i;
+                // TODO: use asserts
                 unsafe {
                     let pos = *a.get_unchecked(base + *b.get_unchecked(base_i) as usize);
                     *orbit_states_mut.get_unchecked_mut(base_i) = pos;
@@ -362,168 +369,14 @@ fn replace_compose_slice(
     }
 }
 
-fn is_goal_slice(orbit_states: &[u8], multi_bv: &mut [u8]) -> bool {
+fn induces_sorted_cycle_type_slice(
+    orbit_states: &[u8],
+    sorted_cycle_type: &[OrientedPartition],
+    sorted_orbit_defs: &[OrbitDef],
+    multi_bv: &mut [u8],
+) -> bool {
     todo!()
 }
-
-// TODO: Utilize #[cfg(simd8)] #[cfg(simd16)] and #[cfg(simd32)] for differing
-// implementations
-#[derive(Clone, Debug)]
-pub struct StackCube3Simd {
-    pub ep: u8x16,
-    pub eo: u8x16,
-    pub cp: u8x8,
-    pub co: u8x8,
-}
-
-impl PartialEq for StackCube3Simd {
-    fn eq(&self, other: &Self) -> bool {
-        self.ep[..12].eq(&other.ep[..12])
-            && self.eo[..12].eq(&other.eo[..12])
-            && self.cp.eq(&other.cp)
-            && self.co.eq(&other.co)
-    }
-}
-
-const EO_MOD_SWIZZLE: u8x16 = u8x16::from_array([0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-const CO_MOD_SWIZZLE: u8x8 = u8x8::from_array([0, 1, 2, 0, 1, 2, 0, 0]);
-
-static CUBE_3_SORTED_ORBIT_DEFS: LazyLock<Vec<OrbitDef>> = LazyLock::new(|| {
-    vec![
-        OrbitDef {
-            piece_count: 8.try_into().unwrap(),
-            orientation_count: 3.try_into().unwrap(),
-        },
-        OrbitDef {
-            piece_count: 12.try_into().unwrap(),
-            orientation_count: 2.try_into().unwrap(),
-        },
-    ]
-});
-
-impl PuzzleState for StackCube3Simd {
-    type GoalMeta<'a> = ();
-
-    fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]> {
-        Some(CUBE_3_SORTED_ORBIT_DEFS.as_slice())
-    }
-
-    fn from_sorted_transformations_unchecked(
-        _sorted_orbit_defs: &[OrbitDef],
-        sorted_transformations: &[Vec<(u8, u8)>],
-    ) -> Result<Self, KSolveConversionError> {
-        let corners_transformation = &sorted_transformations[0];
-        let edges_transformation = &sorted_transformations[1];
-
-        let mut ep = u8x16::splat(0);
-        let mut eo = u8x16::splat(0);
-        let mut cp = u8x8::splat(0);
-        let mut co = u8x8::splat(0);
-
-        for (i, &(perm, orientation_delta)) in edges_transformation.iter().enumerate() {
-            ep[i] = perm;
-            eo[i] = orientation_delta;
-        }
-
-        for (i, &(perm, orientation_delta)) in corners_transformation.iter().enumerate() {
-            cp[i] = perm;
-            co[i] = orientation_delta;
-        }
-
-        Ok(StackCube3Simd { ep, eo, cp, co })
-    }
-
-    fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: &[OrbitDef]) {
-        // TODO: it is unclear for now if it will later be more efficient or
-        // not to combine orientation/permutation into a single simd vector
-        self.ep = a.ep.swizzle_dyn(b.ep);
-        self.eo = EO_MOD_SWIZZLE.swizzle_dyn(a.eo.swizzle_dyn(b.ep) + b.eo);
-        // self.eo = (a.eo.swizzle_dyn(b.ep) + b.eo) % TWOS;
-        self.cp = a.cp.swizzle_dyn(b.cp);
-        self.co = CO_MOD_SWIZZLE.swizzle_dyn(a.co.swizzle_dyn(b.cp) + b.co);
-        // self.co = (a.co.swizzle_dyn(b.cp) + b.co) % THREES;
-    }
-
-    fn is_goal(&self, _goal_meta: ()) -> bool {
-        // pub fn induces_oriented_partition(
-        //     perm: &[u8],
-        //     ori: &[i8],
-        //     // cycle_type: &CycleType<u8>,
-        //     partition: &[(u8, bool)],
-        //     orientation_count: i8,
-        //     multi_bv: &mut [u8],
-        // ) -> bool {
-        // reuse memory
-        // multi_bv.fill(0);
-        // visited corners is LSB, covered_cycle_lengths is 2nd LSB
-        // let mut covered_cycles_count = 0;
-        // for i in 0..perm.len() {
-        //     if multi_bv[i] & 1 != 0 {
-        //         continue;
-        //     }
-        //     multi_bv[i] |= 1;
-        //     let mut actual_cycle_length = 1;
-        //     let mut corner = perm[i] as usize;
-        //     let mut orientation_sum = ori[corner];
-
-        //     while corner != i {
-        //         actual_cycle_length += 1;
-        //         multi_bv[corner] |= 1;
-        //         corner = perm[corner] as usize;
-        //         orientation_sum += ori[corner];
-        //     }
-
-        //     let actual_orients = orientation_sum % orientation_count != 0;
-        //     if actual_cycle_length == 1 && !actual_orients {
-        //         continue;
-        //     }
-        //     let Some(valid_cycle_index) = partition.iter().enumerate().position(
-        //         |(j, &(expected_cycle_length, expected_orients))| {
-        //             expected_cycle_length == actual_cycle_length
-        //                 && expected_orients == actual_orients
-        //                 && (multi_bv[j] & 2 == 0)
-        //         },
-        //     ) else {
-        //         return false;
-        //     };
-        //     multi_bv[valid_cycle_index] |= 2;
-        //     covered_cycles_count += 1;
-        //     // cannot possibly return true if this runs
-        //     if covered_cycles_count > partition.len() {
-        //         return false;
-        //     }
-        // }
-        // covered_cycles_count == partition.len()
-        // }
-        todo!()
-    }
-}
-
-// pub struct StackEvenCubeSimd<const S_24S: usize> {
-//     cp: u8x8,
-//     co: u8x8,
-//     s_24s: [u8x32; S_24S],
-// }
-
-// pub struct HeapEvenCubeSimd {
-//     cp: u8x8,
-//     co: u8x8,
-//     s_24s: [u8x32],
-// }
-
-// pub struct StackOddCubeSimd<const S_24S: usize> {
-//     ep: u8x16,
-//     eo: u8x16,
-//     cp: u8x8,
-//     co: u8x8,
-//     s_24s: [u8x32; S_24S],
-// }
-
-// pub struct HeapOddCubeSimd {
-//     cp: u8x8,
-//     co: u8x8,
-//     s_24s: [u8x32],
-// }
 
 #[cfg(test)]
 mod tests {
@@ -538,7 +391,7 @@ mod tests {
     ];
 
     fn apply_moves<P: PuzzleState + Clone>(
-        puzzle_def: PuzzleDef<P>,
+        puzzle_def: &PuzzleDef<P>,
         puzzle_state: P,
         moves: &str,
     ) -> P {
@@ -582,7 +435,7 @@ mod tests {
 
     #[test]
     fn test_composition_simd() {
-        let cube3_def: PuzzleDef<StackCube3Simd> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let cube3_def: PuzzleDef<simdcube::StackCube3Simd> = (&*KPUZZLE_3X3).try_into().unwrap();
         let mut solved = cube3_def.solved_state().unwrap();
         let r_move = cube3_def.find_move("R").unwrap();
         let f_move = cube3_def.find_move("F").unwrap();
@@ -631,7 +484,7 @@ mod tests {
     fn many_compositions<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.solved_state().unwrap();
-        let also_solved = apply_moves(cube3_def, solved.clone(), &"R F ".repeat(105));
+        let also_solved = apply_moves(&cube3_def, solved.clone(), &"R F ".repeat(105));
         assert_eq!(also_solved, solved);
     }
 
@@ -639,7 +492,7 @@ mod tests {
     fn test_many_compositions() {
         many_compositions::<StackCube3>();
         many_compositions::<HeapPuzzle>();
-        many_compositions::<StackCube3Simd>();
+        many_compositions::<simdcube::StackCube3Simd>();
     }
 
     fn s_u4_symmetry<P: PuzzleState>() {
@@ -665,14 +518,14 @@ mod tests {
     fn test_s_u4_symmetry() {
         s_u4_symmetry::<StackCube3>();
         s_u4_symmetry::<HeapPuzzle>();
-        s_u4_symmetry::<StackCube3Simd>();
+        s_u4_symmetry::<simdcube::StackCube3Simd>();
     }
 
     fn expanded_move<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let actual_solved = cube3_def.solved_state().unwrap();
         let expected_solved = apply_moves(
-            cube3_def,
+            &cube3_def,
             actual_solved.clone(),
             "R R' D2 D2 U U U2 F B' F' B",
         );
@@ -683,7 +536,37 @@ mod tests {
     fn test_expanded_move() {
         expanded_move::<StackCube3>();
         expanded_move::<HeapPuzzle>();
-        expanded_move::<StackCube3Simd>();
+        expanded_move::<simdcube::StackCube3Simd>();
+    }
+
+    fn induces_cycle_type<P: PuzzleState>() {
+        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let order_1260 = apply_moves(
+            &cube3_def,
+            cube3_def.solved_state().unwrap(),
+            "R U2 D' B D'",
+        );
+        let mut multi_bv = vec![0_u8; 12];
+        let sorted_cycle_type = vec![
+            vec![(3.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
+            vec![
+                (2.try_into().unwrap(), true),
+                (2.try_into().unwrap(), false),
+                (7.try_into().unwrap(), true),
+            ],
+        ];
+        assert!(order_1260.induces_sorted_cycle_type(
+            &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
+            &mut multi_bv
+        ));
+    }
+
+    #[test]
+    fn test_induces_cycle_type() {
+        // induces_cycle_type::<StackCube3>();
+        // induces_cycle_type::<HeapPuzzle>();
+        induces_cycle_type::<simdcube::StackCube3Simd>();
     }
 
     #[bench]
@@ -718,7 +601,7 @@ mod tests {
 
     #[bench]
     fn bench_compose_simd(b: &mut Bencher) {
-        let cube3_def: PuzzleDef<StackCube3Simd> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let cube3_def: PuzzleDef<simdcube::StackCube3Simd> = (&*KPUZZLE_3X3).try_into().unwrap();
         let mut solved = cube3_def.solved_state().unwrap();
         let r_move = cube3_def.find_move("R").unwrap();
         let f_move = cube3_def.find_move("F").unwrap();

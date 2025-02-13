@@ -1,9 +1,3 @@
-#[derive(Default)]
-pub struct CycleType<T> {
-    pub corner_partition: Vec<(T, bool)>,
-    pub edge_partition: Vec<(T, bool)>,
-}
-
 impl CubeState {
     pub fn induces_corner_cycle_type(
         &self,
