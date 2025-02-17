@@ -305,6 +305,7 @@ dependencies = [
 name = "cycle_combination_solver"
 version = "0.1.0"
 dependencies = [
+ "cfg-if",
  "cfg_aliases",
  "integer-partitions",
  "memoize",

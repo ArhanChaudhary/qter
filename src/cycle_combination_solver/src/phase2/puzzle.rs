@@ -3,7 +3,7 @@ use puzzle_geometry::ksolve::KSolve;
 use std::{fmt::Debug, num::NonZeroU8};
 use thiserror::Error;
 
-pub mod simdcube;
+pub mod cube3;
 
 pub trait MultiBvInterface {
     type MultiBvMutRef<'a>
@@ -398,6 +398,8 @@ fn replace_compose_slice(
     } in sorted_orbit_defs
     {
         let piece_count = piece_count.get() as usize;
+        // TODO: add back get_unchecked_mut etc and for other slice stuff too
+        // it's 60% faster surprisingly
         if orientation_count == 1.try_into().unwrap() {
             for i in 0..piece_count {
                 orbit_states_mut[base + i] = a[base + b[base + i] as usize];
@@ -408,7 +410,7 @@ fn replace_compose_slice(
                 orbit_states_mut[base + i] = a[base + b[base + i] as usize];
                 orbit_states_mut[base + i + piece_count] =
                     (a[base + b[base + i] as usize + piece_count] + b[base + i + piece_count])
-                        % orientation_count.get();
+                        % orientation_count;
             }
         }
         base += piece_count * 2;
@@ -488,11 +490,6 @@ mod tests {
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
     use test::Bencher;
 
-    static COMPOSE_R_F: [u8; 40] = [
-        6, 1, 0, 4, 2, 5, 3, 7, 2, 2, 2, 1, 1, 0, 1, 0, 9, 3, 7, 2, 1, 5, 6, 0, 8, 4, 10, 11, 1, 1,
-        0, 0, 1, 0, 0, 0, 0, 1, 0, 0,
-    ];
-
     fn apply_moves<P: PuzzleState + Clone>(
         puzzle_def: &PuzzleDef<P>,
         puzzle_state: P,
@@ -506,51 +503,6 @@ mod tests {
             std::mem::swap(&mut result, &mut prev_result);
         }
         result
-    }
-
-    #[test]
-    fn test_composition_stack() {
-        let cube3_def: PuzzleDef<StackCube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let mut solved = cube3_def.solved_state().unwrap();
-        let r_move = cube3_def.find_move("R").unwrap();
-        let f_move = cube3_def.find_move("F").unwrap();
-        solved.replace_compose(
-            &r_move.puzzle_state,
-            &f_move.puzzle_state,
-            &cube3_def.sorted_orbit_defs,
-        );
-        assert_eq!(solved.0, COMPOSE_R_F);
-    }
-
-    #[test]
-    fn test_composition_heap() {
-        let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let mut solved = cube3_def.solved_state().unwrap();
-        let r_move = cube3_def.find_move("R").unwrap();
-        let f_move = cube3_def.find_move("F").unwrap();
-        solved.replace_compose(
-            &r_move.puzzle_state,
-            &f_move.puzzle_state,
-            &cube3_def.sorted_orbit_defs,
-        );
-        assert_eq!(solved.0.iter().as_slice(), COMPOSE_R_F);
-    }
-
-    #[test]
-    fn test_composition_simd() {
-        let cube3_def: PuzzleDef<simdcube::StackCube3Simd> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let mut solved = cube3_def.solved_state().unwrap();
-        let r_move = cube3_def.find_move("R").unwrap();
-        let f_move = cube3_def.find_move("F").unwrap();
-        solved.replace_compose(
-            &r_move.puzzle_state,
-            &f_move.puzzle_state,
-            &cube3_def.sorted_orbit_defs,
-        );
-        assert_eq!(solved.cp.as_array(), &COMPOSE_R_F[..8]);
-        assert_eq!(solved.co.as_array(), &COMPOSE_R_F[8..16]);
-        assert_eq!(&solved.ep.as_array()[..12], &COMPOSE_R_F[16..28]);
-        assert_eq!(&solved.eo.as_array()[..12], &COMPOSE_R_F[28..40]);
     }
 
     // TODO: add this test when puzzle geometry is able to generate KSolve
@@ -595,7 +547,7 @@ mod tests {
     fn test_many_compositions() {
         many_compositions::<StackCube3>();
         many_compositions::<HeapPuzzle>();
-        many_compositions::<simdcube::StackCube3Simd>();
+        many_compositions::<cube3::Cube3>();
     }
 
     fn s_u4_symmetry<P: PuzzleState>() {
@@ -621,7 +573,7 @@ mod tests {
     fn test_s_u4_symmetry() {
         s_u4_symmetry::<StackCube3>();
         s_u4_symmetry::<HeapPuzzle>();
-        s_u4_symmetry::<simdcube::StackCube3Simd>();
+        s_u4_symmetry::<cube3::Cube3>();
     }
 
     fn expanded_move<P: PuzzleState>() {
@@ -639,7 +591,7 @@ mod tests {
     fn test_expanded_move() {
         expanded_move::<StackCube3>();
         expanded_move::<HeapPuzzle>();
-        expanded_move::<simdcube::StackCube3Simd>();
+        expanded_move::<cube3::Cube3>();
     }
 
     fn induces_sorted_cycle_type<P: PuzzleState>() {
@@ -669,8 +621,10 @@ mod tests {
     fn test_induces_sorted_cycle_type() {
         induces_sorted_cycle_type::<StackCube3>();
         induces_sorted_cycle_type::<HeapPuzzle>();
-        induces_sorted_cycle_type::<simdcube::StackCube3Simd>();
+        induces_sorted_cycle_type::<cube3::Cube3>();
     }
+
+    // TODO: bench induces cycle type
 
     #[bench]
     fn bench_compose_stack(b: &mut Bencher) {
@@ -704,7 +658,7 @@ mod tests {
 
     #[bench]
     fn bench_compose_simd(b: &mut Bencher) {
-        let cube3_def: PuzzleDef<simdcube::StackCube3Simd> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let cube3_def: PuzzleDef<cube3::Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let mut solved = cube3_def.solved_state().unwrap();
         let r_move = cube3_def.find_move("R").unwrap();
         let f_move = cube3_def.find_move("F").unwrap();
