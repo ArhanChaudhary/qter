@@ -14,11 +14,16 @@ fn main() {
                 )
             )
         },
+        simd8and16: { all(simd8, simd16) },
+        // simd8and16: { not(l) }, // true
+        // simd8and16: { l }, // false
         simd32: {
             any(
                 all(target_feature = "avx2", not(target_feature = "avx512vbmi")),
                 all(target_feature = "avx512vl", target_feature = "avx512vbmi")
             )
-        }
+        },
+        // simd32: { not(l) }, // true
+        // simd32: { l }, // false
     }
 }

@@ -6,28 +6,28 @@ use thiserror::Error;
 pub mod cube3;
 
 pub trait MultiBvInterface {
-    type MultiBvMutRef<'a>
+    type MultiBvReusableRef<'a>
     where
         Self: 'a;
 
-    fn reusable_ref(&mut self) -> Self::MultiBvMutRef<'_>;
+    fn reusable_ref(&mut self) -> Self::MultiBvReusableRef<'_>;
 }
 
 impl MultiBvInterface for Box<[u8]> {
-    type MultiBvMutRef<'a> = &'a mut [u8];
+    type MultiBvReusableRef<'a> = &'a mut [u8];
 
-    fn reusable_ref(&mut self) -> Self::MultiBvMutRef<'_> {
+    fn reusable_ref(&mut self) -> Self::MultiBvReusableRef<'_> {
         self
     }
 }
 
 impl<T: PrimInt, const N: usize> MultiBvInterface for [T; N] {
-    type MultiBvMutRef<'a>
+    type MultiBvReusableRef<'a>
         = [T; N]
     where
         T: 'a;
 
-    fn reusable_ref(&mut self) -> Self::MultiBvMutRef<'_> {
+    fn reusable_ref(&mut self) -> Self::MultiBvReusableRef<'_> {
         *self
     }
 }
@@ -55,8 +55,8 @@ where
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type: &[OrientedPartition],
+        multi_bv: <Self::MultiBv as MultiBvInterface>::MultiBvReusableRef<'_>,
         sorted_orbit_defs: &[OrbitDef],
-        multi_bv: <Self::MultiBv as MultiBvInterface>::MultiBvMutRef<'_>,
     ) -> bool;
 }
 
@@ -290,10 +290,10 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type: &[OrientedPartition],
-        sorted_orbit_defs: &[OrbitDef],
         multi_bv: &mut [u8],
+        sorted_orbit_defs: &[OrbitDef],
     ) -> bool {
-        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
+        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, multi_bv, sorted_orbit_defs)
     }
 }
 
@@ -335,10 +335,10 @@ impl PuzzleState for HeapPuzzle {
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type: &[OrientedPartition],
-        sorted_orbit_defs: &[OrbitDef],
         multi_bv: &mut [u8],
+        sorted_orbit_defs: &[OrbitDef],
     ) -> bool {
-        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
+        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, multi_bv, sorted_orbit_defs)
     }
 }
 
@@ -420,8 +420,8 @@ fn replace_compose_slice(
 fn induces_sorted_cycle_type_slice(
     orbit_states: &[u8],
     sorted_cycle_type: &[OrientedPartition],
-    sorted_orbit_defs: &[OrbitDef],
     multi_bv: &mut [u8],
+    sorted_orbit_defs: &[OrbitDef],
 ) -> bool {
     let mut base = 0;
     for (
@@ -612,8 +612,8 @@ mod tests {
         let mut multi_bv = P::default_multi_bv(&cube3_def.sorted_orbit_defs);
         assert!(order_1260.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            multi_bv.reusable_ref(),
             &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref()
         ));
     }
 
