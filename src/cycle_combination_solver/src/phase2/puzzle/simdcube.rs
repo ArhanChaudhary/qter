@@ -41,13 +41,19 @@ static CUBE_3_SORTED_ORBIT_DEFS: LazyLock<Vec<OrbitDef>> = LazyLock::new(|| {
 });
 
 impl PuzzleState for StackCube3Simd {
+    type MultiBv = [u16; 2];
+
+    fn default_multi_bv(_sorted_orbit_defs: &[OrbitDef]) -> [u16; 2] {
+        Default::default()
+    }
+
     fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]> {
         Some(CUBE_3_SORTED_ORBIT_DEFS.as_slice())
     }
 
     fn from_sorted_transformations_unchecked(
-        _sorted_orbit_defs: &[OrbitDef],
         sorted_transformations: &[Vec<(u8, u8)>],
+        _sorted_orbit_defs: &[OrbitDef],
     ) -> Result<Self, KSolveConversionError> {
         let corners_transformation = &sorted_transformations[0];
         let edges_transformation = &sorted_transformations[1];
@@ -85,9 +91,8 @@ impl PuzzleState for StackCube3Simd {
         &self,
         sorted_cycle_type: &[OrientedPartition],
         _sorted_orbit_defs: &[OrbitDef],
-        _multi_bv: &mut [u8],
+        mut multi_bv: [u16; 2],
     ) -> bool {
-        let mut multi_bv = [0_u16; 2];
         let mut covered_cycles_count = 0_u8;
 
         assert!(sorted_cycle_type.len() == 2);
@@ -125,11 +130,11 @@ impl PuzzleState for StackCube3Simd {
             multi_bv[1] |= 1 << valid_cycle_index;
             covered_cycles_count += 1;
             // cannot possibly return true if this runs
-            if covered_cycles_count as usize > sorted_corner_partition.len() {
+            if covered_cycles_count > sorted_corner_partition.len() as u8 {
                 return false;
             }
         }
-        if covered_cycles_count as usize != sorted_corner_partition.len() {
+        if covered_cycles_count != sorted_corner_partition.len() as u8 {
             return false;
         }
 
@@ -142,14 +147,14 @@ impl PuzzleState for StackCube3Simd {
             }
             multi_bv[0] |= 1 << i;
             let mut actual_cycle_length = 1;
-            let mut corner = self.ep[i] as usize;
-            let mut orientation_sum = self.eo[corner];
+            let mut edge = self.ep[i] as usize;
+            let mut orientation_sum = self.eo[edge];
 
-            while corner != i {
+            while edge != i {
                 actual_cycle_length += 1;
-                multi_bv[0] |= 1 << corner;
-                corner = self.ep[corner] as usize;
-                orientation_sum += self.eo[corner];
+                multi_bv[0] |= 1 << edge;
+                edge = self.ep[edge] as usize;
+                orientation_sum += self.eo[edge];
             }
 
             let actual_orients = orientation_sum % 2 != 0;
@@ -168,11 +173,11 @@ impl PuzzleState for StackCube3Simd {
             multi_bv[1] |= 1 << valid_cycle_index;
             covered_cycles_count += 1;
             // cannot possibly return true if this runs
-            if covered_cycles_count as usize > sorted_edge_partition.len() {
+            if covered_cycles_count > sorted_edge_partition.len() as u8 {
                 return false;
             }
         }
-        covered_cycles_count as usize == sorted_edge_partition.len()
+        covered_cycles_count == sorted_edge_partition.len() as u8
     }
 }
 

@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 integer-partitions = "0.1.1"
 memoize = "0.4.2"
+num-traits = "0.2.19"
 pareto_front = "1.0.1"
 puzzle_geometry = { version = "0.1.0", path = "../puzzle_geometry" }
 qter_core = { version = "0.1.0", path = "../qter_core" }

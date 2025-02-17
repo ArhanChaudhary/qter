@@ -1,21 +1,53 @@
+use num_traits::PrimInt;
 use puzzle_geometry::ksolve::KSolve;
 use std::{fmt::Debug, num::NonZeroU8};
 use thiserror::Error;
 
 pub mod simdcube;
 
+pub trait MultiBvInterface {
+    type MultiBvMutRef<'a>
+    where
+        Self: 'a;
+
+    fn reusable_ref(&mut self) -> Self::MultiBvMutRef<'_>;
+}
+
+impl MultiBvInterface for Box<[u8]> {
+    type MultiBvMutRef<'a> = &'a mut [u8];
+
+    fn reusable_ref(&mut self) -> Self::MultiBvMutRef<'_> {
+        self
+    }
+}
+
+impl<T: PrimInt, const N: usize> MultiBvInterface for [T; N] {
+    type MultiBvMutRef<'a>
+        = [T; N]
+    where
+        T: 'a;
+
+    fn reusable_ref(&mut self) -> Self::MultiBvMutRef<'_> {
+        *self
+    }
+}
+
 pub trait PuzzleState
 where
     Self: Sized + Clone + PartialEq + Debug,
 {
+    type MultiBv: MultiBvInterface;
+
+    /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
+    fn default_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv;
     /// Get the implmentor's orbit definition specification, or None if any
     /// orbit definition is allowed
     fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]>;
     /// Create a puzzle state from a sorted transformation without checking if
     /// it belongs to orbit defs
     fn from_sorted_transformations_unchecked(
-        sorted_orbit_defs: &[OrbitDef],
         sorted_transformations: &[Vec<(u8, u8)>],
+        sorted_orbit_defs: &[OrbitDef],
     ) -> Result<Self, KSolveConversionError>;
     /// Compose two puzzle states in place
     fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: &[OrbitDef]);
@@ -24,7 +56,7 @@ where
         &self,
         sorted_cycle_type: &[OrientedPartition],
         sorted_orbit_defs: &[OrbitDef],
-        multi_bv: &mut [u8],
+        multi_bv: <Self::MultiBv as MultiBvInterface>::MultiBvMutRef<'_>,
     ) -> bool;
 }
 
@@ -94,7 +126,7 @@ fn solved_state_from_sorted_orbit_defs<P: PuzzleState>(
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
-    P::from_sorted_transformations_unchecked(sorted_orbit_defs, &sorted_transformations)
+    P::from_sorted_transformations_unchecked(&sorted_transformations, sorted_orbit_defs)
 }
 
 impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
@@ -152,8 +184,8 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
             sorted_transformations.sort_by_key(|a| a.len());
 
             let puzzle_state = P::from_sorted_transformations_unchecked(
-                sorted_orbit_defs.as_slice(),
                 &sorted_transformations,
+                sorted_orbit_defs.as_slice(),
             )?;
 
             let base_move = Move {
@@ -223,13 +255,19 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
 }
 
 impl<const N: usize> PuzzleState for StackPuzzle<N> {
+    type MultiBv = Box<[u8]>;
+
+    fn default_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv {
+        default_multi_bv_slice(sorted_orbit_defs)
+    }
+
     fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]> {
         None
     }
 
     fn from_sorted_transformations_unchecked(
-        sorted_orbit_defs: &[OrbitDef],
         sorted_transformations: &[Vec<(u8, u8)>],
+        sorted_orbit_defs: &[OrbitDef],
     ) -> Result<Self, KSolveConversionError> {
         let mut orbit_states = [0_u8; N];
         ksolve_move_to_slice_unchecked(
@@ -260,13 +298,19 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
 }
 
 impl PuzzleState for HeapPuzzle {
+    type MultiBv = Box<[u8]>;
+
+    fn default_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv {
+        default_multi_bv_slice(sorted_orbit_defs)
+    }
+
     fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]> {
         None
     }
 
     fn from_sorted_transformations_unchecked(
-        sorted_orbit_defs: &[OrbitDef],
         sorted_transformations: &[Vec<(u8, u8)>],
+        sorted_orbit_defs: &[OrbitDef],
     ) -> Result<Self, KSolveConversionError> {
         let mut orbit_states = vec![
             0_u8;
@@ -296,6 +340,19 @@ impl PuzzleState for HeapPuzzle {
     ) -> bool {
         induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
     }
+}
+
+fn default_multi_bv_slice(sorted_orbit_defs: &[OrbitDef]) -> Box<[u8]> {
+    vec![
+        0;
+        sorted_orbit_defs
+            .last()
+            .unwrap()
+            .piece_count
+            .get()
+            .div_ceil(4) as usize
+    ]
+    .into_boxed_slice()
 }
 
 fn ksolve_move_to_slice_unchecked(
@@ -343,26 +400,15 @@ fn replace_compose_slice(
         let piece_count = piece_count.get() as usize;
         if orientation_count == 1.try_into().unwrap() {
             for i in 0..piece_count {
-                let base_i = base + i;
-                // TODO: use asserts
-                unsafe {
-                    let pos = *a.get_unchecked(base + *b.get_unchecked(base_i) as usize);
-                    *orbit_states_mut.get_unchecked_mut(base_i) = pos;
-                    *orbit_states_mut.get_unchecked_mut(base_i + piece_count) = 0;
-                }
+                orbit_states_mut[base + i] = a[base + b[base + i] as usize];
+                orbit_states_mut[base + i + piece_count] = 0;
             }
         } else {
             for i in 0..piece_count {
-                let base_i = base + i;
-                unsafe {
-                    let pos = a.get_unchecked(base + *b.get_unchecked(base_i) as usize);
-                    let a_ori =
-                        a.get_unchecked(base + *b.get_unchecked(base_i) as usize + piece_count);
-                    let b_ori = b.get_unchecked(base_i + piece_count);
-                    *orbit_states_mut.get_unchecked_mut(base_i) = *pos;
-                    *orbit_states_mut.get_unchecked_mut(base_i + piece_count) =
-                        (*a_ori + *b_ori) % orientation_count;
-                }
+                orbit_states_mut[base + i] = a[base + b[base + i] as usize];
+                orbit_states_mut[base + i + piece_count] =
+                    (a[base + b[base + i] as usize + piece_count] + b[base + i + piece_count])
+                        % orientation_count.get();
             }
         }
         base += piece_count * 2;
@@ -375,7 +421,64 @@ fn induces_sorted_cycle_type_slice(
     sorted_orbit_defs: &[OrbitDef],
     multi_bv: &mut [u8],
 ) -> bool {
-    todo!()
+    let mut base = 0;
+    for (
+        &OrbitDef {
+            piece_count,
+            orientation_count,
+        },
+        partition,
+    ) in sorted_orbit_defs.iter().zip(sorted_cycle_type.iter())
+    {
+        multi_bv.fill(0);
+        let mut covered_cycles_count = 0_u8;
+        let piece_count = piece_count.get() as usize;
+        for i in 0..piece_count {
+            let (div, rem) = (i / 4, i % 4);
+            if multi_bv[div] & (1 << rem) != 0 {
+                continue;
+            }
+            multi_bv[div] |= 1 << rem;
+            let mut actual_cycle_length = 1;
+            let mut piece = orbit_states[base + i] as usize;
+            let mut orientation_sum = orbit_states[base + piece + piece_count];
+
+            while piece != i {
+                actual_cycle_length += 1;
+                let (div, rem) = (piece / 4, piece % 4);
+                multi_bv[div] |= 1 << rem;
+                piece = orbit_states[base + piece] as usize;
+                orientation_sum += orbit_states[base + piece + piece_count];
+            }
+
+            let actual_orients = orientation_sum % orientation_count != 0;
+            if actual_cycle_length == 1 && !actual_orients {
+                continue;
+            }
+            let Some(valid_cycle_index) = partition.iter().enumerate().position(
+                |(j, &(expected_cycle_length, expected_orients))| {
+                    let (div, rem) = (j / 4, j % 4);
+                    expected_cycle_length.get() == actual_cycle_length
+                        && expected_orients == actual_orients
+                        && (multi_bv[div] & (1 << (rem + 4)) == 0)
+                },
+            ) else {
+                return false;
+            };
+            let (div, rem) = (valid_cycle_index / 4, valid_cycle_index % 4);
+            multi_bv[div] |= 1 << (rem + 4);
+            covered_cycles_count += 1;
+            // cannot possibly return true if this runs
+            if covered_cycles_count > partition.len() as u8 {
+                return false;
+            }
+        }
+        if covered_cycles_count != partition.len() as u8 {
+            return false;
+        }
+        base += piece_count * 2;
+    }
+    true
 }
 
 #[cfg(test)]
@@ -539,14 +642,13 @@ mod tests {
         expanded_move::<simdcube::StackCube3Simd>();
     }
 
-    fn induces_cycle_type<P: PuzzleState>() {
+    fn induces_sorted_cycle_type<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let order_1260 = apply_moves(
             &cube3_def,
             cube3_def.solved_state().unwrap(),
             "R U2 D' B D'",
         );
-        let mut multi_bv = vec![0_u8; 12];
         let sorted_cycle_type = vec![
             vec![(3.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
             vec![
@@ -555,18 +657,19 @@ mod tests {
                 (7.try_into().unwrap(), true),
             ],
         ];
+        let mut multi_bv = P::default_multi_bv(&cube3_def.sorted_orbit_defs);
         assert!(order_1260.induces_sorted_cycle_type(
             &sorted_cycle_type,
             &cube3_def.sorted_orbit_defs,
-            &mut multi_bv
+            multi_bv.reusable_ref()
         ));
     }
 
     #[test]
-    fn test_induces_cycle_type() {
-        // induces_cycle_type::<StackCube3>();
-        // induces_cycle_type::<HeapPuzzle>();
-        induces_cycle_type::<simdcube::StackCube3Simd>();
+    fn test_induces_sorted_cycle_type() {
+        induces_sorted_cycle_type::<StackCube3>();
+        induces_sorted_cycle_type::<HeapPuzzle>();
+        induces_sorted_cycle_type::<simdcube::StackCube3Simd>();
     }
 
     #[bench]

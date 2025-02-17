@@ -308,6 +308,7 @@ dependencies = [
  "cfg_aliases",
  "integer-partitions",
  "memoize",
+ "num-traits",
  "pareto_front",
  "puzzle_geometry",
  "qter_core",
