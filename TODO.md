@@ -18,6 +18,14 @@
 - Phase 1
 - Look into fixing a corner for even cubes/other puzzles
 
+## PuzzleGeometry
+- Get a permutation group out of a puzzle definition
+- Define the moves as permutations and orientations of pieces
+- Calculate orientations and parities of the puzzle
+- Calculate the symmetries of the puzzle
+- Parse our modified puzzlegeometry definition string
+- Release as a crate on crates.io
+
 ## QAT
 
 - ⭐Precompute tables for builtin architectures
@@ -35,7 +43,6 @@
 - Directory of testing programs instead of hardcoding into Rust
   - Inline testing in the QAT format
 - Henry's efficient multiplication program
-- "[repeat|print|halt] until _ solved" syntax
 
 ## Interpreter/CLI
 
@@ -47,6 +54,7 @@
 
 - Compile to Q
 - Parse Q
+- "[repeat|print|halt] until _ solved" syntax
 
 ## End user
 
