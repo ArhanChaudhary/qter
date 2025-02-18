@@ -8,14 +8,55 @@
 //! from the solved state. For each state, the depth is recorded in a vector
 //! of the appropriate size.
 
-use itertools::{repeat_n, Itertools};
+pub trait PruningTable {
+    fn insert(&mut self, hash: u64, depth: u8);
 
-use super::{
-    cube::{self, CubeState},
-    CycleType,
-};
-use std::{io::Write, time::Instant};
+    fn commit_depth_traversed(&mut self, depth: u8);
 
+    fn min_depth_of(&self, hash: u64) -> u8;
+}
+
+pub struct BloomFilterTable {
+    // 255 means unvisited
+    table: Box<[u8]>,
+    depth_traversed: u8,
+}
+
+impl BloomFilterTable {
+    pub fn new(entries: usize) -> BloomFilterTable {
+        BloomFilterTable {
+            table: vec![255; entries].into_boxed_slice(),
+            depth_traversed: 0,
+        }
+    }
+
+    fn hash_to_idx(&self, hash: u64) -> usize {
+        (hash % (self.table.len() as u64)) as usize
+    }
+}
+
+impl PruningTable for BloomFilterTable {
+    fn insert(&mut self, hash: u64, depth: u8) {
+        assert!(depth < 255);
+
+        let entry = &mut self.table[self.hash_to_idx(hash)];
+        *entry = (*entry).min(depth);
+    }
+
+    fn commit_depth_traversed(&mut self, depth: u8) {
+        assert!(self.depth_traversed <= depth);
+        self.depth_traversed = depth;
+    }
+
+    fn min_depth_of(&self, hash: u64) -> u8 {
+        match self.table[self.hash_to_idx(hash)] {
+            255 => self.depth_traversed,
+            v => v,
+        }
+    }
+}
+
+/*
 /**
  * A struct holding pruning information for certain subgroups of the
  * Rubik's Cube.
@@ -654,3 +695,4 @@ mod tests {
         assert_eq!(pruning_tables.corners(0), 6);
     }
 }
+*/
