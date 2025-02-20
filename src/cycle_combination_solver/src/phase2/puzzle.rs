@@ -146,8 +146,19 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                 })
             })
             .collect::<Result<_, KSolveConversionError>>()?;
-        sorted_orbit_defs
-            .sort_by_key(|orbit_def| (orbit_def.piece_count, orbit_def.orientation_count));
+
+        let mut arg_indicies = (0..sorted_orbit_defs.len()).collect::<Vec<_>>();
+        arg_indicies.sort_by_key(|&i| {
+            (
+                sorted_orbit_defs[i].piece_count.get(),
+                sorted_orbit_defs[i].orientation_count.get(),
+            )
+        });
+
+        sorted_orbit_defs = arg_indicies
+            .iter()
+            .map(|&i| sorted_orbit_defs[i].clone())
+            .collect();
 
         let mut moves = Vec::with_capacity(ksolve.moves().len());
         let mut symmetries = Vec::with_capacity(ksolve.symmetries().len());
@@ -171,8 +182,10 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                         .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>();
-            // TODO: sorting should take orientation_count into account
-            sorted_transformations.sort_by_key(|a| a.len());
+            sorted_transformations = arg_indicies
+                .iter()
+                .map(|&i| sorted_transformations[i].clone())
+                .collect();
 
             P::validate_sorted_orbit_defs(sorted_orbit_defs.as_slice())?;
             let puzzle_state = P::from_sorted_transformations_unchecked(
@@ -402,19 +415,29 @@ fn replace_compose_slice(
     } in sorted_orbit_defs
     {
         let piece_count = piece_count.get() as usize;
-        // TODO: add back get_unchecked_mut etc and for other slice stuff too
-        // it's 60% faster surprisingly
+        // SAFETY: Permutation vectors and orientation vectors are shuffled
+        // around, testing has shown this is sound.
         if orientation_count == 1.try_into().unwrap() {
             for i in 0..piece_count {
-                orbit_states_mut[base + i] = a[base + b[base + i] as usize];
-                orbit_states_mut[base + i + piece_count] = 0;
+                let base_i = base + i;
+                unsafe {
+                    let pos = *a.get_unchecked(base + *b.get_unchecked(base_i) as usize);
+                    *orbit_states_mut.get_unchecked_mut(base_i) = pos;
+                    *orbit_states_mut.get_unchecked_mut(base_i + piece_count) = 0;
+                }
             }
         } else {
             for i in 0..piece_count {
-                orbit_states_mut[base + i] = a[base + b[base + i] as usize];
-                orbit_states_mut[base + i + piece_count] =
-                    (a[base + b[base + i] as usize + piece_count] + b[base + i + piece_count])
-                        % orientation_count;
+                let base_i = base + i;
+                unsafe {
+                    let pos = a.get_unchecked(base + *b.get_unchecked(base_i) as usize);
+                    let a_ori =
+                        a.get_unchecked(base + *b.get_unchecked(base_i) as usize + piece_count);
+                    let b_ori = b.get_unchecked(base_i + piece_count);
+                    *orbit_states_mut.get_unchecked_mut(base_i) = *pos;
+                    *orbit_states_mut.get_unchecked_mut(base_i + piece_count) =
+                        (*a_ori + *b_ori) % orientation_count;
+                }
             }
         }
         base += piece_count * 2;
@@ -441,20 +464,44 @@ fn induces_sorted_cycle_type_slice(
         let piece_count = piece_count.get() as usize;
         for i in 0..piece_count {
             let (div, rem) = (i / 4, i % 4);
-            if multi_bv[div] & (1 << rem) != 0 {
+            // SAFETY: default_multi_bv_slice ensures that (i / 4) always fits
+            // in multi_bv
+            if unsafe { *multi_bv.get_unchecked(div) } & (1 << rem) != 0 {
                 continue;
             }
-            multi_bv[div] |= 1 << rem;
+            // SAFETY: see above
+            unsafe {
+                *multi_bv.get_unchecked_mut(div) |= 1 << rem;
+            }
             let mut actual_cycle_length = 1;
-            let mut piece = orbit_states[base + i] as usize;
-            let mut orientation_sum = orbit_states[base + piece + piece_count];
+            // SAFETY: sorted_orbit_defs guarantees that base (the orbit state
+            // base pointer) + i (a permutation vector element) is valid
+            let mut piece = unsafe { *orbit_states.get_unchecked(base + i) } as usize;
+            // SAFETY: sorted_orbit_defs guarantees that base (the orbit state
+            // base pointer) + i + piece (an orientation vector element) is valid
+            let mut orientation_sum =
+                unsafe { *orbit_states.get_unchecked(base + piece + piece_count) };
 
             while piece != i {
                 actual_cycle_length += 1;
                 let (div, rem) = (piece / 4, piece % 4);
-                multi_bv[div] |= 1 << rem;
-                piece = orbit_states[base + piece] as usize;
-                orientation_sum += orbit_states[base + piece + piece_count];
+                // SAFETY: default_multi_bv_slice ensures that (piece / 4)
+                // always in fits in multi_bv
+                unsafe {
+                    *multi_bv.get_unchecked_mut(div) |= 1 << rem;
+                }
+                // SAFETY: sorted_orbit_defs guarantees that base (the orbit
+                // state base pointer) + piece (a permutation vector element) is
+                // valid
+                unsafe {
+                    piece = *orbit_states.get_unchecked(base + piece) as usize;
+                }
+                // SAFETY: sorted_orbit_defs guarantees that base (the orbit
+                // state base pointer) + piece + piece_count (an orientation
+                // vector element) is valid
+                unsafe {
+                    orientation_sum += *orbit_states.get_unchecked(base + piece + piece_count);
+                }
             }
 
             let actual_orients = orientation_sum % orientation_count != 0;
@@ -466,13 +513,19 @@ fn induces_sorted_cycle_type_slice(
                     let (div, rem) = (j / 4, j % 4);
                     expected_cycle_length.get() == actual_cycle_length
                         && expected_orients == actual_orients
-                        && (multi_bv[div] & (1 << (rem + 4)) == 0)
+                        // SAFETY: default_multi_bv_slice ensures that (j / 4)
+                        // always fits in multi_bv
+                        && unsafe { *multi_bv.get_unchecked(div) } & (1 << (rem + 4)) == 0
                 },
             ) else {
                 return false;
             };
             let (div, rem) = (valid_cycle_index / 4, valid_cycle_index % 4);
-            multi_bv[div] |= 1 << (rem + 4);
+            // SAFETY: default_multi_bv_slice ensures that
+            // (valid_cycle_index / 4) always fits in multi_bv
+            unsafe {
+                *multi_bv.get_unchecked_mut(div) |= 1 << (rem + 4);
+            }
             covered_cycles_count += 1;
             // cannot possibly return true if this runs
             if covered_cycles_count > partition.len() as u8 {
@@ -939,7 +992,17 @@ mod tests {
     }
 
     #[bench]
-    fn bench_induces_sorted_cycle_type(b: &mut Bencher) {
+    fn bench_induces_sorted_cycle_type_stack(b: &mut Bencher) {
         bench_induces_sorted_cycle_type_helper::<StackCube3>(b);
+    }
+
+    #[bench]
+    fn bench_induces_sorted_cycle_type_heap(b: &mut Bencher) {
+        bench_induces_sorted_cycle_type_helper::<HeapPuzzle>(b);
+    }
+
+    #[bench]
+    fn bench_induces_sorted_cycle_type_cube3(b: &mut Bencher) {
+        bench_induces_sorted_cycle_type_helper::<cube3::Cube3>(b);
     }
 }

@@ -125,23 +125,26 @@ impl PuzzleState for Cube3 {
     ) -> bool {
         let mut covered_cycles_count = 0_u8;
 
-        assert!(sorted_cycle_type.len() == 2);
-
-        let sorted_corner_partition = &sorted_cycle_type[0];
+        // SAFETY: validate_sorted_orbit_defs ensures that sorted_cycle_type.len() == 2
+        let sorted_corner_partition = unsafe { sorted_cycle_type.get_unchecked(0) };
         for i in 0..8 {
             if multi_bv[0] & (1 << i) != 0 {
                 continue;
             }
             multi_bv[0] |= 1 << i;
             let mut actual_cycle_length = 1;
-            let mut corner = self.cp[i] as usize;
-            let mut orientation_sum = self.co[corner];
+            // SAFETY: cp is length 8, so i is always in bounds
+            let mut corner = unsafe { *self.cp.as_array().get_unchecked(i) } as usize;
+            // SAFETY: co is length 8, and corner is always between 0 and 8, so corner is always in bounds
+            let mut orientation_sum = unsafe { *self.co.as_array().get_unchecked(corner) };
 
             while corner != i {
                 actual_cycle_length += 1;
                 multi_bv[0] |= 1 << corner;
-                corner = self.cp[corner] as usize;
-                orientation_sum += self.co[corner];
+                // SAFETY: cp is length 8, and corner is always between 0 and 8, so corner is always in bounds
+                corner = unsafe { *self.cp.as_array().get_unchecked(corner) } as usize;
+                // SAFETY: co is length 8, and corner is always between 0 and 8, so corner is always in bounds
+                orientation_sum += unsafe { *self.co.as_array().get_unchecked(corner) };
             }
 
             let actual_orients = orientation_sum % 3 != 0;
@@ -170,21 +173,26 @@ impl PuzzleState for Cube3 {
 
         multi_bv = [0; 2];
         covered_cycles_count = 0;
-        let sorted_edge_partition = &sorted_cycle_type[1];
+        // SAFETY: validate_sorted_orbit_defs ensures that sorted_cycle_type.len() == 2
+        let sorted_edge_partition = unsafe { sorted_cycle_type.get_unchecked(1) };
         for i in 0..12 {
             if multi_bv[0] & (1 << i) != 0 {
                 continue;
             }
             multi_bv[0] |= 1 << i;
             let mut actual_cycle_length = 1;
-            let mut edge = self.ep[i] as usize;
-            let mut orientation_sum = self.eo[edge];
+            // SAFETY: ep is length 12, so i is always in bounds
+            let mut edge = unsafe { *self.ep.as_array().get_unchecked(i) } as usize;
+            // SAFETY: eo is length 12, and edge is always between 0 and 12, so edge is always in bounds
+            let mut orientation_sum = unsafe { *self.eo.as_array().get_unchecked(edge) };
 
             while edge != i {
                 actual_cycle_length += 1;
                 multi_bv[0] |= 1 << edge;
-                edge = self.ep[edge] as usize;
-                orientation_sum += self.eo[edge];
+                // SAFETY: ep is length 12, and edge is always between 0 and 12, so edge is always in bounds
+                edge = unsafe { *self.ep.as_array().get_unchecked(edge) } as usize;
+                // SAFETY: eo is length 12, and edge is always between 0 and 12, so edge is always in bounds
+                orientation_sum += unsafe { *self.eo.as_array().get_unchecked(edge) };
             }
 
             let actual_orients = orientation_sum % 2 != 0;
