@@ -908,7 +908,7 @@ mod tests {
         });
     }
 
-    fn bench_compose_helper<P: PuzzleState>(b: &mut Bencher) {
+    fn bench_compose_puzzle_helper<P: PuzzleState>(b: &mut Bencher) {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let mut solved = cube3_def.solved_state().unwrap();
         let r_move = cube3_def.find_move("R").unwrap();
@@ -924,17 +924,17 @@ mod tests {
 
     #[bench]
     fn bench_compose_stack(b: &mut Bencher) {
-        bench_compose_helper::<StackCube3>(b);
+        bench_compose_puzzle_helper::<StackCube3>(b);
     }
 
     #[bench]
     fn bench_compose_heap(b: &mut Bencher) {
-        bench_compose_helper::<HeapPuzzle>(b);
+        bench_compose_puzzle_helper::<HeapPuzzle>(b);
     }
 
     #[bench]
     fn bench_compose_cube3(b: &mut Bencher) {
-        bench_compose_helper::<cube3::Cube3>(b);
+        bench_compose_puzzle_helper::<cube3::Cube3>(b);
     }
 
     #[bench]
