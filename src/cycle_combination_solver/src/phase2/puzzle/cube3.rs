@@ -62,15 +62,24 @@ impl PuzzleState for Cube3 {
         Default::default()
     }
 
-    fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]> {
-        Some(CUBE_3_SORTED_ORBIT_DEFS.as_slice())
+    fn validate_sorted_orbit_defs(
+        sorted_orbit_defs: &[OrbitDef],
+    ) -> Result<(), KSolveConversionError> {
+        if sorted_orbit_defs == CUBE_3_SORTED_ORBIT_DEFS.as_slice() {
+            Ok(())
+        } else {
+            Err(KSolveConversionError::InvalidOrbitDefs(
+                CUBE_3_SORTED_ORBIT_DEFS.to_vec(),
+                sorted_orbit_defs.to_vec(),
+            ))
+        }
     }
 
     #[cfg(not(simd32))]
     fn from_sorted_transformations_unchecked(
         sorted_transformations: &[Vec<(u8, u8)>],
         _sorted_orbit_defs: &[OrbitDef],
-    ) -> Result<Self, KSolveConversionError> {
+    ) -> Self {
         let corners_transformation = &sorted_transformations[0];
         let edges_transformation = &sorted_transformations[1];
 
@@ -89,7 +98,7 @@ impl PuzzleState for Cube3 {
             co[i] = orientation_delta;
         }
 
-        Ok(Cube3 { ep, eo, cp, co })
+        Cube3 { ep, eo, cp, co }
     }
 
     #[cfg(not(simd32))]

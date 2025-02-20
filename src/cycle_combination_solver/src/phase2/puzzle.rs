@@ -5,6 +5,38 @@ use thiserror::Error;
 
 pub mod cube3;
 
+pub trait PuzzleState
+where
+    Self: Sized + Clone + PartialEq + Debug,
+{
+    type MultiBv: MultiBvInterface;
+
+    /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
+    fn default_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv;
+    /// Can the implementor be created from these sorted orbit defs? For example
+    /// StackPuzzle<39> cannot hold a 3x3 cube state and Cube3Simd cannot hold a
+    /// 4x4 cube state
+    fn validate_sorted_orbit_defs(
+        sorted_orbit_defs: &[OrbitDef],
+    ) -> Result<(), KSolveConversionError>;
+    /// Create a puzzle state from a sorted transformation without checking if
+    /// it belongs to orbit defs. Panics if sorted orbit defs are invalid which
+    /// is guaranteed to not happen normally by appropriately calling validate.
+    fn from_sorted_transformations_unchecked(
+        sorted_transformations: &[Vec<(u8, u8)>],
+        sorted_orbit_defs: &[OrbitDef],
+    ) -> Self;
+    /// Compose two puzzle states in place
+    fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: &[OrbitDef]);
+    /// The goal state for IDA* search
+    fn induces_sorted_cycle_type(
+        &self,
+        sorted_cycle_type: &[OrientedPartition],
+        multi_bv: <Self::MultiBv as MultiBvInterface>::MultiBvReusableRef<'_>,
+        sorted_orbit_defs: &[OrbitDef],
+    ) -> bool;
+}
+
 pub trait MultiBvInterface {
     type MultiBvReusableRef<'a>
     where
@@ -30,34 +62,6 @@ impl<T: PrimInt, const N: usize> MultiBvInterface for [T; N] {
     fn reusable_ref(&mut self) -> Self::MultiBvReusableRef<'_> {
         *self
     }
-}
-
-pub trait PuzzleState
-where
-    Self: Sized + Clone + PartialEq + Debug,
-{
-    type MultiBv: MultiBvInterface;
-
-    /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
-    fn default_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv;
-    /// Get the implmentor's orbit definition specification, or None if any
-    /// orbit definition is allowed
-    fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]>;
-    /// Create a puzzle state from a sorted transformation without checking if
-    /// it belongs to orbit defs
-    fn from_sorted_transformations_unchecked(
-        sorted_transformations: &[Vec<(u8, u8)>],
-        sorted_orbit_defs: &[OrbitDef],
-    ) -> Result<Self, KSolveConversionError>;
-    /// Compose two puzzle states in place
-    fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: &[OrbitDef]);
-    /// The goal state for IDA* search
-    fn induces_sorted_cycle_type(
-        &self,
-        sorted_cycle_type: &[OrientedPartition],
-        multi_bv: <Self::MultiBv as MultiBvInterface>::MultiBvReusableRef<'_>,
-        sorted_orbit_defs: &[OrbitDef],
-    ) -> bool;
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -108,14 +112,12 @@ impl<P: PuzzleState> PuzzleDef<P> {
         self.symmetries.iter().find(|def| def.name == name)
     }
 
-    pub fn solved_state(&self) -> Result<P, KSolveConversionError> {
+    pub fn solved_state(&self) -> P {
         solved_state_from_sorted_orbit_defs(&self.sorted_orbit_defs)
     }
 }
 
-fn solved_state_from_sorted_orbit_defs<P: PuzzleState>(
-    sorted_orbit_defs: &[OrbitDef],
-) -> Result<P, KSolveConversionError> {
+fn solved_state_from_sorted_orbit_defs<P: PuzzleState>(sorted_orbit_defs: &[OrbitDef]) -> P {
     let sorted_transformations = sorted_orbit_defs
         .iter()
         .map(|orbit_def| {
@@ -147,15 +149,6 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
         sorted_orbit_defs
             .sort_by_key(|orbit_def| (orbit_def.piece_count, orbit_def.orientation_count));
 
-        if let Some(expected_sorted_orbit_defs) = P::expected_sorted_orbit_defs() {
-            if sorted_orbit_defs != expected_sorted_orbit_defs {
-                return Err(KSolveConversionError::InvalidOrbitDefs(
-                    expected_sorted_orbit_defs.to_vec(),
-                    sorted_orbit_defs,
-                ));
-            }
-        }
-
         let mut moves = Vec::with_capacity(ksolve.moves().len());
         let mut symmetries = Vec::with_capacity(ksolve.symmetries().len());
 
@@ -181,10 +174,11 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
             // TODO: sorting should take orientation_count into account
             sorted_transformations.sort_by_key(|a| a.len());
 
+            P::validate_sorted_orbit_defs(sorted_orbit_defs.as_slice())?;
             let puzzle_state = P::from_sorted_transformations_unchecked(
                 &sorted_transformations,
                 sorted_orbit_defs.as_slice(),
-            )?;
+            );
 
             let base_move = Move {
                 name: ksolve_move.name().to_owned(),
@@ -196,7 +190,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                 continue;
             }
 
-            let solved: P = solved_state_from_sorted_orbit_defs(&sorted_orbit_defs)?;
+            let solved: P = solved_state_from_sorted_orbit_defs(&sorted_orbit_defs);
             let mut move_1 = base_move.clone();
             let mut move_2 = base_move.clone();
 
@@ -259,21 +253,31 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
         default_multi_bv_slice(sorted_orbit_defs)
     }
 
-    fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]> {
-        None
+    fn validate_sorted_orbit_defs(
+        sorted_orbit_defs: &[OrbitDef],
+    ) -> Result<(), KSolveConversionError> {
+        if N >= sorted_orbit_defs
+            .iter()
+            .map(|orbit_def| (orbit_def.piece_count.get() as usize) * 2)
+            .sum()
+        {
+            Ok(())
+        } else {
+            Err(KSolveConversionError::NotEnoughBufferSpace)
+        }
     }
 
     fn from_sorted_transformations_unchecked(
         sorted_transformations: &[Vec<(u8, u8)>],
         sorted_orbit_defs: &[OrbitDef],
-    ) -> Result<Self, KSolveConversionError> {
+    ) -> Self {
         let mut orbit_states = [0_u8; N];
         ksolve_move_to_slice_unchecked(
             &mut orbit_states,
             sorted_orbit_defs,
             sorted_transformations,
-        )?;
-        Ok(StackPuzzle(orbit_states))
+        );
+        StackPuzzle(orbit_states)
     }
 
     fn replace_compose(
@@ -302,19 +306,24 @@ impl PuzzleState for HeapPuzzle {
         default_multi_bv_slice(sorted_orbit_defs)
     }
 
-    fn expected_sorted_orbit_defs() -> Option<&'static [OrbitDef]> {
-        None
+    fn validate_sorted_orbit_defs(
+        _sorted_orbit_defs: &[OrbitDef],
+    ) -> Result<(), KSolveConversionError> {
+        // No validation needed. from_sorted_transformations_unchecked creates
+        // an orbit states buffer that is guaranteed to be the right size, and
+        // there is no restriction on the expected orbit defs
+        Ok(())
     }
 
     fn from_sorted_transformations_unchecked(
         sorted_transformations: &[Vec<(u8, u8)>],
         sorted_orbit_defs: &[OrbitDef],
-    ) -> Result<Self, KSolveConversionError> {
+    ) -> Self {
         let mut orbit_states = vec![
             0_u8;
-            sorted_transformations
+            sorted_orbit_defs
                 .iter()
-                .map(|perm_and_ori| perm_and_ori.len() * 2)
+                .map(|orbit_def| orbit_def.piece_count.get() as usize * 2)
                 .sum()
         ]
         .into_boxed_slice();
@@ -322,8 +331,8 @@ impl PuzzleState for HeapPuzzle {
             &mut orbit_states,
             sorted_orbit_defs,
             sorted_transformations,
-        )?;
-        Ok(HeapPuzzle(orbit_states))
+        );
+        HeapPuzzle(orbit_states)
     }
 
     fn replace_compose(&mut self, a: &HeapPuzzle, b: &HeapPuzzle, sorted_orbit_defs: &[OrbitDef]) {
@@ -357,20 +366,17 @@ fn ksolve_move_to_slice_unchecked(
     orbit_states: &mut [u8],
     sorted_orbit_defs: &[OrbitDef],
     sorted_transformations: &[Vec<(u8, u8)>],
-) -> Result<(), KSolveConversionError> {
+) {
     let mut i = 0;
     for (transformation, orbit_def) in sorted_transformations.iter().zip(sorted_orbit_defs.iter()) {
         let piece_count = orbit_def.piece_count.get() as usize;
         for j in 0..piece_count {
             let (perm, orientation_delta) = transformation[j];
-            *orbit_states
-                .get_mut(i + j + piece_count)
-                .ok_or(KSolveConversionError::NotEnoughBufferSpace)? = orientation_delta;
+            orbit_states[i + j + piece_count] = orientation_delta;
             orbit_states[i + j] = perm;
         }
         i += piece_count * 2;
     }
-    Ok(())
 }
 
 fn replace_compose_slice(
@@ -553,7 +559,7 @@ mod tests {
 
     fn many_compositions<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let solved = cube3_def.solved_state().unwrap();
+        let solved = cube3_def.solved_state();
         let also_solved = apply_moves(&cube3_def, &solved, "R F", 105);
         assert_eq!(also_solved, solved);
     }
@@ -569,7 +575,7 @@ mod tests {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let s_u4_symmetry = cube3_def.find_symmetry("S_U4").unwrap();
 
-        let mut result = cube3_def.solved_state().unwrap();
+        let mut result = cube3_def.solved_state();
         let mut prev_result = result.clone();
         for _ in 0..4 {
             prev_result.replace_compose(
@@ -580,7 +586,7 @@ mod tests {
             std::mem::swap(&mut result, &mut prev_result);
         }
 
-        let solved = cube3_def.solved_state().unwrap();
+        let solved = cube3_def.solved_state();
         assert_eq!(result, solved);
     }
 
@@ -593,7 +599,7 @@ mod tests {
 
     fn expanded_move<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let actual_solved = cube3_def.solved_state().unwrap();
+        let actual_solved = cube3_def.solved_state();
         let expected_solved = apply_moves(
             &cube3_def,
             &actual_solved,
@@ -612,7 +618,7 @@ mod tests {
 
     fn induces_sorted_cycle_type_within_cycle<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let solved = cube3_def.solved_state().unwrap();
+        let solved = cube3_def.solved_state();
         let mut multi_bv = P::default_multi_bv(&cube3_def.sorted_orbit_defs);
 
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 1);
@@ -643,7 +649,7 @@ mod tests {
 
     fn induces_sorted_cycle_type_many<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let solved = cube3_def.solved_state().unwrap();
+        let solved = cube3_def.solved_state();
         let mut multi_bv = P::default_multi_bv(&cube3_def.sorted_orbit_defs);
         assert!(solved.induces_sorted_cycle_type(
             &[vec![], vec![]],
@@ -892,12 +898,7 @@ mod tests {
             ct(&[(3, true), (5, true)]),
             ct(&[(2, true), (2, false), (7, true)]),
         ];
-        let order_1260 = apply_moves(
-            &cube3_def,
-            &cube3_def.solved_state().unwrap(),
-            "R U2 D' B D'",
-            1,
-        );
+        let order_1260 = apply_moves(&cube3_def, &cube3_def.solved_state(), "R U2 D' B D'", 1);
         let mut multi_bv = P::default_multi_bv(&cube3_def.sorted_orbit_defs);
         b.iter(|| {
             test::black_box(&order_1260).induces_sorted_cycle_type(
@@ -910,7 +911,7 @@ mod tests {
 
     fn bench_compose_puzzle_helper<P: PuzzleState>(b: &mut Bencher) {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let mut solved = cube3_def.solved_state().unwrap();
+        let mut solved = cube3_def.solved_state();
         let r_move = cube3_def.find_move("R").unwrap();
         let f_move = cube3_def.find_move("F").unwrap();
         b.iter(|| {

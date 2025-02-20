@@ -1,34 +1,32 @@
-use super::puzzle::{cube3::Cube3, KSolveConversionError, Move, PuzzleDef, PuzzleState};
+use super::puzzle::{cube3::Cube3, Move, PuzzleDef, PuzzleState};
 use std::{marker::PhantomData, ops::Index};
 
-pub trait ValidPuzzleStackBuf<P: PuzzleState> {}
+pub trait ValidPuzzleStateHistoryBuf<P: PuzzleState> {}
 
-pub trait PuzzleStackBuf<P: PuzzleState>:
-    ValidPuzzleStackBuf<P> + Index<usize, Output = P> + Sized
+pub trait PuzzleStateHistoryBuf<P: PuzzleState>:
+    ValidPuzzleStateHistoryBuf<P> + Index<usize, Output = P>
 {
-    fn initialize(puzzle_def: &PuzzleDef<P>) -> Result<Self, KSolveConversionError>;
+    fn initialize(puzzle_def: &PuzzleDef<P>) -> Self;
     fn push_stack(&mut self, stack_idx: usize, moove: &Move<P>, puzzle_def: &PuzzleDef<P>);
 }
 
-pub struct PuzzleStack<P: PuzzleState, B: PuzzleStackBuf<P>> {
+pub struct PuzzleStateHistory<P: PuzzleState, B: PuzzleStateHistoryBuf<P>> {
     stack: B,
     stack_idx: usize,
     _marker: PhantomData<P>,
 }
 
-impl<P: PuzzleState, B: PuzzleStackBuf<P>> TryFrom<&PuzzleDef<P>> for PuzzleStack<P, B> {
-    type Error = KSolveConversionError;
-
-    fn try_from(puzzle_def: &PuzzleDef<P>) -> Result<Self, KSolveConversionError> {
-        Ok(Self {
-            stack: B::initialize(puzzle_def)?,
+impl<P: PuzzleState, B: PuzzleStateHistoryBuf<P>> From<&PuzzleDef<P>> for PuzzleStateHistory<P, B> {
+    fn from(puzzle_def: &PuzzleDef<P>) -> Self {
+        Self {
+            stack: B::initialize(puzzle_def),
             stack_idx: 0,
             _marker: PhantomData,
-        })
+        }
     }
 }
 
-impl<P: PuzzleState, B: PuzzleStackBuf<P>> PuzzleStack<P, B> {
+impl<P: PuzzleState, B: PuzzleStateHistoryBuf<P>> PuzzleStateHistory<P, B> {
     pub fn push_stack(&mut self, moove: &Move<P>, puzzle_def: &PuzzleDef<P>) {
         self.stack.push_stack(self.stack_idx, moove, puzzle_def);
         self.stack_idx += 1;
@@ -39,19 +37,19 @@ impl<P: PuzzleState, B: PuzzleStackBuf<P>> PuzzleStack<P, B> {
     }
 }
 
-impl<P: PuzzleState> ValidPuzzleStackBuf<P> for Vec<P> {}
+impl<P: PuzzleState> ValidPuzzleStateHistoryBuf<P> for Vec<P> {}
 
-impl<P: PuzzleState> PuzzleStackBuf<P> for Vec<P> {
-    fn initialize(puzzle_def: &PuzzleDef<P>) -> Result<Self, KSolveConversionError> {
-        Ok(vec![puzzle_def.solved_state()?])
+impl<P: PuzzleState> PuzzleStateHistoryBuf<P> for Vec<P> {
+    fn initialize(puzzle_def: &PuzzleDef<P>) -> Self {
+        vec![puzzle_def.solved_state()]
     }
 
     fn push_stack(&mut self, stack_idx: usize, moove: &Move<P>, puzzle_def: &PuzzleDef<P>) {
+        // TODO: move this to the main IDDFS loop!
         if stack_idx + 1 >= self.len() {
             assert!(stack_idx + 1 == self.len()); // Greater than makes no sense
-                                                  // We can unwrap because initialize had to have ran before and call
-                                                  // solved_state
-            let mut new_entry = puzzle_def.solved_state().unwrap();
+
+            let mut new_entry = puzzle_def.solved_state();
             new_entry.replace_compose(
                 &self[stack_idx],
                 &moove.puzzle_state,
@@ -75,15 +73,14 @@ impl<P: PuzzleState> PuzzleStackBuf<P> for Vec<P> {
     }
 }
 
-impl ValidPuzzleStackBuf<Cube3> for [Cube3; 21] {}
+impl ValidPuzzleStateHistoryBuf<Cube3> for [Cube3; 21] {}
 
-impl<const N: usize, P: PuzzleState> PuzzleStackBuf<P> for [P; N]
+impl<const N: usize, P: PuzzleState> PuzzleStateHistoryBuf<P> for [P; N]
 where
-    [P; N]: ValidPuzzleStackBuf<P>,
+    [P; N]: ValidPuzzleStateHistoryBuf<P>,
 {
-    fn initialize(puzzle_def: &PuzzleDef<P>) -> Result<Self, KSolveConversionError> {
-        let solved = puzzle_def.solved_state()?;
-        Ok(core::array::from_fn(|_| solved.clone()))
+    fn initialize(puzzle_def: &PuzzleDef<P>) -> Self {
+        core::array::from_fn(|_| puzzle_def.solved_state())
     }
 
     fn push_stack(&mut self, stack_idx: usize, moove: &Move<P>, puzzle_def: &PuzzleDef<P>) {
@@ -108,77 +105,77 @@ mod tests {
     use crate::phase2::puzzle::cube3::Cube3;
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
-    fn puzzle_stack_composition<B: PuzzleStackBuf<Cube3>>() {
+    fn puzzle_state_history_composition<B: PuzzleStateHistoryBuf<Cube3>>() {
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let solved = cube3_def.solved_state().unwrap();
+        let solved = cube3_def.solved_state();
         let r_move = cube3_def.find_move("R").unwrap();
         let r2_move = cube3_def.find_move("R2").unwrap();
-        let mut puzzle_stack: PuzzleStack<Cube3, B> = (&cube3_def).try_into().unwrap();
+        let mut puzzle_state_history: PuzzleStateHistory<Cube3, B> = (&cube3_def).into();
 
-        puzzle_stack.push_stack(r_move, &cube3_def);
-        puzzle_stack.push_stack(r_move, &cube3_def);
-        assert_eq!(puzzle_stack.stack_idx, 2);
+        puzzle_state_history.push_stack(r_move, &cube3_def);
+        puzzle_state_history.push_stack(r_move, &cube3_def);
+        assert_eq!(puzzle_state_history.stack_idx, 2);
 
         let mut r2_state = solved.clone();
         r2_state.replace_compose(&solved, &r2_move.puzzle_state, &cube3_def.sorted_orbit_defs);
-        assert_eq!(&puzzle_stack.stack[2], &r2_state);
+        assert_eq!(&puzzle_state_history.stack[2], &r2_state);
     }
 
     #[test]
-    fn test_puzzle_stack_composition() {
-        puzzle_stack_composition::<Vec<Cube3>>();
-        puzzle_stack_composition::<[Cube3; 21]>();
+    fn test_puzzle_state_history_composition() {
+        puzzle_state_history_composition::<Vec<Cube3>>();
+        puzzle_state_history_composition::<[Cube3; 21]>();
     }
 
-    fn puzzle_stack_pop<B: PuzzleStackBuf<Cube3>>() {
+    fn puzzle_state_history_pop<B: PuzzleStateHistoryBuf<Cube3>>() {
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let solved = cube3_def.solved_state().unwrap();
+        let solved = cube3_def.solved_state();
         let r_move = cube3_def.find_move("R").unwrap();
         let r2_move = cube3_def.find_move("R2").unwrap();
         let f2_move = cube3_def.find_move("F2").unwrap();
         let r_prime_move = cube3_def.find_move("R'").unwrap();
-        let mut puzzle_stack: PuzzleStack<Cube3, B> = (&cube3_def).try_into().unwrap();
+        let mut puzzle_state_history: PuzzleStateHistory<Cube3, B> = (&cube3_def).into();
 
-        puzzle_stack.push_stack(r_move, &cube3_def);
-        puzzle_stack.push_stack(r2_move, &cube3_def);
+        puzzle_state_history.push_stack(r_move, &cube3_def);
+        puzzle_state_history.push_stack(r2_move, &cube3_def);
 
-        assert_eq!(puzzle_stack.stack_idx, 2);
+        assert_eq!(puzzle_state_history.stack_idx, 2);
         let mut r_prime_state = solved.clone();
         r_prime_state.replace_compose(
             &solved,
             &r_prime_move.puzzle_state,
             &cube3_def.sorted_orbit_defs,
         );
-        assert_eq!(&puzzle_stack.stack[2], &r_prime_state);
+        assert_eq!(&puzzle_state_history.stack[2], &r_prime_state);
 
-        puzzle_stack.pop_stack();
+        puzzle_state_history.pop_stack();
 
-        assert_eq!(puzzle_stack.stack_idx, 1);
+        assert_eq!(puzzle_state_history.stack_idx, 1);
         let mut r_state = solved.clone();
         r_state.replace_compose(&solved, &r_move.puzzle_state, &cube3_def.sorted_orbit_defs);
-        assert_eq!(&puzzle_stack.stack[1], &r_state);
+        assert_eq!(&puzzle_state_history.stack[1], &r_state);
 
-        puzzle_stack.push_stack(f2_move, &cube3_def);
+        puzzle_state_history.push_stack(f2_move, &cube3_def);
 
-        assert_eq!(puzzle_stack.stack_idx, 2);
+        assert_eq!(puzzle_state_history.stack_idx, 2);
         let mut r_f2_state = solved.clone();
         r_f2_state.replace_compose(
             &r_state,
             &f2_move.puzzle_state,
             &cube3_def.sorted_orbit_defs,
         );
-        assert_eq!(&puzzle_stack.stack[2], &r_f2_state);
+        assert_eq!(&puzzle_state_history.stack[2], &r_f2_state);
 
-        puzzle_stack.push_stack(f2_move, &cube3_def);
-        puzzle_stack.push_stack(r_prime_move, &cube3_def);
+        puzzle_state_history.push_stack(f2_move, &cube3_def);
+        puzzle_state_history.push_stack(r_prime_move, &cube3_def);
 
-        assert_eq!(puzzle_stack.stack_idx, 4);
-        assert_eq!(&puzzle_stack.stack[4], &solved);
+        assert_eq!(puzzle_state_history.stack_idx, 4);
+        assert_eq!(&puzzle_state_history.stack[4], &solved);
     }
 
     #[test]
-    fn test_puzzle_stack_pop() {
-        puzzle_stack_pop::<Vec<Cube3>>();
-        puzzle_stack_pop::<[Cube3; 21]>();
+    fn test_puzzle_state_history_pop() {
+        puzzle_state_history_pop::<Vec<Cube3>>();
+        puzzle_state_history_pop::<[Cube3; 21]>();
     }
 }

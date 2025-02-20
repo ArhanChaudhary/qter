@@ -1,4 +1,4 @@
 mod pruning;
 pub mod puzzle;
 pub mod solver;
-pub mod puzzle_stack;
+pub mod puzzle_state_history;
