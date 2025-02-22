@@ -10,7 +10,7 @@ let
     }
   );
   pkgs = import <nixpkgs> { overlays = [ rust_overlay ]; };
-  rust = pkgs.rust-bin.nightly."2025-01-28".default.override {
+  rust = pkgs.rust-bin.nightly."2025-02-22".default.override {
     extensions = [ "rust-src" "rust-analyzer" ];
   };
 in
