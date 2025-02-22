@@ -27,6 +27,12 @@ fn main() {
                     ),
                     target_feature = "neon",
                     target_endian = "little"
+                ),
+                all(
+                    target_arch = "arm",
+                    target_feature = "v7",
+                    target_feature = "neon",
+                    target_endian = "little"
                 )
             )
         },
@@ -52,5 +58,13 @@ fn main() {
         },
         // simd32: { not(l) }, // true
         // simd32: { l }, // false
+        simd64: {
+            all(
+                target_feature = "avx512vl",
+                target_feature = "avx512vbmi"
+            )
+        }
+        // simd64: { not(l) }, // false
+        // simd64: { l }, // true
     }
 }
