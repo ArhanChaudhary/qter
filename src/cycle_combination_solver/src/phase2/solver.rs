@@ -73,7 +73,7 @@ impl<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryBuf<P>> CycleTypeS
     pub fn solve(&self) -> Vec<Box<[Move<P>]>> {
         let mut mutable = CycleTypeSolverMutable {
             puzzle_state_history: (&self.puzzle_def).into(),
-            multi_bv: P::default_multi_bv(&self.puzzle_def.sorted_orbit_defs),
+            multi_bv: P::new_multi_bv(&self.puzzle_def.sorted_orbit_defs),
             solutions: vec![],
         };
         let mut cost_bound = self

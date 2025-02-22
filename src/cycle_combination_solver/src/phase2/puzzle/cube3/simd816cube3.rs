@@ -1,28 +1,8 @@
-use super::{KSolveConversionError, OrientedPartition, PuzzleState};
-use crate::phase2::puzzle::OrbitDef;
+use super::common::CUBE_3_SORTED_ORBIT_DEFS;
+use crate::phase2::puzzle::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
 use std::hash::{Hash, Hasher};
-use std::{
-    simd::{u8x16, u8x32, u8x8},
-    sync::LazyLock,
-};
+use std::simd::{u8x16, u8x8};
 
-static CUBE_3_SORTED_ORBIT_DEFS: LazyLock<Vec<OrbitDef>> = LazyLock::new(|| {
-    vec![
-        OrbitDef {
-            piece_count: 8.try_into().unwrap(),
-            orientation_count: 3.try_into().unwrap(),
-        },
-        OrbitDef {
-            piece_count: 12.try_into().unwrap(),
-            orientation_count: 2.try_into().unwrap(),
-        },
-    ]
-});
-
-#[cfg(not(any(simd32, simd8and16)))]
-pub type Cube3 = super::StackPuzzle<40>;
-
-#[cfg(all(not(simd32), simd8and16))]
 #[derive(Clone, Debug)]
 pub struct Cube3 {
     pub ep: u8x16,
@@ -31,33 +11,16 @@ pub struct Cube3 {
     pub co: u8x8,
 }
 
-#[cfg(simd32)]
-#[derive(Clone, Debug)]
-pub struct Cube3 {
-    perm: u8x32,
-    ori: u8x32,
-}
-
-#[cfg(any(simd32, simd8and16))]
 impl PartialEq for Cube3 {
-    #[cfg(not(simd32))]
     fn eq(&self, other: &Self) -> bool {
         self.ep[..12].eq(&other.ep[..12])
             && self.eo[..12].eq(&other.eo[..12])
             && self.cp.eq(&other.cp)
             && self.co.eq(&other.co)
     }
-
-    #[cfg(simd32)]
-    fn eq(&self, other: &Self) -> bool {
-        // TODO: probably incorrect
-        self.perm.eq(&other.perm) && self.ori.eq(&other.ori)
-    }
 }
 
-#[cfg(any(simd32, simd8and16))]
 impl Hash for Cube3 {
-    #[cfg(not(simd32))]
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.ep[..12].hash(state);
         self.eo[..12].hash(state);
@@ -66,11 +29,10 @@ impl Hash for Cube3 {
     }
 }
 
-#[cfg(any(simd32, simd8and16))]
 impl PuzzleState for Cube3 {
     type MultiBv = [u16; 2];
 
-    fn default_multi_bv(_sorted_orbit_defs: &[OrbitDef]) -> [u16; 2] {
+    fn new_multi_bv(_sorted_orbit_defs: &[OrbitDef]) -> [u16; 2] {
         Default::default()
     }
 
@@ -87,7 +49,6 @@ impl PuzzleState for Cube3 {
         }
     }
 
-    #[cfg(not(simd32))]
     fn from_sorted_transformations_unchecked(
         sorted_transformations: &[Vec<(u8, u8)>],
         _sorted_orbit_defs: &[OrbitDef],
@@ -113,7 +74,6 @@ impl PuzzleState for Cube3 {
         Cube3 { ep, eo, cp, co }
     }
 
-    #[cfg(not(simd32))]
     fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: &[OrbitDef]) {
         // Benching from a 2020 Mac M1 has shown that swizzling twice is
         // marginally faster than taking the modulus
@@ -130,12 +90,10 @@ impl PuzzleState for Cube3 {
         // self.co = (a.co.swizzle_dyn(b.cp) + b.co) % THREES;
     }
 
-    #[cfg(not(simd32))]
     fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]) {
         todo!();
     }
 
-    #[cfg(not(simd32))]
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type: &[OrientedPartition],
@@ -236,58 +194,4 @@ impl PuzzleState for Cube3 {
         }
         covered_cycles_count == sorted_edge_partition.len() as u8
     }
-
-    #[cfg(simd32)]
-    fn from_sorted_transformations_unchecked(
-        sorted_transformations: &[Vec<(u8, u8)>],
-        _sorted_orbit_defs: &[OrbitDef],
-    ) -> Result<Self, KSolveConversionError> {
-        todo!();
-    }
-
-    #[cfg(simd32)]
-    fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: &[OrbitDef]) {
-        todo!();
-    }
-
-    #[cfg(simd32)]
-    fn replace_inverse(&mut self, a: &Self, _sorted_orbit_defs: &[OrbitDef]) {
-        todo!();
-    }
-
-    #[cfg(simd32)]
-    fn induces_sorted_cycle_type(
-        &self,
-        sorted_cycle_type: &[OrientedPartition],
-        multi_bv: [u16; 2],
-        _sorted_orbit_defs: &[OrbitDef],
-    ) -> bool {
-        todo!();
-    }
 }
-
-// pub struct StackEvenCubeSimd<const S_24S: usize> {
-//     cp: u8x8,
-//     co: u8x8,
-//     s_24s: [u8x32; S_24S],
-// }
-
-// pub struct HeapEvenCubeSimd {
-//     cp: u8x8,
-//     co: u8x8,
-//     s_24s: [u8x32],
-// }
-
-// pub struct StackOddCubeSimd<const S_24S: usize> {
-//     ep: u8x16,
-//     eo: u8x16,
-//     cp: u8x8,
-//     co: u8x8,
-//     s_24s: [u8x32; S_24S],
-// }
-
-// pub struct HeapOddCubeSimd {
-//     cp: u8x8,
-//     co: u8x8,
-//     s_24s: [u8x32],
-// }

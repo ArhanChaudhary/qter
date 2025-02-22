@@ -1,6 +1,6 @@
 use num_traits::PrimInt;
 use puzzle_geometry::ksolve::KSolve;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::{fmt::Debug, num::NonZeroU8};
 use thiserror::Error;
 
@@ -10,7 +10,7 @@ pub trait PuzzleState: Hash + Clone + PartialEq + Debug {
     type MultiBv: MultiBvInterface;
 
     /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
-    fn default_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv;
+    fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv;
     /// Can the implementor be created from these sorted orbit defs? For example
     /// StackPuzzle<39> cannot hold a 3x3 cube state and Cube3Simd cannot hold a
     /// 4x4 cube state
@@ -19,7 +19,7 @@ pub trait PuzzleState: Hash + Clone + PartialEq + Debug {
     ) -> Result<(), KSolveConversionError>;
     /// Create a puzzle state from a sorted transformation without checking if
     /// it belongs to orbit defs. Panics if sorted orbit defs are invalid which
-    /// is guaranteed to not happen normally by appropriately calling validate.
+    /// is guaranteed to not happen normally by appropriately calling validate
     fn from_sorted_transformations_unchecked(
         sorted_transformations: &[Vec<(u8, u8)>],
         sorted_orbit_defs: &[OrbitDef],
@@ -64,10 +64,10 @@ impl<T: PrimInt, const N: usize> MultiBvInterface for [T; N] {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 pub struct StackPuzzle<const N: usize>(pub [u8; N]);
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 pub struct HeapPuzzle(pub Box<[u8]>);
 
 pub struct PuzzleDef<P: PuzzleState> {
@@ -152,6 +152,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
             (
                 sorted_orbit_defs[i].piece_count.get(),
                 sorted_orbit_defs[i].orientation_count.get(),
+                // TODO: sort by facelets per piece, distance from center
             )
         });
 
@@ -259,16 +260,10 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
     }
 }
 
-impl<const N: usize> Hash for StackPuzzle<N> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
-    }
-}
-
 impl<const N: usize> PuzzleState for StackPuzzle<N> {
     type MultiBv = Box<[u8]>;
 
-    fn default_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv {
+    fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv {
         default_multi_bv_slice(sorted_orbit_defs)
     }
 
@@ -322,16 +317,10 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
     }
 }
 
-impl Hash for HeapPuzzle {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
-    }
-}
-
 impl PuzzleState for HeapPuzzle {
     type MultiBv = Box<[u8]>;
 
-    fn default_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv {
+    fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv {
         default_multi_bv_slice(sorted_orbit_defs)
     }
 
@@ -696,7 +685,7 @@ mod tests {
     fn induces_sorted_cycle_type_within_cycle<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.solved_state();
-        let mut multi_bv = P::default_multi_bv(&cube3_def.sorted_orbit_defs);
+        let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
 
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 1);
         let sorted_cycle_type = [
@@ -727,7 +716,7 @@ mod tests {
     fn induces_sorted_cycle_type_many<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.solved_state();
-        let mut multi_bv = P::default_multi_bv(&cube3_def.sorted_orbit_defs);
+        let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
         assert!(solved.induces_sorted_cycle_type(
             &[vec![], vec![]],
             multi_bv.reusable_ref(),
@@ -976,7 +965,7 @@ mod tests {
             ct(&[(2, true), (2, false), (7, true)]),
         ];
         let order_1260 = apply_moves(&cube3_def, &cube3_def.solved_state(), "R U2 D' B D'", 1);
-        let mut multi_bv = P::default_multi_bv(&cube3_def.sorted_orbit_defs);
+        let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
         b.iter(|| {
             test::black_box(&order_1260).induces_sorted_cycle_type(
                 &sorted_cycle_type,
