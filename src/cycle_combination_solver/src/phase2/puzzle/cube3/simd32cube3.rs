@@ -1,3 +1,5 @@
+#![cfg_attr(not(simd32), allow(dead_code, unused_variables))]
+
 use super::common::CUBE_3_SORTED_ORBIT_DEFS;
 use crate::phase2::puzzle::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
 use std::{

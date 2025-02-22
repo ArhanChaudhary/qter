@@ -264,7 +264,7 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
     type MultiBv = Box<[u8]>;
 
     fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv {
-        default_multi_bv_slice(sorted_orbit_defs)
+        new_multi_bv_slice(sorted_orbit_defs)
     }
 
     fn validate_sorted_orbit_defs(
@@ -321,7 +321,7 @@ impl PuzzleState for HeapPuzzle {
     type MultiBv = Box<[u8]>;
 
     fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv {
-        default_multi_bv_slice(sorted_orbit_defs)
+        new_multi_bv_slice(sorted_orbit_defs)
     }
 
     fn validate_sorted_orbit_defs(
@@ -371,7 +371,7 @@ impl PuzzleState for HeapPuzzle {
     }
 }
 
-fn default_multi_bv_slice(sorted_orbit_defs: &[OrbitDef]) -> Box<[u8]> {
+fn new_multi_bv_slice(sorted_orbit_defs: &[OrbitDef]) -> Box<[u8]> {
     vec![
         0;
         sorted_orbit_defs
@@ -454,7 +454,53 @@ fn replace_compose_slice(
 }
 
 fn replace_inverse_slice(orbit_states_mut: &mut [u8], a: &[u8], sorted_orbit_defs: &[OrbitDef]) {
-    todo!();
+    debug_assert_eq!(
+        sorted_orbit_defs
+            .iter()
+            .map(|orbit_def| (orbit_def.piece_count.get() as usize) * 2)
+            .sum::<usize>(),
+        orbit_states_mut.len()
+    );
+    debug_assert_eq!(orbit_states_mut.len(), a.len());
+
+    let mut base = 0;
+    for &OrbitDef {
+        piece_count,
+        orientation_count,
+    } in sorted_orbit_defs
+    {
+        let piece_count = piece_count.get() as usize;
+        if orientation_count == 1.try_into().unwrap() {
+            // TODO: make unsafe + test cases
+            for i in 0..piece_count {
+                let base_i = base + i;
+                // unsafe {
+                //     let pos = *a.get_unchecked(base + *b.get_unchecked(base_i) as usize);
+                //     *orbit_states_mut.get_unchecked_mut(base_i) = pos;
+                //     *orbit_states_mut.get_unchecked_mut(base_i + piece_count) = 0;
+                // }
+                orbit_states_mut[base + a[base_i] as usize] = i as u8;
+                orbit_states_mut[base + a[base_i] as usize + piece_count] = 0;
+            }
+        } else {
+            for i in 0..piece_count {
+                let base_i = base + i;
+                // unsafe {
+                //     let pos = a.get_unchecked(base + *b.get_unchecked(base_i) as usize);
+                //     let a_ori =
+                //         a.get_unchecked(base + *b.get_unchecked(base_i) as usize + piece_count);
+                //     let b_ori = b.get_unchecked(base_i + piece_count);
+                //     *orbit_states_mut.get_unchecked_mut(base_i) = *pos;
+                //     *orbit_states_mut.get_unchecked_mut(base_i + piece_count) =
+                //         (*a_ori + *b_ori) % orientation_count;
+                // }
+                orbit_states_mut[base + a[base_i] as usize] = i as u8;
+                orbit_states_mut[base + a[base_i] as usize + piece_count] =
+                    (orientation_count.get() - a[base_i + piece_count]) % orientation_count.get();
+            }
+        }
+        base += piece_count * 2;
+    }
 }
 
 fn induces_sorted_cycle_type_slice(

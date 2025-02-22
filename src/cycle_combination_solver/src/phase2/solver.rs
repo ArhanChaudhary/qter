@@ -34,12 +34,12 @@ impl<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryBuf<P>> CycleTypeS
     fn search_for_solution(
         &self,
         mutable: &mut CycleTypeSolverMutable<P, B>,
-        current_cost: u8,
+        sofar_cost: u8,
         cost_bound: u8,
     ) -> u8 {
         let last_puzzle_state = mutable.puzzle_state_history.last_state();
         let remaining_cost = self.pruning_table.permissible_heuristic(last_puzzle_state);
-        let goal_cost = current_cost + remaining_cost;
+        let goal_cost = sofar_cost + remaining_cost;
         if goal_cost > cost_bound {
             return goal_cost;
         }
@@ -63,7 +63,7 @@ impl<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryBuf<P>> CycleTypeS
                 .puzzle_state_history
                 .push_stack(&move_.puzzle_state, &self.puzzle_def);
             next_cost_bound = self
-                .search_for_solution(mutable, current_cost + 1, cost_bound)
+                .search_for_solution(mutable, sofar_cost + 1, cost_bound)
                 .min(next_cost_bound);
             mutable.puzzle_state_history.pop_stack();
         }
