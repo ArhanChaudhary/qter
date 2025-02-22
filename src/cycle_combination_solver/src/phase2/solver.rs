@@ -1,92 +1,88 @@
 use super::{
     pruning::PruningTable,
-    puzzle::{KSolveConversionError, Move, OrientedPartition, PuzzleDef, PuzzleState},
+    puzzle::{Move, MultiBvInterface, OrientedPartition, PuzzleDef, PuzzleState},
+    puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryBuf},
 };
 
-pub struct CycleTypeSolver<T: PruningTable, P: PuzzleState> {
+pub struct CycleTypeSolver<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryBuf<P>> {
     puzzle_def: PuzzleDef<P>,
-    cycle_type: Vec<OrientedPartition>,
+    sorted_cycle_type: Vec<OrientedPartition>,
     pruning_table: T,
+    _marker: std::marker::PhantomData<B>,
 }
 
-enum SearchResult {
-    Found,
-    NewBound(u8),
+struct CycleTypeSolverMutable<P: PuzzleState, B: PuzzleStateHistoryBuf<P>> {
+    puzzle_state_history: PuzzleStateHistory<P, B>,
+    multi_bv: <P as PuzzleState>::MultiBv,
+    solutions: Vec<Box<[Move<P>]>>,
 }
 
-impl<T: PruningTable, P: PuzzleState> CycleTypeSolver<T, P> {
+impl<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryBuf<P>> CycleTypeSolver<P, T, B> {
     pub fn new(
         puzzle_def: PuzzleDef<P>,
-        cycle_type: Vec<OrientedPartition>,
+        sorted_cycle_type: Vec<OrientedPartition>,
         pruning_table: T,
     ) -> Self {
         Self {
             puzzle_def,
-            cycle_type,
+            sorted_cycle_type,
             pruning_table,
+            _marker: std::marker::PhantomData,
         }
     }
 
-    // fn search_for_solution(
-    //     &self,
-    //     curr_path: &mut MoveSequence,
-    //     last_state: &CubeState,
-    //     g: u8,
-    //     bound: u8,
-    // ) -> SearchResult {
-    //     let last_h = self.pruning_tables.compute_h_value(last_state);
-    //     let f = g + last_h;
-    //     if f > bound {
-    //         SearchResult::NewBound(f)
-    //     } else if last_state.induces_cycle_type(&self.target_cycle_type, self.multi_bv.as_mut()) {
-    //         // yay it's solved!
-    //         SearchResult::Found
-    //     } else {
-    //         let mut min = u8::MAX;
-    //         let allowed_moves = curr_path.allowed_moves_after_seq();
-    //         for m in cube::ALL_MOVES
-    //             .iter()
-    //             .filter(|mo| ((1 << cube::get_basemove_pos(mo.basemove)) & allowed_moves) == 0)
-    //         {
-    //             if !curr_path.is_empty() {
-    //                 let last_move = curr_path[curr_path.len() - 1];
-    //                 if last_move.basemove == m.basemove {
-    //                     continue;
-    //                 }
-    //             }
-    //             curr_path.push(*m);
-    //             let next_state = last_state.apply_move_instance(m);
-    //             let t = self.search_for_solution(curr_path, &next_state, g + 1, bound);
-    //             match t {
-    //                 SearchResult::Found => return SearchResult::Found,
-    //                 SearchResult::NewBound(b) => {
-    //                     min = std::cmp::min(b, min);
-    //                 }
-    //             };
-    //             curr_path.pop();
-    //         }
-    //         SearchResult::NewBound(min)
-    //     }
-    // }
+    fn search_for_solution(
+        &self,
+        mutable: &mut CycleTypeSolverMutable<P, B>,
+        current_cost: u8,
+        cost_bound: u8,
+    ) -> u8 {
+        let last_puzzle_state = mutable.puzzle_state_history.last_state();
+        let remaining_cost = self.pruning_table.permissible_heuristic(last_puzzle_state);
+        let goal_cost = current_cost + remaining_cost;
+        if goal_cost > cost_bound {
+            return goal_cost;
+        }
+        if last_puzzle_state.induces_sorted_cycle_type(
+            &self.sorted_cycle_type,
+            mutable.multi_bv.reusable_ref(),
+            &self.puzzle_def.sorted_orbit_defs,
+        ) {
+            mutable
+                .solutions
+                .push(mutable.puzzle_state_history.move_sequence(&self.puzzle_def));
+        }
+        let mut next_cost_bound = u8::MAX;
+        // let allowed_moves = self.puzzle_state_history.allowed_moves_after_seq();
+        // for m in cube::ALL_MOVES
+        //     .iter()
+        //     .filter(|mo| ((1 << cube::get_basemove_pos(mo.basemove)) & allowed_moves) == 0)
+        // TODO: fetch cost_bound from recursive step and return early
+        for move_ in self.puzzle_def.moves.iter() {
+            mutable
+                .puzzle_state_history
+                .push_stack(&move_.puzzle_state, &self.puzzle_def);
+            next_cost_bound = self
+                .search_for_solution(mutable, current_cost + 1, cost_bound)
+                .min(next_cost_bound);
+            mutable.puzzle_state_history.pop_stack();
+        }
+        next_cost_bound
+    }
 
-    // // TODO: all solutions
-    // pub fn solve(&self) -> Result<Vec<Move<P>>, KSolveConversionError> {
-    //     let start_state = self.puzzle_def.solved_state()?;
-
-    //     // initial lower bound on number of moves needed to solve start state
-    //     let mut bound = self.pruning_tables.compute_h_value(&start_state);
-    //     let mut path: MoveSequence = MoveSequence::default();
-    //     loop {
-    //         println!("Searching depth {}...", bound);
-    //         match self.search_for_solution(&mut path, &start_state, 0, bound) {
-    //             SearchResult::Found => {
-    //                 break;
-    //             }
-    //             SearchResult::NewBound(t) => {
-    //                 bound = t;
-    //             }
-    //         }
-    //     }
-    //     path
-    // }
+    pub fn solve(&self) -> Vec<Box<[Move<P>]>> {
+        let mut mutable = CycleTypeSolverMutable {
+            puzzle_state_history: (&self.puzzle_def).into(),
+            multi_bv: P::default_multi_bv(&self.puzzle_def.sorted_orbit_defs),
+            solutions: vec![],
+        };
+        let mut cost_bound = self
+            .pruning_table
+            .permissible_heuristic(mutable.puzzle_state_history.last_state());
+        while mutable.solutions.is_empty() {
+            println!("Searching depth {}...", cost_bound);
+            cost_bound = self.search_for_solution(&mut mutable, 0, cost_bound);
+        }
+        mutable.solutions
+    }
 }

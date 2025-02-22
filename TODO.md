@@ -19,6 +19,7 @@
 - Look into fixing a corner for even cubes/other puzzles
 
 ## PuzzleGeometry
+
 - Get a permutation group out of a puzzle definition
 - Define the moves as permutations and orientations of pieces
 - Calculate orientations and parities of the puzzle

@@ -1,6 +1,11 @@
 // use cycle_combination_solver::phase2::puzzle::{PuzzleDef, PuzzleState, StackCube3};
 // use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
+use cycle_combination_solver::phase2::{
+    pruning::{ApproximatePruningTable, ZeroTable},
+    puzzle::{cube3::Cube3, Move},
+    solver::CycleTypeSolver,
+};
 // use cycle_combination_solver::phase2::{puzzle::induces_sorted_cycle_type_slice, solver::CycleTypeSolver};
 // use itertools::{repeat_n, Itertools};
 use puzzle_geometry::ksolve::KPUZZLE_3X3;
@@ -41,6 +46,18 @@ fn main() {
     //     BloomFilterTable::new(),
     // );
 
+    let solver: CycleTypeSolver<Cube3, _, [Cube3; 21]> = CycleTypeSolver::new(
+        (&*KPUZZLE_3X3).try_into().unwrap(),
+        vec![
+            vec![(3.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
+            vec![(2.try_into().unwrap(), true), (2.try_into().unwrap(), true)],
+        ],
+        ZeroTable,
+    );
+    let solutions = solver.solve();
+    for solution in solutions {
+        println!("{:?}", solution);
+    }
     // let mut depth = 0;
     // let cubies = 8;
     // let orientation_count = 3;

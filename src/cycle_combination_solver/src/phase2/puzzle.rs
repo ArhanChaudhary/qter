@@ -1,14 +1,12 @@
 use num_traits::PrimInt;
 use puzzle_geometry::ksolve::KSolve;
+use std::hash::{Hash, Hasher};
 use std::{fmt::Debug, num::NonZeroU8};
 use thiserror::Error;
 
 pub mod cube3;
 
-pub trait PuzzleState
-where
-    Self: Sized + Clone + PartialEq + Debug,
-{
+pub trait PuzzleState: Hash + Clone + PartialEq + Debug {
     type MultiBv: MultiBvInterface;
 
     /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
@@ -28,6 +26,8 @@ where
     ) -> Self;
     /// Compose two puzzle states in place
     fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: &[OrbitDef]);
+    /// Inverse of a puzzle state
+    fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]);
     /// The goal state for IDA* search
     fn induces_sorted_cycle_type(
         &self,
@@ -259,6 +259,12 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
     }
 }
 
+impl<const N: usize> Hash for StackPuzzle<N> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
 impl<const N: usize> PuzzleState for StackPuzzle<N> {
     type MultiBv = Box<[u8]>;
 
@@ -302,6 +308,10 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
         replace_compose_slice(&mut self.0, &a.0, &b.0, sorted_orbit_defs);
     }
 
+    fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]) {
+        replace_inverse_slice(&mut self.0, &a.0, sorted_orbit_defs);
+    }
+
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type: &[OrientedPartition],
@@ -309,6 +319,12 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
         sorted_orbit_defs: &[OrbitDef],
     ) -> bool {
         induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, multi_bv, sorted_orbit_defs)
+    }
+}
+
+impl Hash for HeapPuzzle {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
     }
 }
 
@@ -350,6 +366,10 @@ impl PuzzleState for HeapPuzzle {
 
     fn replace_compose(&mut self, a: &HeapPuzzle, b: &HeapPuzzle, sorted_orbit_defs: &[OrbitDef]) {
         replace_compose_slice(&mut self.0, &a.0, &b.0, sorted_orbit_defs);
+    }
+
+    fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]) {
+        replace_inverse_slice(&mut self.0, &a.0, sorted_orbit_defs);
     }
 
     fn induces_sorted_cycle_type(
@@ -442,6 +462,10 @@ fn replace_compose_slice(
         }
         base += piece_count * 2;
     }
+}
+
+fn replace_inverse_slice(orbit_states_mut: &mut [u8], a: &[u8], sorted_orbit_defs: &[OrbitDef]) {
+    todo!();
 }
 
 fn induces_sorted_cycle_type_slice(

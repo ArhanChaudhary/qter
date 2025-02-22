@@ -1,5 +1,6 @@
 use super::{KSolveConversionError, OrientedPartition, PuzzleState};
 use crate::phase2::puzzle::OrbitDef;
+use std::hash::{Hash, Hasher};
 use std::{
     simd::{u8x16, u8x32, u8x8},
     sync::LazyLock,
@@ -55,6 +56,17 @@ impl PartialEq for Cube3 {
 }
 
 #[cfg(any(simd32, simd8and16))]
+impl Hash for Cube3 {
+    #[cfg(not(simd32))]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.ep[..12].hash(state);
+        self.eo[..12].hash(state);
+        self.cp.hash(state);
+        self.co.hash(state);
+    }
+}
+
+#[cfg(any(simd32, simd8and16))]
 impl PuzzleState for Cube3 {
     type MultiBv = [u16; 2];
 
@@ -103,17 +115,24 @@ impl PuzzleState for Cube3 {
 
     #[cfg(not(simd32))]
     fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: &[OrbitDef]) {
+        // Benching from a 2020 Mac M1 has shown that swizzling twice is
+        // marginally faster than taking the modulus
         const EO_MOD_SWIZZLE: u8x16 =
             u8x16::from_array([0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
         const CO_MOD_SWIZZLE: u8x8 = u8x8::from_array([0, 1, 2, 0, 1, 2, 0, 0]);
-        // TODO: it is unclear for now if it will later be more efficient or
-        // not to combine orientation/permutation into a single simd vector
+        // const TWOS: u8x16 = u8x16::from_array([2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1]);
+        // const THREES: u8x8 = u8x8::from_array([3, 3, 3, 3, 3, 3, 3, 3]);
         self.ep = a.ep.swizzle_dyn(b.ep);
         self.eo = EO_MOD_SWIZZLE.swizzle_dyn(a.eo.swizzle_dyn(b.ep) + b.eo);
         // self.eo = (a.eo.swizzle_dyn(b.ep) + b.eo) % TWOS;
         self.cp = a.cp.swizzle_dyn(b.cp);
         self.co = CO_MOD_SWIZZLE.swizzle_dyn(a.co.swizzle_dyn(b.cp) + b.co);
         // self.co = (a.co.swizzle_dyn(b.cp) + b.co) % THREES;
+    }
+
+    #[cfg(not(simd32))]
+    fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]) {
+        todo!();
     }
 
     #[cfg(not(simd32))]
@@ -228,6 +247,11 @@ impl PuzzleState for Cube3 {
 
     #[cfg(simd32)]
     fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: &[OrbitDef]) {
+        todo!();
+    }
+
+    #[cfg(simd32)]
+    fn replace_inverse(&mut self, a: &Self, _sorted_orbit_defs: &[OrbitDef]) {
         todo!();
     }
 
