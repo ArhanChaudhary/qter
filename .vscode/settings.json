@@ -8,5 +8,8 @@
     "MD025": false,
     "MD033": false,
     "MD041": false
+  },
+  "rust-analyzer.server.extraEnv": {
+    "RUSTFLAGS": "-Ctarget-cpu=native"
   }
 }
