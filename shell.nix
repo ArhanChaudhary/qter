@@ -5,8 +5,8 @@
 let
   rust_overlay = import (
     builtins.fetchTarball {
-      url = "https://github.com/oxalica/rust-overlay/archive/83284068670d5ae4a43641c4afb150f3446be70d.tar.gz";
-      sha256 = "sha256:0z5cym494khqy3pxfwfq89nb2981v8q8wb4kxn04i6qj34gjp8ab";
+      url = "https://github.com/oxalica/rust-overlay/archive/74a3fb71b0cc67376ab9e7c31abcd68c813fc226.tar.gz";
+      sha256 = "sha256:1y308q8yxz8nkdw2gh626ay8am8c5w4jn0kfc37wiiqza0xp392s";
     }
   );
   pkgs = import <nixpkgs> { overlays = [ rust_overlay ]; };
