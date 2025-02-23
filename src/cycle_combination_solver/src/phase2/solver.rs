@@ -52,22 +52,25 @@ impl<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryBuf<P>> CycleTypeS
                 .solutions
                 .push(mutable.puzzle_state_history.move_sequence(&self.puzzle_def));
         }
-        let mut next_cost_bound = u8::MAX;
+        let mut next_goal_cost = u8::MAX;
         // let allowed_moves = self.puzzle_state_history.allowed_moves_after_seq();
         // for m in cube::ALL_MOVES
         //     .iter()
         //     .filter(|mo| ((1 << cube::get_basemove_pos(mo.basemove)) & allowed_moves) == 0)
-        // TODO: fetch cost_bound from recursive step and return early
         for move_ in self.puzzle_def.moves.iter() {
             mutable
                 .puzzle_state_history
                 .push_stack(&move_.puzzle_state, &self.puzzle_def);
-            next_cost_bound = self
+            next_goal_cost = self
                 .search_for_solution(mutable, sofar_cost + 1, cost_bound)
-                .min(next_cost_bound);
+                .min(next_goal_cost);
             mutable.puzzle_state_history.pop_stack();
+            // TODO: is this right
+            if next_goal_cost - 1 > cost_bound {
+                return next_goal_cost - 1;
+            }
         }
-        next_cost_bound
+        next_goal_cost
     }
 
     pub fn solve(&self) -> Vec<Box<[Move<P>]>> {
