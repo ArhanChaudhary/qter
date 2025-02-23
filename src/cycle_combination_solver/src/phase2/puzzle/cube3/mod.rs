@@ -20,11 +20,11 @@ mod common {
     });
 }
 
-mod simd32cube3;
-mod simd816cube3;
+mod simd32;
+mod simd8and16;
 
 #[cfg(all(not(simd32), simd8and16))]
-pub use simd816cube3::Cube3;
+pub use simd8and16::Cube3;
 
 #[cfg(simd32)]
-pub use simd32cube3::Cube3;
+pub use simd32::Cube3;

@@ -29,6 +29,15 @@ impl Hash for Cube3 {
     }
 }
 
+// TODO: probably not a big deal, but the armv7 target in swizzle_dyn swizzles
+// high bits as well as low bits and this will be a tiny bit slower than
+// otherwise. May be worth special casing?
+
+const EO_MOD_SWIZZLE: u8x16 = u8x16::from_array([0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+const CO_MOD_SWIZZLE: u8x8 = u8x8::from_array([0, 1, 2, 0, 1, 2, 0, 0]);
+const TWOS: u8x16 = u8x16::from_array([2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]);
+const THREES: u8x8 = u8x8::from_array([3, 3, 3, 3, 3, 3, 3, 3]);
+
 impl PuzzleState for Cube3 {
     type MultiBv = [u16; 2];
 
@@ -76,12 +85,7 @@ impl PuzzleState for Cube3 {
 
     fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: &[OrbitDef]) {
         // Benching from a 2020 Mac M1 has shown that swizzling twice is
-        // marginally faster than taking the modulus
-        const EO_MOD_SWIZZLE: u8x16 =
-            u8x16::from_array([0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-        const CO_MOD_SWIZZLE: u8x8 = u8x8::from_array([0, 1, 2, 0, 1, 2, 0, 0]);
-        // const TWOS: u8x16 = u8x16::from_array([2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1]);
-        // const THREES: u8x8 = u8x8::from_array([3, 3, 3, 3, 3, 3, 3, 3]);
+        // faster than taking the modulus (3.07ns vs 5.94ns)
         self.ep = a.ep.swizzle_dyn(b.ep);
         self.eo = EO_MOD_SWIZZLE.swizzle_dyn(a.eo.swizzle_dyn(b.ep) + b.eo);
         // self.eo = (a.eo.swizzle_dyn(b.ep) + b.eo) % TWOS;
@@ -90,8 +94,128 @@ impl PuzzleState for Cube3 {
         // self.co = (a.co.swizzle_dyn(b.cp) + b.co) % THREES;
     }
 
-    fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]) {
-        todo!();
+    fn replace_inverse(&mut self, a: &Self, _sorted_orbit_defs: &[OrbitDef]) {
+        let mut ep_inverse;
+        let mut cp_inverse;
+
+        // Three ways to inverse permutation, benched on a 2020 Mac M1. These
+        // results are probably not the case on all platforms, experimentation
+        // is encouraged.
+
+        // #[cfg(any())]
+        // 6.36ns
+        {
+            // Permutation inversion taken from Andrew Skalski's vcube[1]. The
+            // addition sequence was generated using [2].
+            // [1] https://github.com/Voltara/vcube
+            // [2] http://wwwhomes.uni-bielefeld.de/achim/addition_chain.html
+            //
+            // Note that there does not seem to be any speed difference when these
+            // instructions are reordered (codegen puts all u8x8 and u8x16 swizzles
+            // together).
+            let mut pow_3_ep = a.ep.swizzle_dyn(a.ep);
+            pow_3_ep = pow_3_ep.swizzle_dyn(a.ep);
+            ep_inverse = pow_3_ep.swizzle_dyn(pow_3_ep);
+            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            ep_inverse = ep_inverse.swizzle_dyn(pow_3_ep);
+            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            ep_inverse = ep_inverse.swizzle_dyn(a.ep);
+            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            ep_inverse = ep_inverse.swizzle_dyn(pow_3_ep);
+            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            ep_inverse = ep_inverse.swizzle_dyn(a.ep);
+
+            let mut pow_3_cp = a.cp.swizzle_dyn(a.cp);
+            pow_3_cp = pow_3_cp.swizzle_dyn(a.cp);
+            cp_inverse = pow_3_cp.swizzle_dyn(pow_3_cp);
+            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            cp_inverse = cp_inverse.swizzle_dyn(pow_3_cp);
+            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            cp_inverse = cp_inverse.swizzle_dyn(a.cp);
+            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            cp_inverse = cp_inverse.swizzle_dyn(pow_3_cp);
+            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            cp_inverse = cp_inverse.swizzle_dyn(a.cp);
+        }
+        #[cfg(any())]
+        // 9.68ns
+        {
+            ep_inverse = Simd::splat(0);
+            cp_inverse = Simd::splat(0);
+            // Brute force the inverse by checking all possible values and
+            // using a mask to check when equal to identity (also inspired by
+            // Andrew Skalski's vcube).
+            for i in 0..12 {
+                let ep_trial = Simd::from_array([i as u8; 16]);
+                const EP_IDENTITY: u8x16 =
+                    u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 0, 0, 0]);
+                let ep_correct: Simd<u8, 16> =
+                    a.ep.swizzle_dyn(ep_trial)
+                        .simd_eq(EP_IDENTITY)
+                        .to_int()
+                        .cast();
+                ep_inverse |= ep_trial & ep_correct;
+
+                if i < 8 {
+                    let cp_trial = Simd::from_array([i as u8; 8]);
+                    const CP_IDENTITY: u8x8 = u8x8::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
+                    let cp_correct: Simd<u8, 8> =
+                        a.cp.swizzle_dyn(cp_trial)
+                            .simd_eq(CP_IDENTITY)
+                            .to_int()
+                            .cast();
+                    cp_inverse |= cp_trial & cp_correct;
+                }
+            }
+        }
+        #[cfg(any())]
+        // 11.7ns
+        {
+            // Sanity check that SIMD is actually faster, This is ~100% slower
+            // than the above brute force method on a 2020 Mac M1.
+            for i in 0..12 {
+                // SAFETY: ep is length 12, so i is always in bounds
+                unsafe {
+                    *self.ep.as_mut_array().get_unchecked_mut(a.ep[i] as usize) = i as u8;
+                }
+                if i < 8 {
+                    // SAFETY: cp is length 8, so i is always in bounds
+                    unsafe {
+                        *self.cp.as_mut_array().get_unchecked_mut(a.cp[i] as usize) = i as u8;
+                    }
+                }
+            }
+            ep_inverse = self.ep;
+            cp_inverse = self.cp;
+        }
+
+        let eo_inverse = EO_MOD_SWIZZLE
+            .swizzle_dyn(TWOS - a.eo)
+            .swizzle_dyn(ep_inverse);
+        let co_inverse = CO_MOD_SWIZZLE
+            .swizzle_dyn(THREES - a.co)
+            .swizzle_dyn(cp_inverse);
+
+        self.ep = ep_inverse;
+        self.eo = eo_inverse;
+        self.cp = cp_inverse;
+        self.co = co_inverse;
     }
 
     fn induces_sorted_cycle_type(

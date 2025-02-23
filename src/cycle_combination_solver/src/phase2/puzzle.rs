@@ -728,6 +728,68 @@ mod tests {
         expanded_move::<cube3::Cube3>();
     }
 
+    fn inversion<P: PuzzleState>() {
+        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let solved = cube3_def.solved_state();
+        let mut result = cube3_def.solved_state();
+
+        let state_r2_b_prime = apply_moves(&cube3_def, &solved, "R2 B'", 1);
+        result.replace_inverse(&state_r2_b_prime, &cube3_def.sorted_orbit_defs);
+
+        let state_b_r2 = apply_moves(&cube3_def, &solved, "B R2", 1);
+        assert_eq!(result, state_b_r2);
+
+        let in_r_f_cycle = apply_moves(&cube3_def, &solved, "R F", 40);
+        result.replace_inverse(&in_r_f_cycle, &cube3_def.sorted_orbit_defs);
+
+        let remaining_r_f_cycle = apply_moves(&cube3_def, &solved, "R F", 65);
+        assert_eq!(result, remaining_r_f_cycle);
+
+        for i in 1..=5 {
+            let state = apply_moves(&cube3_def, &solved, "L F L' F'", i);
+            result.replace_inverse(&state, &cube3_def.sorted_orbit_defs);
+            let remaining_state = apply_moves(&cube3_def, &solved, "L F L' F'", 6 - i);
+            assert_eq!(result, remaining_state);
+        }
+    }
+
+    #[test]
+    fn test_inversion() {
+        inversion::<StackCube3>();
+        inversion::<HeapPuzzle>();
+        inversion::<cube3::Cube3>();
+    }
+
+    fn random_inversion<P: PuzzleState>() {
+        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let solved = cube3_def.solved_state();
+
+        for _ in 0..100 {
+            let mut prev_result = cube3_def.solved_state();
+            let mut result = cube3_def.solved_state();
+            for _ in 0..20 {
+                let move_index = fastrand::choice(0_u8..18).unwrap();
+                let move_ = &cube3_def.moves[move_index as usize];
+                prev_result.replace_compose(
+                    &result,
+                    &move_.puzzle_state,
+                    &cube3_def.sorted_orbit_defs,
+                );
+                std::mem::swap(&mut result, &mut prev_result);
+            }
+            prev_result.replace_inverse(&result, &cube3_def.sorted_orbit_defs);
+            result.replace_compose(&prev_result, &result.clone(), &cube3_def.sorted_orbit_defs);
+            assert_eq!(result, solved);
+        }
+    }
+
+    #[test]
+    fn test_random_inversion() {
+        random_inversion::<StackCube3>();
+        random_inversion::<HeapPuzzle>();
+        random_inversion::<cube3::Cube3>();
+    }
+
     fn induces_sorted_cycle_type_within_cycle<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.solved_state();
@@ -1021,6 +1083,17 @@ mod tests {
         });
     }
 
+    fn bench_inverse_puzzle_helper<P: PuzzleState>(b: &mut Bencher) {
+        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let solved = cube3_def.solved_state();
+        let mut result = solved.clone();
+        let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 100);
+        b.iter(|| {
+            test::black_box(&mut result)
+                .replace_inverse(test::black_box(&order_1260), &cube3_def.sorted_orbit_defs);
+        });
+    }
+
     fn bench_compose_puzzle_helper<P: PuzzleState>(b: &mut Bencher) {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let mut solved = cube3_def.solved_state();
@@ -1048,6 +1121,21 @@ mod tests {
     #[bench]
     fn bench_compose_cube3(b: &mut Bencher) {
         bench_compose_puzzle_helper::<cube3::Cube3>(b);
+    }
+
+    #[bench]
+    fn bench_inverse_stack(b: &mut Bencher) {
+        bench_inverse_puzzle_helper::<StackCube3>(b);
+    }
+
+    #[bench]
+    fn bench_inverse_heap(b: &mut Bencher) {
+        bench_inverse_puzzle_helper::<HeapPuzzle>(b);
+    }
+
+    #[bench]
+    fn bench_inverse_cube3(b: &mut Bencher) {
+        bench_inverse_puzzle_helper::<cube3::Cube3>(b);
     }
 
     #[bench]

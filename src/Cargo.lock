@@ -312,6 +312,7 @@ name = "cycle_combination_solver"
 version = "0.1.0"
 dependencies = [
  "cfg_aliases",
+ "fastrand",
  "fxhash",
  "integer-partitions",
  "memoize",
@@ -376,6 +377,12 @@ dependencies = [
  "indenter",
  "once_cell",
 ]
+
+[[package]]
+name = "fastrand"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
 name = "foldhash"
