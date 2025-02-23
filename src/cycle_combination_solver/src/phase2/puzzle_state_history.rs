@@ -38,10 +38,11 @@ impl<P: PuzzleState, B: PuzzleStateHistoryBuf<P>> PuzzleStateHistory<P, B> {
     }
 
     pub fn last_state(&self) -> &P {
+        // TODO: make more stuff unsafe because i am evil
         &self.stack[self.stack_index]
     }
 
-    pub fn move_sequence(&self, puzzle_def: &PuzzleDef<P>) -> Box<[Move<P>]> {
+    pub fn derive_move_sequence(&self, puzzle_def: &PuzzleDef<P>) -> Box<[Move<P>]> {
         let mut move_sequence = Vec::with_capacity(self.stack_index);
         let mut result = puzzle_def.solved_state();
         let mut result2 = puzzle_def.solved_state();
@@ -49,11 +50,7 @@ impl<P: PuzzleState, B: PuzzleStateHistoryBuf<P>> PuzzleStateHistory<P, B> {
             let prev_state = &self.stack[i - 1];
             let curr_state = &self.stack[i];
             result2.replace_inverse(prev_state, &puzzle_def.sorted_orbit_defs);
-            result.replace_compose(
-                &result2,
-                curr_state,
-                &puzzle_def.sorted_orbit_defs,
-            );
+            result.replace_compose(&result2, curr_state, &puzzle_def.sorted_orbit_defs);
             move_sequence.push(
                 puzzle_def
                     .moves
