@@ -1,7 +1,9 @@
 #[cfg(not(any(simd32, simd8and16)))]
+use super::StackPuzzle;
+
+#[cfg(not(any(simd32, simd8and16)))]
 pub type Cube3 = StackPuzzle<40>;
 
-#[cfg(any(simd32, simd8and16))]
 mod common {
     use crate::phase2::puzzle::OrbitDef;
     use std::sync::LazyLock;
