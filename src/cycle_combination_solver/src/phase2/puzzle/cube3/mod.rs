@@ -1,8 +1,5 @@
 #[cfg(not(any(simd32, simd8and16)))]
-use super::StackPuzzle;
-
-#[cfg(not(any(simd32, simd8and16)))]
-pub type Cube3 = StackPuzzle<40>;
+pub type Cube3 = super::StackPuzzle<40>;
 
 mod common {
     use crate::phase2::puzzle::OrbitDef;
@@ -25,8 +22,8 @@ mod common {
 mod simd32;
 mod simd8and16;
 
-#[cfg(all(not(simd32), simd8and16))]
-pub use simd8and16::Cube3;
-
 #[cfg(simd32)]
 pub use simd32::Cube3;
+
+#[cfg(all(not(simd32), simd8and16))]
+pub use simd8and16::Cube3;

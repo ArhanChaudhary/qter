@@ -38,10 +38,10 @@ impl<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryBuf<P>> CycleTypeS
         cost_bound: u8,
     ) -> u8 {
         let last_puzzle_state = mutable.puzzle_state_history.last_state();
-        let remaining_cost = self.pruning_table.permissible_heuristic(last_puzzle_state);
-        let goal_cost = sofar_cost + remaining_cost;
-        if goal_cost > cost_bound {
-            return goal_cost;
+        let mut est_remaining_cost = self.pruning_table.permissible_heuristic(last_puzzle_state);
+        let est_goal_cost = sofar_cost + est_remaining_cost;
+        if est_goal_cost > cost_bound {
+            return est_goal_cost;
         }
         if last_puzzle_state.induces_sorted_cycle_type(
             &self.sorted_cycle_type,
@@ -52,7 +52,7 @@ impl<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryBuf<P>> CycleTypeS
                 .solutions
                 .push(mutable.puzzle_state_history.move_sequence(&self.puzzle_def));
         }
-        let mut next_goal_cost = u8::MAX;
+        let mut next_est_goal_cost = u8::MAX;
         // let allowed_moves = self.puzzle_state_history.allowed_moves_after_seq();
         // for m in cube::ALL_MOVES
         //     .iter()
@@ -61,16 +61,19 @@ impl<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryBuf<P>> CycleTypeS
             mutable
                 .puzzle_state_history
                 .push_stack(&move_.puzzle_state, &self.puzzle_def);
-            next_goal_cost = self
+            next_est_goal_cost = self
                 .search_for_solution(mutable, sofar_cost + 1, cost_bound)
-                .min(next_goal_cost);
+                .min(next_est_goal_cost);
             mutable.puzzle_state_history.pop_stack();
             // TODO: is this right
-            if next_goal_cost - 1 > cost_bound {
-                return next_goal_cost - 1;
+            if next_est_goal_cost - 1 > est_remaining_cost {
+                est_remaining_cost = next_est_goal_cost - 1;
+                if sofar_cost + est_remaining_cost > cost_bound {
+                    return est_remaining_cost;
+                }
             }
         }
-        next_goal_cost
+        next_est_goal_cost
     }
 
     pub fn solve(&self) -> Vec<Box<[Move<P>]>> {

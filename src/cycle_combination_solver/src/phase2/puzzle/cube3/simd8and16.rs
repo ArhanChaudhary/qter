@@ -189,7 +189,7 @@ impl PuzzleState for Cube3 {
         #[cfg(any())]
         // 11.7ns
         {
-            // Sanity check that SIMD is actually faster.r
+            // Sanity check that SIMD is actually faster.
 
             for i in 0..12 {
                 // SAFETY: ep is length 12, so i is always in bounds
