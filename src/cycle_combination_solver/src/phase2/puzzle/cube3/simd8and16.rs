@@ -187,8 +187,8 @@ impl PuzzleState for Cube3 {
         #[cfg(any())]
         // 11.7ns
         {
-            // Sanity check that SIMD is actually faster, This is ~100% slower
-            // than the above brute force method on a 2020 Mac M1.
+            // Sanity check that SIMD is actually faster.r
+
             for i in 0..12 {
                 // SAFETY: ep is length 12, so i is always in bounds
                 unsafe {
