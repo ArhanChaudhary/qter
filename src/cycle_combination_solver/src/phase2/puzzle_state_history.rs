@@ -1,33 +1,38 @@
 use super::puzzle::{cube3::Cube3, Move, PuzzleDef, PuzzleState};
 use std::ops::Index;
 
-pub trait ValidPuzzleStateHistoryBuf<P: PuzzleState> {}
+pub trait PuzzleStateHistoryInterface<P: PuzzleState> {
+    // Not the cleanest way of doing this but whatever
+    type Buf: PuzzleStateHistoryBuf<P> + Index<usize, Output = (P, usize)>;
+}
 
-pub trait PuzzleStateHistoryBuf<P: PuzzleState>: Index<usize, Output = (P, usize)> {
+pub trait PuzzleStateHistoryBuf<P: PuzzleState> {
     fn initialize(puzzle_def: &PuzzleDef<P>) -> Self;
     fn push_stack(&mut self, stack_index: usize, move_index: usize, puzzle_def: &PuzzleDef<P>);
 }
 
-pub struct PuzzleStateHistory<P: PuzzleState, B: PuzzleStateHistoryBuf<P>> {
-    stack: B,
+pub struct PuzzleStateHistory<P: PuzzleState, B: PuzzleStateHistoryInterface<P>> {
+    stack: B::Buf,
     stack_index: usize,
     _marker: std::marker::PhantomData<P>,
 }
 
-impl<P: PuzzleState, B: PuzzleStateHistoryBuf<P>> From<&PuzzleDef<P>> for PuzzleStateHistory<P, B> {
+impl<P: PuzzleState, B: PuzzleStateHistoryInterface<P>> From<&PuzzleDef<P>>
+    for PuzzleStateHistory<P, B>
+{
     fn from(puzzle_def: &PuzzleDef<P>) -> Self {
         Self {
-            stack: B::initialize(puzzle_def),
+            stack: B::Buf::initialize(puzzle_def),
             stack_index: 0,
             _marker: std::marker::PhantomData,
         }
     }
 }
 
-impl<P: PuzzleState, B: PuzzleStateHistoryBuf<P>> PuzzleStateHistory<P, B> {
+impl<P: PuzzleState, B: PuzzleStateHistoryInterface<P>> PuzzleStateHistory<P, B> {
     pub fn push_stack(&mut self, move_index: usize, puzzle_def: &PuzzleDef<P>) {
-        self.stack
-            .push_stack(self.stack_index, move_index, puzzle_def);
+        // B::push_stack(&mut self.stack, self.stack_index, move_index, puzzle_def);
+        self.stack.push_stack(self.stack_index, move_index, puzzle_def);
         self.stack_index += 1;
     }
 
@@ -49,9 +54,12 @@ impl<P: PuzzleState, B: PuzzleStateHistoryBuf<P>> PuzzleStateHistory<P, B> {
     }
 }
 
-// TODO: change this to Vec<P>
+impl<P: PuzzleState> PuzzleStateHistoryInterface<P> for Vec<P> {
+    type Buf = Vec<(P, usize)>;
+}
+
 impl<P: PuzzleState> PuzzleStateHistoryBuf<P> for Vec<(P, usize)> {
-    fn initialize(puzzle_def: &PuzzleDef<P>) -> Self {
+    fn initialize(puzzle_def: &PuzzleDef<P>) -> Vec<(P, usize)> {
         vec![(puzzle_def.solved_state(), usize::MAX)]
     }
 
@@ -87,11 +95,20 @@ impl<P: PuzzleState> PuzzleStateHistoryBuf<P> for Vec<(P, usize)> {
     }
 }
 
+pub trait ValidPuzzleStateHistoryBuf<P: PuzzleState> {}
+
 impl ValidPuzzleStateHistoryBuf<Cube3> for [Cube3; 21] {}
+
+impl<const N: usize, P: PuzzleState> PuzzleStateHistoryInterface<P> for [P; N]
+where
+    [P; N]: ValidPuzzleStateHistoryBuf<P>,
+{
+    type Buf = [(P, usize); N];
+}
 
 impl<const N: usize, P: PuzzleState> PuzzleStateHistoryBuf<P> for [(P, usize); N]
 where
-    [P; N]: ValidPuzzleStateHistoryBuf<P>,
+    [P; N]: PuzzleStateHistoryInterface<P>,
 {
     fn initialize(puzzle_def: &PuzzleDef<P>) -> Self {
         core::array::from_fn(|_| (puzzle_def.solved_state(), usize::MAX))
@@ -129,7 +146,7 @@ mod tests {
             .unwrap()
     }
 
-    fn puzzle_state_history_composition<B: PuzzleStateHistoryBuf<Cube3>>() {
+    fn puzzle_state_history_composition<B: PuzzleStateHistoryInterface<Cube3>>() {
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let r_move = cube3_def.find_move("R").unwrap();
         let r_move_index = move_index(&cube3_def, r_move);
@@ -147,11 +164,11 @@ mod tests {
 
     #[test]
     fn test_puzzle_state_history_composition() {
-        puzzle_state_history_composition::<Vec<(Cube3, usize)>>();
-        puzzle_state_history_composition::<[(Cube3, usize); 21]>();
+        puzzle_state_history_composition::<Vec<Cube3>>();
+        puzzle_state_history_composition::<[Cube3; 21]>();
     }
 
-    fn puzzle_state_history_pop<B: PuzzleStateHistoryBuf<Cube3>>() {
+    fn puzzle_state_history_pop<B: PuzzleStateHistoryInterface<Cube3>>() {
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.solved_state();
         let r_move = cube3_def.find_move("R").unwrap();
@@ -205,7 +222,7 @@ mod tests {
 
     #[test]
     fn test_puzzle_state_history_pop() {
-        puzzle_state_history_pop::<Vec<(Cube3, usize)>>();
-        puzzle_state_history_pop::<[(Cube3, usize); 21]>();
+        puzzle_state_history_pop::<Vec<Cube3>>();
+        puzzle_state_history_pop::<[Cube3; 21]>();
     }
 }

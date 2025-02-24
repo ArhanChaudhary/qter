@@ -1,23 +1,25 @@
 use super::{
     pruning::PruningTable,
     puzzle::{Move, MultiBvInterface, OrientedPartition, PuzzleDef, PuzzleState},
-    puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryBuf},
+    puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryInterface},
 };
 
-pub struct CycleTypeSolver<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryBuf<P>> {
+pub struct CycleTypeSolver<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryInterface<P>> {
     puzzle_def: PuzzleDef<P>,
     sorted_cycle_type: Vec<OrientedPartition>,
     pruning_table: T,
     _marker: std::marker::PhantomData<B>,
 }
 
-struct CycleTypeSolverMutable<P: PuzzleState, B: PuzzleStateHistoryBuf<P>> {
+struct CycleTypeSolverMutable<P: PuzzleState, B: PuzzleStateHistoryInterface<P>> {
     puzzle_state_history: PuzzleStateHistory<P, B>,
     multi_bv: <P as PuzzleState>::MultiBv,
     solutions: Vec<Box<[Move<P>]>>,
 }
 
-impl<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryBuf<P>> CycleTypeSolver<P, T, B> {
+impl<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryInterface<P>>
+    CycleTypeSolver<P, T, B>
+{
     pub fn new(
         puzzle_def: PuzzleDef<P>,
         sorted_cycle_type: Vec<OrientedPartition>,
@@ -101,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_identity_cycle_type() {
-        let solver: CycleTypeSolver<Cube3, _, [(Cube3, usize); 21]> = CycleTypeSolver::new(
+        let solver: CycleTypeSolver<Cube3, _, [Cube3; 21]> = CycleTypeSolver::new(
             (&*KPUZZLE_3X3).try_into().unwrap(),
             vec![vec![], vec![]],
             ZeroTable,
@@ -113,7 +115,7 @@ mod tests {
 
     #[test]
     fn test_single_quarter_turn() {
-        let solver: CycleTypeSolver<Cube3, _, [(Cube3, usize); 21]> = CycleTypeSolver::new(
+        let solver: CycleTypeSolver<Cube3, _, [Cube3; 21]> = CycleTypeSolver::new(
             (&*KPUZZLE_3X3).try_into().unwrap(),
             vec![
                 vec![(4.try_into().unwrap(), false)],
@@ -128,7 +130,7 @@ mod tests {
 
     #[test]
     fn test_single_half_turn() {
-        let solver: CycleTypeSolver<Cube3, _, [(Cube3, usize); 21]> = CycleTypeSolver::new(
+        let solver: CycleTypeSolver<Cube3, _, [Cube3; 21]> = CycleTypeSolver::new(
             (&*KPUZZLE_3X3).try_into().unwrap(),
             vec![
                 vec![
@@ -149,7 +151,7 @@ mod tests {
 
     #[test]
     fn test_210_order() {
-        let solver: CycleTypeSolver<Cube3, _, [(Cube3, usize); 21]> = CycleTypeSolver::new(
+        let solver: CycleTypeSolver<Cube3, _, [Cube3; 21]> = CycleTypeSolver::new(
             (&*KPUZZLE_3X3).try_into().unwrap(),
             vec![
                 vec![(1.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
