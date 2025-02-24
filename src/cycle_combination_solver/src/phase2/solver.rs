@@ -60,9 +60,9 @@ impl<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryInterface<P>>
         }
 
         let mut min_next_est_goal_cost = u8::MAX;
+        // FIXME: this doesn't cover every symmetric sequence
         let mut next_move_index = move_index + 1;
         let start = mutable.puzzle_state_history.get_move(move_index);
-        // for move_ in self.puzzle_def.moves.iter() {
         for move_index in start..self.puzzle_def.moves.len() {
             // if not a canonical sequence continue and set next_move_index to 0
             mutable
@@ -174,7 +174,7 @@ mod tests {
         //     }
         //     println!();
         // }
-        assert_eq!(solutions.len(), 480);
+        assert_eq!(solutions.len(), 440);
         assert!(solutions.iter().all(|solution| solution.len() == 5));
     }
 }

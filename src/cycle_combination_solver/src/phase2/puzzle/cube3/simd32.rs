@@ -95,3 +95,79 @@ impl PuzzleState for Cube3 {
 //     co: u8x8,
 //     s_24s: [u8x32],
 // }
+
+#[cfg(test)]
+mod tests {
+    extern crate test;
+    use super::*;
+    use crate::phase2::puzzle::tests::*;
+    use test::Bencher;
+
+    #[test]
+    fn test_validate_sorted_orbit_defs() {
+        let res = Cube3::validate_sorted_orbit_defs(&CUBE_3_SORTED_ORBIT_DEFS);
+        assert!(res.is_ok());
+        // TODO: test that it fails with the wrong orbit defs when we have
+        // another ksolve
+    }
+
+    #[test]
+    #[cfg_attr(not(simd32), ignore)]
+    fn test_many_compositions() {
+        many_compositions::<Cube3>();
+    }
+
+    #[test]
+    #[cfg_attr(not(simd32), ignore)]
+    fn test_s_u4_symmetry() {
+        s_u4_symmetry::<Cube3>();
+    }
+
+    #[test]
+    #[cfg_attr(not(simd32), ignore)]
+    fn test_expanded_move() {
+        expanded_move::<Cube3>();
+    }
+
+    #[test]
+    #[cfg_attr(not(simd32), ignore)]
+    fn test_inversion() {
+        inversion::<Cube3>();
+    }
+
+    #[test]
+    #[cfg_attr(not(simd32), ignore)]
+    fn test_random_inversion() {
+        random_inversion::<Cube3>();
+    }
+
+    #[test]
+    #[cfg_attr(not(simd32), ignore)]
+    fn test_induces_sorted_cycle_type_within_cycle() {
+        induces_sorted_cycle_type_within_cycle::<Cube3>();
+    }
+
+    #[test]
+    #[cfg_attr(not(simd32), ignore)]
+    fn test_induces_sorted_cycle_type_many() {
+        induces_sorted_cycle_type_many::<Cube3>();
+    }
+
+    #[bench]
+    #[cfg_attr(not(simd32), ignore)]
+    fn bench_compose(b: &mut Bencher) {
+        bench_compose_puzzle_helper::<Cube3>(b);
+    }
+
+    #[bench]
+    #[cfg_attr(not(simd32), ignore)]
+    fn bench_inverse(b: &mut Bencher) {
+        bench_inverse_puzzle_helper::<Cube3>(b);
+    }
+
+    #[bench]
+    #[cfg_attr(not(simd32), ignore)]
+    fn bench_induces_sorted_cycle_type(b: &mut Bencher) {
+        bench_induces_sorted_cycle_type_helper::<Cube3>(b);
+    }
+}

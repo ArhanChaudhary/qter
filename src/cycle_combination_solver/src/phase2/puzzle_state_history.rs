@@ -69,7 +69,6 @@ impl<P: PuzzleState> PuzzleStateHistoryBuf<P> for Vec<(P, usize)> {
     }
 
     fn push_stack(&mut self, stack_index: usize, move_index: usize, puzzle_def: &PuzzleDef<P>) {
-        // TODO: unsafe at the end
         let puzzle_state = &puzzle_def.moves[move_index].puzzle_state;
         // TODO: move this to the main IDDFS loop!
         if stack_index + 1 >= self.len() {
@@ -116,7 +115,9 @@ where
     [P; N]: PuzzleStateHistoryInterface<P>,
 {
     fn initialize(puzzle_def: &PuzzleDef<P>) -> Self {
-        core::array::from_fn(|_| (puzzle_def.solved_state(), 0))
+        let mut ret = core::array::from_fn(|_| (puzzle_def.solved_state(), usize::MAX));
+        ret[0].1 = 0;
+        ret
     }
 
     fn push_stack(&mut self, stack_index: usize, move_index: usize, puzzle_def: &PuzzleDef<P>) {

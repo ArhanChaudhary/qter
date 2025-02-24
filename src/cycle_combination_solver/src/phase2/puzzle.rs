@@ -633,17 +633,6 @@ mod tests {
         result
     }
 
-    // TODO: add this test when puzzle geometry is able to generate KSolve
-    // puzzles with set sizes larger than 255
-    // #[test]
-    // fn test_set_size_too_big() {
-    //     let cube3_def =
-    //     assert!(matches!(
-    //         cube3_def,
-    //         Err(KSolveConversionError::SetSizeTooBig)
-    //     ));
-    // }
-
     #[test]
     fn test_not_enough_buffer_space() {
         let cube3_def = PuzzleDef::<StackPuzzle<39>>::try_from(&*KPUZZLE_3X3);
@@ -653,18 +642,7 @@ mod tests {
         ));
     }
 
-    // TODO: add this test when either puzzle geometry exposes another KSolve
-    // definition other than KPUZZLE_3X3 or when there is another simd puzzle
-    // #[test]
-    // fn test_invalid_orbit_defs() {
-    //     let cube3_def =
-    //     assert!(matches!(
-    //         cube3_def,
-    //         Err(KSolveConversionError::InvalidOrbitDefs(_, _))
-    //     ));
-    // }
-
-    fn many_compositions<P: PuzzleState>() {
+    pub fn many_compositions<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.solved_state();
         let also_solved = apply_moves(&cube3_def, &solved, "R F", 105);
@@ -675,10 +653,9 @@ mod tests {
     fn test_many_compositions() {
         many_compositions::<StackCube3>();
         many_compositions::<HeapPuzzle>();
-        many_compositions::<cube3::Cube3>();
     }
 
-    fn s_u4_symmetry<P: PuzzleState>() {
+    pub fn s_u4_symmetry<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let s_u4_symmetry = cube3_def.find_symmetry("S_U4").unwrap();
 
@@ -701,10 +678,9 @@ mod tests {
     fn test_s_u4_symmetry() {
         s_u4_symmetry::<StackCube3>();
         s_u4_symmetry::<HeapPuzzle>();
-        s_u4_symmetry::<cube3::Cube3>();
     }
 
-    fn expanded_move<P: PuzzleState>() {
+    pub fn expanded_move<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let actual_solved = cube3_def.solved_state();
         let expected_solved = apply_moves(
@@ -720,10 +696,9 @@ mod tests {
     fn test_expanded_move() {
         expanded_move::<StackCube3>();
         expanded_move::<HeapPuzzle>();
-        expanded_move::<cube3::Cube3>();
     }
 
-    fn inversion<P: PuzzleState>() {
+    pub fn inversion<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.solved_state();
         let mut result = cube3_def.solved_state();
@@ -752,10 +727,9 @@ mod tests {
     fn test_inversion() {
         inversion::<StackCube3>();
         inversion::<HeapPuzzle>();
-        inversion::<cube3::Cube3>();
     }
 
-    fn random_inversion<P: PuzzleState>() {
+    pub fn random_inversion<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.solved_state();
 
@@ -782,10 +756,26 @@ mod tests {
     fn test_random_inversion() {
         random_inversion::<StackCube3>();
         random_inversion::<HeapPuzzle>();
-        random_inversion::<cube3::Cube3>();
     }
 
-    fn induces_sorted_cycle_type_within_cycle<P: PuzzleState>() {
+    pub fn hash<P: PuzzleState>() {
+        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let solved = cube3_def.solved_state();
+
+        let in_rf_cycle_1 = apply_moves(&cube3_def, &solved, "R F", 40);
+        let in_rf_cycle_2 = apply_moves(&cube3_def, &solved, "F' R'", 65);
+
+        assert_eq!(in_rf_cycle_1, in_rf_cycle_2);
+        assert_eq!(fxhash::hash(&in_rf_cycle_1), fxhash::hash(&in_rf_cycle_2));
+    }
+
+    #[test]
+    fn test_hash() {
+        hash::<StackCube3>();
+        hash::<HeapPuzzle>();
+    }
+
+    pub fn induces_sorted_cycle_type_within_cycle<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.solved_state();
         let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
@@ -813,10 +803,9 @@ mod tests {
     fn test_induces_sorted_cycle_type_within_cycle() {
         induces_sorted_cycle_type_within_cycle::<StackCube3>();
         induces_sorted_cycle_type_within_cycle::<HeapPuzzle>();
-        induces_sorted_cycle_type_within_cycle::<cube3::Cube3>();
     }
 
-    fn induces_sorted_cycle_type_many<P: PuzzleState>() {
+    pub fn induces_sorted_cycle_type_many<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.solved_state();
         let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
@@ -1058,10 +1047,9 @@ mod tests {
     fn test_induces_sorted_cycle_type_many() {
         induces_sorted_cycle_type_many::<StackCube3>();
         induces_sorted_cycle_type_many::<HeapPuzzle>();
-        induces_sorted_cycle_type_many::<cube3::Cube3>();
     }
 
-    fn bench_induces_sorted_cycle_type_helper<P: PuzzleState>(b: &mut Bencher) {
+    pub fn bench_induces_sorted_cycle_type_helper<P: PuzzleState>(b: &mut Bencher) {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let sorted_cycle_type = [
             ct(&[(3, true), (5, true)]),
@@ -1078,7 +1066,7 @@ mod tests {
         });
     }
 
-    fn bench_inverse_puzzle_helper<P: PuzzleState>(b: &mut Bencher) {
+    pub fn bench_inverse_puzzle_helper<P: PuzzleState>(b: &mut Bencher) {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.solved_state();
         let mut result = solved.clone();
@@ -1089,7 +1077,7 @@ mod tests {
         });
     }
 
-    fn bench_compose_puzzle_helper<P: PuzzleState>(b: &mut Bencher) {
+    pub fn bench_compose_puzzle_helper<P: PuzzleState>(b: &mut Bencher) {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let mut solved = cube3_def.solved_state();
         let r_move = cube3_def.find_move("R").unwrap();
@@ -1114,11 +1102,6 @@ mod tests {
     }
 
     #[bench]
-    fn bench_compose_cube3(b: &mut Bencher) {
-        bench_compose_puzzle_helper::<cube3::Cube3>(b);
-    }
-
-    #[bench]
     fn bench_inverse_stack(b: &mut Bencher) {
         bench_inverse_puzzle_helper::<StackCube3>(b);
     }
@@ -1129,11 +1112,6 @@ mod tests {
     }
 
     #[bench]
-    fn bench_inverse_cube3(b: &mut Bencher) {
-        bench_inverse_puzzle_helper::<cube3::Cube3>(b);
-    }
-
-    #[bench]
     fn bench_induces_sorted_cycle_type_stack(b: &mut Bencher) {
         bench_induces_sorted_cycle_type_helper::<StackCube3>(b);
     }
@@ -1141,10 +1119,5 @@ mod tests {
     #[bench]
     fn bench_induces_sorted_cycle_type_heap(b: &mut Bencher) {
         bench_induces_sorted_cycle_type_helper::<HeapPuzzle>(b);
-    }
-
-    #[bench]
-    fn bench_induces_sorted_cycle_type_cube3(b: &mut Bencher) {
-        bench_induces_sorted_cycle_type_helper::<cube3::Cube3>(b);
     }
 }
