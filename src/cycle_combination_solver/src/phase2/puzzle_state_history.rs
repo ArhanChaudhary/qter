@@ -32,7 +32,8 @@ impl<P: PuzzleState, B: PuzzleStateHistoryInterface<P>> From<&PuzzleDef<P>>
 impl<P: PuzzleState, B: PuzzleStateHistoryInterface<P>> PuzzleStateHistory<P, B> {
     pub fn push_stack(&mut self, move_index: usize, puzzle_def: &PuzzleDef<P>) {
         // B::push_stack(&mut self.stack, self.stack_index, move_index, puzzle_def);
-        self.stack.push_stack(self.stack_index, move_index, puzzle_def);
+        self.stack
+            .push_stack(self.stack_index, move_index, puzzle_def);
         self.stack_index += 1;
     }
 
@@ -45,7 +46,11 @@ impl<P: PuzzleState, B: PuzzleStateHistoryInterface<P>> PuzzleStateHistory<P, B>
         &self.stack[self.stack_index].0
     }
 
-    pub fn move_history(&self, puzzle_def: &PuzzleDef<P>) -> Box<[Move<P>]> {
+    pub fn get_move(&self, index: usize) -> usize {
+        self.stack[index].1
+    }
+
+    pub fn create_move_history(&self, puzzle_def: &PuzzleDef<P>) -> Box<[Move<P>]> {
         let mut move_sequence = Vec::with_capacity(self.stack_index);
         for i in 1..=self.stack_index {
             move_sequence.push(puzzle_def.moves[self.stack[i].1].clone())
@@ -60,7 +65,7 @@ impl<P: PuzzleState> PuzzleStateHistoryInterface<P> for Vec<P> {
 
 impl<P: PuzzleState> PuzzleStateHistoryBuf<P> for Vec<(P, usize)> {
     fn initialize(puzzle_def: &PuzzleDef<P>) -> Vec<(P, usize)> {
-        vec![(puzzle_def.solved_state(), usize::MAX)]
+        vec![(puzzle_def.solved_state(), 0)]
     }
 
     fn push_stack(&mut self, stack_index: usize, move_index: usize, puzzle_def: &PuzzleDef<P>) {
@@ -111,7 +116,7 @@ where
     [P; N]: PuzzleStateHistoryInterface<P>,
 {
     fn initialize(puzzle_def: &PuzzleDef<P>) -> Self {
-        core::array::from_fn(|_| (puzzle_def.solved_state(), usize::MAX))
+        core::array::from_fn(|_| (puzzle_def.solved_state(), 0))
     }
 
     fn push_stack(&mut self, stack_index: usize, move_index: usize, puzzle_def: &PuzzleDef<P>) {

@@ -36,6 +36,7 @@ impl<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryInterface<P>>
     fn search_for_solution(
         &self,
         mutable: &mut CycleTypeSolverMutable<P, B>,
+        move_index: usize,
         sofar_cost: u8,
         cost_bound: u8,
     ) -> u8 {
@@ -51,19 +52,26 @@ impl<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryInterface<P>>
             mutable.multi_bv.reusable_ref(),
             &self.puzzle_def.sorted_orbit_defs,
         ) {
-            mutable
-                .solutions
-                .push(mutable.puzzle_state_history.move_history(&self.puzzle_def));
+            mutable.solutions.push(
+                mutable
+                    .puzzle_state_history
+                    .create_move_history(&self.puzzle_def),
+            );
         }
 
         let mut min_next_est_goal_cost = u8::MAX;
+        let mut next_move_index = move_index + 1;
+        let start = mutable.puzzle_state_history.get_move(move_index);
         // for move_ in self.puzzle_def.moves.iter() {
-        for move_index in 0..self.puzzle_def.moves.len() {
+        for move_index in start..self.puzzle_def.moves.len() {
+            // if not a canonical sequence continue and set next_move_index to 0
             mutable
                 .puzzle_state_history
                 .push_stack(move_index, &self.puzzle_def);
-            let next_est_goal_cost = self.search_for_solution(mutable, sofar_cost + 1, cost_bound);
+            let next_est_goal_cost =
+                self.search_for_solution(mutable, next_move_index, sofar_cost + 1, cost_bound);
             mutable.puzzle_state_history.pop_stack();
+            next_move_index = 0;
 
             // BPMX optimization
             // if next_est_goal_cost.saturating_sub(1) > est_goal_cost {
@@ -89,7 +97,7 @@ impl<P: PuzzleState, T: PruningTable<P>, B: PuzzleStateHistoryInterface<P>>
             .permissible_heuristic(mutable.puzzle_state_history.last_state());
         while mutable.solutions.is_empty() {
             println!("Searching depth {}...", cost_bound);
-            cost_bound = self.search_for_solution(&mut mutable, 0, cost_bound);
+            cost_bound = self.search_for_solution(&mut mutable, 0, 0, cost_bound);
         }
         mutable.solutions
     }
@@ -160,6 +168,12 @@ mod tests {
             ZeroTable,
         );
         let solutions = solver.solve();
+        // for solution in solutions.iter() {
+        //     for move_ in solution.iter() {
+        //         print!("{} ", &move_.name);
+        //     }
+        //     println!();
+        // }
         assert_eq!(solutions.len(), 480);
         assert!(solutions.iter().all(|solution| solution.len() == 5));
     }

@@ -118,19 +118,17 @@ impl PuzzleState for Cube3 {
             let mut pow_3_ep = a.ep.swizzle_dyn(a.ep);
             pow_3_ep = pow_3_ep.swizzle_dyn(a.ep);
             ep_inverse = pow_3_ep.swizzle_dyn(pow_3_ep);
-            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
-            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            for _ in 0..2 {
+                ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            }
             ep_inverse = ep_inverse.swizzle_dyn(pow_3_ep);
-            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
-            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
-            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
-            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            for _ in 0..4 {
+                ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            }
             ep_inverse = ep_inverse.swizzle_dyn(a.ep);
-            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
-            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
-            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
-            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
-            ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            for _ in 0..5 {
+                ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
+            }
             ep_inverse = ep_inverse.swizzle_dyn(pow_3_ep);
             ep_inverse = ep_inverse.swizzle_dyn(ep_inverse);
             ep_inverse = ep_inverse.swizzle_dyn(a.ep);
@@ -138,19 +136,17 @@ impl PuzzleState for Cube3 {
             let mut pow_3_cp = a.cp.swizzle_dyn(a.cp);
             pow_3_cp = pow_3_cp.swizzle_dyn(a.cp);
             cp_inverse = pow_3_cp.swizzle_dyn(pow_3_cp);
-            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
-            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            for _ in 0..2 {
+                cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            }
             cp_inverse = cp_inverse.swizzle_dyn(pow_3_cp);
-            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
-            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
-            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
-            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            for _ in 0..4 {
+                cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            }
             cp_inverse = cp_inverse.swizzle_dyn(a.cp);
-            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
-            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
-            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
-            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
-            cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            for _ in 0..5 {
+                cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
+            }
             cp_inverse = cp_inverse.swizzle_dyn(pow_3_cp);
             cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
             cp_inverse = cp_inverse.swizzle_dyn(a.cp);
