@@ -69,6 +69,21 @@ impl KSolve {
             })
             .collect()
     }
+
+    pub fn with_moves(&self, moves: &[&str]) -> Self {
+        let ret = self.clone();
+        let moves = ret
+            .moves
+            .into_iter()
+            .filter(|m| moves.contains(&m.name.as_str()))
+            .collect();
+        Self {
+            name: ret.name,
+            sets: ret.sets,
+            moves,
+            symmetries: ret.symmetries,
+        }
+    }
 }
 
 impl KSolveSet {
@@ -222,6 +237,8 @@ pub fn nonzero_perm(transformation: Vec<Vec<(u16, u8)>>) -> KSolveTransformation
         .collect()
 }
 
+// This is here for testing. This should be replaced with a puzzle geometry
+// string in the future.
 pub static KPUZZLE_3X3: LazyLock<KSolve> = LazyLock::new(|| KSolve {
     name: "3x3x3".to_owned(),
     sets: vec![

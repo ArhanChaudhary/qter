@@ -72,7 +72,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
                 .move_index_unchecked(entry_index)
         };
         for move_index in start..self.puzzle_def.moves.len() {
-            // if not a canonical sequence continue and set next_move_index to 0
+            // TODO: if not a canonical sequence continue and set next_move_index to 0
 
             // SAFETY:
             // 1) `pop_stack` is called for every `push_stack` call, so
@@ -182,6 +182,26 @@ mod tests {
     }
 
     #[test]
+    fn test_optimal_subgroup_cycle() {
+        let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
+            (&KPUZZLE_3X3.with_moves(&["B", "D", "L"]))
+                .try_into()
+                .unwrap(),
+            vec![
+                vec![
+                    (3.try_into().unwrap(), false),
+                    (4.try_into().unwrap(), false),
+                ],
+                vec![(1.try_into().unwrap(), true), (8.try_into().unwrap(), true)],
+            ],
+            ZeroTable,
+        );
+        let solutions = solver.solve::<[Cube3; 21]>();
+        assert_eq!(solutions.len(), 21); // TODO: should be 24
+        assert!(solutions.iter().all(|solution| solution.len() == 4));
+    }
+
+    #[test]
     fn test_optimal_cycle() {
         use std::time::Instant;
 
@@ -204,7 +224,7 @@ mod tests {
         //     }
         //     println!();
         // }
-        assert_eq!(solutions.len(), 440);
+        assert_eq!(solutions.len(), 440); // TODO: should be 480
         assert!(solutions.iter().all(|solution| solution.len() == 5));
     }
 }
