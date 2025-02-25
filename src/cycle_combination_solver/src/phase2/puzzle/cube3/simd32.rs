@@ -156,13 +156,13 @@ mod tests {
     #[bench]
     #[cfg_attr(not(simd32), ignore)]
     fn bench_compose(b: &mut Bencher) {
-        bench_compose_puzzle_helper::<Cube3>(b);
+        bench_compose_helper::<Cube3>(b);
     }
 
     #[bench]
     #[cfg_attr(not(simd32), ignore)]
     fn bench_inverse(b: &mut Bencher) {
-        bench_inverse_puzzle_helper::<Cube3>(b);
+        bench_inverse_helper::<Cube3>(b);
     }
 
     #[bench]

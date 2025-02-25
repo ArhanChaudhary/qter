@@ -104,7 +104,7 @@ impl PuzzleState for Cube3 {
         // results are probably not the case on all platforms, experimentation
         // is encouraged.
 
-        // #[cfg(any())]
+        #[cfg(true)]
         // 6.36ns
         {
             // Permutation inversion taken from Andrew Skalski's vcube[1]. The
@@ -151,7 +151,7 @@ impl PuzzleState for Cube3 {
             cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
             cp_inverse = cp_inverse.swizzle_dyn(a.cp);
         }
-        #[cfg(any())]
+        #[cfg(false)]
         // 9.68ns
         {
             ep_inverse = Simd::splat(0);
@@ -182,7 +182,7 @@ impl PuzzleState for Cube3 {
                 }
             }
         }
-        #[cfg(any())]
+        #[cfg(false)]
         // 11.7ns
         {
             // Sanity check that SIMD is actually faster.
@@ -388,13 +388,13 @@ mod tests {
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_compose(b: &mut Bencher) {
-        bench_compose_puzzle_helper::<Cube3>(b);
+        bench_compose_helper::<Cube3>(b);
     }
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_inverse(b: &mut Bencher) {
-        bench_inverse_puzzle_helper::<Cube3>(b);
+        bench_inverse_helper::<Cube3>(b);
     }
 
     #[bench]

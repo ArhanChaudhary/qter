@@ -481,7 +481,8 @@ fn replace_inverse_slice(orbit_states_mut: &mut [u8], a: &[u8], sorted_orbit_def
                 let base_i = base + i;
                 unsafe {
                     *orbit_states_mut.get_unchecked_mut(base + a[base_i] as usize) = i as u8;
-                    *orbit_states_mut.get_unchecked_mut(base + a[base_i] as usize + piece_count) = 0;
+                    *orbit_states_mut.get_unchecked_mut(base + a[base_i] as usize + piece_count) =
+                        0;
                 }
             }
         } else {
@@ -762,11 +763,11 @@ mod tests {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.solved_state();
 
-        let in_rf_cycle_1 = apply_moves(&cube3_def, &solved, "R F", 40);
-        let in_rf_cycle_2 = apply_moves(&cube3_def, &solved, "F' R'", 65);
+        let in_r_f_cycle_1 = apply_moves(&cube3_def, &solved, "R F", 40);
+        let in_r_f_cycle_2 = apply_moves(&cube3_def, &solved, "F' R'", 65);
 
-        assert_eq!(in_rf_cycle_1, in_rf_cycle_2);
-        assert_eq!(fxhash::hash(&in_rf_cycle_1), fxhash::hash(&in_rf_cycle_2));
+        assert_eq!(in_r_f_cycle_1, in_r_f_cycle_2);
+        assert_eq!(fxhash::hash(&in_r_f_cycle_1), fxhash::hash(&in_r_f_cycle_2));
     }
 
     #[test]
@@ -1066,7 +1067,7 @@ mod tests {
         });
     }
 
-    pub fn bench_inverse_puzzle_helper<P: PuzzleState>(b: &mut Bencher) {
+    pub fn bench_inverse_helper<P: PuzzleState>(b: &mut Bencher) {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.solved_state();
         let mut result = solved.clone();
@@ -1077,7 +1078,7 @@ mod tests {
         });
     }
 
-    pub fn bench_compose_puzzle_helper<P: PuzzleState>(b: &mut Bencher) {
+    pub fn bench_compose_helper<P: PuzzleState>(b: &mut Bencher) {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let mut solved = cube3_def.solved_state();
         let r_move = cube3_def.find_move("R").unwrap();
@@ -1093,22 +1094,22 @@ mod tests {
 
     #[bench]
     fn bench_compose_stack(b: &mut Bencher) {
-        bench_compose_puzzle_helper::<StackCube3>(b);
+        bench_compose_helper::<StackCube3>(b);
     }
 
     #[bench]
     fn bench_compose_heap(b: &mut Bencher) {
-        bench_compose_puzzle_helper::<HeapPuzzle>(b);
+        bench_compose_helper::<HeapPuzzle>(b);
     }
 
     #[bench]
     fn bench_inverse_stack(b: &mut Bencher) {
-        bench_inverse_puzzle_helper::<StackCube3>(b);
+        bench_inverse_helper::<StackCube3>(b);
     }
 
     #[bench]
     fn bench_inverse_heap(b: &mut Bencher) {
-        bench_inverse_puzzle_helper::<HeapPuzzle>(b);
+        bench_inverse_helper::<HeapPuzzle>(b);
     }
 
     #[bench]

@@ -13,3 +13,6 @@ members = [
 [workspace.lints.clippy]
 type_complexity = "allow"
 disallowed_types = "deny"
+
+[profile.test.package.cycle_combination_solver]
+opt-level = 3
