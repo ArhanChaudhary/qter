@@ -70,18 +70,17 @@ impl KSolve {
             .collect()
     }
 
-    pub fn with_moves(&self, moves: &[&str]) -> Self {
-        let ret = self.clone();
-        let moves = ret
+    pub fn with_moves(self, moves: &[&str]) -> Self {
+        let moves = self
             .moves
             .into_iter()
             .filter(|m| moves.contains(&m.name.as_str()))
             .collect();
         Self {
-            name: ret.name,
-            sets: ret.sets,
+            name: self.name,
+            sets: self.sets,
             moves,
-            symmetries: ret.symmetries,
+            symmetries: self.symmetries,
         }
     }
 }

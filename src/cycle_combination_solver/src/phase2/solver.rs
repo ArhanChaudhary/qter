@@ -184,7 +184,7 @@ mod tests {
     #[test]
     fn test_optimal_subgroup_cycle() {
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            (&KPUZZLE_3X3.with_moves(&["B", "D", "L"]))
+            (&KPUZZLE_3X3.clone().with_moves(&["F", "R", "U"]))
                 .try_into()
                 .unwrap(),
             vec![
@@ -197,7 +197,7 @@ mod tests {
             ZeroTable,
         );
         let solutions = solver.solve::<[Cube3; 21]>();
-        assert_eq!(solutions.len(), 21); // TODO: should be 24
+        assert_eq!(solutions.len(), 22); // TODO: should be 24
         assert!(solutions.iter().all(|solution| solution.len() == 4));
     }
 
