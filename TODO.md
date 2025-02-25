@@ -11,9 +11,7 @@
     - commutative ordering FSM
       - prevent same face
       - prevent antipodes
-    - sequence symmetry
   - multithreading
-  - find all solutions at depth
   - tANS table compression
 - Phase 1
 - Look into fixing a corner for even cubes/other puzzles

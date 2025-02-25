@@ -118,7 +118,7 @@ impl<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> PuzzleStateHistory<P, H>
     /// # Safety
     ///
     /// The caller must guarantee that `entry_index` is in bounds of the stack.
-    pub unsafe fn get_move_index_unchecked(&self, entry_index: usize) -> usize {
+    pub unsafe fn move_index_unchecked(&self, entry_index: usize) -> usize {
         // SAFETY: entry_index is guaranteed to be in bounds by the caller
         unsafe { (*entry_index.get_unchecked(self.stack.as_ref())).1 }
     }

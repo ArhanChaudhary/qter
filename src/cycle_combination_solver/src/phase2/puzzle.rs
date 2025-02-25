@@ -71,9 +71,9 @@ pub struct StackPuzzle<const N: usize>(pub [u8; N]);
 pub struct HeapPuzzle(pub Box<[u8]>);
 
 pub struct PuzzleDef<P: PuzzleState> {
-    pub moves: Vec<Move<P>>,
-    pub symmetries: Vec<Move<P>>,
-    pub sorted_orbit_defs: Vec<OrbitDef>,
+    pub moves: Box<[Move<P>]>,
+    pub symmetries: Box<[Move<P>]>,
+    pub sorted_orbit_defs: Box<[OrbitDef]>,
     pub name: String,
 }
 
@@ -252,9 +252,9 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
         }
 
         Ok(PuzzleDef {
-            moves,
-            symmetries,
-            sorted_orbit_defs,
+            moves: moves.into_boxed_slice(),
+            symmetries: symmetries.into_boxed_slice(),
+            sorted_orbit_defs: sorted_orbit_defs.into_boxed_slice(),
             name: ksolve.name().to_owned(),
         })
     }

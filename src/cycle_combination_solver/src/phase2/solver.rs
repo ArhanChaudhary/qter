@@ -4,22 +4,19 @@ use super::{
     puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryInterface},
 };
 
-pub struct CycleTypeSolver<P: PuzzleState, T: PruningTable<P>, H: PuzzleStateHistoryInterface<P>> {
+pub struct CycleTypeSolver<P: PuzzleState, T: PruningTable<P>> {
     puzzle_def: PuzzleDef<P>,
     sorted_cycle_type: Vec<OrientedPartition>,
     pruning_table: T,
-    _marker: std::marker::PhantomData<H>,
 }
 
 struct CycleTypeSolverMutable<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> {
     puzzle_state_history: PuzzleStateHistory<P, H>,
-    multi_bv: <P as PuzzleState>::MultiBv,
+    multi_bv: P::MultiBv,
     solutions: Vec<Box<[Move<P>]>>,
 }
 
-impl<P: PuzzleState, T: PruningTable<P>, H: PuzzleStateHistoryInterface<P>>
-    CycleTypeSolver<P, T, H>
-{
+impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
     pub fn new(
         puzzle_def: PuzzleDef<P>,
         sorted_cycle_type: Vec<OrientedPartition>,
@@ -29,11 +26,10 @@ impl<P: PuzzleState, T: PruningTable<P>, H: PuzzleStateHistoryInterface<P>>
             puzzle_def,
             sorted_cycle_type,
             pruning_table,
-            _marker: std::marker::PhantomData,
         }
     }
 
-    fn search_for_solution(
+    fn search_for_solution<H: PuzzleStateHistoryInterface<P>>(
         &self,
         mutable: &mut CycleTypeSolverMutable<P, H>,
         entry_index: usize,
@@ -73,7 +69,7 @@ impl<P: PuzzleState, T: PruningTable<P>, H: PuzzleStateHistoryInterface<P>>
         let start = unsafe {
             mutable
                 .puzzle_state_history
-                .get_move_index_unchecked(entry_index)
+                .move_index_unchecked(entry_index)
         };
         for move_index in start..self.puzzle_def.moves.len() {
             // if not a canonical sequence continue and set next_move_index to 0
@@ -94,7 +90,7 @@ impl<P: PuzzleState, T: PruningTable<P>, H: PuzzleStateHistoryInterface<P>>
             mutable.puzzle_state_history.pop_stack();
             next_entry_index = 0;
 
-            // BPMX optimization
+            // TODO: BPMX optimization
             // if next_est_goal_cost.saturating_sub(1) > est_goal_cost {
             //     est_goal_cost = next_est_goal_cost.saturating_sub(1);
             //     if est_goal_cost > cost_bound {
@@ -107,8 +103,8 @@ impl<P: PuzzleState, T: PruningTable<P>, H: PuzzleStateHistoryInterface<P>>
         min_next_est_goal_cost
     }
 
-    pub fn solve(&self) -> Vec<Box<[Move<P>]>> {
-        let mut mutable = CycleTypeSolverMutable {
+    pub fn solve<H: PuzzleStateHistoryInterface<P>>(&self) -> Vec<Box<[Move<P>]>> {
+        let mut mutable: CycleTypeSolverMutable<P, H> = CycleTypeSolverMutable {
             puzzle_state_history: (&self.puzzle_def).into(),
             multi_bv: P::new_multi_bv(&self.puzzle_def.sorted_orbit_defs),
             solutions: vec![],
@@ -139,19 +135,19 @@ mod tests {
 
     #[test]
     fn test_identity_cycle_type() {
-        let solver: CycleTypeSolver<Cube3, _, [Cube3; 21]> = CycleTypeSolver::new(
+        let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             (&*KPUZZLE_3X3).try_into().unwrap(),
             vec![vec![], vec![]],
             ZeroTable,
         );
-        let solutions = solver.solve();
+        let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 1);
         assert_eq!(solutions[0].len(), 0);
     }
 
     #[test]
     fn test_single_quarter_turn() {
-        let solver: CycleTypeSolver<Cube3, _, [Cube3; 21]> = CycleTypeSolver::new(
+        let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             (&*KPUZZLE_3X3).try_into().unwrap(),
             vec![
                 vec![(4.try_into().unwrap(), false)],
@@ -159,14 +155,14 @@ mod tests {
             ],
             ZeroTable,
         );
-        let solutions = solver.solve();
+        let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 12);
         assert!(solutions.iter().all(|solution| solution.len() == 1));
     }
 
     #[test]
     fn test_single_half_turn() {
-        let solver: CycleTypeSolver<Cube3, _, [Cube3; 21]> = CycleTypeSolver::new(
+        let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             (&*KPUZZLE_3X3).try_into().unwrap(),
             vec![
                 vec![
@@ -180,7 +176,7 @@ mod tests {
             ],
             ZeroTable,
         );
-        let solutions = solver.solve();
+        let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 6);
         assert!(solutions.iter().all(|solution| solution.len() == 1));
     }
@@ -189,7 +185,7 @@ mod tests {
     fn test_optimal_cycle() {
         use std::time::Instant;
 
-        let solver: CycleTypeSolver<Cube3, _, [Cube3; 21]> = CycleTypeSolver::new(
+        let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             (&*KPUZZLE_3X3).try_into().unwrap(),
             vec![
                 vec![(1.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
@@ -199,7 +195,7 @@ mod tests {
         );
 
         let start = Instant::now();
-        let solutions = solver.solve();
+        let solutions = solver.solve::<[Cube3; 21]>();
         let duration = start.elapsed();
         println!("Time to find optimal cycle: {:?}", duration);
         // for solution in solutions.iter() {
