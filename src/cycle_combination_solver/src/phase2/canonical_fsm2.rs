@@ -8,7 +8,7 @@ use cubing::alg::QuantumMove;
 
 use crate::{
     _internal::{
-        errors::SearchError, puzzle_traits::puzzle_traits::SemiGroupActionPuzzle,
+        errors::SearchError, puzzle_traits::puzzle_traits::PuzzleState,
         search::indexed_vec::IndexedVec,
     },
     whole_number_newtype,
@@ -76,14 +76,14 @@ impl StateToMask {
 }
 
 #[derive(Debug)]
-pub struct CanonicalFSM<TPuzzle: SemiGroupActionPuzzle> {
+pub struct CanonicalFSM<P: PuzzleState> {
     // disallowed_move_classes, indexed by state ordinal, holds the set of move classes that should
     // not be made from this state.
     // disallowed_move_classes: StateToMask,
     pub(crate) next_state_lookup:
         IndexedVec<CanonicalFSMState, IndexedVec<MoveClassIndex, CanonicalFSMState>>,
 
-    phantom_data: PhantomData<TPuzzle>,
+    phantom_data: PhantomData<P>,
 }
 
 #[derive(Debug, Default)]
@@ -91,34 +91,14 @@ pub struct CanonicalFSMConstructionOptions {
     pub forbid_transitions_by_quantums_either_direction: HashSet<(QuantumMove, QuantumMove)>,
 }
 
-impl CanonicalFSMConstructionOptions {
-    fn is_transition_forbidden<TPuzzle: SemiGroupActionPuzzle>(
-        &self,
-        move1_info: &MoveTransformationInfo<TPuzzle>,
-        move2_info: &MoveTransformationInfo<TPuzzle>,
-    ) -> bool {
-        self.forbid_transitions_by_quantums_either_direction
-            .contains(&(
-                move1_info.r#move.quantum.as_ref().clone(),
-                move2_info.r#move.quantum.as_ref().clone(),
-            ))
-            || self
-                .forbid_transitions_by_quantums_either_direction
-                .contains(&(
-                    move2_info.r#move.quantum.as_ref().clone(),
-                    move1_info.r#move.quantum.as_ref().clone(),
-                ))
-    }
-}
-
-impl<TPuzzle: SemiGroupActionPuzzle> CanonicalFSM<TPuzzle> {
+impl<P: PuzzleState> CanonicalFSM<P> {
     // TODO: Return a more specific error.
     /// Pass `Default::default()` as for `options` when no options are needed.
     pub fn try_new(
-        tpuzzle: TPuzzle,
-        generators: SearchGenerators<TPuzzle>, // TODO: make this a field in the options?
+        puzzle_state: P,
+        generators: SearchGenerators<P>, // TODO: make this a field in the options?
         options: CanonicalFSMConstructionOptions,
-    ) -> Result<CanonicalFSM<TPuzzle>, SearchError> {
+    ) -> Result<CanonicalFSM<P>, SearchError> {
         let num_move_classes = generators.by_move_class.len();
         if num_move_classes > MAX_NUM_MOVE_CLASSES {
             return Err(SearchError {
@@ -143,7 +123,7 @@ impl<TPuzzle: SemiGroupActionPuzzle> CanonicalFSM<TPuzzle> {
                 let j = MoveClassIndex(j);
                 let move1_info = &generators.by_move_class.at(i)[0];
                 let move2_info = &generators.by_move_class.at(j)[0];
-                if !tpuzzle.do_moves_commute(move1_info, move2_info) {
+                if !puzzle_state.do_moves_commute(move1_info, move2_info) {
                     commutes[*i] &= MoveClassMask(!(1 << *j));
                     commutes[*j] &= MoveClassMask(!(1 << *i));
                 }

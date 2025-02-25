@@ -37,6 +37,7 @@
   - Lua stuff
 - Memory tapes
   - Implement in QAT
+- Asher's repeated move post process optimization: R U R repeated = R then U R2 repeated
 - Dynamically shuffle sub-cycles with syntax X ← A\*B\*C\*D, Y ← E\*F\*G\*H
 - Function macro
 - Directory of testing programs instead of hardcoding into Rust

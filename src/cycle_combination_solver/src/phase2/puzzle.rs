@@ -28,7 +28,7 @@ pub trait PuzzleState: Hash + Clone + PartialEq + Debug {
     fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: &[OrbitDef]);
     /// Inverse of a puzzle state
     fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]);
-    /// The goal state for IDA* search
+    /// The goal state for IDA* search, may use unchecked operations for speed
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type: &[OrientedPartition],
@@ -643,6 +643,106 @@ mod tests {
         ));
     }
 
+    fn validate_sorted_orbit_defs<P: PuzzleState>() {
+        let ok = P::validate_sorted_orbit_defs(&[
+            OrbitDef {
+                piece_count: 8.try_into().unwrap(),
+                orientation_count: 3.try_into().unwrap(),
+            },
+            OrbitDef {
+                piece_count: 12.try_into().unwrap(),
+                orientation_count: 2.try_into().unwrap(),
+            },
+        ]);
+        assert!(ok.is_ok());
+
+        let bad = P::validate_sorted_orbit_defs(&[
+            OrbitDef {
+                piece_count: 12.try_into().unwrap(),
+                orientation_count: 3.try_into().unwrap(),
+            },
+            OrbitDef {
+                piece_count: 8.try_into().unwrap(),
+                orientation_count: 3.try_into().unwrap(),
+            },
+        ]);
+
+        assert!(matches!(
+            bad,
+            Err(KSolveConversionError::InvalidOrbitDefs(_, _))
+        ));
+
+        let bad = P::validate_sorted_orbit_defs(&[
+            OrbitDef {
+                piece_count: 8.try_into().unwrap(),
+                orientation_count: 3.try_into().unwrap(),
+            },
+            OrbitDef {
+                piece_count: 12.try_into().unwrap(),
+                orientation_count: 3.try_into().unwrap(),
+            },
+        ]);
+
+        assert!(matches!(
+            bad,
+            Err(KSolveConversionError::InvalidOrbitDefs(_, _))
+        ));
+
+        let bad = P::validate_sorted_orbit_defs(&[
+            OrbitDef {
+                piece_count: 8.try_into().unwrap(),
+                orientation_count: 3.try_into().unwrap(),
+            },
+            OrbitDef {
+                piece_count: 12.try_into().unwrap(),
+                orientation_count: 2.try_into().unwrap(),
+            },
+            OrbitDef {
+                piece_count: 12.try_into().unwrap(),
+                orientation_count: 2.try_into().unwrap(),
+            },
+        ]);
+
+        assert!(matches!(
+            bad,
+            Err(KSolveConversionError::InvalidOrbitDefs(_, _))
+        ));
+
+        let bad = P::validate_sorted_orbit_defs(&[
+            OrbitDef {
+                piece_count: 8.try_into().unwrap(),
+                orientation_count: 3.try_into().unwrap(),
+            },
+        ]);
+
+        assert!(matches!(
+            bad,
+            Err(KSolveConversionError::InvalidOrbitDefs(_, _))
+        ));
+
+        let bad = P::validate_sorted_orbit_defs(&[
+            OrbitDef {
+                piece_count: 8.try_into().unwrap(),
+                orientation_count: 3.try_into().unwrap(),
+            },
+            OrbitDef {
+                piece_count: 13.try_into().unwrap(),
+                orientation_count: 2.try_into().unwrap(),
+            },
+        ]);
+
+        assert!(matches!(
+            bad,
+            Err(KSolveConversionError::InvalidOrbitDefs(_, _))
+        ));
+    }
+
+    #[test]
+    fn test_validate_sorted_orbit_defs() {
+        validate_sorted_orbit_defs::<cube3::simd8and16::Cube3>();
+        validate_sorted_orbit_defs::<cube3::simd32::Cube3>();
+    }
+
     pub fn many_compositions<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.solved_state();
@@ -654,6 +754,10 @@ mod tests {
     fn test_many_compositions() {
         many_compositions::<StackCube3>();
         many_compositions::<HeapPuzzle>();
+        #[cfg(simd8and16)]
+        many_compositions::<cube3::simd8and16::Cube3>();
+        #[cfg(simd32)]
+        many_compositions::<cube3::simd32::Cube3>();
     }
 
     pub fn s_u4_symmetry<P: PuzzleState>() {
@@ -679,6 +783,10 @@ mod tests {
     fn test_s_u4_symmetry() {
         s_u4_symmetry::<StackCube3>();
         s_u4_symmetry::<HeapPuzzle>();
+        #[cfg(simd8and16)]
+        s_u4_symmetry::<cube3::simd8and16::Cube3>();
+        #[cfg(simd32)]
+        s_u4_symmetry::<cube3::simd32::Cube3>();
     }
 
     pub fn expanded_move<P: PuzzleState>() {
@@ -697,6 +805,10 @@ mod tests {
     fn test_expanded_move() {
         expanded_move::<StackCube3>();
         expanded_move::<HeapPuzzle>();
+        #[cfg(simd8and16)]
+        expanded_move::<cube3::simd8and16::Cube3>();
+        #[cfg(simd32)]
+        expanded_move::<cube3::simd32::Cube3>();
     }
 
     pub fn inversion<P: PuzzleState>() {
@@ -728,6 +840,10 @@ mod tests {
     fn test_inversion() {
         inversion::<StackCube3>();
         inversion::<HeapPuzzle>();
+        #[cfg(simd8and16)]
+        inversion::<cube3::simd8and16::Cube3>();
+        #[cfg(simd32)]
+        inversion::<cube3::simd32::Cube3>();
     }
 
     pub fn random_inversion<P: PuzzleState>() {
@@ -757,6 +873,10 @@ mod tests {
     fn test_random_inversion() {
         random_inversion::<StackCube3>();
         random_inversion::<HeapPuzzle>();
+        #[cfg(simd8and16)]
+        random_inversion::<cube3::simd8and16::Cube3>();
+        #[cfg(simd32)]
+        random_inversion::<cube3::simd32::Cube3>();
     }
 
     pub fn hash<P: PuzzleState>() {
@@ -774,6 +894,10 @@ mod tests {
     fn test_hash() {
         hash::<StackCube3>();
         hash::<HeapPuzzle>();
+        #[cfg(simd8and16)]
+        hash::<cube3::simd8and16::Cube3>();
+        #[cfg(simd32)]
+        hash::<cube3::simd32::Cube3>();
     }
 
     pub fn induces_sorted_cycle_type_within_cycle<P: PuzzleState>() {
@@ -804,6 +928,10 @@ mod tests {
     fn test_induces_sorted_cycle_type_within_cycle() {
         induces_sorted_cycle_type_within_cycle::<StackCube3>();
         induces_sorted_cycle_type_within_cycle::<HeapPuzzle>();
+        #[cfg(simd8and16)]
+        induces_sorted_cycle_type_within_cycle::<cube3::simd8and16::Cube3>();
+        #[cfg(simd32)]
+        induces_sorted_cycle_type_within_cycle::<cube3::simd32::Cube3>();
     }
 
     pub fn induces_sorted_cycle_type_many<P: PuzzleState>() {
@@ -1048,6 +1176,10 @@ mod tests {
     fn test_induces_sorted_cycle_type_many() {
         induces_sorted_cycle_type_many::<StackCube3>();
         induces_sorted_cycle_type_many::<HeapPuzzle>();
+        #[cfg(simd8and16)]
+        induces_sorted_cycle_type_many::<cube3::simd8and16::Cube3>();
+        #[cfg(simd32)]
+        induces_sorted_cycle_type_many::<cube3::simd32::Cube3>();
     }
 
     pub fn bench_induces_sorted_cycle_type_helper<P: PuzzleState>(b: &mut Bencher) {
@@ -1103,6 +1235,18 @@ mod tests {
     }
 
     #[bench]
+    #[cfg_attr(not(simd8and16), ignore)]
+    fn bench_compose_cube3_simd8and16(b: &mut Bencher) {
+        bench_compose_helper::<cube3::simd8and16::Cube3>(b);
+    }
+
+    #[bench]
+    #[cfg_attr(not(simd32), ignore)]
+    fn bench_compose_cube3_simd32(b: &mut Bencher) {
+        bench_compose_helper::<cube3::simd32::Cube3>(b);
+    }
+
+    #[bench]
     fn bench_inverse_stack(b: &mut Bencher) {
         bench_inverse_helper::<StackCube3>(b);
     }
@@ -1113,6 +1257,18 @@ mod tests {
     }
 
     #[bench]
+    #[cfg_attr(not(simd8and16), ignore)]
+    fn bench_inverse_cube3_simd8and16(b: &mut Bencher) {
+        bench_inverse_helper::<cube3::simd8and16::Cube3>(b);
+    }
+
+    #[bench]
+    #[cfg_attr(not(simd32), ignore)]
+    fn bench_inverse_cube3_simd32(b: &mut Bencher) {
+        bench_inverse_helper::<cube3::simd32::Cube3>(b);
+    }
+
+    #[bench]
     fn bench_induces_sorted_cycle_type_stack(b: &mut Bencher) {
         bench_induces_sorted_cycle_type_helper::<StackCube3>(b);
     }
@@ -1120,5 +1276,17 @@ mod tests {
     #[bench]
     fn bench_induces_sorted_cycle_type_heap(b: &mut Bencher) {
         bench_induces_sorted_cycle_type_helper::<HeapPuzzle>(b);
+    }
+
+    #[bench]
+    #[cfg_attr(not(simd8and16), ignore)]
+    fn bench_induces_sorted_cycle_type_cube3_simd8and16(b: &mut Bencher) {
+        bench_induces_sorted_cycle_type_helper::<cube3::simd8and16::Cube3>(b);
+    }
+
+    #[bench]
+    #[cfg_attr(not(simd32), ignore)]
+    fn bench_induces_sorted_cycle_type_cube3_simd32(b: &mut Bencher) {
+        bench_induces_sorted_cycle_type_helper::<cube3::simd32::Cube3>(b);
     }
 }

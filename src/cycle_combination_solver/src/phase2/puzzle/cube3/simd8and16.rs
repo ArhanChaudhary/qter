@@ -1,7 +1,7 @@
 #![cfg_attr(any(simd32, not(simd8and16)), allow(dead_code, unused_variables))]
 
-use super::common::CUBE_3_SORTED_ORBIT_DEFS;
-use crate::phase2::puzzle::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
+use super::common::Cube3Interface;
+use crate::phase2::puzzle::OrientedPartition;
 use std::hash::{Hash, Hasher};
 use std::simd::{u8x16, u8x8};
 
@@ -40,30 +40,8 @@ const CO_MOD_SWIZZLE: u8x8 = u8x8::from_array([0, 1, 2, 0, 1, 2, 0, 0]);
 const TWOS: u8x16 = u8x16::splat(2);
 const THREES: u8x8 = u8x8::splat(3);
 
-impl PuzzleState for Cube3 {
-    type MultiBv = [u16; 2];
-
-    fn new_multi_bv(_sorted_orbit_defs: &[OrbitDef]) -> [u16; 2] {
-        Default::default()
-    }
-
-    fn validate_sorted_orbit_defs(
-        sorted_orbit_defs: &[OrbitDef],
-    ) -> Result<(), KSolveConversionError> {
-        if sorted_orbit_defs == CUBE_3_SORTED_ORBIT_DEFS.as_slice() {
-            Ok(())
-        } else {
-            Err(KSolveConversionError::InvalidOrbitDefs(
-                CUBE_3_SORTED_ORBIT_DEFS.to_vec(),
-                sorted_orbit_defs.to_vec(),
-            ))
-        }
-    }
-
-    fn from_sorted_transformations_unchecked(
-        sorted_transformations: &[Vec<(u8, u8)>],
-        _sorted_orbit_defs: &[OrbitDef],
-    ) -> Self {
+impl Cube3Interface for Cube3 {
+    fn from_sorted_transformations_unchecked(sorted_transformations: &[Vec<(u8, u8)>]) -> Self {
         let corners_transformation = &sorted_transformations[0];
         let edges_transformation = &sorted_transformations[1];
 
@@ -85,7 +63,7 @@ impl PuzzleState for Cube3 {
         Cube3 { ep, eo, cp, co }
     }
 
-    fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: &[OrbitDef]) {
+    fn replace_compose(&mut self, a: &Self, b: &Self) {
         // Benching from a 2020 Mac M1 has shown that swizzling twice is
         // faster than taking the modulus (3.07ns vs 5.94ns)
         self.ep = a.ep.swizzle_dyn(b.ep);
@@ -96,7 +74,7 @@ impl PuzzleState for Cube3 {
         // self.co = (a.co.swizzle_dyn(b.cp) + b.co) % THREES;
     }
 
-    fn replace_inverse(&mut self, a: &Self, _sorted_orbit_defs: &[OrbitDef]) {
+    fn replace_inverse(&mut self, a: &Self) {
         let mut ep_inverse;
         let mut cp_inverse;
 
@@ -224,7 +202,6 @@ impl PuzzleState for Cube3 {
         &self,
         sorted_cycle_type: &[OrientedPartition],
         mut multi_bv: [u16; 2],
-        _sorted_orbit_defs: &[OrbitDef],
     ) -> bool {
         let mut covered_cycles_count = 0_u8;
 
@@ -328,62 +305,6 @@ mod tests {
     use super::*;
     use crate::phase2::puzzle::tests::*;
     use test::Bencher;
-
-    #[test]
-    fn test_validate_sorted_orbit_defs() {
-        let res = Cube3::validate_sorted_orbit_defs(&CUBE_3_SORTED_ORBIT_DEFS);
-        assert!(res.is_ok());
-        // TODO: test that it fails with the wrong orbit defs when we have
-        // another ksolve
-    }
-
-    #[test]
-    #[cfg_attr(not(simd8and16), ignore)]
-    fn test_hash() {
-        hash::<Cube3>();
-    }
-
-    #[test]
-    #[cfg_attr(not(simd8and16), ignore)]
-    fn test_many_compositions() {
-        many_compositions::<Cube3>();
-    }
-
-    #[test]
-    #[cfg_attr(not(simd8and16), ignore)]
-    fn test_s_u4_symmetry() {
-        s_u4_symmetry::<Cube3>();
-    }
-
-    #[test]
-    #[cfg_attr(not(simd8and16), ignore)]
-    fn test_expanded_move() {
-        expanded_move::<Cube3>();
-    }
-
-    #[test]
-    #[cfg_attr(not(simd8and16), ignore)]
-    fn test_inversion() {
-        inversion::<Cube3>();
-    }
-
-    #[test]
-    #[cfg_attr(not(simd8and16), ignore)]
-    fn test_random_inversion() {
-        random_inversion::<Cube3>();
-    }
-
-    #[test]
-    #[cfg_attr(not(simd8and16), ignore)]
-    fn test_induces_sorted_cycle_type_within_cycle() {
-        induces_sorted_cycle_type_within_cycle::<Cube3>();
-    }
-
-    #[test]
-    #[cfg_attr(not(simd8and16), ignore)]
-    fn test_induces_sorted_cycle_type_many() {
-        induces_sorted_cycle_type_many::<Cube3>();
-    }
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
