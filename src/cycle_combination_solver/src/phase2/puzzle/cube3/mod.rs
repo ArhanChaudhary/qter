@@ -49,8 +49,12 @@ mod common {
 
         fn from_sorted_transformations_unchecked(
             sorted_transformations: &[Vec<(u8, u8)>],
-            _sorted_orbit_defs: &[OrbitDef],
+            sorted_orbit_defs: &[OrbitDef],
         ) -> Self {
+            debug_assert!(sorted_transformations.len() == 2);
+            debug_assert_eq!(sorted_transformations[0].len(), 8);
+            debug_assert_eq!(sorted_transformations[1].len(), 12);
+            debug_assert!(Self::validate_sorted_orbit_defs(sorted_orbit_defs).is_ok());
             Self::from_sorted_transformations_unchecked(sorted_transformations)
         }
 

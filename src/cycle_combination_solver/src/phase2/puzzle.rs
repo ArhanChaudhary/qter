@@ -29,6 +29,8 @@ pub trait PuzzleState: Hash + Clone + PartialEq + Debug {
     /// Inverse of a puzzle state
     fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]);
     /// The goal state for IDA* search, may use unchecked operations for speed
+    /// as long as validate_sorted_orbit_defs has been called. I choose to not
+    /// make this an unsafe function but I may in the future.
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type: &[OrientedPartition],
@@ -708,12 +710,10 @@ mod tests {
             Err(KSolveConversionError::InvalidOrbitDefs(_, _))
         ));
 
-        let bad = P::validate_sorted_orbit_defs(&[
-            OrbitDef {
-                piece_count: 8.try_into().unwrap(),
-                orientation_count: 3.try_into().unwrap(),
-            },
-        ]);
+        let bad = P::validate_sorted_orbit_defs(&[OrbitDef {
+            piece_count: 8.try_into().unwrap(),
+            orientation_count: 3.try_into().unwrap(),
+        }]);
 
         assert!(matches!(
             bad,

@@ -5,30 +5,12 @@ use crate::phase2::puzzle::OrientedPartition;
 use std::hash::{Hash, Hasher};
 use std::simd::{u8x16, u8x8};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Hash)]
 pub struct Cube3 {
     pub ep: u8x16,
     pub eo: u8x16,
     pub cp: u8x8,
     pub co: u8x8,
-}
-
-impl PartialEq for Cube3 {
-    fn eq(&self, other: &Self) -> bool {
-        self.ep[..12].eq(&other.ep[..12])
-            && self.eo[..12].eq(&other.eo[..12])
-            && self.cp.eq(&other.cp)
-            && self.co.eq(&other.co)
-    }
-}
-
-impl Hash for Cube3 {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.ep[..12].hash(state);
-        self.eo[..12].hash(state);
-        self.cp.hash(state);
-        self.co.hash(state);
-    }
 }
 
 // TODO: probably not a big deal, but the armv7 target in swizzle_dyn swizzles
@@ -50,14 +32,18 @@ impl Cube3Interface for Cube3 {
         let mut cp = u8x8::splat(0);
         let mut co = u8x8::splat(0);
 
-        for (i, &(perm, orientation_delta)) in edges_transformation.iter().enumerate() {
+        for i in 0..12 {
+            let (perm, orientation_delta) = edges_transformation[i];
             ep[i] = perm;
             eo[i] = orientation_delta;
         }
 
-        for (i, &(perm, orientation_delta)) in corners_transformation.iter().enumerate() {
+        ep[12..16].fill(15);
+
+        for i in 0..8 {
+            let (perm, orientation) = corners_transformation[i];
             cp[i] = perm;
-            co[i] = orientation_delta;
+            co[i] = orientation;
         }
 
         Cube3 { ep, eo, cp, co }
@@ -129,19 +115,23 @@ impl Cube3Interface for Cube3 {
             cp_inverse = cp_inverse.swizzle_dyn(cp_inverse);
             cp_inverse = cp_inverse.swizzle_dyn(a.cp);
         }
+        // TODO: make these benches
         #[cfg(false)]
         // 9.68ns
         {
-            ep_inverse = Simd::splat(0);
-            cp_inverse = Simd::splat(0);
+            use std::simd::cmp::SimdPartialEq;
+            use std::simd::num::SimdInt;
+
+            ep_inverse = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 15, 15, 15]);
+            cp_inverse = u8x8::splat(0);
             // Brute force the inverse by checking all possible values and
             // using a mask to check when equal to identity (also inspired by
             // Andrew Skalski's vcube).
             for i in 0..12 {
-                let ep_trial = Simd::from_array([i as u8; 16]);
+                let ep_trial = u8x16::splat(i);
                 const EP_IDENTITY: u8x16 =
-                    u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 0, 0, 0]);
-                let ep_correct: Simd<u8, 16> =
+                    u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 15, 15, 15]);
+                let ep_correct: u8x16 =
                     a.ep.swizzle_dyn(ep_trial)
                         .simd_eq(EP_IDENTITY)
                         .to_int()
@@ -149,9 +139,9 @@ impl Cube3Interface for Cube3 {
                 ep_inverse |= ep_trial & ep_correct;
 
                 if i < 8 {
-                    let cp_trial = Simd::from_array([i as u8; 8]);
+                    let cp_trial = u8x8::splat(i);
                     const CP_IDENTITY: u8x8 = u8x8::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
-                    let cp_correct: Simd<u8, 8> =
+                    let cp_correct: u8x8 =
                         a.cp.swizzle_dyn(cp_trial)
                             .simd_eq(CP_IDENTITY)
                             .to_int()

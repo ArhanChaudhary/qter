@@ -8,10 +8,7 @@ use std::{
 };
 
 #[derive(Clone, Debug)]
-pub struct Cube3 {
-    perm: u8x32,
-    ori: u8x32,
-}
+pub struct Cube3(u8x32);
 
 impl PartialEq for Cube3 {
     fn eq(&self, other: &Self) -> bool {
