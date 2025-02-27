@@ -12,6 +12,7 @@
       - prevent same face
       - prevent antipodes
   - multithreading
+    - and microthreading
   - tANS table compression
 - Phase 1
 - Look into fixing a corner for even cubes/other puzzles

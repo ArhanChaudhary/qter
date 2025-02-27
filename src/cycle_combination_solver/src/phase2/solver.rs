@@ -34,6 +34,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
         mutable: &mut CycleTypeSolverMutable<P, H>,
         entry_index: usize,
         sofar_cost: u8,
+        // TODO: make this `togo` and descending (see sc)
         cost_bound: u8,
     ) -> u8 {
         // SAFETY: This function calls `pop_stack` for every `push_stack` call.
@@ -41,7 +42,8 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
         let last_puzzle_state = unsafe { mutable.puzzle_state_history.last_state_unchecked() };
         let est_remaining_cost = self.pruning_table.permissible_heuristic(last_puzzle_state);
         let est_goal_cost = sofar_cost + est_remaining_cost;
-
+        // TODO: vcube does IDA* fundamentally differently, ie it returns
+        // est_remaining_cost instead of est_goal_cost.
         if est_goal_cost > cost_bound {
             return est_goal_cost;
         }
@@ -72,7 +74,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
                 .move_index_unchecked(entry_index)
         };
         for move_index in start..self.puzzle_def.moves.len() {
-            // TODO: if not a canonical sequence continue and set next_move_index to 0
+            // if not a canonical sequence continue and set next_move_index to 0
 
             // SAFETY:
             // 1) `pop_stack` is called for every `push_stack` call, so
@@ -115,13 +117,13 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
         );
         mutable
             .puzzle_state_history
-            .resize_if_needed(cost_bound as usize + 1, &self.puzzle_def);
+            .resize_if_needed(cost_bound as usize + 1);
         while mutable.solutions.is_empty() {
             println!("Searching depth {}...", cost_bound);
             cost_bound = self.search_for_solution(&mut mutable, 0, 0, cost_bound);
             mutable
                 .puzzle_state_history
-                .resize_if_needed(cost_bound as usize + 1, &self.puzzle_def);
+                .resize_if_needed(cost_bound as usize + 1);
         }
         mutable.solutions
     }

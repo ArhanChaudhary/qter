@@ -43,29 +43,3 @@ impl Cube3Interface for Cube3 {
         todo!();
     }
 }
-
-// pub struct StackEvenCubeSimd<const S_24S: usize> {
-//     cp: u8x8,
-//     co: u8x8,
-//     s_24s: [u8x32; S_24S],
-// }
-
-// pub struct HeapEvenCubeSimd {
-//     cp: u8x8,
-//     co: u8x8,
-//     s_24s: [u8x32],
-// }
-
-// pub struct StackOddCubeSimd<const S_24S: usize> {
-//     ep: u8x16,
-//     eo: u8x16,
-//     cp: u8x8,
-//     co: u8x8,
-//     s_24s: [u8x32; S_24S],
-// }
-
-// pub struct HeapOddCubeSimd {
-//     cp: u8x8,
-//     co: u8x8,
-//     s_24s: [u8x32],
-// }

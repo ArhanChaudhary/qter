@@ -9,7 +9,7 @@ pub trait PuzzleStateHistoryInterface<P: PuzzleState> {
     fn initialize(puzzle_def: &PuzzleDef<P>) -> Self::Buf;
 
     /// Resize the underlying buffer capacity if needed.
-    fn resize_if_needed(buf: &mut Self::Buf, max_stack_pointer: usize, puzzle_def: &PuzzleDef<P>);
+    fn resize_if_needed(buf: &mut Self::Buf, max_stack_pointer: usize);
 
     /// Push a new state onto the stack by composing the given move with the
     /// last state in the stack, denoted by `stack_pointer`.
@@ -95,8 +95,8 @@ impl<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> PuzzleStateHistory<P, H>
     }
 
     /// Resize the underlying buffer capacity if needed.
-    pub fn resize_if_needed(&mut self, max_stack_pointer: usize, puzzle_def: &PuzzleDef<P>) {
-        H::resize_if_needed(&mut self.stack, max_stack_pointer, puzzle_def);
+    pub fn resize_if_needed(&mut self, max_stack_pointer: usize) {
+        H::resize_if_needed(&mut self.stack, max_stack_pointer)
     }
 
     /// Get the last state in the stack.
@@ -139,14 +139,11 @@ impl<P: PuzzleState> PuzzleStateHistoryInterface<P> for Vec<P> {
     type Buf = Vec<(P, usize)>;
 
     fn initialize(puzzle_def: &PuzzleDef<P>) -> Vec<(P, usize)> {
-        vec![(puzzle_def.solved_state(), 0)]
+        vec![(puzzle_def.new_solved_state(), 0)]
     }
 
-    fn resize_if_needed(buf: &mut Self::Buf, max_stack_pointer: usize, puzzle_def: &PuzzleDef<P>) {
-        buf.resize(
-            max_stack_pointer + 1,
-            (puzzle_def.solved_state(), usize::MAX),
-        );
+    fn resize_if_needed(buf: &mut Self::Buf, max_stack_pointer: usize) {
+        buf.resize(max_stack_pointer + 1, (buf[0].0.clone(), usize::MAX));
     }
 }
 
@@ -171,16 +168,12 @@ where
     type Buf = [(P, usize); N];
 
     fn initialize(puzzle_def: &PuzzleDef<P>) -> [(P, usize); N] {
-        let mut ret = core::array::from_fn(|_| (puzzle_def.solved_state(), usize::MAX));
+        let mut ret = core::array::from_fn(|_| (puzzle_def.new_solved_state(), usize::MAX));
         ret[0].1 = 0;
         ret
     }
 
-    fn resize_if_needed(
-        _buf: &mut Self::Buf,
-        _max_stack_pointer: usize,
-        _puzzle_def: &PuzzleDef<P>,
-    ) {
+    fn resize_if_needed(_buf: &mut Self::Buf, _max_stack_pointer: usize) {
         // The stack pointer is always less than the length of the buffer
         // because of the trait bound. Therefore there is no need to resize the
         // buffer.
@@ -206,7 +199,10 @@ mod tests {
         let puzzle_state_history: PuzzleStateHistory<Cube3, H> = (&cube3_def).into();
 
         assert_eq!(puzzle_state_history.stack_pointer, 0);
-        assert_eq!(&puzzle_state_history.stack[0].0, &cube3_def.solved_state());
+        assert_eq!(
+            &puzzle_state_history.stack[0].0,
+            &cube3_def.new_solved_state()
+        );
         assert_eq!(puzzle_state_history.stack[0].1, 0);
     }
 
@@ -222,7 +218,7 @@ mod tests {
         let r_move_index = move_index(&cube3_def, r_move);
 
         let mut puzzle_state_history: PuzzleStateHistory<Cube3, H> = (&cube3_def).into();
-        puzzle_state_history.resize_if_needed(2, &cube3_def);
+        puzzle_state_history.resize_if_needed(2);
 
         unsafe {
             puzzle_state_history.push_stack_unchecked(r_move_index, &cube3_def);
@@ -245,7 +241,7 @@ mod tests {
 
     fn puzzle_state_history_pop<H: PuzzleStateHistoryInterface<Cube3>>() {
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let solved = cube3_def.solved_state();
+        let solved = cube3_def.new_solved_state();
         let r_move = cube3_def.find_move("R").unwrap();
         let r2_move = cube3_def.find_move("R2").unwrap();
         let f2_move = cube3_def.find_move("F2").unwrap();
@@ -257,7 +253,7 @@ mod tests {
         let r_prime_move_index = move_index(&cube3_def, r_prime_move);
 
         let mut puzzle_state_history: PuzzleStateHistory<Cube3, H> = (&cube3_def).into();
-        puzzle_state_history.resize_if_needed(4, &cube3_def);
+        puzzle_state_history.resize_if_needed(4);
 
         unsafe {
             puzzle_state_history.push_stack_unchecked(r_move_index, &cube3_def);
