@@ -34,7 +34,9 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
         mutable: &mut CycleTypeSolverMutable<P, H>,
         entry_index: usize,
         sofar_cost: u8,
-        // TODO: make this `togo` and descending (see sc)
+        // FIXME: make this `togo` and descending (see sc) and vcube does IDA*
+        // fundamentally differently, ie it returns est_remaining_cost instead
+        // of est_goal_cost.
         cost_bound: u8,
     ) -> u8 {
         // SAFETY: This function calls `pop_stack` for every `push_stack` call.
@@ -42,8 +44,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
         let last_puzzle_state = unsafe { mutable.puzzle_state_history.last_state_unchecked() };
         let est_remaining_cost = self.pruning_table.permissible_heuristic(last_puzzle_state);
         let est_goal_cost = sofar_cost + est_remaining_cost;
-        // TODO: vcube does IDA* fundamentally differently, ie it returns
-        // est_remaining_cost instead of est_goal_cost.
+
         if est_goal_cost > cost_bound {
             return est_goal_cost;
         }
@@ -73,6 +74,8 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
                 .puzzle_state_history
                 .move_index_unchecked(entry_index)
         };
+        // FIXME: im not entirely convinced inverse lesser branching factor
+        // stuff wont work: U -> R F B L D, D -> R F B L
         for move_index in start..self.puzzle_def.moves.len() {
             // if not a canonical sequence continue and set next_move_index to 0
 

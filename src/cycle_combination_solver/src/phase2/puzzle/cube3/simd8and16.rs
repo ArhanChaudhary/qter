@@ -45,7 +45,7 @@ impl Cube3Interface for Cube3 {
     }
 
     fn replace_compose(&mut self, a: &Self, b: &Self) {
-        // TODO: probably not a big deal, but the armv7 target in swizzle_dyn
+        // FIXME: probably not a big deal, but the armv7 target in swizzle_dyn
         // swizzles high bits as well as low bits and this will be a tiny bit
         // slower than otherwise. May be worth special casing?
 

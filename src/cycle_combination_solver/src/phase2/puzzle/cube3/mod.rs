@@ -34,28 +34,20 @@ mod common {
             Default::default()
         }
 
-        fn validate_sorted_orbit_defs(
+        fn try_from_transformation_meta(
+            sorted_transformations: &[Vec<(u8, u8)>],
             sorted_orbit_defs: &[OrbitDef],
-        ) -> Result<(), KSolveConversionError> {
+        ) -> Result<C, KSolveConversionError> {
             if sorted_orbit_defs == CUBE_3_SORTED_ORBIT_DEFS {
-                Ok(())
+                Ok(Self::from_sorted_transformations_unchecked(
+                    sorted_transformations,
+                ))
             } else {
                 Err(KSolveConversionError::InvalidOrbitDefs(
                     CUBE_3_SORTED_ORBIT_DEFS.to_vec(),
                     sorted_orbit_defs.to_vec(),
                 ))
             }
-        }
-
-        fn from_sorted_transformations_unchecked(
-            sorted_transformations: &[Vec<(u8, u8)>],
-            sorted_orbit_defs: &[OrbitDef],
-        ) -> Self {
-            debug_assert!(sorted_transformations.len() == 2);
-            debug_assert_eq!(sorted_transformations[0].len(), 8);
-            debug_assert_eq!(sorted_transformations[1].len(), 12);
-            debug_assert!(Self::validate_sorted_orbit_defs(sorted_orbit_defs).is_ok());
-            Self::from_sorted_transformations_unchecked(sorted_transformations)
         }
 
         fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: &[OrbitDef]) {
