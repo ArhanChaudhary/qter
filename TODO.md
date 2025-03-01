@@ -48,7 +48,6 @@
 ## Interpreter/CLI
 
 - Implement tapes
-- ⭐Dumping an execution trace
 - Debugging tool
 
 ## Q
