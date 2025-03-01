@@ -1,5 +1,5 @@
 WHITESPACE = _{ " " | "\t" }
-COMMENT    = _{ ("--[[" ~ (!"--]]" ~ ANY)* ~ "--]]") | ("--" ~ (!"\n" ~ ANY)* ~ "\n") }
+COMMENT    = _{ ("--[[" ~ (!"--]]" ~ ANY)* ~ "--]]") | (("--" | (SOI ~ "#!")) ~ (!"\n" ~ ANY)* ~ "\n") }
 
 program = { "\n"* ~ statement ~ ("\n"+ ~ statement)* ~ "\n"* ~ EOI }
 
