@@ -127,11 +127,11 @@ pub enum ActionPerformed<'s> {
         location: usize,
     },
     FailedSolvedGoto {
-        register_idx: usize,
+        puzzle_idx: usize,
         facelets: &'s Facelets,
     },
     SucceededSolvedGoto {
-        register_idx: usize,
+        puzzle_idx: usize,
         facelets: &'s Facelets,
         location: usize,
     },
@@ -139,7 +139,10 @@ pub enum ActionPerformed<'s> {
         register_idx: usize,
         amt: Int<U>,
     },
-    ExecutedAlgorithm(&'s PermutePuzzle),
+    ExecutedAlgorithm {
+        puzzle_idx: usize,
+        algorithm: &'s PermutePuzzle,
+    },
     Panicked,
 }
 
@@ -252,6 +255,16 @@ impl Interpreter {
         }
     }
 
+    /// Return the instruction index to be executed next
+    pub fn program_counter(&self) -> usize {
+        self.program_counter
+    }
+
+    /// The program currently being executed
+    pub fn program(&self) -> &Program {
+        &self.program
+    }
+
     /// Get the current execution state of the interpreter
     pub fn execution_state(&self) -> &ExecutionState {
         &self.execution_state
@@ -306,14 +319,14 @@ impl Interpreter {
                     ActionPerformed::SucceededSolvedGoto {
                         facelets,
                         location: *instruction_idx,
-                        register_idx: *register_idx,
+                        puzzle_idx: *register_idx,
                     }
                 } else {
                     self.program_counter += 1;
 
                     ActionPerformed::FailedSolvedGoto {
                         facelets,
-                        register_idx: *register_idx,
+                        puzzle_idx: *register_idx,
                     }
                 }
             }
@@ -418,7 +431,10 @@ impl Interpreter {
 
                 self.program_counter += 1;
 
-                ActionPerformed::ExecutedAlgorithm(permute_puzzle)
+                ActionPerformed::ExecutedAlgorithm {
+                    puzzle_idx: *puzzle_idx,
+                    algorithm: permute_puzzle,
+                }
             }
         }
     }
@@ -428,7 +444,7 @@ impl Interpreter {
     /// Returns details of the paused state reached
     pub fn step_until_halt(&mut self) -> &PausedState {
         loop {
-            if let ActionPerformed::Paused = self.step() {
+            if let ActionPerformed::Paused | ActionPerformed::Panicked = self.step() {
                 break;
             }
         }
