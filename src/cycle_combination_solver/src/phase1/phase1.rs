@@ -11,12 +11,14 @@ struct OrderIteration {
 }
 
 struct ComboIteration {
-    r: usize,
-    p: usize,
+    register: usize,
+    orbit: usize,
     orbit_sums: Vec<usize>,
-    assignments: Vec<Vec<Vec<usize>>>,
+    assignments: Vec<Assignment>,
     available_pieces: usize,
 }
+
+type Assignment = Vec<Vec<usize>>;
 
 #[derive(Clone)]
 struct PrimeCombo {
@@ -50,7 +52,7 @@ struct CycleCombination {
     cycles: Vec<Cycle>,
 }
 
-fn prime_powers_below_n(n: &usize, max_orient: &[usize]) -> Vec<Vec<PrimePower>> {
+fn prime_powers_below_n(n: usize, max_orient: &[usize]) -> Vec<Vec<PrimePower>> {
     let mut primes: Vec<usize> = vec![2];
 
     for possible_prime in (3..n + 1).step_by(2) {
@@ -75,19 +77,19 @@ fn prime_powers_below_n(n: &usize, max_orient: &[usize]) -> Vec<Vec<PrimePower>>
 
     let mut prime_powers = vec![];
 
-    for p in primes.iter().enumerate() {
+    for (p, prime) in primes.iter().enumerate() {
         let mut orient: usize = 1;
-        let mut piece_check = p.1.pow(2);
-        if max_orient.len() > *p.1 && max_orient[*p.1] > 0 {
-            orient = *p.1;
-            piece_check = *p.1;
+        let mut piece_check = prime.pow(2);
+        if max_orient.len() > *prime && max_orient[*prime] > 0 {
+            orient = *prime;
+            piece_check = *prime;
             prime_powers.push(vec![
                 PrimePower {
                     value: 1,
                     pieces: 0,
                 },
                 PrimePower {
-                    value: *p.1,
+                    value: *prime,
                     pieces: 0,
                 },
             ])
@@ -98,20 +100,20 @@ fn prime_powers_below_n(n: &usize, max_orient: &[usize]) -> Vec<Vec<PrimePower>>
                     pieces: 0,
                 },
                 PrimePower {
-                    value: *p.1,
-                    pieces: *p.1,
+                    value: *prime,
+                    pieces: *prime,
                 },
             ])
         }
 
-        while piece_check <= *n {
-            prime_powers[p.0].push(PrimePower {
+        while piece_check <= n {
+            prime_powers[p].push(PrimePower {
                 value: orient * piece_check,
                 pieces: piece_check,
             });
 
-            piece_check *= *p.1;
-            if orient > 1 && piece_check > max_orient[*p.1] {
+            piece_check *= *prime;
+            if orient > 1 && piece_check > max_orient[*prime] {
                 piece_check *= orient;
                 orient = 1;
             }
@@ -122,8 +124,8 @@ fn prime_powers_below_n(n: &usize, max_orient: &[usize]) -> Vec<Vec<PrimePower>>
 }
 
 fn possible_order_list(
-    total_pieces: &usize,
-    partition_max: &usize,
+    total_pieces: usize,
+    partition_max: usize,
     max_orient: &[usize],
 ) -> Vec<PrimeCombo> {
     let prime_powers = prime_powers_below_n(partition_max, max_orient);
@@ -138,7 +140,7 @@ fn possible_order_list(
     }];
 
     while let Some(s) = stack.pop() {
-        if s.index == -1 || prime_powers[s.index as usize][1].pieces + s.piece_count > *total_pieces
+        if s.index == -1 || prime_powers[s.index as usize][1].pieces + s.piece_count > total_pieces
         {
             paths.push(PrimeCombo {
                 order: s.product,
@@ -150,13 +152,15 @@ fn possible_order_list(
         }
 
         for p in prime_powers[s.index as usize].iter() {
-            let mut new_pieces = s.piece_count + p.pieces;
-            if p.pieces > 0 && p.pieces % 2 == 0 {
-                // TODO this should not happen on 4x4
-                new_pieces += 2;
-            }
+            let new_pieces = s.piece_count
+                + p.pieces
+                + if p.pieces > 0 && p.pieces % 2 == 0 {
+                    2
+                } else {
+                    0
+                }; // TODO this should not happen on 4x4
 
-            if new_pieces <= *total_pieces {
+            if new_pieces <= total_pieces {
                 stack.push(OrderIteration {
                     index: s.index - 1,
                     piece_count: new_pieces,
@@ -184,10 +188,10 @@ fn cycle_combo_test(
     registers: &[PrimeCombo],
     cycle_cubie_counts: &[usize],
     puzzle_orbit_definition: &[Orbit],
-) -> Option<Vec<Vec<Vec<usize>>>> {
+) -> Option<Vec<Assignment>> {
     let mut stack: Vec<ComboIteration> = vec![ComboIteration {
-        r: 0,
-        p: 0,
+        register: 0,
+        orbit: 0,
         orbit_sums: vec![0; cycle_cubie_counts.len()],
         assignments: vec![vec![vec![]; cycle_cubie_counts.len()]; registers.len()],
         available_pieces: cycle_cubie_counts.iter().sum(), //TODO this is wrong
@@ -201,58 +205,62 @@ fn cycle_combo_test(
         }
 
         let mut seen = vec![];
-        while s.p == registers[s.r].values.len() {
-            s.p = 0;
-            s.r += 1;
-            if s.r == registers.len() {
+        while s.orbit == registers[s.register].values.len() {
+            s.orbit = 0;
+            s.register += 1;
+            if s.register == registers.len() {
                 break;
             }
         }
 
-        if s.r == registers.len() {
+        if s.register == registers.len() {
             return Some(s.assignments);
         } //TODO no duplicates
 
-        for orbit in puzzle_orbit_definition.iter().enumerate() {
-            if orbit.1.orient_count == 1 {
-                if seen.contains(&cycle_cubie_counts[orbit.0]) {
+        for (o, orbit) in puzzle_orbit_definition.iter().enumerate() {
+            if orbit.orient_count == 1 {
+                if seen.contains(&cycle_cubie_counts[o]) {
                     continue;
                 } else {
-                    seen.push(cycle_cubie_counts[orbit.0]);
+                    seen.push(cycle_cubie_counts[o]);
                 }
             }
 
             let mut new_cycle: usize;
             let new_available: usize;
-            if orbit.1.orient_count > 1 && registers[s.r].values[s.p] % orbit.1.orient_count == 0 {
-                new_cycle = registers[s.r].piece_counts[s.p];
+            if orbit.orient_count > 1
+                && registers[s.register].values[s.orbit] % orbit.orient_count == 0
+            {
+                new_cycle = registers[s.register].piece_counts[s.orbit];
                 new_available = s.available_pieces;
-            } else if registers[s.r].values[s.p] - registers[s.r].piece_counts[s.p]
+            } else if registers[s.register].values[s.orbit]
+                - registers[s.register].piece_counts[s.orbit]
                 <= s.available_pieces
             {
-                new_cycle = registers[s.r].values[s.p];
-                new_available = s.available_pieces - registers[s.r].values[s.p]
-                    + registers[s.r].piece_counts[s.p];
+                new_cycle = registers[s.register].values[s.orbit];
+                new_available = s.available_pieces - registers[s.register].values[s.orbit]
+                    + registers[s.register].piece_counts[s.orbit];
             } else {
                 continue;
             }
 
-            if new_cycle == 0 && s.assignments[s.r][orbit.0].is_empty() {
+            if new_cycle == 0 && s.assignments[s.register][o].is_empty() {
                 if s.available_pieces == 0 {
                     continue;
                 }
                 new_cycle = 1;
             }
 
-            let mut parity: usize = 0;
-            if new_cycle % 2 == 0 && new_cycle > 0 {
-                parity = 2;
-            }
+            let parity: usize = if new_cycle % 2 == 0 && new_cycle > 0 {
+                2
+            } else {
+                0
+            };
 
-            if new_cycle + parity + s.orbit_sums[orbit.0] <= cycle_cubie_counts[orbit.0] {
+            if new_cycle + parity + s.orbit_sums[o] <= cycle_cubie_counts[o] {
                 stack.push(ComboIteration {
-                    r: s.r,
-                    p: s.p + 1,
+                    register: s.register,
+                    orbit: s.orbit + 1,
                     orbit_sums: s.orbit_sums.clone(),
                     assignments: s.assignments.clone(),
                     available_pieces: new_available,
@@ -260,11 +268,11 @@ fn cycle_combo_test(
 
                 if new_cycle > 0 {
                     let last = stack.len() - 1;
-                    stack[last].orbit_sums[orbit.0] += new_cycle;
-                    stack[last].assignments[s.r][orbit.0].push(new_cycle);
+                    stack[last].orbit_sums[o] += new_cycle;
+                    stack[last].assignments[s.register][o].push(new_cycle);
                     if parity > 0 {
-                        stack[last].orbit_sums[orbit.0] += 2;
-                        stack[last].assignments[s.r][orbit.0].push(2);
+                        stack[last].orbit_sums[o] += 2;
+                        stack[last].assignments[s.register][o].push(2);
                     }
                 }
             }
@@ -282,37 +290,34 @@ fn assignments_to_combo(
 ) -> CycleCombination {
     let mut cycle_combination: Vec<Cycle> = vec![];
 
-    for r in registers.iter().enumerate() {
+    for (r, register) in registers.iter().enumerate() {
         let mut partitions: Vec<Partition> = vec![];
 
-        for orbit in puzzle_orbit_definition.iter().enumerate() {
+        for (o, orbit) in puzzle_orbit_definition.iter().enumerate() {
             let mut lcm: usize = 1;
-            for a in &assignments[r.0][orbit.0] {
+            for a in &assignments[r][o] {
                 lcm = num_integer::lcm(lcm, *a);
             }
 
-            if orbit.1.orient_count > 1 {
-                lcm *= orbit.1.orient_count;
-                assignments[r.0][orbit.0].push(1);
+            if orbit.orient_count > 1 {
+                lcm *= orbit.orient_count;
+                assignments[r][o].push(1);
             }
 
             partitions.push(Partition {
-                name: orbit.1.name.clone(),
-                partition: assignments[r.0][orbit.0].clone(),
+                name: orbit.name.clone(),
+                partition: assignments[r][o].clone(),
                 order: lcm,
             });
         }
 
         cycle_combination.push(Cycle {
-            order: r.1.order,
+            order: register.order,
             partitions,
         });
     }
 
-    let mut order_product: usize = 1;
-    for r in registers {
-        order_product *= r.order;
-    }
+    let order_product = registers.iter().map(|v| v.order).product();
 
     CycleCombination {
         used_cubie_counts: cycle_cubie_counts.to_vec(),
@@ -328,20 +333,20 @@ fn efficient_cycle_combinations(
     let mut cycle_cubie_counts: Vec<usize> = vec![0; puzzle_orbit_definition.len()];
     let mut max_orient: Vec<usize> = vec![0; 4];
 
-    for orbit in puzzle_orbit_definition.iter().enumerate() {
-        if orbit.1.orient_count > 1 {
-            max_orient[orbit.1.orient_count] = orbit.1.cubie_count - 1;
-            cycle_cubie_counts[orbit.0] = orbit.1.cubie_count - 1;
+    for (o, orbit) in puzzle_orbit_definition.iter().enumerate() {
+        if orbit.orient_count > 1 {
+            max_orient[orbit.orient_count] = orbit.cubie_count - 1;
+            cycle_cubie_counts[o] = orbit.cubie_count - 1;
         } else {
-            cycle_cubie_counts[orbit.0] = orbit.1.cubie_count;
+            cycle_cubie_counts[o] = orbit.cubie_count;
         }
     }
 
     let total_cubies: usize = cycle_cubie_counts.iter().sum();
     let cubies_per_register = total_cubies / num_registers;
     let possible_orders: Vec<PrimeCombo> = possible_order_list(
-        &cubies_per_register,
-        cycle_cubie_counts
+        cubies_per_register,
+        *cycle_cubie_counts
             .iter()
             .max()
             .unwrap()
@@ -349,32 +354,32 @@ fn efficient_cycle_combinations(
         &max_orient,
     );
 
-    for order in possible_orders {
-        println!("Testing Order {}", order.order);
+    for prime_combo in possible_orders {
+        println!("Testing Order {}", prime_combo.order);
 
         let mut unorientable_excess: usize = 0;
-        for o in order.values.iter().enumerate() {
-            if o.1 % 2 == 0 {
+        for (v, value) in prime_combo.values.iter().enumerate() {
+            if value % 2 == 0 {
                 let orientable =
-                    (max_orient[2] / 1.max(order.piece_counts[o.0])).min(num_registers);
+                    (max_orient[2] / 1.max(prime_combo.piece_counts[v])).min(num_registers);
                 unorientable_excess +=
-                    (num_registers - orientable) * (o.1 - order.piece_counts[o.0]);
-            } else if o.1 % 3 == 0 {
+                    (num_registers - orientable) * (value - prime_combo.piece_counts[v]);
+            } else if value % 3 == 0 {
                 let orientable =
-                    (max_orient[3] / 1.max(order.piece_counts[o.0])).min(num_registers);
+                    (max_orient[3] / 1.max(prime_combo.piece_counts[v])).min(num_registers);
                 unorientable_excess +=
-                    (num_registers - orientable) * (o.1 - order.piece_counts[o.0]);
+                    (num_registers - orientable) * (value - prime_combo.piece_counts[v]);
             }
         }
 
-        if unorientable_excess + num_registers * (order.piece_counts.iter().sum::<usize>())
+        if unorientable_excess + num_registers * (prime_combo.piece_counts.iter().sum::<usize>())
             > total_cubies
         {
             continue;
         }
 
         let assignments = cycle_combo_test(
-            &vec![order.clone(); num_registers],
+            &vec![prime_combo.clone(); num_registers],
             &cycle_cubie_counts,
             puzzle_orbit_definition,
         );
@@ -382,7 +387,7 @@ fn efficient_cycle_combinations(
         if assignments.is_some() {
             return Some(assignments_to_combo(
                 &mut assignments.unwrap(),
-                &vec![order.clone(); num_registers],
+                &vec![prime_combo.clone(); num_registers],
                 &cycle_cubie_counts,
                 puzzle_orbit_definition,
             ));
