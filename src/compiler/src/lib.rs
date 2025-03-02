@@ -323,9 +323,9 @@ struct ExpansionInfo {
     // The global scope is block zero and if the block/label hasn't been expanded its ID is None
     block_counter: usize,
     block_info: BlockInfoTracker,
-    /// Map (file contents, macro name) to a macro
+    /// Map (file contents containing macro definition, macro name) to a macro
     macros: HashMap<(ArcIntern<str>, ArcIntern<str>), WithSpan<Macro>>,
-    /// Map each (file contents, macro name) to the file that it's in
+    /// Map each (file contents containing macro call, macro name) to the file contents that the macro definition is in
     available_macros: HashMap<(ArcIntern<str>, ArcIntern<str>), ArcIntern<str>>,
     /// Each file has its own LuaMacros; use the file contents as the key
     lua_macros: HashMap<ArcIntern<str>, LuaMacros>,

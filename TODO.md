@@ -36,6 +36,7 @@
   - Actual expansion
   - `after` syntax
   - Lua stuff
+- Architecture switching
 - Memory tapes
   - Implement in QAT
 - Asher's repeated move post process optimization: R U R repeated = R then U R2 repeated
@@ -44,11 +45,14 @@
 - Directory of testing programs instead of hardcoding into Rust
   - Inline testing in the QAT format
 - Henry's efficient multiplication program
+- `solve-puzzle` and `repeat-until` optimizations
+- Analyzing branches and removing dead code
 
 ## Interpreter/CLI
 
 - Implement tapes
 - Debugging tool
+- Implementing the fancy CRT/loop-repetition-calculating thingy
 
 ## Q
 

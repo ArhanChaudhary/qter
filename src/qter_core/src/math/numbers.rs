@@ -16,6 +16,10 @@ pub struct I;
 pub struct U;
 
 /// A signed or unsigned integer
+///
+/// This is an opaque big integer type, intended to represent orders of puzzles and values of registers since those can get huge.
+///
+/// This is currently implemented as a 512 bit integer, but since it's opaque, the size can be trivially increased as necessary.
 pub struct Int<Signed> {
     value: I512,
     phantom: PhantomData<Signed>,
