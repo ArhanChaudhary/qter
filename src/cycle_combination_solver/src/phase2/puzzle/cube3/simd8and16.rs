@@ -2,7 +2,7 @@
 
 use super::common::Cube3Interface;
 use crate::phase2::puzzle::OrientedPartition;
-use std::simd::{u8x16, u8x8};
+use std::simd::{cmp::SimdPartialEq, num::SimdInt, u8x16, u8x8};
 
 #[derive(Clone, Debug, PartialEq, Hash)]
 pub struct Cube3 {
@@ -18,11 +18,11 @@ const TWOS: u8x16 = u8x16::splat(2);
 const THREES: u8x8 = u8x8::splat(3);
 
 impl Cube3Interface for Cube3 {
-    fn from_sorted_transformations_unchecked(sorted_transformations: &[Vec<(u8, u8)>]) -> Self {
+    fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self {
         let corners_transformation = &sorted_transformations[0];
         let edges_transformation = &sorted_transformations[1];
 
-        let mut ep = u8x16::splat(0);
+        let mut ep = u8x16::splat(15);
         let mut eo = u8x16::splat(0);
         let mut cp = u8x8::splat(0);
         let mut co = u8x8::splat(0);
@@ -32,8 +32,6 @@ impl Cube3Interface for Cube3 {
             ep[i] = perm;
             eo[i] = orientation_delta;
         }
-
-        ep[12..16].fill(15);
 
         for i in 0..8 {
             let (perm, orientation) = corners_transformation[i];
@@ -48,6 +46,8 @@ impl Cube3Interface for Cube3 {
         // FIXME: probably not a big deal, but the armv7 target in swizzle_dyn
         // swizzles high bits as well as low bits and this will be a tiny bit
         // slower than otherwise. May be worth special casing?
+
+        // TODO: bench using sub and min
 
         // Benchmarking on a 2020 Mac M1 has shown that swizzling twice is
         // faster than taking the modulus (1.93ns vs 3.69ns)
@@ -212,8 +212,6 @@ impl Cube3Interface for Cube3 {
 impl Cube3 {
     pub fn replace_inverse_brute(&mut self, a: &Self) {
         // Benchmarked on a 2020 Mac M1: 10.19ns
-        use std::simd::{cmp::SimdPartialEq, num::SimdInt};
-
         self.ep = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 15, 15, 15]);
         self.cp = u8x8::splat(0);
         // Brute force the inverse by checking all possible values and
@@ -249,7 +247,7 @@ impl Cube3 {
     }
 
     pub fn replace_inverse_raw(&mut self, a: &Self) {
-        // Benchmarked on a 2020 Mac M1: 1.7ns
+        // Benchmarked on a 2020 Mac M1: 7.16ns
 
         for i in 0..12 {
             // SAFETY: ep is length 12, so i is always in bounds
@@ -322,7 +320,6 @@ mod tests {
     #[test]
     #[cfg_attr(not(simd8and16), ignore)]
     fn test_raw_inversion() {
-        // Benchmarked on a 2020 Mac M1: 7.16ns
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();

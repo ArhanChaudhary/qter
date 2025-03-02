@@ -6,7 +6,7 @@ mod common {
     use std::{fmt::Debug, hash::Hash, num::NonZeroU8};
 
     pub trait Cube3Interface: Hash + Clone + PartialEq + Debug {
-        fn from_sorted_transformations_unchecked(sorted_transformations: &[Vec<(u8, u8)>]) -> Self;
+        fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self;
         fn replace_compose(&mut self, a: &Self, b: &Self);
         fn replace_inverse(&mut self, a: &Self);
         fn induces_sorted_cycle_type(
@@ -39,9 +39,7 @@ mod common {
             sorted_orbit_defs: &[OrbitDef],
         ) -> Result<C, KSolveConversionError> {
             if sorted_orbit_defs == CUBE_3_SORTED_ORBIT_DEFS {
-                Ok(Self::from_sorted_transformations_unchecked(
-                    sorted_transformations,
-                ))
+                Ok(Self::from_sorted_transformations(sorted_transformations))
             } else {
                 Err(KSolveConversionError::InvalidOrbitDefs(
                     CUBE_3_SORTED_ORBIT_DEFS.to_vec(),

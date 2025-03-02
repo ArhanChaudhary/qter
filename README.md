@@ -1,4 +1,4 @@
-<!-- cspell:ignore nlogo promela scilab vcube benwh rokicki lgarron ditrus voltara infinidoge esqu1 trangium movecount Arhan Chaudhary Rovnyak korf twizzle metaprogramming cubies youtuber abelian nxopt -->
+<!-- cspell:ignore nlogo promela scilab vcube benwh rokicki lgarron ditrus voltara infinidoge esqu1 trangium movecount Arhan Chaudhary Rovnyak korf twizzle metaprogramming cubies youtuber abelian nxopt sebastianotronto twsearch -->
 <p align="center">
     <img src="media/Header.png" width="500" alt="The qter logo">
 </p>
@@ -629,12 +629,19 @@ Talking points
 <!-- cspell:enable -->
 # Acknowledgements
 
-- [@rokicki](https://github.com/rokicki) for personally advising phase 2 design and for the inspiring [PuzzleGeometry format](https://alpha.twizzle.net/explore/help.html#puzzlegeometry).
-- [@lgarron](https://github.com/lgarron) and [@esqu1](https://github.com/esqu1) for reference Korf's algorithm implementations in Rust ([1](https://github.com/cubing/twsearch/blob/efb207e11162174360e3ae49aa552cda1313df81/src/rs/_internal/search/idf_search.rs#L340) and [2](https://github.com/esqu1/Rusty-Rubik/blob/1e32829e83c662816bd85f6c37d6f774a15e3aea/src/solver.rs#L123)).
-- [@ScriptRacoon](https://github.com/ScriptRacoon) for providing developmental [code](https://gist.github.com/ScriptRaccoon/c12c4884c116dead62a15a3d09732d5d) for phase 1.
-- [@trangium](https://github.com/trangium) for their [Movecount Coefficient Calculator](https://trangium.github.io/MovecountCoefficient/).
-- [@Voltara](https://github.com/Voltara) for their [optimal solver](https://github.com/Voltara/vcube) used to compress algorithms.
-- [@benwh1](https://github.com/benwh1) and [@adrian154](https://github.com/adrian154) for miscellaneous puzzle theory insights.
-- [@DitrusNight](https://github.com/DitrusNight) for advising our programming language design.
-- [@Phineas1500](https://github.com/Phineas1500) for encouragement and outreach.
-- [@Infinidoge](https://github.com/Infinidoge) for generously providing access to powerful hardware.
+Qter's theoretical background is built upon the hard work of:
+
+- [@rokicki](https://github.com/rokicki)'s [nxopt](https://github.com/rokicki/cube20src/blob/master/nxopt.md), [twsearch](https://github.com/cubing/twsearch), and [PuzzleGeometry](https://alpha.twizzle.net/explore/help.html#puzzlegeometry).
+- [@lgarron](https://github.com/lgarron)'s [canonical FSM](https://github.com/cubing/twsearch/blob/42d41c3480e79dc50005346f0ca7c4727530237f/src/rs/_internal/canonical_fsm/canonical_fsm.rs).
+- [@ScriptRacoon](https://github.com/ScriptRacoon)'s [order solver](https://gist.github.com/ScriptRaccoon/c12c4884c116dead62a15a3d09732d5d).
+- [@trangium](https://github.com/trangium)'s [Movecount Coefficient Calculator](https://trangium.github.io/MovecountCoefficient/).
+- [@sebastianotronto](https://github.com/sebastianotronto)'s [multithreaded IDA* implementation](https://git.tronto.net/h48/file/src/solvers/h48/solve.h.html).
+- [@Voltara](https://github.com/Voltara)'s [SIMD optimizations](https://github.com/Voltara/vcube/blob/9f5bc2cce18f29437879ace825f22917f6705378/src/avx2_cube.h).
+
+Additionally,
+
+- Thanks to [@rokicki](https://github.com/rokicki) for personally advising most of phase 2's design.
+- Thanks to [@benwh1](https://github.com/benwh1) for miscellaneous puzzle theory insights.
+- Thanks to [@Infinidoge](https://github.com/Infinidoge) for providing access to powerful hardware.
+- Thanks to [@DitrusNight](https://github.com/DitrusNight) for advising qter's programming language design.
+- Thanks to [@Phineas1500](https://github.com/Phineas1500) for encouragement and outreach.

@@ -63,6 +63,7 @@ impl<T: PrimInt, const N: usize> MultiBvInterface for [T; N] {
 }
 
 #[derive(Clone, PartialEq, Debug, Hash)]
+// TODO: rid of this
 pub struct StackPuzzle<const N: usize>(pub [u8; N]);
 
 #[derive(Clone, PartialEq, Debug, Hash)]

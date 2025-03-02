@@ -4,8 +4,8 @@ use std::{ops::Index, slice::SliceIndex};
 pub trait PuzzleStateHistoryInterface<P: PuzzleState> {
     type Buf: Index<usize, Output = (P, usize)> + AsMut<[(P, usize)]> + AsRef<[(P, usize)]>;
 
-    /// Create an initial PuzzleStateHistoryBuf. It must initialize the stack
-    /// with a first entry of the solved state and a move index of 0.
+    /// Create an initial `Self::Buf`. It must initialize the stack with a first
+    /// entry of the solved state and a move index of 0.
     fn initialize(puzzle_def: &PuzzleDef<P>) -> Self::Buf;
 
     /// Resize the underlying buffer capacity if needed.
@@ -158,8 +158,10 @@ pub unsafe trait PuzzleStateHistoryArrayBuf<P: PuzzleState> {}
 // finds an optimal path cannot be longer than 20 moves. 21 is used to account
 // for the solved state at the beginning of the stack.
 unsafe impl PuzzleStateHistoryArrayBuf<Cube3> for [Cube3; 21] {}
-// // SAFETY: God's number for the 2x2x2 is 11. See above.
-// unsafe impl PuzzleStateHistoryArrayBuf<Cube3> for [Cube2; 12] {}
+/*
+ * // SAFETY: God's number for the 2x2x2 is 11. See above.
+ * unsafe impl PuzzleStateHistoryArrayBuf<Cube3> for [Cube2; 12] {}
+ */
 
 impl<const N: usize, P: PuzzleState> PuzzleStateHistoryInterface<P> for [P; N]
 where
