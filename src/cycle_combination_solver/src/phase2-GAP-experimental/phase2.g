@@ -7,6 +7,12 @@ R := (25,27,32,30)(26,29,31,28)( 3,38,43,19)( 5,36,45,21)( 8,33,48,24);
 B := (33,35,40,38)(34,37,39,36)( 3, 9,46,32)( 2,12,47,29)( 1,14,48,27);
 D := (41,43,48,46)(42,45,47,44)(14,22,30,38)(15,23,31,39)(16,24,32,40);
 cube := Group(U, L, F, R, B, D);
+edge_facelet_buf := 42;
+corner_facelet_buf := 1;
+edge_cubies := Blocks(cube, Orbit(cube, edge_facelet_buf));
+corner_cubies := Blocks(cube, Orbit(cube, corner_facelet_buf));
+edge_facelets := Immutable(Flat(edge_cubies));
+corner_facelets := Immutable(Flat(corner_cubies));
 
 Read("./util.g");
 
@@ -16,10 +22,11 @@ cornercube := ClosureGroup(
 );
 cornercube_enumerator := Enumerator(cornercube);
 moves := [U, L, F, R, B, D, U^-1, L^-1, F^-1, R^-1, B^-1, D^-1, U^2, L^2, F^2, R^2, B^2, D^2];;
-len_moves := Length(moves);
-target_cycle_structure_corners := [ ,1,,,,,,1 ];
-target_cycle_structure := [ 1, 1,,,,,, 1,1 ];
 
+len_moves := Length(moves);
+target_cycle_structure_corners := [ ,2 ];
+target_cycle_structure := [ 1,2,,,,,,,1 ];
+# phase 2 currently has a logic error, it finds the first cycle with the cycle type but not every cycle same htm/qtm which are all candidates for phase 3
 HashPerm := function(perm)
     # TODO: use lehmer code + ternary instead
     return Position(cornercube_enumerator, perm);
@@ -80,6 +87,7 @@ BFSFromStructure := function(target_cycle_structure_corners)
 end;
 
 heuristic := BFSFromStructure(target_cycle_structure_corners);;
+SaveWorkspace("save11");
 
 IDAStarSearch := function(path, last_state, g, bound)
     local last_h, f, min, i, last_move_index_mod, next_state, j, t;
@@ -141,4 +149,6 @@ IDAStar := function()
     od;
 end;
 
-IDAStar();
+a:=IDAStar();
+Print(a);
+AppendTo("./awesome.txt", a);

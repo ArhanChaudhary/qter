@@ -5,7 +5,14 @@ R := (25,27,32,30)(26,29,31,28)( 3,38,43,19)( 5,36,45,21)( 8,33,48,24);
 B := (33,35,40,38)(34,37,39,36)( 3, 9,46,32)( 2,12,47,29)( 1,14,48,27);
 D := (41,43,48,46)(42,45,47,44)(14,22,30,38)(15,23,31,39)(16,24,32,40);
 cube := Group(U, L, F, R, B, D);
+edge_facelet_buf := 42;
+corner_facelet_buf := 1;
+edge_cubies := Blocks(cube, Orbit(cube, edge_facelet_buf));
+corner_cubies := Blocks(cube, Orbit(cube, corner_facelet_buf));
+edge_facelets := Immutable(Flat(edge_cubies));
+corner_facelets := Immutable(Flat(corner_cubies));
 
+Read("util.g");
 moves := [U, L, F, R, B, D, U^-1, L^-1, F^-1, R^-1, B^-1, D^-1, U^2, L^2, F^2, R^2, B^2, D^2];;
 for i in [1..10000] do
     s := [];
@@ -14,9 +21,9 @@ for i in [1..10000] do
     od;
     s := Stabilizer(cube, s, OnTuples);
     if Size(s) > 10000000 then continue; fi;
-    for j in Set(List(ConjugacyClasses(s), x -> Order(Representative(x)))) do
-        a := ConjugacyClassesOfOrder(s, j);
-        b := Filtered(ConjugacyClasses(s), x -> Order(Representative(x)) = j);
+    for j in Set(List(ConjugacyClasses(s), x -> CycleStructurePerm(Representative(x)))) do
+        a := ConjugacyClassesOfStructure(s, j);
+        b := Filtered(ConjugacyClasses(s), x -> CycleStructurePerm(Representative(x)) = j);
         if Length(a) <> Length(b) then
             Error("Test failed");
         fi;
@@ -31,5 +38,5 @@ for i in [1..10000] do
             fi;
         od;
     od;
-    AppendTo("x.txt", "Test ", i, " passed\n");
+    Print("Test ", i, " passed\n");
 od;

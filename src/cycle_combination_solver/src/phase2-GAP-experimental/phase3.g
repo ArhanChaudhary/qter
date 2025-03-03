@@ -1,28 +1,9 @@
 prev_phase_info := function()
     return rec(
         first_cycles := Immutable([
-            U*L*F*L^-1*R^2,
-            U*F*R*F^-1*B^2,
-            U*R*B*R^-1*L^2,
-            U*B*L*B^-1*F^2,
-            U*L*U^-1*D^2*F,
-            U*F*U^-1*D^2*R,
-            U*R*U^-1*D^2*B,
-            U*B*U^-1*D^2*L,
-            U*L^-1*R^2*B*L,
-            U*F^-1*B^2*L*F,
-            U*R^-1*L^2*F*R,
-            U*B^-1*F^2*R*B,
-            U*L^-1*U^-1*F^-1*D^2,
-            U*F^-1*U^-1*R^-1*D^2,
-            U*R^-1*U^-1*B^-1*D^2,
-            U*B^-1*U^-1*L^-1*D^2,
-            U*D^2*L^-1*U^-1*F^-1,
-            U*D^2*F^-1*U^-1*R^-1,
-            U*D^2*R^-1*U^-1*B^-1,
-            U*D^2*B^-1*U^-1*L^-1
+            U*L*B^-1*L*B^-1*U*R^-1*D*U^2*L^2*F^2,
         ]),
-        second_cycle_order := 24,
+        second_cycle_order := 18,
         share_edge := true,
         share_corner := true,
     );
@@ -54,8 +35,18 @@ ValidCornerFlip := function(corner1, corner2)
     fi;
 end;
 
+# TODO: try longer phase 1 cycles from phase 2, they might result in a shorter
+# phase 3 cycle
+
+# ALL WAYS TO ARRANGE THE REST OF N - 1 cycles
+# ADDENDUM: no because we care about the shortest algorithm for the most order
+# cycle, symmetry when all cycle orders are the same is handled in phase 1
+# ADDENDUM2: DONT DO THIS IN PHASE 1 DO IT HERE
+
 for i in [1..Length(prev_phase_info.first_cycles)] do
+    # first_cycle_moved_points:=Unique(Concatenation(first_cycle_moved_points, MovedPoints(tmp)));
     first_cycle := prev_phase_info.first_cycles[i];
+    # Given our second cycle algorithm, we want to find the third
     first_cycle_moved_points := MovedPoints(first_cycle);
     first_cycle_stabilizer := Stabilizer(
         cube,
@@ -89,6 +80,7 @@ for i in [1..Length(prev_phase_info.first_cycles)] do
             od;
         fi;
         if prev_phase_info.share_corner then
+            # TODO: multiple shared corner cubies, use ALL previous unshared cubies
             shared_corner_cubie := CycleFromList(First(
                 first_cycle_components,
                 c -> Length(c) = 3
@@ -115,6 +107,8 @@ for i in [1..Length(prev_phase_info.first_cycles)] do
         second_cycle_group,
         prev_phase_info.second_cycle_order
     );
+    # second_cycle_classes := ConjugacyClassesOfStructure(second_cycle_group, [ 1,,,,,,,,1 ]);
+    # TODO: FORCE FLIP SHARED CUBIE, FILTER CLASSES
     unique_length := 0;
     for j in [1..Length(second_cycle_classes)] do
         is_duplicate := false;
@@ -135,9 +129,11 @@ for i in [1..Length(prev_phase_info.first_cycles)] do
             and inversed_class_element in second_cycle_classes[j]
         );
         for second_cycle_candidate in second_cycle_classes[j] do
+            # thing := Cycles(second_cycle_candidate, MovedPoints(second_cycle_candidate));
             if (
                 not prune_inverse_elements or
                 second_cycle_candidate < second_cycle_candidate^-1
+            # ) and [7, 18] in thing and ([1, 35, 9] in thing or [1, 9, 35] in thing) then
             ) then
                 AppendTo(
                     "./output2.txt",
@@ -147,4 +143,5 @@ for i in [1..Length(prev_phase_info.first_cycles)] do
             fi;
         od;
     od;
+    # TODO: for every thing the same htm and qtm size. have a stack of shared cubies each cycle combination uses
 od;
