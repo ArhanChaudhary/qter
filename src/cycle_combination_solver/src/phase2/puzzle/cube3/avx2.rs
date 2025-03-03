@@ -5,11 +5,7 @@ use super::common::Cube3Interface;
 use core::arch::x86;
 #[cfg(target_arch = "x86_64")]
 use core::arch::x86_64 as x86;
-use std::{
-    fmt,
-    hash::Hash,
-    simd::{cmp::SimdOrd, u8x32},
-};
+use std::{fmt, hash::Hash, simd::u8x32};
 
 #[allow(clippy::derived_hash_with_manual_eq)]
 #[derive(Clone, Hash)]
@@ -19,8 +15,13 @@ pub struct Cube3(u8x32);
 impl PartialEq for Cube3 {
     #[inline(always)]
     fn eq(&self, other: &Self) -> bool {
+        #[cfg(avx2)]
         extern "vectorcall" fn eq_vectorcall(a: &Cube3, b: &Cube3) -> bool {
             a.0 == b.0
+        }
+        #[cfg(not(avx2))]
+        fn eq_vectorcall(a: &Cube3, b: &Cube3) -> bool {
+            unimplemented!()
         }
         eq_vectorcall(self, other)
     }
@@ -76,7 +77,10 @@ impl Cube3Interface for Cube3 {
 
     #[inline(always)]
     fn replace_compose(&mut self, a: &Self, b: &Self) {
+        #[cfg(avx2)]
         extern "vectorcall" fn replace_compose_vectorcall(dst: &mut Cube3, a: &Cube3, b: &Cube3) {
+            use std::simd::cmp::SimdOrd;
+
             const ORI_MASK: u8x32 = u8x32::splat(0b11_0000);
             const ORI_CARRY: u8x32 = u8x32::from_array([
                 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
@@ -93,12 +97,19 @@ impl Cube3Interface for Cube3 {
 
             dst.0 = composed;
         }
+        #[cfg(not(avx2))]
+        fn replace_compose_vectorcall(_dst: &mut Cube3, _a: &Cube3, _b: &Cube3) {
+            unimplemented!()
+        }
         replace_compose_vectorcall(self, a, b);
     }
 
     #[inline(always)]
     fn replace_inverse(&mut self, a: &Self) {
+        #[cfg(avx2)]
         extern "vectorcall" fn replace_inverse_vectorcall(dst: &mut Cube3, a: &Cube3) {
+            use std::simd::cmp::SimdOrd;
+
             const ORI_CARRY_INVERSE: u8x32 = u8x32::from_array([
                 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10,
                 0x10, 0x10, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
@@ -145,6 +156,10 @@ impl Cube3Interface for Cube3 {
             // this to be safe.
             ori = unsafe { x86::_mm256_shuffle_epi8(ori.into(), inverse_perm.into()).into() };
             *dst = Cube3(inverse_perm | ori);
+        }
+        #[cfg(not(avx2))]
+        fn replace_inverse_vectorcall(_dst: &mut Cube3, _a: &Cube3) {
+            unimplemented!()
         }
         replace_inverse_vectorcall(self, a);
     }
