@@ -1,7 +1,6 @@
-#![cfg_attr(any(simd32, not(simd8and16)), allow(dead_code, unused_variables))]
+#![cfg_attr(any(avx2, not(simd8and16)), allow(dead_code, unused_variables))]
 
 use super::common::Cube3Interface;
-use crate::phase2::puzzle::OrientedPartition;
 use std::simd::{cmp::SimdPartialEq, num::SimdInt, u8x16, u8x8};
 
 #[derive(Clone, Debug, PartialEq, Hash)]
@@ -43,20 +42,15 @@ impl Cube3Interface for Cube3 {
     }
 
     fn replace_compose(&mut self, a: &Self, b: &Self) {
-        // FIXME: probably not a big deal, but the armv7 target in swizzle_dyn
+        // TODO: probably not a big deal, but the armv7 target in swizzle_dyn
         // swizzles high bits as well as low bits and this will be a tiny bit
         // slower than otherwise. May be worth special casing?
 
-        // TODO: bench using sub and min
-
-        // Benchmarking on a 2020 Mac M1 has shown that swizzling twice is
-        // faster than taking the modulus (1.93ns vs 3.69ns)
+        // Benchmarked on a 2020 Mac M1: 1.93ns
         self.ep = a.ep.swizzle_dyn(b.ep);
         self.eo = EO_MOD_SWIZZLE.swizzle_dyn(a.eo.swizzle_dyn(b.ep) + b.eo);
-        // self.eo = (a.eo.swizzle_dyn(b.ep) + b.eo) % TWOS;
         self.cp = a.cp.swizzle_dyn(b.cp);
         self.co = CO_MOD_SWIZZLE.swizzle_dyn(a.co.swizzle_dyn(b.cp) + b.co);
-        // self.co = (a.co.swizzle_dyn(b.cp) + b.co) % THREES;
     }
 
     fn replace_inverse(&mut self, a: &Self) {
@@ -108,104 +102,17 @@ impl Cube3Interface for Cube3 {
             .swizzle_dyn(self.cp);
     }
 
-    fn induces_sorted_cycle_type(
+    fn ep_eo_cp_co(
         &self,
-        sorted_cycle_type: &[OrientedPartition],
-        mut multi_bv: [u16; 2],
-    ) -> bool {
-        let mut covered_cycles_count = 0_u8;
-
-        // SAFETY: validate_sorted_orbit_defs ensures that sorted_cycle_type.len() == 2
-        let sorted_corner_partition = unsafe { sorted_cycle_type.get_unchecked(0) };
-        for i in 0..8 {
-            if multi_bv[0] & (1 << i) != 0 {
-                continue;
-            }
-            multi_bv[0] |= 1 << i;
-            let mut actual_cycle_length = 1;
-            // SAFETY: cp is length 8, so i is always in bounds
-            let mut corner = unsafe { *self.cp.as_array().get_unchecked(i) } as usize;
-            // SAFETY: co is length 8, and corner is always between 0 and 8, so corner is always in bounds
-            let mut orientation_sum = unsafe { *self.co.as_array().get_unchecked(corner) };
-
-            while corner != i {
-                actual_cycle_length += 1;
-                multi_bv[0] |= 1 << corner;
-                // SAFETY: cp is length 8, and corner is always between 0 and 8, so corner is always in bounds
-                corner = unsafe { *self.cp.as_array().get_unchecked(corner) } as usize;
-                // SAFETY: co is length 8, and corner is always between 0 and 8, so corner is always in bounds
-                orientation_sum += unsafe { *self.co.as_array().get_unchecked(corner) };
-            }
-
-            let actual_orients = orientation_sum % 3 != 0;
-            if actual_cycle_length == 1 && !actual_orients {
-                continue;
-            }
-            let Some(valid_cycle_index) = sorted_corner_partition.iter().enumerate().position(
-                |(j, &(expected_cycle_length, expected_orients))| {
-                    expected_cycle_length.get() == actual_cycle_length
-                        && expected_orients == actual_orients
-                        && (multi_bv[1] & (1 << j) == 0)
-                },
-            ) else {
-                return false;
-            };
-            multi_bv[1] |= 1 << valid_cycle_index;
-            covered_cycles_count += 1;
-            // cannot possibly return true if this runs
-            if covered_cycles_count > sorted_corner_partition.len() as u8 {
-                return false;
-            }
-        }
-        if covered_cycles_count != sorted_corner_partition.len() as u8 {
-            return false;
-        }
-
-        multi_bv = [0; 2];
-        covered_cycles_count = 0;
-        // SAFETY: validate_sorted_orbit_defs ensures that sorted_cycle_type.len() == 2
-        let sorted_edge_partition = unsafe { sorted_cycle_type.get_unchecked(1) };
-        for i in 0..12 {
-            if multi_bv[0] & (1 << i) != 0 {
-                continue;
-            }
-            multi_bv[0] |= 1 << i;
-            let mut actual_cycle_length = 1;
-            // SAFETY: ep is length 12, so i is always in bounds
-            let mut edge = unsafe { *self.ep.as_array().get_unchecked(i) } as usize;
-            // SAFETY: eo is length 12, and edge is always between 0 and 12, so edge is always in bounds
-            let mut orientation_sum = unsafe { *self.eo.as_array().get_unchecked(edge) };
-
-            while edge != i {
-                actual_cycle_length += 1;
-                multi_bv[0] |= 1 << edge;
-                // SAFETY: ep is length 12, and edge is always between 0 and 12, so edge is always in bounds
-                edge = unsafe { *self.ep.as_array().get_unchecked(edge) } as usize;
-                // SAFETY: eo is length 12, and edge is always between 0 and 12, so edge is always in bounds
-                orientation_sum += unsafe { *self.eo.as_array().get_unchecked(edge) };
-            }
-
-            let actual_orients = orientation_sum % 2 != 0;
-            if actual_cycle_length == 1 && !actual_orients {
-                continue;
-            }
-            let Some(valid_cycle_index) = sorted_edge_partition.iter().enumerate().position(
-                |(j, &(expected_cycle_length, expected_orients))| {
-                    expected_cycle_length.get() == actual_cycle_length
-                        && expected_orients == actual_orients
-                        && (multi_bv[1] & (1 << j) == 0)
-                },
-            ) else {
-                return false;
-            };
-            multi_bv[1] |= 1 << valid_cycle_index;
-            covered_cycles_count += 1;
-            // cannot possibly return true if this runs
-            if covered_cycles_count > sorted_edge_partition.len() as u8 {
-                return false;
-            }
-        }
-        covered_cycles_count == sorted_edge_partition.len() as u8
+        ep: &mut [u8; 16],
+        eo: &mut [u8; 16],
+        cp: &mut [u8; 8],
+        co: &mut [u8; 8],
+    ) {
+        self.ep.copy_to_slice(ep);
+        self.eo.copy_to_slice(eo);
+        self.cp.copy_to_slice(cp);
+        self.co.copy_to_slice(co);
     }
 }
 

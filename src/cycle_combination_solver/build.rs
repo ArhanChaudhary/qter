@@ -44,27 +44,10 @@ fn main() {
         },
         // simd8and16: { not(l) }, // true
         // simd8and16: { l }, // false
-        simd32: {
-            any(
-                all(
-                    target_feature = "avx2",
-                    not(target_feature = "avx512vbmi")
-                ),
-                all(
-                    target_feature = "avx512vl",
-                    target_feature = "avx512vbmi"
-                )
-            )
+        avx2: {
+            target_feature = "avx2"
         },
-        // simd32: { not(l) }, // true
-        // simd32: { l }, // false
-        simd64: {
-            all(
-                target_feature = "avx512vl",
-                target_feature = "avx512vbmi"
-            )
-        }
-        // simd64: { not(l) }, // false
-        // simd64: { l }, // true
+        // avx2: { not(l) }, // true
+        // avx2: { l }, // false
     }
 }

@@ -34,7 +34,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
         mutable: &mut CycleTypeSolverMutable<P, H>,
         entry_index: usize,
         sofar_cost: u8,
-        // FIXME: make this `togo` and descending (see sc) and vcube does IDA*
+        // TODO: make this `togo` and descending (see sc) and vcube does IDA*
         // fundamentally differently, ie it returns est_remaining_cost instead
         // of est_goal_cost.
         cost_bound: u8,
@@ -61,7 +61,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
         }
 
         let mut min_next_est_goal_cost = u8::MAX;
-        // FIXME: this doesn't cover every symmetric sequence
+        // TODO: this doesn't cover every symmetric sequence
         let mut next_entry_index = entry_index + 1;
         // SAFETY: `entry_index` starts at zero in the initial call, and
         // `B::initialize` guarantees that the first entry is bound. For every
@@ -74,7 +74,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
                 .puzzle_state_history
                 .move_index_unchecked(entry_index)
         };
-        // FIXME: im not entirely convinced inverse lesser branching factor
+        // TODO: im not entirely convinced inverse lesser branching factor
         // stuff wont work: U -> R F B L D, D -> R F B L
         for move_index in start..self.puzzle_def.moves.len() {
             // if not a canonical sequence continue and set next_move_index to 0

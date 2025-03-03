@@ -91,6 +91,7 @@ impl<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> PuzzleStateHistory<P, H>
 
     /// Pop the last state from the stack.
     pub fn pop_stack(&mut self) {
+        debug_assert!(self.stack_pointer > 0);
         self.stack_pointer -= 1;
     }
 
