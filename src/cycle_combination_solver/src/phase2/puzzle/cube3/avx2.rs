@@ -2,10 +2,18 @@
 
 use super::common::Cube3Interface;
 #[cfg(target_arch = "x86")]
-use core::arch::x86;
+use core::arch::x86::_mm256_shuffle_epi8;
 #[cfg(target_arch = "x86_64")]
-use core::arch::x86_64 as x86;
-use std::{fmt, hash::Hash, simd::u8x32};
+use core::arch::x86_64::_mm256_shuffle_epi8;
+use std::{
+    fmt,
+    hash::Hash,
+    simd::{
+        cmp::{SimdOrd, SimdPartialEq},
+        num::SimdInt,
+        u8x32,
+    },
+};
 
 #[allow(clippy::derived_hash_with_manual_eq)]
 #[derive(Clone, Hash)]
@@ -59,6 +67,17 @@ const ORI_CARRY_INVERSE: u8x32 = u8x32::from_array([
     0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
 ]);
 
+#[inline(always)]
+fn avx2_swizzle_lo(a: u8x32, b: u8x32) -> u8x32 {
+    #[cfg(avx2)]
+    // SAFETY: a and b are well defined. Honestly not sure why this is unsafe
+    unsafe {
+        _mm256_shuffle_epi8(a.into(), b.into()).into()
+    }
+    #[cfg(not(avx2))]
+    unimplemented!()
+}
+
 impl Cube3Interface for Cube3 {
     fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self {
         let corners_transformation = &sorted_transformations[0];
@@ -85,10 +104,7 @@ impl Cube3Interface for Cube3 {
     #[inline(always)]
     fn replace_compose(&mut self, a: &Self, b: &Self) {
         // Benchmarked on a 2x Intel Xeon E5-2667 v3 VM: 1.55ns
-        #[cfg(avx2)]
-        extern "vectorcall" fn replace_compose_vectorcall(dst: &mut Cube3, a: &Cube3, b: &Cube3) {
-            use std::simd::cmp::SimdOrd;
-
+        fn inner(dst: &mut Cube3, a: &Cube3, b: &Cube3) {
             const ORI_MASK: u8x32 = u8x32::splat(0b11_0000);
             const ORI_CARRY: u8x32 = u8x32::from_array([
                 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
@@ -96,67 +112,59 @@ impl Cube3Interface for Cube3 {
                 0x30, 0x30, 0x30, 0x30,
             ]);
 
-            // SAFETY: a and b are well defined. Testing has shown this to be
-            // safe.
-            let mut composed: u8x32 =
-                unsafe { x86::_mm256_shuffle_epi8(a.0.into(), b.0.into()).into() };
+            let mut composed = avx2_swizzle_lo(a.0, b.0);
             composed += b.0 & ORI_MASK;
             composed = composed.simd_min(composed - ORI_CARRY);
 
             dst.0 = composed;
         }
+        #[cfg(avx2)]
+        extern "vectorcall" fn replace_compose_vectorcall(dst: &mut Cube3, a: &Cube3, b: &Cube3) {
+            inner(dst, a, b)
+        }
         #[cfg(not(avx2))]
-        fn replace_compose_vectorcall(_dst: &mut Cube3, _a: &Cube3, _b: &Cube3) {
-            unimplemented!()
+        fn replace_compose_vectorcall(dst: &mut Cube3, a: &Cube3, b: &Cube3) {
+            inner(dst, a, b);
         }
         replace_compose_vectorcall(self, a, b);
     }
 
     #[inline(always)]
+    #[no_mangle]
     fn replace_inverse(&mut self, a: &Self) {
         // Benchmarked on a 2x Intel Xeon E5-2667 v3 VM: 6.27ns
-        #[cfg(avx2)]
-        extern "vectorcall" fn replace_inverse_vectorcall(dst: &mut Cube3, a: &Cube3) {
-            use std::simd::cmp::SimdOrd;
-
+        fn inner(dst: &mut Cube3, a: &Cube3) {
             let perm = a.0 & PERM_MASK;
             let mut added_ori = a.0 ^ perm;
-            let perm = perm.into();
 
-            // See simd8and16 for what this is
-            // SAFETY: all arguments are well defined. Testing has shown this to
-            // be safe.
-            let inverse: u8x32 = unsafe {
-                let mut pow_3 = x86::_mm256_shuffle_epi8(perm, perm);
-                pow_3 = x86::_mm256_shuffle_epi8(pow_3, perm);
-                let mut inverse = x86::_mm256_shuffle_epi8(pow_3, pow_3);
-                inverse = x86::_mm256_shuffle_epi8(inverse, inverse);
-                inverse =
-                    x86::_mm256_shuffle_epi8(x86::_mm256_shuffle_epi8(inverse, inverse), pow_3);
-                inverse = x86::_mm256_shuffle_epi8(inverse, inverse);
-                inverse = x86::_mm256_shuffle_epi8(inverse, inverse);
-                inverse = x86::_mm256_shuffle_epi8(inverse, inverse);
-                inverse =
-                    x86::_mm256_shuffle_epi8(x86::_mm256_shuffle_epi8(inverse, inverse), perm);
-                inverse = x86::_mm256_shuffle_epi8(inverse, inverse);
-                inverse = x86::_mm256_shuffle_epi8(inverse, inverse);
-                inverse = x86::_mm256_shuffle_epi8(inverse, inverse);
-                inverse = x86::_mm256_shuffle_epi8(inverse, inverse);
-                inverse =
-                    x86::_mm256_shuffle_epi8(x86::_mm256_shuffle_epi8(inverse, inverse), pow_3);
-                x86::_mm256_shuffle_epi8(x86::_mm256_shuffle_epi8(inverse, inverse), perm).into()
-            };
+            let mut pow_3 = avx2_swizzle_lo(perm, perm);
+            pow_3 = avx2_swizzle_lo(pow_3, perm);
+            let mut inverse = avx2_swizzle_lo(pow_3, pow_3);
+            inverse = avx2_swizzle_lo(inverse, inverse);
+            inverse = avx2_swizzle_lo(avx2_swizzle_lo(inverse, inverse), pow_3);
+            inverse = avx2_swizzle_lo(inverse, inverse);
+            inverse = avx2_swizzle_lo(inverse, inverse);
+            inverse = avx2_swizzle_lo(inverse, inverse);
+            inverse = avx2_swizzle_lo(avx2_swizzle_lo(inverse, inverse), perm);
+            inverse = avx2_swizzle_lo(inverse, inverse);
+            inverse = avx2_swizzle_lo(inverse, inverse);
+            inverse = avx2_swizzle_lo(inverse, inverse);
+            inverse = avx2_swizzle_lo(inverse, inverse);
+            inverse = avx2_swizzle_lo(avx2_swizzle_lo(inverse, inverse), pow_3);
+            inverse = avx2_swizzle_lo(avx2_swizzle_lo(inverse, inverse), perm);
+
             added_ori += added_ori;
             added_ori = added_ori.simd_min(added_ori - ORI_CARRY_INVERSE);
-            // SAFETY: ori and inverse_perm are well defined. Testing has shown
-            // this to be safe.
-            added_ori =
-                unsafe { x86::_mm256_shuffle_epi8(added_ori.into(), inverse.into()).into() };
+            added_ori = avx2_swizzle_lo(added_ori, inverse);
             *dst = Cube3(inverse | added_ori);
         }
+        #[cfg(avx2)]
+        extern "vectorcall" fn replace_inverse_vectorcall(dst: &mut Cube3, a: &Cube3) {
+            inner(dst, a)
+        }
         #[cfg(not(avx2))]
-        fn replace_inverse_vectorcall(_dst: &mut Cube3, _a: &Cube3) {
-            unimplemented!()
+        fn replace_inverse_vectorcall(dst: &mut Cube3, a: &Cube3) {
+            inner(dst, a)
         }
         replace_inverse_vectorcall(self, a);
     }
@@ -183,13 +191,7 @@ impl Cube3 {
     #[inline(always)]
     pub fn replace_inverse_brute(&mut self, a: &Self) {
         // Benchmarked on a 2x Intel Xeon E5-2667 v3 VM: 6.80ns
-        #[cfg(avx2)]
-        extern "vectorcall" fn replace_inverse_brute_vectorcall(dst: &mut Cube3, a: &Cube3) {
-            use std::simd::{
-                cmp::{SimdOrd, SimdPartialEq},
-                num::SimdInt,
-            };
-
+        fn inner(dst: &mut Cube3, a: &Cube3) {
             let perm = a.0 & PERM_MASK;
             let mut added_ori = a.0 ^ perm;
 
@@ -206,11 +208,7 @@ impl Cube3 {
                 ($i:literal) => {
                     let inv_trial = u8x32::splat($i);
                     let inv_correct = IDENTITY
-                        // SAFETY: perm and inv_trial are well defined. Testing has
-                        // shown this to be safe.
-                        .simd_eq(unsafe {
-                            x86::_mm256_shuffle_epi8(perm.into(), inv_trial.into()).into()
-                        })
+                        .simd_eq(avx2_swizzle_lo(perm, inv_trial))
                         .to_int()
                         .cast();
                     inverse = (inv_trial & inv_correct) | inverse;
@@ -232,15 +230,16 @@ impl Cube3 {
 
             added_ori += added_ori;
             added_ori = added_ori.simd_min(added_ori - ORI_CARRY_INVERSE);
-            // SAFETY: ori and inverse_perm are well defined. Testing has shown
-            // this to be safe.
-            added_ori =
-                unsafe { x86::_mm256_shuffle_epi8(added_ori.into(), inverse.into()).into() };
+            added_ori = avx2_swizzle_lo(added_ori, inverse);
             *dst = Cube3(inverse | added_ori);
         }
+        #[cfg(avx2)]
+        extern "vectorcall" fn replace_inverse_brute_vectorcall(dst: &mut Cube3, a: &Cube3) {
+            inner(dst, a)
+        }
         #[cfg(not(avx2))]
-        fn replace_inverse_brute_vectorcall(_dst: &mut Cube3, _a: &Cube3) {
-            unimplemented!()
+        fn replace_inverse_brute_vectorcall(dst: &mut Cube3, a: &Cube3) {
+            inner(dst, a)
         }
         replace_inverse_brute_vectorcall(self, a);
     }
