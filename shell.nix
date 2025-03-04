@@ -5,13 +5,16 @@
 let
   rust_overlay = import (
     builtins.fetchTarball {
-      url = "https://github.com/oxalica/rust-overlay/archive/74a3fb71b0cc67376ab9e7c31abcd68c813fc226.tar.gz";
-      sha256 = "sha256:1y308q8yxz8nkdw2gh626ay8am8c5w4jn0kfc37wiiqza0xp392s";
+      url = "https://github.com/oxalica/rust-overlay/archive/aefb7017d710f150970299685e8d8b549d653649.tar.gz";
+      sha256 = "sha256:0bwxwmbg3jnyiadn6bjk6sx2as0l9slzvp0xkx16jjr8bl8z0sz7";
     }
   );
   pkgs = import <nixpkgs> { overlays = [ rust_overlay ]; };
   rust = pkgs.rust-bin.nightly."2025-03-02".default.override {
-    extensions = [ "rust-src" "rust-analyzer" ];
+    extensions = [
+      "rust-src"
+      "rust-analyzer"
+    ];
   };
 in
 pkgs.mkShell {
