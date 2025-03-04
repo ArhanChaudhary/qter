@@ -181,3 +181,9 @@ impl Cube3Interface for Cube3 {
         co.copy_from_slice(&ori[16..24]);
     }
 }
+
+impl Cube3 {
+    pub fn replace_inverse_brute(&mut self, a: &Self) {
+
+    }
+}

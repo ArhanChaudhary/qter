@@ -42,10 +42,6 @@ impl Cube3Interface for Cube3 {
     }
 
     fn replace_compose(&mut self, a: &Self, b: &Self) {
-        // TODO: probably not a big deal, but the armv7 target in swizzle_dyn
-        // swizzles high bits as well as low bits and this will be a tiny bit
-        // slower than otherwise. May be worth special casing?
-
         // Benchmarked on a 2020 Mac M1: 1.93ns
         self.ep = a.ep.swizzle_dyn(b.ep);
         self.eo = EO_MOD_SWIZZLE.swizzle_dyn(a.eo.swizzle_dyn(b.ep) + b.eo);

@@ -1165,18 +1165,15 @@ mod tests {
         induces_sorted_cycle_type_many::<cube3::avx2::Cube3>();
     }
 
-    pub fn bench_induces_sorted_cycle_type_helper<P: PuzzleState>(b: &mut Bencher) {
+    pub fn bench_compose_helper<P: PuzzleState>(b: &mut Bencher) {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let sorted_cycle_type = [
-            ct(&[(3, true), (5, true)]),
-            ct(&[(2, true), (2, false), (7, true)]),
-        ];
-        let order_1260 = apply_moves(&cube3_def, &cube3_def.new_solved_state(), "R U2 D' B D'", 1);
-        let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
+        let mut solved = cube3_def.new_solved_state();
+        let r_move = cube3_def.find_move("R").unwrap();
+        let f_move = cube3_def.find_move("F").unwrap();
         b.iter(|| {
-            test::black_box(&order_1260).induces_sorted_cycle_type(
-                &sorted_cycle_type,
-                multi_bv.reusable_ref(),
+            test::black_box(&mut solved).replace_compose(
+                test::black_box(&r_move.puzzle_state),
+                test::black_box(&f_move.puzzle_state),
                 &cube3_def.sorted_orbit_defs,
             );
         });
@@ -1193,17 +1190,54 @@ mod tests {
         });
     }
 
-    pub fn bench_compose_helper<P: PuzzleState>(b: &mut Bencher) {
+    pub fn bench_induces_sorted_cycle_type_worst_helper<P: PuzzleState>(b: &mut Bencher) {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let mut solved = cube3_def.new_solved_state();
-        let r_move = cube3_def.find_move("R").unwrap();
-        let f_move = cube3_def.find_move("F").unwrap();
+        let sorted_cycle_type = [
+            ct(&[(3, true), (5, true)]),
+            ct(&[(2, true), (2, false), (7, true)]),
+        ];
+        let order_1260 = apply_moves(&cube3_def, &cube3_def.new_solved_state(), "R U2 D' B D'", 1);
+        let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
         b.iter(|| {
-            test::black_box(&mut solved).replace_compose(
-                test::black_box(&r_move.puzzle_state),
-                test::black_box(&f_move.puzzle_state),
+            test::black_box(&order_1260).induces_sorted_cycle_type(
+                &sorted_cycle_type,
+                multi_bv.reusable_ref(),
                 &cube3_def.sorted_orbit_defs,
             );
+        });
+    }
+
+    pub fn bench_induces_sorted_cycle_type_average_helper<P: PuzzleState>(b: &mut Bencher) {
+        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let solved = cube3_def.new_solved_state();
+
+        let sorted_cycle_type = [
+            ct(&[(3, true), (5, true)]),
+            ct(&[(2, true), (2, false), (7, true)]),
+        ];
+        let random_1000: Vec<P> = (0..1000).map(|_| {
+            let mut prev_result = solved.clone();
+            let mut result = solved.clone();
+            for _ in 0..20 {
+                let move_index = fastrand::choice(0_u8..18).unwrap();
+                let move_ = &cube3_def.moves[move_index as usize];
+                prev_result.replace_compose(
+                    &result,
+                    &move_.puzzle_state,
+                    &cube3_def.sorted_orbit_defs,
+                );
+                std::mem::swap(&mut result, &mut prev_result);
+            }
+            result
+        }).collect();
+        let mut random_iter = random_1000.iter().cycle();
+
+        b.iter(|| {
+           test::black_box(random_iter.next().unwrap()).induces_sorted_cycle_type(
+               &sorted_cycle_type,
+               P::new_multi_bv(&cube3_def.sorted_orbit_defs).reusable_ref(),
+               &cube3_def.sorted_orbit_defs,
+           );
         });
     }
 
@@ -1213,20 +1247,24 @@ mod tests {
     }
 
     #[bench]
+    fn bench_inverse_cube3_heap(b: &mut Bencher) {
+        bench_inverse_helper::<HeapPuzzle>(b);
+    }
+
+    #[bench]
+    fn bench_induces_sorted_cycle_type_cube3_heap_worst(b: &mut Bencher) {
+        bench_induces_sorted_cycle_type_worst_helper::<HeapPuzzle>(b);
+    }
+
+    #[bench]
+    fn bench_induces_sorted_cycle_type_cube3_heap_average(b: &mut Bencher) {
+        bench_induces_sorted_cycle_type_average_helper::<HeapPuzzle>(b);
+    }
+
+    #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_compose_cube3_simd8and16(b: &mut Bencher) {
         bench_compose_helper::<cube3::simd8and16::Cube3>(b);
-    }
-
-    #[bench]
-    #[cfg_attr(not(avx2), ignore)]
-    fn bench_compose_cube3_avx2(b: &mut Bencher) {
-        bench_compose_helper::<cube3::avx2::Cube3>(b);
-    }
-
-    #[bench]
-    fn bench_inverse_cube3_heap(b: &mut Bencher) {
-        bench_inverse_helper::<HeapPuzzle>(b);
     }
 
     #[bench]
@@ -1236,25 +1274,38 @@ mod tests {
     }
 
     #[bench]
+    #[cfg_attr(not(simd8and16), ignore)]
+    fn bench_induces_sorted_cycle_type_cube3_simd8and16_worst(b: &mut Bencher) {
+        bench_induces_sorted_cycle_type_worst_helper::<cube3::simd8and16::Cube3>(b);
+    }
+
+    #[bench]
+    #[cfg_attr(not(simd8and16), ignore)]
+    fn bench_induces_sorted_cycle_type_cube3_simd8and16_average(b: &mut Bencher) {
+        bench_induces_sorted_cycle_type_average_helper::<cube3::simd8and16::Cube3>(b);
+    }
+
+    #[bench]
+    #[cfg_attr(not(avx2), ignore)]
+    fn bench_compose_cube3_avx2(b: &mut Bencher) {
+        bench_compose_helper::<cube3::avx2::Cube3>(b);
+    }
+
+    #[bench]
     #[cfg_attr(not(avx2), ignore)]
     fn bench_inverse_cube3_avx2(b: &mut Bencher) {
         bench_inverse_helper::<cube3::avx2::Cube3>(b);
     }
 
     #[bench]
-    fn bench_induces_sorted_cycle_type_cube3_heap(b: &mut Bencher) {
-        bench_induces_sorted_cycle_type_helper::<HeapPuzzle>(b);
-    }
-
-    #[bench]
-    #[cfg_attr(not(simd8and16), ignore)]
-    fn bench_induces_sorted_cycle_type_cube3_simd8and16(b: &mut Bencher) {
-        bench_induces_sorted_cycle_type_helper::<cube3::simd8and16::Cube3>(b);
+    #[cfg_attr(not(avx2), ignore)]
+    fn bench_induces_sorted_cycle_type_cube3_avx2_worst(b: &mut Bencher) {
+        bench_induces_sorted_cycle_type_worst_helper::<cube3::avx2::Cube3>(b);
     }
 
     #[bench]
     #[cfg_attr(not(avx2), ignore)]
-    fn bench_induces_sorted_cycle_type_cube3_avx2(b: &mut Bencher) {
-        bench_induces_sorted_cycle_type_helper::<cube3::avx2::Cube3>(b);
+    fn bench_induces_sorted_cycle_type_cube3_avx2_average(b: &mut Bencher) {
+        bench_induces_sorted_cycle_type_average_helper::<cube3::avx2::Cube3>(b);
     }
 }

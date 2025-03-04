@@ -178,6 +178,10 @@ pub use avx2::Cube3;
 #[cfg(all(not(avx2), simd8and16))]
 pub use simd8and16::Cube3;
 
+// TODO: avx512vl when we have time
+
+// TODO: NxN cubes:
+
 // pub struct StackEvenCubeSimd<const S_24S: usize> {
 //     cp: u8x8,
 //     co: u8x8,
