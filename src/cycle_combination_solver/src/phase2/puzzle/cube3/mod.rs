@@ -3,7 +3,7 @@ pub type Cube3 = super::StackPuzzle<40>;
 
 mod common {
     use crate::phase2::puzzle::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
-    use std::{fmt::Debug, hash::Hash, hint::assert_unchecked, num::NonZeroU8};
+    use std::{fmt::Debug, hash::Hash, num::NonZeroU8};
 
     pub trait Cube3Interface: Hash + Clone + PartialEq + Debug {
         fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self;

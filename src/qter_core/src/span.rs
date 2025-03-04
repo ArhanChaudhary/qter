@@ -1,4 +1,7 @@
-use std::{ops::{Deref, DerefMut}, sync::OnceLock};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::OnceLock,
+};
 
 use internment::ArcIntern;
 use pest::{Position, RuleType};

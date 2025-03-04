@@ -119,34 +119,51 @@ impl Cube3Interface for Cube3 {
 
 impl Cube3 {
     pub fn replace_inverse_brute(&mut self, a: &Self) {
-        // Benchmarked on a 2020 Mac M1: 10.19ns
+        // Benchmarked on a 2020 Mac M1: 6.01ns
         self.ep = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15]);
         self.cp = u8x8::splat(0);
         // Brute force the inverse by checking all possible values and
         // using a mask to check when equal to identity (also inspired by
         // Andrew Skalski's vcube).
-        for i in 0..12 {
-            let ep_trial = u8x16::splat(i);
-            const EP_IDENTITY: u8x16 =
-                u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
-            let ep_correct: u8x16 =
-                a.ep.swizzle_dyn(ep_trial)
-                    .simd_eq(EP_IDENTITY)
-                    .to_int()
-                    .cast();
-            self.ep |= ep_trial & ep_correct;
-
-            if i < 8 {
-                let cp_trial = u8x8::splat(i);
-                const CP_IDENTITY: u8x8 = u8x8::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
-                let cp_correct: u8x8 =
-                    a.cp.swizzle_dyn(cp_trial)
-                        .simd_eq(CP_IDENTITY)
+        const EP_IDENTITY: u8x16 =
+            u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+        const CP_IDENTITY: u8x8 = u8x8::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
+        macro_rules! brute_unroll {
+            ($i:literal) => {
+                let ep_trial = u8x16::splat($i);
+                let ep_correct: u8x16 =
+                    a.ep.swizzle_dyn(ep_trial)
+                        .simd_eq(EP_IDENTITY)
                         .to_int()
                         .cast();
-                self.cp |= cp_trial & cp_correct;
-            }
+                self.ep |= ep_trial & ep_correct;
+
+                // Note that doing simd16 and simd8 stuff separately isn't any
+                // faster
+                if $i < 8 {
+                    let cp_trial = u8x8::splat($i);
+                    let cp_correct: u8x8 =
+                        a.cp.swizzle_dyn(cp_trial)
+                            .simd_eq(CP_IDENTITY)
+                            .to_int()
+                            .cast();
+                    self.cp |= cp_trial & cp_correct;
+                }
+            };
         }
+
+        brute_unroll!(0);
+        brute_unroll!(1);
+        brute_unroll!(2);
+        brute_unroll!(3);
+        brute_unroll!(4);
+        brute_unroll!(5);
+        brute_unroll!(6);
+        brute_unroll!(7);
+        brute_unroll!(8);
+        brute_unroll!(9);
+        brute_unroll!(10);
+        brute_unroll!(11);
 
         self.eo = EO_MOD_SWIZZLE.swizzle_dyn(TWOS - a.eo).swizzle_dyn(self.ep);
         self.co = CO_MOD_SWIZZLE

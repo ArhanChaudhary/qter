@@ -183,7 +183,6 @@ impl Cube3 {
     #[inline(always)]
     pub fn replace_inverse_brute(&mut self, a: &Self) {
         // Benchmarked on a 2x Intel Xeon E5-2667 v3 VM: 6.80ns
-        // (~8% slower than replace_inverse)
         #[cfg(avx2)]
         extern "vectorcall" fn replace_inverse_brute_vectorcall(dst: &mut Cube3, a: &Cube3) {
             use std::simd::{
@@ -203,8 +202,6 @@ impl Cube3 {
                 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
                 10, 11, 12, 13, 14, 15,
             ]);
-
-            // this doubles speed!
             macro_rules! brute_unroll {
                 ($i:literal) => {
                     let inv_trial = u8x32::splat($i);
