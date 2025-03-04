@@ -1,13 +1,13 @@
 #![cfg_attr(not(avx2), allow(dead_code, unused_variables))]
 
 use super::common::Cube3Interface;
-#[cfg(target_arch = "x86")]
+#[cfg(all(avx2, target_arch = "x86"))]
 use core::arch::x86::_mm256_shuffle_epi8;
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(avx2, target_arch = "x86_64"))]
 use core::arch::x86_64::_mm256_shuffle_epi8;
 use std::{
     fmt,
-    hash::Hash,
+    hash::{Hash, Hasher},
     simd::{
         cmp::{SimdOrd, SimdPartialEq},
         num::SimdInt,
@@ -15,8 +15,7 @@ use std::{
     },
 };
 
-#[allow(clippy::derived_hash_with_manual_eq)]
-#[derive(Clone, Hash)]
+#[derive(Clone)]
 #[repr(transparent)]
 pub struct Cube3(u8x32);
 
@@ -32,6 +31,21 @@ impl PartialEq for Cube3 {
             unimplemented!()
         }
         eq_vectorcall(self, other)
+    }
+}
+
+impl Hash for Cube3 {
+    #[inline(always)]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        #[cfg(avx2)]
+        extern "vectorcall" fn hash_vectorcall<H: Hasher>(a: &Cube3, state: &mut H) {
+            a.0.hash(state)
+        }
+        #[cfg(not(avx2))]
+        fn hash_vectorcall<H: Hasher>(a: &Cube3, state: &mut H) {
+            unimplemented!()
+        }
+        hash_vectorcall(self, state)
     }
 }
 
@@ -130,7 +144,6 @@ impl Cube3Interface for Cube3 {
     }
 
     #[inline(always)]
-    #[no_mangle]
     fn replace_inverse(&mut self, a: &Self) {
         // Benchmarked on a 2x Intel Xeon E5-2667 v3 VM: 6.27ns
         fn inner(dst: &mut Cube3, a: &Cube3) {
@@ -169,21 +182,12 @@ impl Cube3Interface for Cube3 {
         replace_inverse_vectorcall(self, a);
     }
 
-    fn ep_eo_cp_co(
+    fn induces_sorted_cycle_type(
         &self,
-        ep: &mut [u8; 16],
-        eo: &mut [u8; 16],
-        cp: &mut [u8; 8],
-        co: &mut [u8; 8],
-    ) {
-        // TODO: use simd swizzling to make faster
-
-        let perm = (self.0 & PERM_MASK).to_array();
-        let ori = (self.0 >> 4).to_array();
-        ep.copy_from_slice(&perm[..16]);
-        cp.copy_from_slice(&perm[16..24]);
-        eo.copy_from_slice(&ori[..16]);
-        co.copy_from_slice(&ori[16..24]);
+        sorted_cycle_type: &[crate::phase2::puzzle::OrientedPartition],
+        multi_bv: [u16; 2],
+    ) -> bool {
+        todo!();
     }
 }
 

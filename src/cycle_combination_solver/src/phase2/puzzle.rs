@@ -583,6 +583,7 @@ fn induces_sorted_cycle_type_slice(
 #[cfg(test)]
 mod tests {
     extern crate test;
+
     use super::*;
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
     use test::Bencher;
@@ -627,104 +628,6 @@ mod tests {
             Err(KSolveConversionError::NotEnoughBufferSpace)
         ));
     }
-
-    // fn validate_sorted_orbit_defs<P: PuzzleState>() {
-    // let ok = P::validate_sorted_orbit_defs(&[
-    // OrbitDef {
-    // piece_count: 8.try_into().unwrap(),
-    // orientation_count: 3.try_into().unwrap(),
-    // },
-    // OrbitDef {
-    // piece_count: 12.try_into().unwrap(),
-    // orientation_count: 2.try_into().unwrap(),
-    // },
-    // ]);
-    // assert!(ok.is_ok());
-    //
-    // let bad = P::validate_sorted_orbit_defs(&[
-    // OrbitDef {
-    // piece_count: 12.try_into().unwrap(),
-    // orientation_count: 3.try_into().unwrap(),
-    // },
-    // OrbitDef {
-    // piece_count: 8.try_into().unwrap(),
-    // orientation_count: 3.try_into().unwrap(),
-    // },
-    // ]);
-    //
-    // assert!(matches!(
-    // bad,
-    // Err(KSolveConversionError::InvalidOrbitDefs(_, _))
-    // ));
-    //
-    // let bad = P::validate_sorted_orbit_defs(&[
-    // OrbitDef {
-    // piece_count: 8.try_into().unwrap(),
-    // orientation_count: 3.try_into().unwrap(),
-    // },
-    // OrbitDef {
-    // piece_count: 12.try_into().unwrap(),
-    // orientation_count: 3.try_into().unwrap(),
-    // },
-    // ]);
-    //
-    // assert!(matches!(
-    // bad,
-    // Err(KSolveConversionError::InvalidOrbitDefs(_, _))
-    // ));
-    //
-    // let bad = P::validate_sorted_orbit_defs(&[
-    // OrbitDef {
-    // piece_count: 8.try_into().unwrap(),
-    // orientation_count: 3.try_into().unwrap(),
-    // },
-    // OrbitDef {
-    // piece_count: 12.try_into().unwrap(),
-    // orientation_count: 2.try_into().unwrap(),
-    // },
-    // OrbitDef {
-    // piece_count: 12.try_into().unwrap(),
-    // orientation_count: 2.try_into().unwrap(),
-    // },
-    // ]);
-    //
-    // assert!(matches!(
-    // bad,
-    // Err(KSolveConversionError::InvalidOrbitDefs(_, _))
-    // ));
-    //
-    // let bad = P::validate_sorted_orbit_defs(&[OrbitDef {
-    // piece_count: 8.try_into().unwrap(),
-    // orientation_count: 3.try_into().unwrap(),
-    // }]);
-    //
-    // assert!(matches!(
-    // bad,
-    // Err(KSolveConversionError::InvalidOrbitDefs(_, _))
-    // ));
-    //
-    // let bad = P::validate_sorted_orbit_defs(&[
-    // OrbitDef {
-    // piece_count: 8.try_into().unwrap(),
-    // orientation_count: 3.try_into().unwrap(),
-    // },
-    // OrbitDef {
-    // piece_count: 13.try_into().unwrap(),
-    // orientation_count: 2.try_into().unwrap(),
-    // },
-    // ]);
-    //
-    // assert!(matches!(
-    // bad,
-    // Err(KSolveConversionError::InvalidOrbitDefs(_, _))
-    // ));
-    // }
-
-    // #[test]
-    // fn test_validate_sorted_orbit_defs() {
-    //     validate_sorted_orbit_defs::<cube3::simd8and16::Cube3>();
-    //     validate_sorted_orbit_defs::<cube3::avx2::Cube3>();
-    // }
 
     pub fn many_compositions<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
