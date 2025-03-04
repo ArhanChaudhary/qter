@@ -21,7 +21,7 @@ impl Cube3Interface for Cube3 {
         let corners_transformation = &sorted_transformations[0];
         let edges_transformation = &sorted_transformations[1];
 
-        let mut ep = u8x16::splat(15);
+        let mut ep = u8x16::splat(0);
         let mut eo = u8x16::splat(0);
         let mut cp = u8x8::splat(0);
         let mut co = u8x8::splat(0);
@@ -31,6 +31,11 @@ impl Cube3Interface for Cube3 {
             ep[i] = perm;
             eo[i] = orientation_delta;
         }
+
+        ep[12] = 12;
+        ep[13] = 13;
+        ep[14] = 14;
+        ep[15] = 15;
 
         for i in 0..8 {
             let (perm, orientation) = corners_transformation[i];
@@ -115,7 +120,7 @@ impl Cube3Interface for Cube3 {
 impl Cube3 {
     pub fn replace_inverse_brute(&mut self, a: &Self) {
         // Benchmarked on a 2020 Mac M1: 10.19ns
-        self.ep = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 15, 15, 15]);
+        self.ep = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15]);
         self.cp = u8x8::splat(0);
         // Brute force the inverse by checking all possible values and
         // using a mask to check when equal to identity (also inspired by
@@ -123,7 +128,7 @@ impl Cube3 {
         for i in 0..12 {
             let ep_trial = u8x16::splat(i);
             const EP_IDENTITY: u8x16 =
-                u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 15, 15, 15]);
+                u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
             let ep_correct: u8x16 =
                 a.ep.swizzle_dyn(ep_trial)
                     .simd_eq(EP_IDENTITY)

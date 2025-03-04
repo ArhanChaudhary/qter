@@ -1200,7 +1200,7 @@ mod tests {
         let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
         b.iter(|| {
             test::black_box(&order_1260).induces_sorted_cycle_type(
-                &sorted_cycle_type,
+                test::black_box(&sorted_cycle_type),
                 multi_bv.reusable_ref(),
                 &cube3_def.sorted_orbit_defs,
             );
@@ -1211,33 +1211,54 @@ mod tests {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.new_solved_state();
 
-        let sorted_cycle_type = [
-            ct(&[(3, true), (5, true)]),
-            ct(&[(2, true), (2, false), (7, true)]),
+        let sorted_cycle_types = [
+            [
+                ct(&[(3, true), (5, true)]),
+                ct(&[(2, true), (2, false), (7, true)]),
+            ],
+            [ct(&[(1, true), (3, true)]), ct(&[(1, true), (5, true)])],
+            [ct(&[(2, true), (3, true)]), ct(&[(4, true), (5, true)])],
+            [
+                ct(&[(1, true), (2, true), (3, true)]),
+                ct(&[(4, true), (5, true)]),
+            ],
+            [
+                ct(&[(2, true), (3, true)]),
+                ct(&[(1, true), (4, true), (5, false)]),
+            ],
+            [ct(&[(4, false)]), ct(&[(4, false)])],
         ];
-        let random_1000: Vec<P> = (0..1000).map(|_| {
-            let mut prev_result = solved.clone();
-            let mut result = solved.clone();
-            for _ in 0..20 {
-                let move_index = fastrand::choice(0_u8..18).unwrap();
-                let move_ = &cube3_def.moves[move_index as usize];
-                prev_result.replace_compose(
-                    &result,
-                    &move_.puzzle_state,
-                    &cube3_def.sorted_orbit_defs,
-                );
-                std::mem::swap(&mut result, &mut prev_result);
-            }
-            result
-        }).collect();
+        let sorted_cycle_types: Vec<_> =
+            sorted_cycle_types.into_iter().cycle().take(1000).collect();
+        let mut sorted_cycle_type_iter = sorted_cycle_types.iter().cycle();
+
+        let random_1000: Vec<P> = (0..1000)
+            .map(|_| {
+                let mut prev_result = solved.clone();
+                let mut result = solved.clone();
+                for _ in 0..20 {
+                    let move_index = fastrand::choice(0_u8..18).unwrap();
+                    let move_ = &cube3_def.moves[move_index as usize];
+                    prev_result.replace_compose(
+                        &result,
+                        &move_.puzzle_state,
+                        &cube3_def.sorted_orbit_defs,
+                    );
+                    std::mem::swap(&mut result, &mut prev_result);
+                }
+                result
+            })
+            .collect();
         let mut random_iter = random_1000.iter().cycle();
 
+        let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
         b.iter(|| {
-           test::black_box(random_iter.next().unwrap()).induces_sorted_cycle_type(
-               &sorted_cycle_type,
-               P::new_multi_bv(&cube3_def.sorted_orbit_defs).reusable_ref(),
-               &cube3_def.sorted_orbit_defs,
-           );
+            test::black_box(unsafe { random_iter.next().unwrap_unchecked() })
+                .induces_sorted_cycle_type(
+                    test::black_box(unsafe { sorted_cycle_type_iter.next().unwrap_unchecked() }),
+                    multi_bv.reusable_ref(),
+                    &cube3_def.sorted_orbit_defs,
+                );
         });
     }
 
