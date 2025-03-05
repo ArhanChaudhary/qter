@@ -306,4 +306,48 @@ mod tests {
             test::black_box(&mut result).replace_inverse_raw(test::black_box(&order_1260));
         });
     }
+
+    #[test]
+    fn rizz() {
+        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let solved = cube3_def.new_solved_state();
+        let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 1);
+
+        const EP_IDENTITY: u8x16 =
+            u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+        // the 4 dummy identity indicies at the end are not counted
+        const EXTRA_ONE_CYCLES: u32 = 4;
+
+        let compose_ep = order_1260.ep;
+        let compose_eo = order_1260.eo;
+        let mut iter_ep = compose_ep;
+        let mut iter_eo = compose_eo;
+        let mut seen = compose_ep.simd_eq(EP_IDENTITY);
+        let num_one_cycles = seen.to_bitmask().count_ones() - EXTRA_ONE_CYCLES;
+        if num_one_cycles > 0 {
+            let one_cycle_piece_mask = iter_eo.simd_ne(u8x16::splat(0));
+            let one_cycle_count = one_cycle_piece_mask.to_bitmask().count_ones() - EXTRA_ONE_CYCLES;
+            println!("1-cycles: {num_one_cycles}");
+            println!("orients: {one_cycle_count}");
+        }
+        let mut i = 2;
+        while !seen.all() {
+            iter_ep = iter_ep.swizzle_dyn(compose_ep);
+            iter_eo = iter_eo.swizzle_dyn(compose_ep) + compose_eo;
+
+            let identity_eq = iter_ep.simd_eq(EP_IDENTITY);
+            let new_pieces = identity_eq & !seen;
+            seen |= identity_eq;
+
+            let num_i_cycles = new_pieces.to_bitmask().count_ones() / i;
+            if num_i_cycles > 0 {
+                let oriented_piece_mask = iter_eo.simd_ne(u8x16::splat(0));
+                let new_oriented_piece_mask = new_pieces & oriented_piece_mask;
+                let new_oriented_cycle_count = new_oriented_piece_mask.to_bitmask().count_ones() / i;
+                println!("{i}-cycles: {num_i_cycles}");
+                println!("orients: {new_oriented_cycle_count}");
+            }
+            i += 1;
+        }
+    }
 }
