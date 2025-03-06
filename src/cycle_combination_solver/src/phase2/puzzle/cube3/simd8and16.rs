@@ -2,7 +2,14 @@
 
 use super::common::Cube3Interface;
 use crate::phase2::puzzle::OrientedPartition;
-use std::simd::{cmp::SimdPartialEq, num::SimdInt, u8x16, u8x8};
+use std::{
+    num::NonZeroU8,
+    simd::{
+        cmp::{SimdPartialEq, SimdPartialOrd},
+        num::SimdInt,
+        u8x16, u8x8,
+    },
+};
 
 #[derive(Clone, Debug, PartialEq, Hash)]
 pub struct Cube3 {
@@ -12,7 +19,7 @@ pub struct Cube3 {
     pub co: u8x8,
 }
 
-const CO_MOD_SWIZZLE: u8x8 = u8x8::from_array([0, 1, 2, 0, 1, 2, 0, 0]);
+const CO_INV_SWIZZLE: u8x8 = u8x8::from_array([0, 2, 1, 0, 2, 1, 0, 0]);
 const EP_IDENTITY: u8x16 =
     u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
 const CP_IDENTITY: u8x8 = u8x8::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
@@ -52,6 +59,7 @@ impl Cube3Interface for Cube3 {
         self.ep = a.ep.swizzle_dyn(b.ep);
         self.eo = (a.eo.swizzle_dyn(b.ep) + b.eo) & u8x16::splat(1);
         self.cp = a.cp.swizzle_dyn(b.cp);
+        const CO_MOD_SWIZZLE: u8x8 = u8x8::from_array([0, 1, 2, 0, 1, 2, 0, 0]);
         self.co = CO_MOD_SWIZZLE.swizzle_dyn(a.co.swizzle_dyn(b.cp) + b.co);
     }
 
@@ -61,7 +69,7 @@ impl Cube3Interface for Cube3 {
         // [1] https://github.com/Voltara/vcube
         // [2] http://wwwhomes.uni-bielefeld.de/achim/addition_chain.html
         //
-        // Benchmarked on a 2020 Mac M1: 3.95ns
+        // Benchmarked on a 2020 Mac M1: 3.58ns
         //
         // Note that there does not seem to be any speed difference when these
         // instructions are reordered (codegen puts all u8x8 and u8x16 swizzles
@@ -98,24 +106,28 @@ impl Cube3Interface for Cube3 {
         self.cp = self.cp.swizzle_dyn(self.cp);
         self.cp = self.cp.swizzle_dyn(self.cp).swizzle_dyn(pow_3_cp);
         self.cp = self.cp.swizzle_dyn(self.cp).swizzle_dyn(a.cp);
-        self.co = CO_MOD_SWIZZLE
-            .swizzle_dyn(u8x8::splat(3) - a.co)
-            .swizzle_dyn(self.cp);
+        self.co = CO_INV_SWIZZLE.swizzle_dyn(a.co).swizzle_dyn(self.cp);
     }
 
     fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
+        // Benchmarked on a 2020 Mac M1: 20ns (worst case) 6.24ns (average)
+
+        // Helps avoid bounds checks in codegen
+        #![allow(clippy::int_plus_one)]
+
         let mut seen = self.ep.simd_eq(EP_IDENTITY);
         let oriented_one_cycle_piece_mask = seen & self.eo.simd_ne(u8x16::splat(0));
         let mut cycle_type_pointer =
             oriented_one_cycle_piece_mask.to_bitmask().count_ones() as usize;
+        // Check oriented one cycles
         if cycle_type_pointer != 0
-            && (cycle_type_pointer > sorted_cycle_type[1].len()
+            && (cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
                 || sorted_cycle_type[1][cycle_type_pointer - 1] != (1.try_into().unwrap(), true))
         {
             return false;
         }
 
-        let mut i = 2;
+        let mut i = NonZeroU8::new(2).unwrap();
         let mut iter_ep = self.ep;
         let mut iter_eo = self.eo;
         while !seen.all() {
@@ -132,27 +144,30 @@ impl Cube3Interface for Cube3 {
                     new_pieces & (iter_eo & u8x16::splat(1)).simd_ne(u8x16::splat(0));
                 let i_oriented_cycle_count = oriented_piece_mask.to_bitmask().count_ones();
 
+                // Unoriented cycles
                 if i_oriented_cycle_count != i_cycle_count {
-                    cycle_type_pointer += ((i_cycle_count - i_oriented_cycle_count) / i) as usize;
-                    if cycle_type_pointer > sorted_cycle_type[1].len()
-                        || sorted_cycle_type[1][cycle_type_pointer - 1].0.get() as u32 != i
-                        || sorted_cycle_type[1][cycle_type_pointer - 1].1
+                    cycle_type_pointer +=
+                        ((i_cycle_count - i_oriented_cycle_count) / i.get() as u32) as usize;
+                    if cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
+                        || sorted_cycle_type[1][cycle_type_pointer - 1] != (i, false)
                     {
                         return false;
                     }
                 }
 
+                // Oriented cycles
                 if i_oriented_cycle_count != 0 {
-                    cycle_type_pointer += (i_oriented_cycle_count / i) as usize;
-                    if cycle_type_pointer > sorted_cycle_type[1].len()
-                        || sorted_cycle_type[1][cycle_type_pointer - 1].0.get() as u32 != i
-                        || !sorted_cycle_type[1][cycle_type_pointer - 1].1
+                    cycle_type_pointer += (i_oriented_cycle_count / i.get() as u32) as usize;
+                    if cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
+                        || sorted_cycle_type[1][cycle_type_pointer - 1] != (i, true)
                     {
                         return false;
                     }
                 }
             }
-            i += 1;
+            // SAFETY: this loop will only ever run 12 times at max because that
+            // is the longest cycle length among edges
+            i = unsafe { i.unchecked_add(1) };
         }
 
         if cycle_type_pointer != sorted_cycle_type[1].len() {
@@ -162,14 +177,15 @@ impl Cube3Interface for Cube3 {
         let mut seen = self.cp.simd_eq(CP_IDENTITY);
         let oriented_one_cycle_piece_mask = seen & self.co.simd_ne(u8x8::splat(0));
         cycle_type_pointer = oriented_one_cycle_piece_mask.to_bitmask().count_ones() as usize;
+        // Check oriented one cycles
         if cycle_type_pointer != 0
-            && (cycle_type_pointer > sorted_cycle_type[1].len()
+            && (cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
                 || sorted_cycle_type[0][cycle_type_pointer - 1] != (1.try_into().unwrap(), true))
         {
             return false;
         }
 
-        i = 2;
+        i = NonZeroU8::new(2).unwrap();
         let mut iter_cp = self.cp;
         let mut iter_co = self.co;
         while !seen.all() {
@@ -182,31 +198,36 @@ impl Cube3Interface for Cube3 {
 
             let i_cycle_count = new_pieces.to_bitmask().count_ones();
             if i_cycle_count > 0 {
+                // x % 3 == 0 fast
+                // see: https://lomont.org/posts/2017/divisibility-testing/
                 let oriented_piece_mask =
-                    new_pieces & (iter_co % u8x8::splat(3)).simd_ne(u8x8::splat(0));
+                    new_pieces & (iter_co * u8x8::splat(171)).simd_gt(u8x8::splat(85));
                 let i_oriented_cycle_count = oriented_piece_mask.to_bitmask().count_ones();
 
+                // Unoriented cycles
                 if i_oriented_cycle_count != i_cycle_count {
-                    cycle_type_pointer += ((i_cycle_count - i_oriented_cycle_count) / i) as usize;
-                    if cycle_type_pointer > sorted_cycle_type[0].len()
-                        || sorted_cycle_type[0][cycle_type_pointer - 1].0.get() as u32 != i
-                        || sorted_cycle_type[0][cycle_type_pointer - 1].1
+                    cycle_type_pointer +=
+                        ((i_cycle_count - i_oriented_cycle_count) / i.get() as u32) as usize;
+                    if cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
+                        || sorted_cycle_type[0][cycle_type_pointer - 1] != (i, false)
                     {
                         return false;
                     }
                 }
 
+                // Oriented cycles
                 if i_oriented_cycle_count != 0 {
-                    cycle_type_pointer += (i_oriented_cycle_count / i) as usize;
-                    if cycle_type_pointer > sorted_cycle_type[0].len()
-                        || sorted_cycle_type[0][cycle_type_pointer - 1].0.get() as u32 != i
-                        || !sorted_cycle_type[0][cycle_type_pointer - 1].1
+                    cycle_type_pointer += (i_oriented_cycle_count / i.get() as u32) as usize;
+                    if cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
+                        || sorted_cycle_type[0][cycle_type_pointer - 1] != (i, true)
                     {
                         return false;
                     }
                 }
             }
-            i += 1;
+            // SAFETY: this loop will only ever run 8 times at max because that
+            // is the longest cycle length among corners
+            i = unsafe { i.unchecked_add(1) };
         }
 
         cycle_type_pointer == sorted_cycle_type[0].len()
@@ -215,8 +236,7 @@ impl Cube3Interface for Cube3 {
 
 impl Cube3 {
     pub fn replace_inverse_brute(&mut self, a: &Self) {
-        // TODO: re-bench everything
-        // Benchmarked on a 2020 Mac M1: 6.01ns
+        // Benchmarked on a 2020 Mac M1: 5.69ns
         self.ep = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15]);
         self.cp = u8x8::splat(0);
         // Brute force the inverse by checking all possible values and
@@ -260,13 +280,11 @@ impl Cube3 {
         brute_unroll!(11);
 
         self.eo = a.eo.swizzle_dyn(self.ep);
-        self.co = CO_MOD_SWIZZLE
-            .swizzle_dyn(u8x8::splat(3) - a.co)
-            .swizzle_dyn(self.cp);
+        self.co = CO_INV_SWIZZLE.swizzle_dyn(a.co).swizzle_dyn(self.cp);
     }
 
     pub fn replace_inverse_raw(&mut self, a: &Self) {
-        // Benchmarked on a 2020 Mac M1: 7.16ns
+        // Benchmarked on a 2020 Mac M1: 7.1ns
 
         for i in 0..12 {
             // SAFETY: ep is length 12, so i is always in bounds
@@ -282,9 +300,7 @@ impl Cube3 {
         }
 
         self.eo = a.eo.swizzle_dyn(self.ep);
-        self.co = CO_MOD_SWIZZLE
-            .swizzle_dyn(u8x8::splat(3) - a.co)
-            .swizzle_dyn(self.cp);
+        self.co = CO_INV_SWIZZLE.swizzle_dyn(a.co).swizzle_dyn(self.cp);
     }
 }
 
