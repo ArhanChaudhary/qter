@@ -1,6 +1,7 @@
 #![cfg_attr(any(avx2, not(simd8and16)), allow(dead_code, unused_variables))]
 
 use super::common::Cube3Interface;
+use crate::phase2::puzzle::OrientedPartition;
 use std::simd::{cmp::SimdPartialEq, num::SimdInt, u8x16, u8x8};
 
 #[derive(Clone, Debug, PartialEq, Hash)]
@@ -11,10 +12,10 @@ pub struct Cube3 {
     pub co: u8x8,
 }
 
-const EO_MOD_SWIZZLE: u8x16 = u8x16::from_array([0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 const CO_MOD_SWIZZLE: u8x8 = u8x8::from_array([0, 1, 2, 0, 1, 2, 0, 0]);
-const TWOS: u8x16 = u8x16::splat(2);
-const THREES: u8x8 = u8x8::splat(3);
+const EP_IDENTITY: u8x16 =
+    u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+const CP_IDENTITY: u8x8 = u8x8::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
 
 impl Cube3Interface for Cube3 {
     fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self {
@@ -49,7 +50,7 @@ impl Cube3Interface for Cube3 {
     fn replace_compose(&mut self, a: &Self, b: &Self) {
         // Benchmarked on a 2020 Mac M1: 1.93ns
         self.ep = a.ep.swizzle_dyn(b.ep);
-        self.eo = EO_MOD_SWIZZLE.swizzle_dyn(a.eo.swizzle_dyn(b.ep) + b.eo);
+        self.eo = (a.eo.swizzle_dyn(b.ep) + b.eo) & u8x16::splat(1);
         self.cp = a.cp.swizzle_dyn(b.cp);
         self.co = CO_MOD_SWIZZLE.swizzle_dyn(a.co.swizzle_dyn(b.cp) + b.co);
     }
@@ -80,6 +81,7 @@ impl Cube3Interface for Cube3 {
         self.ep = self.ep.swizzle_dyn(self.ep);
         self.ep = self.ep.swizzle_dyn(self.ep).swizzle_dyn(pow_3_ep);
         self.ep = self.ep.swizzle_dyn(self.ep).swizzle_dyn(a.ep);
+        self.eo = a.eo.swizzle_dyn(self.ep);
 
         let mut pow_3_cp = a.cp.swizzle_dyn(a.cp);
         pow_3_cp = pow_3_cp.swizzle_dyn(a.cp);
@@ -96,38 +98,130 @@ impl Cube3Interface for Cube3 {
         self.cp = self.cp.swizzle_dyn(self.cp);
         self.cp = self.cp.swizzle_dyn(self.cp).swizzle_dyn(pow_3_cp);
         self.cp = self.cp.swizzle_dyn(self.cp).swizzle_dyn(a.cp);
-
-        self.eo = EO_MOD_SWIZZLE.swizzle_dyn(TWOS - a.eo).swizzle_dyn(self.ep);
         self.co = CO_MOD_SWIZZLE
-            .swizzle_dyn(THREES - a.co)
+            .swizzle_dyn(u8x8::splat(3) - a.co)
             .swizzle_dyn(self.cp);
     }
 
-    fn ep_eo_cp_co(
-        &self,
-        ep: &mut [u8; 16],
-        eo: &mut [u8; 16],
-        cp: &mut [u8; 8],
-        co: &mut [u8; 8],
-    ) {
-        self.ep.copy_to_slice(ep);
-        self.eo.copy_to_slice(eo);
-        self.cp.copy_to_slice(cp);
-        self.co.copy_to_slice(co);
+    fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
+        let mut seen = self.ep.simd_eq(EP_IDENTITY);
+        let oriented_one_cycle_piece_mask = seen & self.eo.simd_ne(u8x16::splat(0));
+        let mut cycle_type_pointer =
+            oriented_one_cycle_piece_mask.to_bitmask().count_ones() as usize;
+        if cycle_type_pointer != 0
+            && (cycle_type_pointer > sorted_cycle_type[1].len()
+                || sorted_cycle_type[1][cycle_type_pointer - 1] != (1.try_into().unwrap(), true))
+        {
+            return false;
+        }
+
+        let mut i = 2;
+        let mut iter_ep = self.ep;
+        let mut iter_eo = self.eo;
+        while !seen.all() {
+            iter_ep = iter_ep.swizzle_dyn(self.ep);
+            iter_eo = iter_eo.swizzle_dyn(self.ep) + self.eo;
+
+            let identity_eq = iter_ep.simd_eq(EP_IDENTITY);
+            let new_pieces = identity_eq & !seen;
+            seen |= identity_eq;
+
+            let i_cycle_count = new_pieces.to_bitmask().count_ones();
+            if i_cycle_count > 0 {
+                let oriented_piece_mask =
+                    new_pieces & (iter_eo & u8x16::splat(1)).simd_ne(u8x16::splat(0));
+                let i_oriented_cycle_count = oriented_piece_mask.to_bitmask().count_ones();
+
+                if i_oriented_cycle_count != i_cycle_count {
+                    cycle_type_pointer += ((i_cycle_count - i_oriented_cycle_count) / i) as usize;
+                    if cycle_type_pointer > sorted_cycle_type[1].len()
+                        || sorted_cycle_type[1][cycle_type_pointer - 1].0.get() as u32 != i
+                        || sorted_cycle_type[1][cycle_type_pointer - 1].1
+                    {
+                        return false;
+                    }
+                }
+
+                if i_oriented_cycle_count != 0 {
+                    cycle_type_pointer += (i_oriented_cycle_count / i) as usize;
+                    if cycle_type_pointer > sorted_cycle_type[1].len()
+                        || sorted_cycle_type[1][cycle_type_pointer - 1].0.get() as u32 != i
+                        || !sorted_cycle_type[1][cycle_type_pointer - 1].1
+                    {
+                        return false;
+                    }
+                }
+            }
+            i += 1;
+        }
+
+        if cycle_type_pointer != sorted_cycle_type[1].len() {
+            return false;
+        }
+
+        let mut seen = self.cp.simd_eq(CP_IDENTITY);
+        let oriented_one_cycle_piece_mask = seen & self.co.simd_ne(u8x8::splat(0));
+        cycle_type_pointer = oriented_one_cycle_piece_mask.to_bitmask().count_ones() as usize;
+        if cycle_type_pointer != 0
+            && (cycle_type_pointer > sorted_cycle_type[1].len()
+                || sorted_cycle_type[0][cycle_type_pointer - 1] != (1.try_into().unwrap(), true))
+        {
+            return false;
+        }
+
+        i = 2;
+        let mut iter_cp = self.cp;
+        let mut iter_co = self.co;
+        while !seen.all() {
+            iter_cp = iter_cp.swizzle_dyn(self.cp);
+            iter_co = iter_co.swizzle_dyn(self.cp) + self.co;
+
+            let identity_eq = iter_cp.simd_eq(CP_IDENTITY);
+            let new_pieces = identity_eq & !seen;
+            seen |= identity_eq;
+
+            let i_cycle_count = new_pieces.to_bitmask().count_ones();
+            if i_cycle_count > 0 {
+                let oriented_piece_mask =
+                    new_pieces & (iter_co % u8x8::splat(3)).simd_ne(u8x8::splat(0));
+                let i_oriented_cycle_count = oriented_piece_mask.to_bitmask().count_ones();
+
+                if i_oriented_cycle_count != i_cycle_count {
+                    cycle_type_pointer += ((i_cycle_count - i_oriented_cycle_count) / i) as usize;
+                    if cycle_type_pointer > sorted_cycle_type[0].len()
+                        || sorted_cycle_type[0][cycle_type_pointer - 1].0.get() as u32 != i
+                        || sorted_cycle_type[0][cycle_type_pointer - 1].1
+                    {
+                        return false;
+                    }
+                }
+
+                if i_oriented_cycle_count != 0 {
+                    cycle_type_pointer += (i_oriented_cycle_count / i) as usize;
+                    if cycle_type_pointer > sorted_cycle_type[0].len()
+                        || sorted_cycle_type[0][cycle_type_pointer - 1].0.get() as u32 != i
+                        || !sorted_cycle_type[0][cycle_type_pointer - 1].1
+                    {
+                        return false;
+                    }
+                }
+            }
+            i += 1;
+        }
+
+        cycle_type_pointer == sorted_cycle_type[0].len()
     }
 }
 
 impl Cube3 {
     pub fn replace_inverse_brute(&mut self, a: &Self) {
+        // TODO: re-bench everything
         // Benchmarked on a 2020 Mac M1: 6.01ns
         self.ep = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15]);
         self.cp = u8x8::splat(0);
         // Brute force the inverse by checking all possible values and
         // using a mask to check when equal to identity (also inspired by
         // Andrew Skalski's vcube).
-        const EP_IDENTITY: u8x16 =
-            u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
-        const CP_IDENTITY: u8x8 = u8x8::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
         macro_rules! brute_unroll {
             ($i:literal) => {
                 let ep_trial = u8x16::splat($i);
@@ -165,9 +259,9 @@ impl Cube3 {
         brute_unroll!(10);
         brute_unroll!(11);
 
-        self.eo = EO_MOD_SWIZZLE.swizzle_dyn(TWOS - a.eo).swizzle_dyn(self.ep);
+        self.eo = a.eo.swizzle_dyn(self.ep);
         self.co = CO_MOD_SWIZZLE
-            .swizzle_dyn(THREES - a.co)
+            .swizzle_dyn(u8x8::splat(3) - a.co)
             .swizzle_dyn(self.cp);
     }
 
@@ -187,9 +281,9 @@ impl Cube3 {
             }
         }
 
-        self.eo = EO_MOD_SWIZZLE.swizzle_dyn(TWOS - a.eo).swizzle_dyn(self.ep);
+        self.eo = a.eo.swizzle_dyn(self.ep);
         self.co = CO_MOD_SWIZZLE
-            .swizzle_dyn(THREES - a.co)
+            .swizzle_dyn(u8x8::splat(3) - a.co)
             .swizzle_dyn(self.cp);
     }
 }
@@ -305,49 +399,5 @@ mod tests {
         b.iter(|| {
             test::black_box(&mut result).replace_inverse_raw(test::black_box(&order_1260));
         });
-    }
-
-    #[test]
-    fn rizz() {
-        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let solved = cube3_def.new_solved_state();
-        let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 1);
-
-        const EP_IDENTITY: u8x16 =
-            u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
-        // the 4 dummy identity indicies at the end are not counted
-        const EXTRA_ONE_CYCLES: u32 = 4;
-
-        let compose_ep = order_1260.ep;
-        let compose_eo = order_1260.eo;
-        let mut iter_ep = compose_ep;
-        let mut iter_eo = compose_eo;
-        let mut seen = compose_ep.simd_eq(EP_IDENTITY);
-        let num_one_cycles = seen.to_bitmask().count_ones() - EXTRA_ONE_CYCLES;
-        if num_one_cycles > 0 {
-            let one_cycle_piece_mask = iter_eo.simd_ne(u8x16::splat(0));
-            let one_cycle_count = one_cycle_piece_mask.to_bitmask().count_ones() - EXTRA_ONE_CYCLES;
-            println!("1-cycles: {num_one_cycles}");
-            println!("orients: {one_cycle_count}");
-        }
-        let mut i = 2;
-        while !seen.all() {
-            iter_ep = iter_ep.swizzle_dyn(compose_ep);
-            iter_eo = iter_eo.swizzle_dyn(compose_ep) + compose_eo;
-
-            let identity_eq = iter_ep.simd_eq(EP_IDENTITY);
-            let new_pieces = identity_eq & !seen;
-            seen |= identity_eq;
-
-            let num_i_cycles = new_pieces.to_bitmask().count_ones() / i;
-            if num_i_cycles > 0 {
-                let oriented_piece_mask = iter_eo.simd_ne(u8x16::splat(0));
-                let new_oriented_piece_mask = new_pieces & oriented_piece_mask;
-                let new_oriented_cycle_count = new_oriented_piece_mask.to_bitmask().count_ones() / i;
-                println!("{i}-cycles: {num_i_cycles}");
-                println!("orients: {new_oriented_cycle_count}");
-            }
-            i += 1;
-        }
     }
 }

@@ -1,5 +1,7 @@
 #![cfg_attr(not(avx2), allow(dead_code, unused_variables))]
 
+use crate::phase2::puzzle::OrientedPartition;
+
 use super::common::Cube3Interface;
 #[cfg(all(avx2, target_arch = "x86"))]
 use core::arch::x86::_mm256_shuffle_epi8;
@@ -184,8 +186,7 @@ impl Cube3Interface for Cube3 {
 
     fn induces_sorted_cycle_type(
         &self,
-        sorted_cycle_type: &[crate::phase2::puzzle::OrientedPartition],
-        multi_bv: [u16; 2],
+        sorted_cycle_type: &[OrientedPartition; 2],
     ) -> bool {
         todo!();
     }

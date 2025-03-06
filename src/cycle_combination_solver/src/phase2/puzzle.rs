@@ -62,6 +62,12 @@ impl<T: PrimInt, const N: usize> MultiBvInterface for [T; N] {
     }
 }
 
+impl MultiBvInterface for () {
+    type MultiBvReusableRef<'a> = ();
+
+    fn reusable_ref(&mut self) -> Self::MultiBvReusableRef<'_> {}
+}
+
 #[derive(Clone, PartialEq, Debug, Hash)]
 pub struct StackPuzzle<const N: usize>(pub [u8; N]);
 
@@ -103,11 +109,11 @@ pub type OrientedPartition = Vec<(NonZeroU8, bool)>;
 
 impl<P: PuzzleState> PuzzleDef<P> {
     pub fn find_move(&self, name: &str) -> Option<&Move<P>> {
-        self.moves.iter().find(|def| def.name == name)
+        self.moves.iter().find(|move_| move_.name == name)
     }
 
     pub fn find_symmetry(&self, name: &str) -> Option<&Move<P>> {
-        self.symmetries.iter().find(|def| def.name == name)
+        self.symmetries.iter().find(|move_| move_.name == name)
     }
 
     pub fn new_solved_state(&self) -> P {
@@ -794,7 +800,7 @@ mod tests {
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 1);
         let sorted_cycle_type = [
             ct(&[(3, true), (5, true)]),
-            ct(&[(2, true), (2, false), (7, true)]),
+            ct(&[(2, false), (2, true), (7, true)]),
         ];
         assert!(order_1260.induces_sorted_cycle_type(
             &sorted_cycle_type,
@@ -1097,7 +1103,7 @@ mod tests {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let sorted_cycle_type = [
             ct(&[(3, true), (5, true)]),
-            ct(&[(2, true), (2, false), (7, true)]),
+            ct(&[(2, false), (2, true), (7, true)]),
         ];
         let order_1260 = apply_moves(&cube3_def, &cube3_def.new_solved_state(), "R U2 D' B D'", 1);
         let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
@@ -1117,7 +1123,7 @@ mod tests {
         let sorted_cycle_types = [
             [
                 ct(&[(3, true), (5, true)]),
-                ct(&[(2, true), (2, false), (7, true)]),
+                ct(&[(2, false), (2, true), (7, true)]),
             ],
             [ct(&[(1, true), (3, true)]), ct(&[(1, true), (5, true)])],
             [ct(&[(2, true), (3, true)]), ct(&[(4, true), (5, true)])],
