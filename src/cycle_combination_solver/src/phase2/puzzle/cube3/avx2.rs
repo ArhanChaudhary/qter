@@ -10,10 +10,11 @@ use core::arch::x86_64::_mm256_shuffle_epi8;
 use std::{
     fmt,
     hash::{Hash, Hasher},
+    num::NonZeroU8,
     simd::{
-        cmp::{SimdOrd, SimdPartialEq},
+        cmp::{SimdOrd, SimdPartialEq, SimdPartialOrd},
         num::SimdInt,
-        u8x32,
+        u8x16, u8x32,
     },
 };
 
@@ -77,10 +78,15 @@ impl fmt::Debug for Cube3 {
     }
 }
 
-const PERM_MASK: u8x32 = u8x32::splat(0b1111);
+const PERM_MASK: u8x32 = u8x32::splat(0b0000_1111);
+const ORI_MASK: u8x32 = u8x32::splat(0b0011_0000);
 const ORI_CARRY_INVERSE: u8x32 = u8x32::from_array([
     0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10,
     0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+]);
+const IDENTITY: u8x32 = u8x32::from_array([
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+    13, 14, 15,
 ]);
 
 #[inline(always)]
@@ -119,9 +125,8 @@ impl Cube3Interface for Cube3 {
 
     #[inline(always)]
     fn replace_compose(&mut self, a: &Self, b: &Self) {
-        // Benchmarked on a 2x Intel Xeon E5-2667 v3 VM: 1.55ns
+        // Benchmarked on a 2x Intel Xeon E5-2667 v3: 1.55ns
         fn inner(dst: &mut Cube3, a: &Cube3, b: &Cube3) {
-            const ORI_MASK: u8x32 = u8x32::splat(0b11_0000);
             const ORI_CARRY: u8x32 = u8x32::from_array([
                 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
                 0x20, 0x20, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
@@ -147,10 +152,9 @@ impl Cube3Interface for Cube3 {
 
     #[inline(always)]
     fn replace_inverse(&mut self, a: &Self) {
-        // Benchmarked on a 2x Intel Xeon E5-2667 v3 VM: 6.27ns
+        // Benchmarked on a 2x Intel Xeon E5-2667 v3: 6.27ns
         fn inner(dst: &mut Cube3, a: &Cube3) {
             let perm = a.0 & PERM_MASK;
-            let mut added_ori = a.0 ^ perm;
 
             let mut pow_3 = avx2_swizzle_lo(perm, perm);
             pow_3 = avx2_swizzle_lo(pow_3, perm);
@@ -168,6 +172,7 @@ impl Cube3Interface for Cube3 {
             inverse = avx2_swizzle_lo(avx2_swizzle_lo(inverse, inverse), pow_3);
             inverse = avx2_swizzle_lo(avx2_swizzle_lo(inverse, inverse), perm);
 
+            let mut added_ori = a.0 & ORI_MASK;
             added_ori += added_ori;
             added_ori = added_ori.simd_min(added_ori - ORI_CARRY_INVERSE);
             added_ori = avx2_swizzle_lo(added_ori, inverse);
@@ -184,31 +189,142 @@ impl Cube3Interface for Cube3 {
         replace_inverse_vectorcall(self, a);
     }
 
-    fn induces_sorted_cycle_type(
-        &self,
-        sorted_cycle_type: &[OrientedPartition; 2],
-    ) -> bool {
-        todo!();
+    fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
+        // Benchmarked on a 2x Intel Xeon E5-2667 v3: 39.94ns (worst) 12.71ns (average)
+        // see simd8and16 for explanation
+        #![allow(clippy::int_plus_one)]
+
+        const EDGE_START: usize = 0;
+        const CORNER_START: usize = 16;
+
+        let compose_ori = self.0 & ORI_MASK;
+        let mut seen = (self.0 & PERM_MASK).simd_eq(IDENTITY);
+
+        let oriented_one_cycle_corner_mask = seen.extract::<CORNER_START, 16>()
+            & compose_ori
+                .extract::<CORNER_START, 16>()
+                .simd_ne(u8x16::splat(0));
+        let mut corner_cycle_type_pointer =
+            oriented_one_cycle_corner_mask.to_bitmask().count_ones() as usize;
+        // Check oriented one cycles
+        if corner_cycle_type_pointer != 0
+            && (corner_cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
+                || sorted_cycle_type[0][corner_cycle_type_pointer - 1]
+                    != (1.try_into().unwrap(), true))
+        {
+            return false;
+        }
+
+        let oriented_one_cycle_edge_mask = seen.extract::<EDGE_START, 16>()
+            & compose_ori
+                .extract::<EDGE_START, 16>()
+                .simd_ne(u8x16::splat(0));
+        let mut edge_cycle_type_pointer =
+            oriented_one_cycle_edge_mask.to_bitmask().count_ones() as usize;
+        // Check oriented one cycles
+        if edge_cycle_type_pointer != 0
+            && (edge_cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
+                || sorted_cycle_type[1][edge_cycle_type_pointer - 1]
+                    != (1.try_into().unwrap(), true))
+        {
+            return false;
+        }
+
+        let mut i = NonZeroU8::new(2).unwrap();
+        let mut iter = self.0;
+        while !seen.all() {
+            iter = avx2_swizzle_lo(iter, self.0) + compose_ori;
+
+            let identity_eq = (iter & PERM_MASK).simd_eq(IDENTITY);
+            let new_pieces = identity_eq & !seen;
+            seen |= identity_eq;
+
+            let new_corners = new_pieces.extract::<CORNER_START, 16>();
+            let i_corner_cycle_count = new_corners.to_bitmask().count_ones();
+            if i_corner_cycle_count > 0 {
+                let mut oriented_corner_mask =
+                    ((iter.extract::<CORNER_START, 16>() >> u8x16::splat(4)) * u8x16::splat(171))
+                        .simd_gt(u8x16::splat(85));
+                oriented_corner_mask &= new_corners;
+                let i_oriented_corner_cycle_count = oriented_corner_mask.to_bitmask().count_ones();
+
+                // Unoriented cycles
+                if i_oriented_corner_cycle_count != i_corner_cycle_count {
+                    corner_cycle_type_pointer += ((i_corner_cycle_count
+                        - i_oriented_corner_cycle_count)
+                        / i.get() as u32) as usize;
+                    if corner_cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
+                        || sorted_cycle_type[0][corner_cycle_type_pointer - 1] != (i, false)
+                    {
+                        return false;
+                    }
+                }
+
+                // Oriented cycles
+                if i_oriented_corner_cycle_count != 0 {
+                    corner_cycle_type_pointer +=
+                        (i_oriented_corner_cycle_count / i.get() as u32) as usize;
+                    if corner_cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
+                        || sorted_cycle_type[0][corner_cycle_type_pointer - 1] != (i, true)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            let new_edges = new_pieces.extract::<EDGE_START, 16>();
+            let i_edge_cycle_count = new_edges.to_bitmask().count_ones();
+            if i_edge_cycle_count > 0 {
+                let mut oriented_edge_mask = (iter.extract::<EDGE_START, 16>()
+                    & u8x16::splat(0b0001_0000))
+                .simd_ne(u8x16::splat(0));
+                oriented_edge_mask &= new_edges;
+                let i_oriented_edge_cycle_count = oriented_edge_mask.to_bitmask().count_ones();
+
+                // Unoriented cycles
+                if i_oriented_edge_cycle_count != i_edge_cycle_count {
+                    edge_cycle_type_pointer += ((i_edge_cycle_count - i_oriented_edge_cycle_count)
+                        / i.get() as u32) as usize;
+                    if edge_cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
+                        || sorted_cycle_type[1][edge_cycle_type_pointer - 1] != (i, false)
+                    {
+                        return false;
+                    }
+                }
+
+                // Oriented cycles
+                if i_oriented_edge_cycle_count != 0 {
+                    edge_cycle_type_pointer +=
+                        (i_oriented_edge_cycle_count / i.get() as u32) as usize;
+                    if edge_cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
+                        || sorted_cycle_type[1][edge_cycle_type_pointer - 1] != (i, true)
+                    {
+                        return false;
+                    }
+                }
+            }
+            // SAFETY: this loop will only ever run 12 times at max because that
+            // is the longest cycle length among edges
+            i = unsafe { i.unchecked_add(1) };
+        }
+
+        corner_cycle_type_pointer == sorted_cycle_type[0].len()
+            && edge_cycle_type_pointer == sorted_cycle_type[1].len()
     }
 }
 
 impl Cube3 {
     #[inline(always)]
     pub fn replace_inverse_brute(&mut self, a: &Self) {
-        // Benchmarked on a 2x Intel Xeon E5-2667 v3 VM: 6.80ns
+        // Benchmarked on a 2x Intel Xeon E5-2667 v3: 6.77ns
         fn inner(dst: &mut Cube3, a: &Cube3) {
             let perm = a.0 & PERM_MASK;
-            let mut added_ori = a.0 ^ perm;
 
             let mut inverse = u8x32::from_array([
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 12, 13, 14, 15,
             ]);
 
-            const IDENTITY: u8x32 = u8x32::from_array([
-                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-                10, 11, 12, 13, 14, 15,
-            ]);
             macro_rules! brute_unroll {
                 ($i:literal) => {
                     let inv_trial = u8x32::splat($i);
@@ -216,7 +332,7 @@ impl Cube3 {
                         .simd_eq(avx2_swizzle_lo(perm, inv_trial))
                         .to_int()
                         .cast();
-                    inverse = (inv_trial & inv_correct) | inverse;
+                    inverse |= inv_trial & inv_correct;
                 };
             }
 
@@ -233,6 +349,7 @@ impl Cube3 {
             brute_unroll!(10);
             brute_unroll!(11);
 
+            let mut added_ori = a.0 & ORI_MASK;
             added_ori += added_ori;
             added_ori = added_ori.simd_min(added_ori - ORI_CARRY_INVERSE);
             added_ori = avx2_swizzle_lo(added_ori, inverse);

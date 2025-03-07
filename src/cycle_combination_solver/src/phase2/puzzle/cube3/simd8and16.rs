@@ -144,10 +144,12 @@ impl Cube3Interface for Cube3 {
 
             let i_corner_cycle_count = new_corners.to_bitmask().count_ones();
             if i_corner_cycle_count > 0 {
-                // x % 3 == 0 fast
-                // see: https://lomont.org/posts/2017/divisibility-testing/
-                let oriented_corner_mask =
-                    new_corners & (iter_co * u8x8::splat(171)).simd_gt(u8x8::splat(85));
+                // x % 3 == 0 fast, https://lomont.org/posts/2017/divisibility-testing/
+                // for some reason the compiler wasn't doing this optimization,
+                // see https://github.com/rust-lang/portable-simd/issues/453
+                let mut oriented_corner_mask =
+                    (iter_co * u8x8::splat(171)).simd_gt(u8x8::splat(85));
+                oriented_corner_mask &= new_corners;
                 let i_oriented_corner_cycle_count = oriented_corner_mask.to_bitmask().count_ones();
 
                 // Unoriented cycles
@@ -204,8 +206,8 @@ impl Cube3Interface for Cube3 {
 
             let i_edge_cycle_count = new_edges.to_bitmask().count_ones();
             if i_edge_cycle_count > 0 {
-                let oriented_edge_mask =
-                    new_edges & (iter_eo & u8x16::splat(1)).simd_ne(u8x16::splat(0));
+                let mut oriented_edge_mask = (iter_eo & u8x16::splat(1)).simd_ne(u8x16::splat(0));
+                oriented_edge_mask &= new_edges;
                 let i_oriented_edge_cycle_count = oriented_edge_mask.to_bitmask().count_ones();
 
                 // Unoriented cycles
