@@ -110,73 +110,19 @@ impl Cube3Interface for Cube3 {
     }
 
     fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
-        // Benchmarked on a 2020 Mac M1: 20ns (worst case) 6.24ns (average)
+        // TODO: index-level representation of cycle type, is this faster?
+        // TODO: check just permutation first, then orientation, find a balance
+        // between worst and average case
+
+        // Benchmarked on a 2020 Mac M1: 19.97ns (worst case) 5.42ns (average)
 
         // Helps avoid bounds checks in codegen
         #![allow(clippy::int_plus_one)]
 
-        let mut seen = self.ep.simd_eq(EP_IDENTITY);
-        let oriented_one_cycle_piece_mask = seen & self.eo.simd_ne(u8x16::splat(0));
-        let mut cycle_type_pointer =
-            oriented_one_cycle_piece_mask.to_bitmask().count_ones() as usize;
-        // Check oriented one cycles
-        if cycle_type_pointer != 0
-            && (cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
-                || sorted_cycle_type[1][cycle_type_pointer - 1] != (1.try_into().unwrap(), true))
-        {
-            return false;
-        }
-
-        let mut i = NonZeroU8::new(2).unwrap();
-        let mut iter_ep = self.ep;
-        let mut iter_eo = self.eo;
-        while !seen.all() {
-            iter_ep = iter_ep.swizzle_dyn(self.ep);
-            iter_eo = iter_eo.swizzle_dyn(self.ep) + self.eo;
-
-            let identity_eq = iter_ep.simd_eq(EP_IDENTITY);
-            let new_pieces = identity_eq & !seen;
-            seen |= identity_eq;
-
-            let i_cycle_count = new_pieces.to_bitmask().count_ones();
-            if i_cycle_count > 0 {
-                let oriented_piece_mask =
-                    new_pieces & (iter_eo & u8x16::splat(1)).simd_ne(u8x16::splat(0));
-                let i_oriented_cycle_count = oriented_piece_mask.to_bitmask().count_ones();
-
-                // Unoriented cycles
-                if i_oriented_cycle_count != i_cycle_count {
-                    cycle_type_pointer +=
-                        ((i_cycle_count - i_oriented_cycle_count) / i.get() as u32) as usize;
-                    if cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
-                        || sorted_cycle_type[1][cycle_type_pointer - 1] != (i, false)
-                    {
-                        return false;
-                    }
-                }
-
-                // Oriented cycles
-                if i_oriented_cycle_count != 0 {
-                    cycle_type_pointer += (i_oriented_cycle_count / i.get() as u32) as usize;
-                    if cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
-                        || sorted_cycle_type[1][cycle_type_pointer - 1] != (i, true)
-                    {
-                        return false;
-                    }
-                }
-            }
-            // SAFETY: this loop will only ever run 12 times at max because that
-            // is the longest cycle length among edges
-            i = unsafe { i.unchecked_add(1) };
-        }
-
-        if cycle_type_pointer != sorted_cycle_type[1].len() {
-            return false;
-        }
-
         let mut seen = self.cp.simd_eq(CP_IDENTITY);
-        let oriented_one_cycle_piece_mask = seen & self.co.simd_ne(u8x8::splat(0));
-        cycle_type_pointer = oriented_one_cycle_piece_mask.to_bitmask().count_ones() as usize;
+        let oriented_one_cycle_corner_mask = seen & self.co.simd_ne(u8x8::splat(0));
+        let mut cycle_type_pointer =
+            oriented_one_cycle_corner_mask.to_bitmask().count_ones() as usize;
         // Check oriented one cycles
         if cycle_type_pointer != 0
             && (cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
@@ -185,7 +131,7 @@ impl Cube3Interface for Cube3 {
             return false;
         }
 
-        i = NonZeroU8::new(2).unwrap();
+        let mut i = NonZeroU8::new(2).unwrap();
         let mut iter_cp = self.cp;
         let mut iter_co = self.co;
         while !seen.all() {
@@ -193,21 +139,21 @@ impl Cube3Interface for Cube3 {
             iter_co = iter_co.swizzle_dyn(self.cp) + self.co;
 
             let identity_eq = iter_cp.simd_eq(CP_IDENTITY);
-            let new_pieces = identity_eq & !seen;
+            let new_corners = identity_eq & !seen;
             seen |= identity_eq;
 
-            let i_cycle_count = new_pieces.to_bitmask().count_ones();
-            if i_cycle_count > 0 {
+            let i_corner_cycle_count = new_corners.to_bitmask().count_ones();
+            if i_corner_cycle_count > 0 {
                 // x % 3 == 0 fast
                 // see: https://lomont.org/posts/2017/divisibility-testing/
-                let oriented_piece_mask =
-                    new_pieces & (iter_co * u8x8::splat(171)).simd_gt(u8x8::splat(85));
-                let i_oriented_cycle_count = oriented_piece_mask.to_bitmask().count_ones();
+                let oriented_corner_mask =
+                    new_corners & (iter_co * u8x8::splat(171)).simd_gt(u8x8::splat(85));
+                let i_oriented_corner_cycle_count = oriented_corner_mask.to_bitmask().count_ones();
 
                 // Unoriented cycles
-                if i_oriented_cycle_count != i_cycle_count {
-                    cycle_type_pointer +=
-                        ((i_cycle_count - i_oriented_cycle_count) / i.get() as u32) as usize;
+                if i_oriented_corner_cycle_count != i_corner_cycle_count {
+                    cycle_type_pointer += ((i_corner_cycle_count - i_oriented_corner_cycle_count)
+                        / i.get() as u32) as usize;
                     if cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
                         || sorted_cycle_type[0][cycle_type_pointer - 1] != (i, false)
                     {
@@ -216,8 +162,8 @@ impl Cube3Interface for Cube3 {
                 }
 
                 // Oriented cycles
-                if i_oriented_cycle_count != 0 {
-                    cycle_type_pointer += (i_oriented_cycle_count / i.get() as u32) as usize;
+                if i_oriented_corner_cycle_count != 0 {
+                    cycle_type_pointer += (i_oriented_corner_cycle_count / i.get() as u32) as usize;
                     if cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
                         || sorted_cycle_type[0][cycle_type_pointer - 1] != (i, true)
                     {
@@ -230,7 +176,65 @@ impl Cube3Interface for Cube3 {
             i = unsafe { i.unchecked_add(1) };
         }
 
-        cycle_type_pointer == sorted_cycle_type[0].len()
+        if cycle_type_pointer != sorted_cycle_type[0].len() {
+            return false;
+        }
+
+        let mut seen = self.ep.simd_eq(EP_IDENTITY);
+        let oriented_one_cycle_edge_mask = seen & self.eo.simd_ne(u8x16::splat(0));
+        cycle_type_pointer = oriented_one_cycle_edge_mask.to_bitmask().count_ones() as usize;
+        // Check oriented one cycles
+        if cycle_type_pointer != 0
+            && (cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
+                || sorted_cycle_type[1][cycle_type_pointer - 1] != (1.try_into().unwrap(), true))
+        {
+            return false;
+        }
+
+        i = NonZeroU8::new(2).unwrap();
+        let mut iter_ep = self.ep;
+        let mut iter_eo = self.eo;
+        while !seen.all() {
+            iter_ep = iter_ep.swizzle_dyn(self.ep);
+            iter_eo = iter_eo.swizzle_dyn(self.ep) + self.eo;
+
+            let identity_eq = iter_ep.simd_eq(EP_IDENTITY);
+            let new_edges = identity_eq & !seen;
+            seen |= identity_eq;
+
+            let i_edge_cycle_count = new_edges.to_bitmask().count_ones();
+            if i_edge_cycle_count > 0 {
+                let oriented_edge_mask =
+                    new_edges & (iter_eo & u8x16::splat(1)).simd_ne(u8x16::splat(0));
+                let i_oriented_edge_cycle_count = oriented_edge_mask.to_bitmask().count_ones();
+
+                // Unoriented cycles
+                if i_oriented_edge_cycle_count != i_edge_cycle_count {
+                    cycle_type_pointer += ((i_edge_cycle_count - i_oriented_edge_cycle_count)
+                        / i.get() as u32) as usize;
+                    if cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
+                        || sorted_cycle_type[1][cycle_type_pointer - 1] != (i, false)
+                    {
+                        return false;
+                    }
+                }
+
+                // Oriented cycles
+                if i_oriented_edge_cycle_count != 0 {
+                    cycle_type_pointer += (i_oriented_edge_cycle_count / i.get() as u32) as usize;
+                    if cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
+                        || sorted_cycle_type[1][cycle_type_pointer - 1] != (i, true)
+                    {
+                        return false;
+                    }
+                }
+            }
+            // SAFETY: this loop will only ever run 12 times at max because that
+            // is the longest cycle length among edges
+            i = unsafe { i.unchecked_add(1) };
+        }
+
+        cycle_type_pointer == sorted_cycle_type[1].len()
     }
 }
 
