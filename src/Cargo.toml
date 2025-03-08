@@ -7,7 +7,7 @@ members = [
   "cli",
   "cycle_combination_solver",
   "puzzle_geometry",
-  "movecount_coefficient",
+  "movecount_coefficient", "robot",
 ]
 
 [workspace.lints.clippy]

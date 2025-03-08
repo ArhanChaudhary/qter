@@ -167,6 +167,13 @@ impl PermutationGroup {
         self.generators.get(&ArcIntern::from(name))
     }
 
+    /// Iterate over all of the generators of the permutation group
+    pub fn generators(&self) -> impl Iterator<Item = (ArcIntern<str>, &Permutation)> {
+        self.generators
+            .iter()
+            .map(|(name, perm)| (name.to_owned(), perm))
+    }
+
     /// Compose a list of generators into an existing permutation
     ///
     /// If any of the generator names don't exist, it will compose all of the generators before it and return the name of the generator that doesn't exist.
@@ -269,7 +276,7 @@ impl Permutation {
     fn minimal_mapping(&self) -> &[usize] {
         let mut mapping = self.mapping();
 
-        while mapping.last().copied() == Some(mapping.len() - 1) {
+        while !mapping.is_empty() && mapping.last().copied() == Some(mapping.len() - 1) {
             mapping = &mapping[0..mapping.len() - 1];
         }
 

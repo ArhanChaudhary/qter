@@ -1,0 +1,13 @@
+[package]
+name = "robot"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+qter_core = { path = "../qter_core" }
+itertools = "0.13"
+internment = { version = "0.8", features = ["arc"] }
+rand = "0.9"
+
+[lints]
+workspace = true
