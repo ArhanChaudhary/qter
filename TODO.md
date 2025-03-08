@@ -29,7 +29,6 @@
 ## QAT
 
 - ⭐Precompute tables for builtin architectures
-- ⭐Optimize additions using the precomputed tables
 - ⭐`A%2` syntax
 - Refactor register references so that they assume the register declaration is global
 - QAT Macros

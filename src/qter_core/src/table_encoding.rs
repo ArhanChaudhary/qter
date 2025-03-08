@@ -6,6 +6,7 @@ use std::{
 use internment::ArcIntern;
 use itertools::Itertools;
 
+#[derive(Debug)]
 struct TableStats {
     frequencies: Vec<u32>,
     length_frequencies: HashMap<usize, u32>,
@@ -70,6 +71,8 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
     if stats.frequencies.len() > (1 << N) - 1 {
         return None;
     }
+
+    println!("{stats:?}");
 
     let mut disallowed_pairs = HashSet::new();
 
@@ -160,6 +163,8 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
     }
 
     let before = stream.len();
+
+    println!("{}", symbols.len());
 
     ans_encode(
         &mut stream,
@@ -386,6 +391,8 @@ fn mk_distribution_closure(stats: TableStats) -> impl FnMut(Option<u16>, &mut [u
         })
         .collect::<HashMap<_, _>>();
 
+    println!("{lens_cdf:?}");
+
     let end_of_alg_symbol = generator_count as u16;
     let mut len = 0;
 
@@ -407,7 +414,8 @@ fn mk_distribution_closure(stats: TableStats) -> impl FnMut(Option<u16>, &mut [u
             } else {
                 let amt_to_give = ((range_left as u32 * *len_chance / (*len_chance + *lens_cdf))
                     as u16)
-                    .min(range_left - generator_count as u16);
+                    .min(range_left - generator_count as u16)
+                    .max(1);
 
                 out[end_of_alg_symbol as usize] = amt_to_give;
                 range_left -= amt_to_give;

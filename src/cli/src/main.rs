@@ -108,13 +108,16 @@ fn main() -> color_eyre::Result<()> {
                 .map(|v| v.trim())
                 .filter(|v| !v.is_empty())
                 .map(|alg| {
-                    alg.split(' ')
-                        .map(|v| v.trim())
+                    alg.split_whitespace()
                         .filter(|v| !v.is_empty())
                         .map(ArcIntern::from)
                         .collect_vec()
                 })
                 .collect_vec();
+
+            // for alg in &to_encode {
+            //     println!("{}", alg.iter().join(" "));
+            // }
 
             let (data, _) =
                 encode_table(&to_encode).ok_or_eyre("Too many unique generators, contact Henry")?;
