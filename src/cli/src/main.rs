@@ -139,6 +139,7 @@ fn interpret_slow(mut interpreter: Interpreter, trace: u8) -> color_eyre::Result
         let action = interpreter.step();
 
         let mut should_give_input = false;
+        let mut halted = false;
 
         match action {
             interpreter::ActionPerformed::None => {
@@ -167,7 +168,7 @@ fn interpret_slow(mut interpreter: Interpreter, trace: u8) -> color_eyre::Result
                         eprintln!("Halting");
                     }
 
-                    break Ok(());
+                    halted = true;
                 }
             }
             interpreter::ActionPerformed::Goto { location: _ } => {
@@ -209,11 +210,16 @@ fn interpret_slow(mut interpreter: Interpreter, trace: u8) -> color_eyre::Result
             }
             interpreter::ActionPerformed::Panicked => {
                 eprintln!("{}", "Panicked!".red());
+                halted = true;
             }
         }
 
         while let Some(message) = interpreter.messages().pop_front() {
             println!("{message}");
+        }
+
+        if halted {
+            break Ok(());
         }
 
         if should_give_input {

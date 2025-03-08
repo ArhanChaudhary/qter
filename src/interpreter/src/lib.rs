@@ -2,7 +2,7 @@ use std::{collections::VecDeque, sync::Arc};
 
 use qter_core::{
     architectures::{Permutation, PermutationGroup},
-    discrete_math::{chinese_remainder_theorem, lcm},
+    discrete_math::{chinese_remainder_theorem, decode, lcm},
     Facelets, Instruction, Int, PermutePuzzle, Program, RegisterGenerator, I, U,
 };
 
@@ -37,31 +37,7 @@ impl Puzzle {
     ///
     /// In general, an arbitrary scramble cannot be decoded. If this is the case, the function will return `None`.
     pub fn decode(&self, facelets: &[usize], generator: &PermutePuzzle) -> Option<Int<U>> {
-        chinese_remainder_theorem(facelets.iter().map(|facelet| {
-            let maps_to = self.state().mapping()[*facelet];
-
-            let chromatic_order = generator.chromatic_orders_by_facelets()[*facelet];
-
-            if maps_to == *facelet {
-                return Some((Int::zero(), chromatic_order));
-            }
-
-            let mut i = Int::<U>::one();
-            let mut maps_to_found_at = None;
-            let mut facelet_at = generator.permutation().mapping()[*facelet];
-
-            while facelet_at != *facelet {
-                if facelet_at == maps_to {
-                    maps_to_found_at = Some(i);
-                    break;
-                }
-
-                facelet_at = generator.permutation().mapping()[facelet_at];
-                i += Int::<U>::one();
-            }
-
-            maps_to_found_at.map(|found_at| (found_at % chromatic_order, chromatic_order))
-        }))
+        decode(self.state(), facelets, generator)
     }
 
     /// Get the underlying `PermutationGroup` of the puzzle
@@ -495,7 +471,7 @@ mod tests {
     use internment::ArcIntern;
     use qter_core::{architectures::PuzzleDefinition, Int, PermutePuzzle, RegisterGenerator, U};
 
-    use crate::{ExecutionState, Interpreter, PausedState, Puzzle};
+    use crate::{Interpreter, PausedState, Puzzle};
 
     #[test]
     fn facelets_solved() {
@@ -516,40 +492,6 @@ mod tests {
         assert!(cube.facelets_solved(&[0, 12, 15, 7, 40]));
 
         assert!(!cube.facelets_solved(&[1, 12, 15, 7, 24]));
-    }
-
-    #[test]
-    fn decode() {
-        let group = Arc::new(
-            PuzzleDefinition::parse(include_str!("../../qter_core/puzzles/3x3.txt")).unwrap(),
-        );
-
-        let mut cube = Puzzle::initialize(Arc::clone(&group.group));
-
-        let permutation = PermutePuzzle::new_from_generators(
-            Arc::clone(&group.group),
-            vec![ArcIntern::from("U")],
-        )
-        .unwrap();
-
-        assert_eq!(cube.decode(&[8], &permutation).unwrap(), Int::<U>::zero());
-        assert!(cube.facelets_solved(&[8]));
-
-        cube.state.compose(permutation.permutation());
-        assert_eq!(cube.decode(&[8], &permutation).unwrap(), Int::<U>::one());
-        assert!(!cube.facelets_solved(&[8]));
-
-        cube.state.compose(permutation.permutation());
-        assert_eq!(cube.decode(&[8], &permutation).unwrap(), Int::from(2));
-        assert!(!cube.facelets_solved(&[8]));
-
-        cube.state.compose(permutation.permutation());
-        assert_eq!(cube.decode(&[8], &permutation).unwrap(), Int::from(3));
-        assert!(!cube.facelets_solved(&[8]));
-
-        cube.state.compose(permutation.permutation());
-        assert_eq!(cube.decode(&[8], &permutation).unwrap(), Int::from(0));
-        assert!(cube.facelets_solved(&[8]));
     }
 
     #[test]

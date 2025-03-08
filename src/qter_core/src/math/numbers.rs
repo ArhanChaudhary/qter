@@ -45,6 +45,13 @@ impl<Signed> Int<Signed> {
         }
     }
 
+    pub fn abs_diff<Signed2>(&self, other: &Int<Signed2>) -> Int<U> {
+        Int {
+            value: self.value.abs_diff(other.value).cast_signed(),
+            phantom: PhantomData,
+        }
+    }
+
     fn from_inner(value: I512) -> Int<Signed> {
         Int {
             value,

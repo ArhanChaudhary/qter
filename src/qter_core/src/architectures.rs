@@ -1,5 +1,6 @@
 use std::{
-    collections::{HashMap, HashSet},
+    borrow::Cow,
+    collections::{BTreeMap, HashMap, HashSet},
     sync::{Arc, OnceLock},
 };
 
@@ -7,9 +8,13 @@ use internment::ArcIntern;
 use itertools::Itertools;
 
 use crate::{
-    discrete_math::lcm_iter, puzzle_parser,
-    shared_facelet_detection::algorithms_to_cycle_generators, Int, I, U,
+    discrete_math::{decode, lcm_iter},
+    puzzle_parser,
+    shared_facelet_detection::algorithms_to_cycle_generators,
+    table_encoding, Int, PermutePuzzle, I, U,
 };
+
+const OPTIMIZED_TABLES: [&[u8]; 0] = [];
 
 /// The definition of a puzzle parsed from the custom format
 #[derive(Debug)]
@@ -57,6 +62,8 @@ impl PuzzleDefinition {
 
         let mut new_arch = Architecture::clone(architecture);
 
+        new_arch.decoded_table = OnceLock::new();
+
         for i in 0..swizzle.len() {
             new_arch.cycle_generators.swap(i, swizzle[i]);
 
@@ -92,10 +99,13 @@ impl PuzzleDefinition {
 pub struct PermutationGroup {
     facelet_colors: Vec<ArcIntern<str>>,
     generators: HashMap<ArcIntern<str>, Permutation>,
+    generator_inverses: HashMap<ArcIntern<str>, ArcIntern<str>>,
 }
 
 impl PermutationGroup {
-    /// Construct a new `PermutationGroup` from a list of facelet colors and generator permutations
+    /// Construct a new `PermutationGroup` from a list of facelet colors and generator permutations.
+    ///
+    /// This function will panic if a permutation does not include an inverse generator for each generator.
     pub fn new(
         facelet_colors: Vec<ArcIntern<str>>,
         mut generators: HashMap<ArcIntern<str>, Permutation>,
@@ -110,9 +120,25 @@ impl PermutationGroup {
             generator.1.facelet_count = facelet_colors.len();
         }
 
+        let mut generator_inverses = HashMap::new();
+
+        'next_item: for (name, generator) in generators.iter() {
+            let mut inverse = generator.to_owned();
+            inverse.exponentiate(Int::from(-1));
+            for (name2, generator2) in generators.iter() {
+                if *generator2 == inverse {
+                    generator_inverses.insert(ArcIntern::clone(name), ArcIntern::clone(name2));
+                    continue 'next_item;
+                }
+            }
+
+            panic!("The generator {name} does not have an inverse generator");
+        }
+
         PermutationGroup {
             facelet_colors,
             generators,
+            generator_inverses,
         }
     }
 
@@ -159,6 +185,15 @@ impl PermutationGroup {
         }
 
         Ok(())
+    }
+
+    /// Find the inverse of an algorithm expressed as a product of generators
+    pub fn invert_alg(&self, alg: &mut [ArcIntern<str>]) {
+        alg.reverse();
+
+        for generator in alg {
+            *generator = ArcIntern::clone(self.generator_inverses.get(generator).unwrap());
+        }
     }
 }
 
@@ -229,6 +264,16 @@ impl Permutation {
 
             mapping
         })
+    }
+
+    fn minimal_mapping(&self) -> &[usize] {
+        let mut mapping = self.mapping();
+
+        while mapping.last().copied() == Some(mapping.len() - 1) {
+            mapping = &mapping[0..mapping.len() - 1];
+        }
+
+        mapping
     }
 
     /// Get the permutation in cycles notation
@@ -317,7 +362,7 @@ impl Permutation {
 
 impl PartialEq for Permutation {
     fn eq(&self, other: &Self) -> bool {
-        self.mapping() == other.mapping()
+        self.minimal_mapping() == other.minimal_mapping()
     }
 }
 
@@ -438,12 +483,112 @@ impl CycleGenerator {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct DecodingTable {
+    orders: Vec<Int<U>>,
+    table: BTreeMap<Vec<Int<U>>, Vec<ArcIntern<str>>>,
+}
+
+impl DecodingTable {
+    /// Find the algorithm that creates the requested cycle combination as closely as possible, as a sum of all offsets left over.
+    pub fn closest_alg<'s, 't>(
+        &'s self,
+        target: &'t [Int<U>],
+    ) -> (&'s [Int<U>], &'s [ArcIntern<str>]) {
+        let mut closest: Option<(Int<U>, &'s [Int<U>], &'s [ArcIntern<str>])> = None;
+
+        let mut update_closest = |achieves: &'s [Int<U>], alg: &'s [ArcIntern<str>]| {
+            let dist = achieves
+                .iter()
+                .copied()
+                .zip(target.iter().copied())
+                .zip(self.orders.iter().copied())
+                .map(|((achieves, target), order)| {
+                    let dist = achieves.abs_diff(&target);
+
+                    if dist > order / Int::<U>::from(2_u32) {
+                        order - dist
+                    } else {
+                        dist
+                    }
+                })
+                .sum::<Int<U>>();
+
+            let mut min_dist = dist;
+
+            if match closest {
+                Some((old_dist, _, _)) => {
+                    min_dist = old_dist;
+                    old_dist > dist
+                }
+                None => true,
+            } {
+                closest = Some((dist, achieves, alg));
+            }
+
+            min_dist
+        };
+
+        // Iterate radially away from the closest value lexicographically, hopefully the true closest is nearby
+
+        let mut end_range = self.table.range(target.to_vec()..).chain(self.table.iter());
+        let mut take_end = true;
+        let mut start_range = self
+            .table
+            .range(..=target.to_vec())
+            .rev()
+            .chain(self.table.iter().rev());
+        let mut take_start = true;
+
+        let mut amt_taken = 0;
+
+        while (take_end || take_start) && amt_taken < self.table.len() {
+            if take_start {
+                // Wrapping around should be impossible
+                let (achieves, alg) = start_range.next().unwrap();
+
+                amt_taken += 1;
+
+                let min_dist = update_closest(achieves, alg);
+
+                // Taking from here can no longer generate closer values
+                if min_dist < target[0].abs_diff(&achieves[0]) {
+                    take_start = false;
+                }
+            }
+
+            if take_end {
+                let (achieves, alg) = end_range.next().unwrap();
+
+                amt_taken += 1;
+
+                let min_dist = update_closest(achieves, alg);
+
+                // Taking from here can no longer generate closer values
+                if min_dist < achieves[0].abs_diff(&target[0]) {
+                    take_end = false;
+                }
+            }
+        }
+
+        let closest = closest.unwrap();
+
+        (closest.1, closest.2)
+    }
+
+    pub(crate) fn orders(&self) -> &[Int<U>] {
+        &self.orders
+    }
+}
+
 /// An architecture of a `PermutationGroup`
 #[derive(Debug, Clone)]
 pub struct Architecture {
     group: Arc<PermutationGroup>,
     cycle_generators: Vec<CycleGenerator>,
     shared_facelets: Vec<usize>,
+    optimized_table: Option<Cow<'static, [u8]>>,
+    decoded_table: OnceLock<DecodingTable>,
 }
 
 impl Architecture {
@@ -458,6 +603,81 @@ impl Architecture {
             group,
             cycle_generators: processed.0,
             shared_facelets: processed.1,
+            optimized_table: None,
+            decoded_table: OnceLock::new(),
+        })
+    }
+
+    /// Insert a table of optimized algorithms into the architecture. The algorithms are expected to be compressed using `table_encoding::encode`. Inverses and the values that registers that define the architecture need not be optimized, they will be included automatically. You may optimize them anyways and values encoded later in the table will be prioritized.
+    ///
+    /// `self.get_table()` will panic if the table is encoded incorrectly and it will ignore invalid entries.
+    pub fn set_optimized_table(&mut self, optimized_table: Cow<'static, [u8]>) {
+        self.optimized_table = Some(optimized_table);
+    }
+
+    /// Retrieve a table of optimized algorithms by how they affect each cycle type.
+    pub fn get_table(&self) -> &DecodingTable {
+        self.decoded_table.get_or_init(|| {
+            let table = match &self.optimized_table {
+                Some(encoded) => table_encoding::decode_table(encoded).unwrap(),
+                None => Vec::new(),
+            };
+
+            let registers_decoding_info = self
+                .registers()
+                .iter()
+                .map(|v| {
+                    (
+                        v.signature_facelets(),
+                        PermutePuzzle::new_from_generators(
+                            Arc::clone(&self.group),
+                            v.generator_sequence().to_owned(),
+                        )
+                        .unwrap(),
+                    )
+                })
+                .collect_vec();
+
+            let mut data = BTreeMap::new();
+
+            let mut add_permutation = |alg: Vec<ArcIntern<str>>| {
+                let permutation =
+                    PermutePuzzle::new_from_generators(self.group_arc(), alg.to_owned()).unwrap();
+
+                let maybe_decoded = registers_decoding_info
+                    .iter()
+                    .map(|reg| decode(permutation.permutation(), &reg.0, &reg.1))
+                    .collect::<Option<Vec<_>>>();
+
+                if let Some(decoded) = maybe_decoded {
+                    data.insert(decoded, alg);
+                }
+            };
+
+            for item in self.registers().iter().flat_map(|v| {
+                let mut inverse = v.generator_sequence.to_owned();
+                self.group.invert_alg(&mut inverse);
+                [v.generator_sequence.to_owned(), inverse]
+            }) {
+                add_permutation(item);
+            }
+
+            for item in table.iter().map(|v| {
+                let mut inverse = v.to_owned();
+                self.group.invert_alg(&mut inverse);
+                inverse
+            }) {
+                add_permutation(item);
+            }
+
+            for item in table.into_iter() {
+                add_permutation(item);
+            }
+
+            DecodingTable {
+                table: data,
+                orders: self.registers().iter().map(|v| v.order()).collect(),
+            }
         })
     }
 

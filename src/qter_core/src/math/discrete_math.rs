@@ -1,4 +1,4 @@
-use crate::{Int, I, U};
+use crate::{architectures::Permutation, Int, PermutePuzzle, I, U};
 
 /// Calculate the GCD of two numbers
 pub fn gcd(mut a: Int<U>, mut b: Int<U>) -> Int<U> {
@@ -130,13 +130,54 @@ pub fn length_of_substring_that_this_string_is_n_repeated_copies_of<'a>(
     current_repeat_length
 }
 
+/// Decode the permutation using the register generator and the given facelets.
+///
+/// In general, an arbitrary scramble cannot be decoded. If this is the case, the function will return `None`.
+pub fn decode(
+    permutation: &Permutation,
+    facelets: &[usize],
+    generator: &PermutePuzzle,
+) -> Option<Int<U>> {
+    chinese_remainder_theorem(facelets.iter().map(|facelet| {
+        let maps_to = permutation.mapping()[*facelet];
+
+        let chromatic_order = generator.chromatic_orders_by_facelets()[*facelet];
+
+        if maps_to == *facelet {
+            return Some((Int::zero(), chromatic_order));
+        }
+
+        let mut i = Int::<U>::one();
+        let mut maps_to_found_at = None;
+        let mut facelet_at = generator.permutation().mapping()[*facelet];
+
+        while facelet_at != *facelet {
+            if facelet_at == maps_to {
+                maps_to_found_at = Some(i);
+                break;
+            }
+
+            facelet_at = generator.permutation().mapping()[facelet_at];
+            i += Int::<U>::one();
+        }
+
+        maps_to_found_at.map(|found_at| (found_at % chromatic_order, chromatic_order))
+    }))
+}
+
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use internment::ArcIntern;
+
     use crate::{
+        architectures::PuzzleDefinition,
         discrete_math::{
-            extended_euclid, gcd, lcm, length_of_substring_that_this_string_is_n_repeated_copies_of,
+            decode, extended_euclid, gcd, lcm,
+            length_of_substring_that_this_string_is_n_repeated_copies_of,
         },
-        Int, U,
+        Int, PermutePuzzle, U,
     };
 
     use super::chinese_remainder_theorem;
@@ -209,5 +250,34 @@ mod tests {
             ),
             5
         );
+    }
+
+    #[test]
+    fn test_decode() {
+        let group = Arc::new(
+            PuzzleDefinition::parse(include_str!("../../../qter_core/puzzles/3x3.txt")).unwrap(),
+        );
+
+        let mut cube = group.group.identity();
+
+        let permutation = PermutePuzzle::new_from_generators(
+            Arc::clone(&group.group),
+            vec![ArcIntern::from("U")],
+        )
+        .unwrap();
+
+        assert_eq!(decode(&cube, &[8], &permutation).unwrap(), Int::<U>::zero());
+
+        cube.compose(permutation.permutation());
+        assert_eq!(decode(&cube, &[8], &permutation).unwrap(), Int::<U>::one());
+
+        cube.compose(permutation.permutation());
+        assert_eq!(decode(&cube, &[8], &permutation).unwrap(), Int::from(2));
+
+        cube.compose(permutation.permutation());
+        assert_eq!(decode(&cube, &[8], &permutation).unwrap(), Int::from(3));
+
+        cube.compose(permutation.permutation());
+        assert_eq!(decode(&cube, &[8], &permutation).unwrap(), Int::from(0));
     }
 }

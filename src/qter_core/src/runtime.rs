@@ -18,32 +18,36 @@ impl PermutePuzzle {
     ///
     /// `effect` is a list of tuples of register indices and how much to add to add to them.
     pub fn new_from_effect(arch: &Architecture, effect: Vec<(usize, Int<U>)>) -> PermutePuzzle {
-        let mut permutation = arch.group().identity();
-
         let mut generators = Vec::new();
 
-        // TODO: Refactor once the puzzle definition includes optimized generators for various combinations of effects
-        for (register, amt) in &effect {
-            let reg = &arch.registers()[*register];
-            let mut perm = reg.permutation.to_owned();
+        let mut expanded_effect = vec![Int::<U>::zero(); arch.registers().len()];
 
-            perm.exponentiate((*amt).into());
-
-            permutation.compose(&perm);
-
-            let mut i = Int::<U>::zero();
-            while i < *amt {
-                generators.extend_from_slice(reg.generator_sequence());
-                i += Int::<U>::one();
-            }
+        for (register, amt) in effect {
+            expanded_effect[register] = amt;
         }
 
-        PermutePuzzle {
-            permutation,
-            generators,
-            group: arch.group_arc(),
-            chromatic_orders: OnceCell::new(),
+        let table = arch.get_table();
+        let orders = table.orders();
+
+        while expanded_effect.iter().any(|v| !v.is_zero()) {
+            let (true_effect, alg) = table.closest_alg(&expanded_effect);
+
+            expanded_effect
+                .iter_mut()
+                .zip(true_effect.iter().copied())
+                .zip(orders.iter().copied())
+                .for_each(|((expanded_effect, true_effect), order)| {
+                    *expanded_effect = if *expanded_effect < true_effect {
+                        *expanded_effect + order - true_effect
+                    } else {
+                        *expanded_effect - true_effect
+                    }
+                });
+
+            generators.extend_from_slice(alg);
         }
+
+        Self::new_from_generators(arch.group_arc(), generators).unwrap()
     }
 
     /// Create a `PermutePuzzle` instance from a list of generators
