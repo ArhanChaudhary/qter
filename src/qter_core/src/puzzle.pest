@@ -3,7 +3,7 @@ WHITESPACE = _{ " " }
 description = { lb? ~ colors ~ generators ~ derived ~ presets ~ EOI }
 
 lb = _{ "\n"+ }
-ident = @{ ( !(WHITESPACE | "\n") ~ ANY )+ }
+ident = @{ ( !(WHITESPACE | "\n" | "~" | "/") ~ ANY )+ }
 number = @{ ASCII_DIGIT+ }
 
 colors = { "COLORS" ~ lb ~ color+ }
@@ -18,7 +18,8 @@ derived = { "DERIVED" ~ lb ~ derivation* }
 derivation = { ident ~ "=" ~ ident+ ~ lb }
 
 presets = { "PRESETS" ~ lb ~ preset* }
-preset = { orders ~ algo ~ ("/" ~ algo)* ~ lb }
+preset = { orders ~ algos ~ ("~" ~ number)? ~ lb }
 orders = { "(" ~ number ~ ("," ~ number)* ~ ")" }
+algos = { algo ~ ("/" ~ algo)* }
 algo = { (!"/" ~ ident)+ }
 

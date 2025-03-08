@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use internment::ArcIntern;
 use itertools::Itertools;
@@ -6,7 +6,9 @@ use pest::{error::Error, Parser};
 use pest_derive::Parser;
 
 use crate::{
-    architectures::{Architecture, Permutation, PermutationGroup, PuzzleDefinition},
+    architectures::{
+        Architecture, Permutation, PermutationGroup, PuzzleDefinition, OPTIMIZED_TABLES,
+    },
     Int, U,
 };
 
@@ -177,9 +179,12 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
             orders.push(order.as_str().parse::<Int<U>>().unwrap());
         }
 
+        let algs_pair = preset_pairs.next().unwrap();
+        let algs_pairs = algs_pair.into_inner();
+
         let mut algorithms = vec![];
 
-        for algorithm_pair in preset_pairs {
+        for algorithm_pair in algs_pairs {
             let mut moves = vec![];
 
             for action in algorithm_pair.into_inner() {
@@ -189,8 +194,8 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
             algorithms.push(moves);
         }
 
-        let architecture = match Architecture::new(Arc::clone(&group), algorithms) {
-            Ok(v) => Arc::new(v),
+        let mut architecture = match Architecture::new(Arc::clone(&group), algorithms) {
+            Ok(v) => v,
             Err(e) => {
                 return Err(Box::new(Error::new_from_span(
                     pest::error::ErrorVariant::CustomError {
@@ -201,6 +206,12 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
             }
         };
 
+        if let Some(pregenerated_idx) = preset_pairs.next() {
+            architecture.set_optimized_table(Cow::Borrowed(
+                OPTIMIZED_TABLES[pregenerated_idx.as_str().parse::<usize>().unwrap()],
+            ));
+        }
+
         for (register, order) in architecture.registers().iter().zip(orders.into_iter()) {
             if register.order() != order {
                 return Err(Box::new(Error::new_from_span(
@@ -210,7 +221,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
             }
         }
 
-        presets.push(architecture);
+        presets.push(Arc::new(architecture));
     }
 
     Ok(PuzzleDefinition { group, presets })

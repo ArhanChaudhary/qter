@@ -14,7 +14,7 @@ use crate::{
     table_encoding, Int, PermutePuzzle, I, U,
 };
 
-const OPTIMIZED_TABLES: [&[u8]; 0] = [];
+pub(crate) const OPTIMIZED_TABLES: [&[u8]; 0] = [];
 
 /// The definition of a puzzle parsed from the custom format
 #[derive(Debug)]
