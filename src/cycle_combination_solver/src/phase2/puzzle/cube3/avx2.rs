@@ -88,6 +88,8 @@ const IDENTITY: u8x32 = u8x32::from_array([
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
     13, 14, 15,
 ]);
+const EDGE_START: usize = 0;
+const CORNER_START: usize = 16;
 
 #[inline(always)]
 fn avx2_swizzle_lo(a: u8x32, b: u8x32) -> u8x32 {
@@ -194,12 +196,11 @@ impl Cube3Interface for Cube3 {
         // see simd8and16 for explanation
         #![allow(clippy::int_plus_one)]
 
-        const EDGE_START: usize = 0;
-        const CORNER_START: usize = 16;
-
         let compose_ori = self.0 & ORI_MASK;
         let mut seen = (self.0 & PERM_MASK).simd_eq(IDENTITY);
 
+        // TODO: extract leads to extra vextracti128 instructions, could trying
+        // to remove them be faster?
         let oriented_one_cycle_corner_mask = seen.extract::<CORNER_START, 16>()
             & compose_ori
                 .extract::<CORNER_START, 16>()
@@ -242,10 +243,9 @@ impl Cube3Interface for Cube3 {
             let new_corners = new_pieces.extract::<CORNER_START, 16>();
             let i_corner_cycle_count = new_corners.to_bitmask().count_ones();
             if i_corner_cycle_count > 0 {
-                let mut oriented_corner_mask =
-                    ((iter.extract::<CORNER_START, 16>() >> u8x16::splat(4)) * u8x16::splat(171))
-                        .simd_gt(u8x16::splat(85));
-                oriented_corner_mask &= new_corners;
+                let iter_co = iter.extract::<CORNER_START, 16>() >> u8x16::splat(4);
+                let oriented_corner_mask =
+                    new_corners & (iter_co * u8x16::splat(171)).simd_gt(u8x16::splat(85));
                 let i_oriented_corner_cycle_count = oriented_corner_mask.to_bitmask().count_ones();
 
                 // Unoriented cycles
@@ -275,10 +275,8 @@ impl Cube3Interface for Cube3 {
             let new_edges = new_pieces.extract::<EDGE_START, 16>();
             let i_edge_cycle_count = new_edges.to_bitmask().count_ones();
             if i_edge_cycle_count > 0 {
-                let mut oriented_edge_mask = (iter.extract::<EDGE_START, 16>()
-                    & u8x16::splat(0b0001_0000))
-                .simd_ne(u8x16::splat(0));
-                oriented_edge_mask &= new_edges;
+                let iter_eo = iter.extract::<EDGE_START, 16>() & u8x16::splat(0b0001_0000);
+                let oriented_edge_mask = new_edges & iter_eo.simd_ne(u8x16::splat(0));
                 let i_oriented_edge_cycle_count = oriented_edge_mask.to_bitmask().count_ones();
 
                 // Unoriented cycles
