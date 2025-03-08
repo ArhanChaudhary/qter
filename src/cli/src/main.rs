@@ -1,11 +1,18 @@
 use std::{fs, io, path::PathBuf};
 
 use clap::{ArgAction, Parser};
-use color_eyre::{eyre::eyre, owo_colors::OwoColorize};
+use color_eyre::{
+    eyre::{eyre, OptionExt},
+    owo_colors::OwoColorize,
+};
 use compiler::compile;
 use internment::ArcIntern;
 use interpreter::{ExecutionState, Interpreter, PausedState};
-use qter_core::{Int, I};
+use itertools::Itertools;
+use qter_core::{
+    table_encoding::{decode_table, encode_table},
+    Int, I,
+};
 
 /// Compiles and interprets qter programs
 #[derive(Parser)]
@@ -33,6 +40,20 @@ enum Commands {
     Test {
         /// Which file to test; must be a .qat file
         file: PathBuf,
+    },
+    #[cfg(debug_assertions)]
+    /// Compress an algorithm table into the special format (This subcommand will not be visible in release mode)
+    Compress {
+        /// The input alg table
+        input: PathBuf,
+        /// The output compressed data
+        output: PathBuf,
+    },
+    #[cfg(debug_assertions)]
+    /// Print the contents of a compressed algorithm table to stdout (This subcommand will not be visible in release mode)
+    Dump {
+        /// The input alg table
+        input: PathBuf,
     },
 }
 
@@ -78,6 +99,38 @@ fn main() -> color_eyre::Result<()> {
         }
         Commands::Debug { file: _ } => todo!(),
         Commands::Test { file: _ } => todo!(),
+        #[cfg(debug_assertions)]
+        Commands::Compress { input, output } => {
+            let data = fs::read_to_string(input)?;
+
+            let to_encode = data
+                .split('\n')
+                .map(|v| v.trim())
+                .filter(|v| !v.is_empty())
+                .map(|alg| {
+                    alg.split(' ')
+                        .map(|v| v.trim())
+                        .filter(|v| !v.is_empty())
+                        .map(ArcIntern::from)
+                        .collect_vec()
+                })
+                .collect_vec();
+
+            let (data, _) =
+                encode_table(&to_encode).ok_or_eyre("Too many unique generators, contact Henry")?;
+
+            fs::write(output, data)?;
+        }
+        #[cfg(debug_assertions)]
+        Commands::Dump { input } => {
+            let data = fs::read(input)?;
+
+            let decoded = decode_table(&data).ok_or_eyre("Could not decode the table")?;
+
+            for alg in decoded {
+                println!("{}", alg.iter().join(" "));
+            }
+        }
     }
 
     Ok(())

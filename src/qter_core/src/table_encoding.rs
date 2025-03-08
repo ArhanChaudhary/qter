@@ -13,6 +13,8 @@ struct TableStats {
 }
 
 /// Returns an encoded table or None if there are too many unique generators to be able to encode them (contact Henry)
+///
+/// Also returns the compressed size of the data with the header size subtracted out.
 pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
     // Statistical modelling of twisty puzzle algs:
     //

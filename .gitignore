@@ -2,3 +2,4 @@
 .DS_Store
 .direnv
 src/cli/*.qat
+src/cli/test.*
