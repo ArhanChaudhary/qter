@@ -243,9 +243,9 @@ impl Cube3Interface for Cube3 {
             let new_corners = new_pieces.extract::<CORNER_START, 16>();
             let i_corner_cycle_count = new_corners.to_bitmask().count_ones();
             if i_corner_cycle_count > 0 {
-                let iter_co = iter.extract::<CORNER_START, 16>() >> u8x16::splat(4);
-                let oriented_corner_mask =
-                    new_corners & (iter_co * u8x16::splat(171)).simd_gt(u8x16::splat(85));
+                let iter_co_mod =
+                    (iter.extract::<CORNER_START, 16>() >> u8x16::splat(4)) * u8x16::splat(171);
+                let oriented_corner_mask = new_corners & iter_co_mod.simd_gt(u8x16::splat(85));
                 let i_oriented_corner_cycle_count = oriented_corner_mask.to_bitmask().count_ones();
 
                 // Unoriented cycles
@@ -275,8 +275,8 @@ impl Cube3Interface for Cube3 {
             let new_edges = new_pieces.extract::<EDGE_START, 16>();
             let i_edge_cycle_count = new_edges.to_bitmask().count_ones();
             if i_edge_cycle_count > 0 {
-                let iter_eo = iter.extract::<EDGE_START, 16>() & u8x16::splat(0b0001_0000);
-                let oriented_edge_mask = new_edges & iter_eo.simd_ne(u8x16::splat(0));
+                let iter_eo_mod = iter.extract::<EDGE_START, 16>() & u8x16::splat(0b0001_0000);
+                let oriented_edge_mask = new_edges & iter_eo_mod.simd_ne(u8x16::splat(0));
                 let i_oriented_edge_cycle_count = oriented_edge_mask.to_bitmask().count_ones();
 
                 // Unoriented cycles

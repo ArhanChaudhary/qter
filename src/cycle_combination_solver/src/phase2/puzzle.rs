@@ -76,6 +76,7 @@ pub struct HeapPuzzle(pub Box<[u8]>);
 
 pub struct PuzzleDef<P: PuzzleState> {
     pub moves: Box<[Move<P>]>,
+    pub class_moves: Box<[Move<P>]>,
     pub symmetries: Box<[Move<P>]>,
     pub sorted_orbit_defs: Box<[OrbitDef]>,
     pub name: String,
@@ -89,6 +90,8 @@ pub enum KSolveConversionError {
     NotEnoughBufferSpace,
     #[error("Could not expand move set, order of a move too high")]
     MoveOrderTooHigh,
+    #[error("Too many move classes")]
+    TooManyMoveClasses,
     #[error("Invalid KSolve orbit definitions. Expected: {0:?}\nActual: {1:?}")]
     InvalidOrbitDefs(Vec<OrbitDef>, Vec<OrbitDef>),
 }
@@ -106,6 +109,16 @@ pub struct OrbitDef {
 }
 
 pub type OrientedPartition = Vec<(NonZeroU8, bool)>;
+
+impl<P: PuzzleState> Move<P> {
+    pub fn commutes_with(&self, other: &Self, sorted_orbit_defs: &[OrbitDef]) -> bool {
+        let mut result = self.puzzle_state.clone();
+        let mut result2 = self.puzzle_state.clone();
+        result.replace_compose(&self.puzzle_state, &other.puzzle_state, sorted_orbit_defs);
+        result2.replace_compose(&other.puzzle_state, &self.puzzle_state, sorted_orbit_defs);
+        result == result2
+    }
+}
 
 impl<P: PuzzleState> PuzzleDef<P> {
     pub fn find_move(&self, name: &str) -> Option<&Move<P>> {
@@ -166,6 +179,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
             .collect();
 
         let mut moves = Vec::with_capacity(ksolve.moves().len());
+        let mut class_moves = vec![];
         let mut symmetries = Vec::with_capacity(ksolve.symmetries().len());
 
         for (i, ksolve_move) in ksolve
@@ -232,7 +246,8 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
             }
 
             let base_name = base_move.name.clone();
-            moves.push(base_move);
+            moves.push(base_move.clone());
+            class_moves.push(base_move);
 
             let order = move_powers.len() as isize + 2;
             for (j, expanded_puzzle_state) in move_powers.into_iter().enumerate() {
@@ -256,6 +271,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
 
         Ok(PuzzleDef {
             moves: moves.into_boxed_slice(),
+            class_moves: class_moves.into_boxed_slice(),
             symmetries: symmetries.into_boxed_slice(),
             sorted_orbit_defs: sorted_orbit_defs.into_boxed_slice(),
             name: ksolve.name().to_owned(),
