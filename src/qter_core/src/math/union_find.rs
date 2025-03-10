@@ -1,5 +1,5 @@
 use std::{
-    cell::{Ref, RefCell},
+    cell::{Cell, Ref, RefCell},
     mem,
 };
 
@@ -41,7 +41,7 @@ enum UnionFindEntry<S: SetInfo> {
         set_meta: S,
     },
     OwnedBy {
-        owned_by: RefCell<usize>,
+        owned_by: Cell<usize>,
     },
 }
 
@@ -136,11 +136,10 @@ impl<S: SetInfo> UnionFind<S> {
                 path_meta: path_meta.borrow(),
             },
             UnionFindEntry::OwnedBy { owned_by } => {
-                let mut ret = self.find(*owned_by.borrow());
+                let mut ret = self.find(owned_by.get());
 
                 if let Some(root_meta) = ret.path_meta() {
-                    // This borrow_mut is valid because it's immediately dropped at the end of the function and won't break anything
-                    *(owned_by.borrow_mut()) = ret.root_idx;
+                    owned_by.set(ret.root_idx);
 
                     // This borrow_mut is valid despite a `Ref` being returned because once this function returns, the node is guaranteed to be a child of a root and compression will not happen again until `union` is called. This function returns an `&` reference to the union-find and `union` takes and `&mut` reference so `union` will not be called until the `Ref` is dropped.
                     let mut path_meta_mut = path_meta.borrow_mut();
@@ -182,7 +181,7 @@ impl<S: SetInfo> UnionFind<S> {
         let old_b_data = mem::replace(
             &mut self.sets[b_idx].0,
             UnionFindEntry::OwnedBy {
-                owned_by: RefCell::new(a_idx),
+                owned_by: Cell::new(a_idx),
             },
         );
 

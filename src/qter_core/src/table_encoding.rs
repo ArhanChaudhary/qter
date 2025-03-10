@@ -72,8 +72,6 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
         return None;
     }
 
-    println!("{stats:?}");
-
     let mut disallowed_pairs = HashSet::new();
 
     for pair in symbol_indices
@@ -163,8 +161,6 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
     }
 
     let before = stream.len();
-
-    println!("{}", symbols.len());
 
     ans_encode(
         &mut stream,
@@ -390,8 +386,6 @@ fn mk_distribution_closure(stats: TableStats) -> impl FnMut(Option<u16>, &mut [u
             out
         })
         .collect::<HashMap<_, _>>();
-
-    println!("{lens_cdf:?}");
 
     let end_of_alg_symbol = generator_count as u16;
     let mut len = 0;

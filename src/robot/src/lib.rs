@@ -326,13 +326,25 @@ mod tests {
             &mut StdRng::from_seed(*b"They call me... THE SWIZZLER!!!\x13"),
         );
 
-        panic!("{}, {}", alg.iter().map(|v| &**v).join(" "), alg.len());
-
         let mut descramble = alg.to_owned();
         group.invert_alg(&mut descramble);
         alg.extend_from_slice(&descramble);
 
-        let err = validate_calibration_alg(&three_by_three(), &alg);
+        let err = validate_calibration_alg(&group, &alg);
+
+        if let Some(err) = err {
+            panic!("{err:?}");
+        }
+    }
+
+    #[test]
+    fn good_alg2() {
+        let alg = "L2 U2 B D2 L R D D2 B F' U D D U' D R' U L D' U' D2 F2 U2 R2 U2 D' U U F' L2 F' F' L D2 F' D' B B D D U' L' R R' D' B2 L2 F D' B' L2 F2 B' D2 B2 R' L2 F' B2 U L B' R' R2 F' D' R2 R B R' D' B' R' U2 B L2 R' B2 R2 D B' L2 F2 D2 L D R U' B R2 R2 R B' F' D2 D' D L2 F' F R' D R' U2 L2 R' D U' R' F' U2 F' D' R2 U L R2";
+
+        let err = validate_calibration_alg(
+            &three_by_three(),
+            &alg.split_whitespace().map(ArcIntern::from).collect_vec(),
+        );
 
         if let Some(err) = err {
             panic!("{err:?}");

@@ -14,7 +14,10 @@ use crate::{
     table_encoding, Int, PermutePuzzle, I, U,
 };
 
-pub(crate) const OPTIMIZED_TABLES: [&[u8]; 1] = [include_bytes!("../puzzles/compressed.bin")];
+pub(crate) const OPTIMIZED_TABLES: [&[u8]; 2] = [
+    include_bytes!("../puzzles/210-24.bin"),
+    include_bytes!("../puzzles/30-30-30.bin"),
+];
 
 /// The definition of a puzzle parsed from the custom format
 #[derive(Debug)]
