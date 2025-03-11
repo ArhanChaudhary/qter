@@ -1,3 +1,7 @@
+//! Canonical canonical_fsm implementation, derived primarily from Lucas Garron's
+//! implementation in twsearch with permission:
+//! https://github.com/cubing/twsearch/blob/main/src/rs/_internal/canonical_fsm/canonical_fsm.rs
+
 use super::puzzle::{KSolveConversionError, PuzzleDef, PuzzleState};
 use std::collections::HashMap;
 
@@ -7,7 +11,7 @@ const MAX_NUM_MOVE_CLASSES: usize = usize::BITS as usize;
 #[derive(Copy, Clone, Eq, Hash, PartialEq)]
 struct MoveClassMask(u64);
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct CanonicalFSMState(usize);
 
 struct MaskToState(HashMap<MoveClassMask, CanonicalFSMState>);
@@ -20,11 +24,13 @@ pub struct CanonicalFSM<P: PuzzleState> {
     _marker: std::marker::PhantomData<P>,
 }
 
-impl<P: PuzzleState> TryFrom<PuzzleDef<P>> for CanonicalFSM<P> {
+impl<P: PuzzleState> TryFrom<&PuzzleDef<P>> for CanonicalFSM<P> {
     type Error = KSolveConversionError;
 
-    fn try_from(puzzle_def: PuzzleDef<P>) -> Result<Self, Self::Error> {
-        let num_move_classes = puzzle_def.class_moves.len();
+    // TODO: understand and improve the implementation. Make this `From` and
+    // remove the move class number limit.
+    fn try_from(puzzle_def: &PuzzleDef<P>) -> Result<Self, Self::Error> {
+        let num_move_classes = puzzle_def.move_classes.len();
         if num_move_classes > MAX_NUM_MOVE_CLASSES {
             return Err(KSolveConversionError::TooManyMoveClasses);
         }
@@ -37,9 +43,12 @@ impl<P: PuzzleState> TryFrom<PuzzleDef<P>> for CanonicalFSM<P> {
         // - The standard T-Perm (`R U R' U' R' F R2 U' R' U' R U R' F'`) has order 2.
         // - `R2 U2` has order 6.
         // - T-perm and `(R2 U2)3` commute.
-        for (i, move_class_1) in puzzle_def.class_moves.iter().enumerate() {
-            for (j, move_class_2) in puzzle_def.class_moves.iter().enumerate() {
-                if !move_class_1.commutes_with(move_class_2, &puzzle_def.sorted_orbit_defs) {
+        for (i, move_class_1_index) in puzzle_def.move_classes.iter().copied().enumerate() {
+            for (j, move_class_2_index) in puzzle_def.move_classes.iter().copied().enumerate() {
+                if !puzzle_def.moves[move_class_1_index].commutes_with(
+                    &puzzle_def.moves[move_class_2_index],
+                    &puzzle_def.sorted_orbit_defs,
+                ) {
                     commutes[i].0 &= !(1 << j);
                     commutes[j].0 &= !(1 << i);
                 }
@@ -62,7 +71,7 @@ impl<P: PuzzleState> TryFrom<PuzzleDef<P>> for CanonicalFSM<P> {
         let mut queue_index = CanonicalFSMState(0);
         while queue_index.0 < state_to_mask.0.len() {
             // illegal state
-            let mut next_state = vec![CanonicalFSMState(0xFFFFFFFF); num_move_classes];
+            let mut next_state = vec![CanonicalFSMState(!0); num_move_classes];
 
             let dequeue_move_class_mask = state_to_mask.0[queue_index.0];
             disallowed_move_classes.0.push(MoveClassMask(0));
@@ -70,7 +79,7 @@ impl<P: PuzzleState> TryFrom<PuzzleDef<P>> for CanonicalFSM<P> {
             queue_index.0 += 1;
             let from_state = queue_index;
 
-            for move_class_index in 0..puzzle_def.class_moves.len() {
+            for move_class_index in 0..puzzle_def.move_classes.len() {
                 let mut skip = false;
                 // If there's a greater move (multiple) in the state that
                 // commutes with this move's `move_class`, we can't move
@@ -90,6 +99,7 @@ impl<P: PuzzleState> TryFrom<PuzzleDef<P>> for CanonicalFSM<P> {
                 let mut next_state_bits = (dequeue_move_class_mask.0
                     & commutes[move_class_index].0)
                     | (1 << move_class_index);
+
                 // If a pair of bits are set with the same commutating moves, we
                 // can clear out the higher ones. This optimization keeps the
                 // state count from going exponential for very big cubes.
@@ -116,6 +126,7 @@ impl<P: PuzzleState> TryFrom<PuzzleDef<P>> for CanonicalFSM<P> {
             }
             next_state_lookup.push(next_state);
         }
+
         Ok(Self {
             next_state_lookup,
             _marker: std::marker::PhantomData,
@@ -130,7 +141,7 @@ impl<P: PuzzleState> CanonicalFSM<P> {
         move_class_index: usize,
     ) -> Option<CanonicalFSMState> {
         match self.next_state_lookup[current_fsm_state.0][move_class_index] {
-            CanonicalFSMState(0xFFFFFFFF) => None,
+            CanonicalFSMState(illegal_state) if illegal_state == !0 => None,
             state => Some(state),
         }
     }
@@ -143,13 +154,77 @@ mod tests {
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
     #[test]
-    fn test_thing() {
+    fn test_canonical_fsm_initially_all_legal() {
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let fsm: CanonicalFSM<Cube3> = cube3_def.try_into().unwrap();
-        for (i, state) in fsm.next_state_lookup.iter().enumerate() {
-            println!("State {i}");
-            for (j, next_state) in state.iter().enumerate() {
-                println!("Move class {j}: {:032b}", next_state.0);
+        let canonical_fsm: CanonicalFSM<Cube3> = (&cube3_def).try_into().unwrap();
+
+        for move_class_index in 0..cube3_def.move_classes.len() {
+            assert!(canonical_fsm
+                .next_state(CanonicalFSMState::default(), move_class_index)
+                .is_some());
+        }
+    }
+
+    #[test]
+    fn test_canonical_fsm_prevents_self() {
+        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let canonical_fsm: CanonicalFSM<Cube3> = (&cube3_def).try_into().unwrap();
+
+        for move_class_index in 0..cube3_def.move_classes.len() {
+            assert!(canonical_fsm
+                .next_state(
+                    canonical_fsm
+                        .next_state(CanonicalFSMState::default(), move_class_index)
+                        .unwrap(),
+                    move_class_index
+                )
+                .is_none());
+        }
+    }
+
+    #[test]
+    fn test_canonical_fsm_prevents_self_and_antipode() {
+        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let canonical_fsm: CanonicalFSM<Cube3> = (&cube3_def).try_into().unwrap();
+
+        for (move_class_index_1, move_class_1) in cube3_def.move_classes.iter().copied().enumerate()
+        {
+            let move_1 = &cube3_def.moves[move_class_1];
+            for (move_class_index_2, move_class_2) in
+                cube3_def.move_classes.iter().copied().enumerate()
+            {
+                let move_2 = &cube3_def.moves[move_class_2];
+                if !move_1.commutes_with(move_2, &cube3_def.sorted_orbit_defs) {
+                    continue;
+                }
+
+                let allows_1_after_2 = canonical_fsm
+                    .next_state(
+                        canonical_fsm
+                            .next_state(CanonicalFSMState::default(), move_class_index_2)
+                            .unwrap(),
+                        move_class_index_1,
+                    )
+                    .is_some();
+                let allows_2_after_1 = canonical_fsm
+                    .next_state(
+                        canonical_fsm
+                            .next_state(CanonicalFSMState::default(), move_class_index_1)
+                            .unwrap(),
+                        move_class_index_2,
+                    )
+                    .is_some();
+
+                if move_class_index_1 == move_class_index_2 {
+                    // No matter what the same face should not be allowed after
+                    // another.
+                    assert!(!allows_2_after_1 && !allows_1_after_2);
+                } else {
+                    // We expect a total ordering of commutative move classes.
+                    // Therefore one should be allowed after the other but not
+                    // the other way around. Xor gives me that truth table.
+                    assert!(allows_1_after_2 ^ allows_2_after_1);
+                }
             }
         }
     }

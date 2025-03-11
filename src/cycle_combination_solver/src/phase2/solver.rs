@@ -1,4 +1,5 @@
 use super::{
+    canonical_fsm::{self, CanonicalFSM, CanonicalFSMState},
     pruning::PruningTable,
     puzzle::{Move, MultiBvInterface, OrientedPartition, PuzzleDef, PuzzleState},
     puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryInterface},
@@ -6,6 +7,7 @@ use super::{
 
 pub struct CycleTypeSolver<P: PuzzleState, T: PruningTable<P>> {
     puzzle_def: PuzzleDef<P>,
+    canonical_fsm: CanonicalFSM<P>,
     sorted_cycle_type: Vec<OrientedPartition>,
     pruning_table: T,
 }
@@ -19,11 +21,13 @@ struct CycleTypeSolverMutable<P: PuzzleState, H: PuzzleStateHistoryInterface<P>>
 impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
     pub fn new(
         puzzle_def: PuzzleDef<P>,
+        canonical_fsm: CanonicalFSM<P>,
         sorted_cycle_type: Vec<OrientedPartition>,
         pruning_table: T,
     ) -> Self {
         Self {
             puzzle_def,
+            canonical_fsm,
             sorted_cycle_type,
             pruning_table,
         }
@@ -32,6 +36,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
     fn search_for_solution<H: PuzzleStateHistoryInterface<P>>(
         &self,
         mutable: &mut CycleTypeSolverMutable<P, H>,
+        current_fsm_state: CanonicalFSMState,
         entry_index: usize,
         sofar_cost: u8,
         // TODO: make this `togo` and descending (see sc) and vcube does IDA*
@@ -74,10 +79,16 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
                 .puzzle_state_history
                 .move_index_unchecked(entry_index)
         };
-        // TODO: im not entirely convinced inverse lesser branching factor
-        // stuff wont work: U -> R F B L D, D -> R F B L
+        // TODO: make start nonzero
         for move_index in start..self.puzzle_def.moves.len() {
-            // if not a canonical sequence continue and set next_move_index to 0
+            let move_class_index = self.puzzle_def.moves[move_index].move_class_index;
+            let Some(next_fsm_state) = self
+                .canonical_fsm
+                .next_state(current_fsm_state, move_class_index)
+            else {
+                next_entry_index = 0;
+                continue;
+            };
 
             // SAFETY:
             // 1) `pop_stack` is called for every `push_stack` call, so
@@ -90,8 +101,13 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
                     .puzzle_state_history
                     .push_stack_unchecked(move_index, &self.puzzle_def);
             }
-            let next_est_goal_cost =
-                self.search_for_solution(mutable, next_entry_index, sofar_cost + 1, cost_bound);
+            let next_est_goal_cost = self.search_for_solution(
+                mutable,
+                next_fsm_state,
+                next_entry_index,
+                sofar_cost + 1,
+                cost_bound,
+            );
             mutable.puzzle_state_history.pop_stack();
             next_entry_index = 0;
 
@@ -123,7 +139,13 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
             .resize_if_needed(cost_bound as usize + 1);
         while mutable.solutions.is_empty() {
             println!("Searching depth {}...", cost_bound);
-            cost_bound = self.search_for_solution(&mut mutable, 0, 0, cost_bound);
+            cost_bound = self.search_for_solution(
+                &mut mutable,
+                CanonicalFSMState::default(),
+                0,
+                0,
+                cost_bound,
+            );
             mutable
                 .puzzle_state_history
                 .resize_if_needed(cost_bound as usize + 1);
@@ -140,11 +162,10 @@ mod tests {
 
     #[test]
     fn test_identity_cycle_type() {
-        let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            (&*KPUZZLE_3X3).try_into().unwrap(),
-            vec![vec![], vec![]],
-            ZeroTable,
-        );
+        let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let canonical_fsm = (&puzzle_def).try_into().unwrap();
+        let solver: CycleTypeSolver<Cube3, _> =
+            CycleTypeSolver::new(puzzle_def, canonical_fsm, vec![vec![], vec![]], ZeroTable);
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 1);
         assert_eq!(solutions[0].len(), 0);
@@ -152,8 +173,11 @@ mod tests {
 
     #[test]
     fn test_single_quarter_turn() {
+        let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let canonical_fsm = (&puzzle_def).try_into().unwrap();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            (&*KPUZZLE_3X3).try_into().unwrap(),
+            puzzle_def,
+            canonical_fsm,
             vec![
                 vec![(4.try_into().unwrap(), false)],
                 vec![(4.try_into().unwrap(), false)],
@@ -167,8 +191,11 @@ mod tests {
 
     #[test]
     fn test_single_half_turn() {
+        let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let canonical_fsm = (&puzzle_def).try_into().unwrap();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            (&*KPUZZLE_3X3).try_into().unwrap(),
+            puzzle_def,
+            canonical_fsm,
             vec![
                 vec![
                     (2.try_into().unwrap(), false),
@@ -188,10 +215,13 @@ mod tests {
 
     #[test]
     fn test_optimal_subgroup_cycle() {
+        let puzzle_def: PuzzleDef<Cube3> = (&KPUZZLE_3X3.clone().with_moves(&["F", "R", "U"]))
+            .try_into()
+            .unwrap();
+        let canonical_fsm = (&puzzle_def).try_into().unwrap();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            (&KPUZZLE_3X3.clone().with_moves(&["F", "R", "U"]))
-                .try_into()
-                .unwrap(),
+            puzzle_def,
+            canonical_fsm,
             vec![
                 vec![
                     (3.try_into().unwrap(), false),
@@ -210,8 +240,11 @@ mod tests {
     fn test_optimal_cycle() {
         use std::time::Instant;
 
+        let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let canonical_fsm = (&puzzle_def).try_into().unwrap();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            (&*KPUZZLE_3X3).try_into().unwrap(),
+            puzzle_def,
+            canonical_fsm,
             vec![
                 vec![(1.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
                 vec![(1.try_into().unwrap(), true), (7.try_into().unwrap(), true)],
@@ -229,7 +262,7 @@ mod tests {
         //     }
         //     println!();
         // }
-        assert_eq!(solutions.len(), 440); // TODO: should be 480
+        assert_eq!(solutions.len(), 260); // TODO: should be 480
         assert!(solutions.iter().all(|solution| solution.len() == 5));
     }
 }

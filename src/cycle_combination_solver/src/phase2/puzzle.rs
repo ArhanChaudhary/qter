@@ -76,7 +76,7 @@ pub struct HeapPuzzle(pub Box<[u8]>);
 
 pub struct PuzzleDef<P: PuzzleState> {
     pub moves: Box<[Move<P>]>,
-    pub class_moves: Box<[Move<P>]>,
+    pub move_classes: Box<[usize]>,
     pub symmetries: Box<[Move<P>]>,
     pub sorted_orbit_defs: Box<[OrbitDef]>,
     pub name: String,
@@ -99,6 +99,7 @@ pub enum KSolveConversionError {
 #[derive(Debug, Clone)]
 pub struct Move<P: PuzzleState> {
     pub puzzle_state: P,
+    pub move_class_index: usize,
     pub name: String,
 }
 
@@ -179,7 +180,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
             .collect();
 
         let mut moves = Vec::with_capacity(ksolve.moves().len());
-        let mut class_moves = vec![];
+        let mut move_classes = vec![];
         let mut symmetries = Vec::with_capacity(ksolve.symmetries().len());
 
         for (i, ksolve_move) in ksolve
@@ -211,19 +212,30 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                 sorted_orbit_defs.as_slice(),
             )?;
 
-            let base_move = Move {
-                name: ksolve_move.name().to_owned(),
-                puzzle_state,
-            };
-
             if i >= ksolve.moves().len() {
+                let base_move = Move {
+                    name: ksolve_move.name().to_owned(),
+                    move_class_index: 0,
+                    puzzle_state,
+                };
                 symmetries.push(base_move);
                 continue;
             }
 
+            let move_class = moves.len();
+            let move_class_index = move_classes.len();
+            let base_move = Move {
+                name: ksolve_move.name().to_owned(),
+                move_class_index,
+                puzzle_state,
+            };
+
             let solved: P = solved_state_from_sorted_orbit_defs(&sorted_orbit_defs);
             let mut move_1 = base_move.clone();
             let mut move_2 = base_move.clone();
+
+            let base_name = base_move.name.clone();
+            move_classes.push(move_class);
 
             let mut move_powers: Vec<P> = vec![];
             const MAX_MOVE_POWER: usize = 1_000_000;
@@ -240,14 +252,11 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                 move_powers.push(move_1.puzzle_state.clone());
                 std::mem::swap(&mut move_1, &mut move_2);
             }
+            moves.push(base_move);
 
             if move_powers.len() == MAX_MOVE_POWER {
                 return Err(KSolveConversionError::MoveOrderTooHigh);
             }
-
-            let base_name = base_move.name.clone();
-            moves.push(base_move.clone());
-            class_moves.push(base_move);
 
             let order = move_powers.len() as isize + 2;
             for (j, expanded_puzzle_state) in move_powers.into_iter().enumerate() {
@@ -264,6 +273,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                 }
                 moves.push(Move {
                     puzzle_state: expanded_puzzle_state,
+                    move_class_index,
                     name: expanded_name,
                 });
             }
@@ -271,7 +281,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
 
         Ok(PuzzleDef {
             moves: moves.into_boxed_slice(),
-            class_moves: class_moves.into_boxed_slice(),
+            move_classes: move_classes.into_boxed_slice(),
             symmetries: symmetries.into_boxed_slice(),
             sorted_orbit_defs: sorted_orbit_defs.into_boxed_slice(),
             name: ksolve.name().to_owned(),
@@ -640,6 +650,31 @@ mod tests {
             }
         }
         result
+    }
+
+    fn commutes_with<P: PuzzleState>() {
+        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let u_move = cube3_def.find_move("U").unwrap();
+        let d2_move = cube3_def.find_move("D2").unwrap();
+        let r_move = cube3_def.find_move("R").unwrap();
+        assert!(u_move.commutes_with(u_move, &cube3_def.sorted_orbit_defs));
+        assert!(d2_move.commutes_with(d2_move, &cube3_def.sorted_orbit_defs));
+        assert!(u_move.commutes_with(d2_move, &cube3_def.sorted_orbit_defs));
+
+        assert!(!u_move.commutes_with(r_move, &cube3_def.sorted_orbit_defs));
+        assert!(!d2_move.commutes_with(r_move, &cube3_def.sorted_orbit_defs));
+        assert!(!r_move.commutes_with(u_move, &cube3_def.sorted_orbit_defs));
+        assert!(!r_move.commutes_with(d2_move, &cube3_def.sorted_orbit_defs));
+    }
+
+    #[test]
+    fn test_commutes_with() {
+        commutes_with::<StackCube3>();
+        commutes_with::<HeapPuzzle>();
+        #[cfg(simd8and16)]
+        commutes_with::<cube3::simd8and16::Cube3>();
+        #[cfg(avx2)]
+        commutes_with::<cube3::avx2::Cube3>();
     }
 
     #[test]
