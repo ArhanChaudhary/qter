@@ -1,6 +1,10 @@
-use std::{fs, io, path::PathBuf};
+use std::{
+    fmt::{Display, Formatter},
+    fs, io,
+    path::PathBuf,
+};
 
-use clap::{ArgAction, Parser};
+use clap::{ArgAction, Parser, ValueEnum};
 use color_eyre::{
     eyre::{eyre, OptionExt},
     owo_colors::OwoColorize,
@@ -11,8 +15,34 @@ use interpreter::{ExecutionState, Interpreter, PausedState};
 use itertools::Itertools;
 use qter_core::{
     table_encoding::{decode_table, encode_table},
-    Int, I,
+    Int, PermutePuzzle, I,
 };
+
+#[derive(Clone, Copy, ValueEnum)]
+enum WrongSolvedGoto {
+    /// Do not try to retrieve cube state from the robot and instead use a simulated cube state.
+    Cheat,
+    /// If the program returns an incorrect cube state, quit the program with an error.
+    Quit,
+    /// Print an error, but continue running with the new cube state
+    PrintAccept,
+    /// Print an error and ignore the cube state, using the simulated one instead
+    PrintIgnore,
+    /// Continue running with the new cube state without printing an error
+    SilentAccept,
+}
+
+impl Display for WrongSolvedGoto {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        f.write_str(match self {
+            WrongSolvedGoto::Cheat => "cheat",
+            WrongSolvedGoto::Quit => "quit",
+            WrongSolvedGoto::PrintAccept => "print-accept",
+            WrongSolvedGoto::PrintIgnore => "print-ignore",
+            WrongSolvedGoto::SilentAccept => "silent-accept",
+        })
+    }
+}
 
 /// Compiles and interprets qter programs
 #[derive(Parser)]
@@ -40,6 +70,18 @@ enum Commands {
     Test {
         /// Which file to test; must be a .qat file
         file: PathBuf,
+    },
+    /// Interpret a QAT program using a cube-solving robot
+    ///
+    /// The program inputted with `command` should receive moves through stdin and upon completing the moves, output the cube state through stdout using the format specified by [rob-twophase](https://github.com/efrantar/rob-twophase/blob/d245031257d52b2663c5790c5410ef30aefd775f/src/face.h#L29).
+    ///
+    /// The program may only use a single puzzle, and it may only be a 3x3 unless `solved-goto` is set to `cheat`. Feel free to PR if you have a different robot.
+    Robot {
+        /// The program to control the robot along with arguments
+        command: String,
+        /// How to handle the cube state from the robot not matching the simulated cube state
+        #[arg(long, short, default_value_t = WrongSolvedGoto::PrintAccept)]
+        solved_goto: WrongSolvedGoto,
     },
     #[cfg(debug_assertions)]
     /// Compress an algorithm table into the special format (This subcommand will not be visible in release mode)
@@ -99,6 +141,10 @@ fn main() -> color_eyre::Result<()> {
         }
         Commands::Debug { file: _ } => todo!(),
         Commands::Test { file: _ } => todo!(),
+        Commands::Robot {
+            command,
+            solved_goto,
+        } => todo!(),
         #[cfg(debug_assertions)]
         Commands::Compress { input, output } => {
             let data = fs::read_to_string(input)?;
@@ -164,13 +210,15 @@ fn interpret_fast(mut interpreter: Interpreter) -> color_eyre::Result<()> {
     }
 }
 
-fn give_number_input(interpreter: &mut Interpreter) -> color_eyre::Result<()> {
+fn give_number_input(
+    interpreter: &mut Interpreter,
+) -> color_eyre::Result<(usize, Option<PermutePuzzle>, Int<I>)> {
     loop {
         let mut number = String::new();
         io::stdin().read_line(&mut number)?;
         match number.parse::<Int<I>>() {
             Ok(v) => match interpreter.give_input(v) {
-                Ok(_) => break Ok(()),
+                Ok((puzzle_idx, alg)) => break Ok((puzzle_idx, alg, v)),
                 Err(e) => println!("{e}"),
             },
             Err(_) => println!("Please input an integer"),
@@ -279,7 +327,28 @@ fn interpret_slow(mut interpreter: Interpreter, trace: u8) -> color_eyre::Result
         }
 
         if should_give_input {
-            give_number_input(&mut interpreter)?;
+            let (puzzle_idx, alg, mut count) = give_number_input(&mut interpreter)?;
+
+            if let Some(alg) = alg {
+                let mut seq = alg.generators().to_owned();
+
+                if count < Int::<I>::zero() {
+                    alg.group().invert_alg(&mut seq);
+                    count = -count;
+                }
+
+                eprint!("Puzzle {puzzle_idx}:");
+
+                while count > Int::<I>::zero() {
+                    for generator in &seq {
+                        eprint!(" {generator}");
+                    }
+
+                    count -= Int::<I>::one();
+                }
+
+                eprintln!();
+            }
         }
     }
 }

@@ -77,6 +77,16 @@ impl PermutePuzzle {
         &self.generators
     }
 
+    /// Return the permutation group that this alg operates on
+    pub fn group(&self) -> &PermutationGroup {
+        &self.group
+    }
+
+    /// Return the permutation group that this alg operates on in an Arc
+    pub fn group_arc(&self) -> Arc<PermutationGroup> {
+        Arc::clone(&self.group)
+    }
+
     /// Calculate the order of every cycle of facelets created by seeing this `PermutePuzzle` instance as a register generator.
     ///
     /// Returns a list of chromatic orders where the index is the facelet.

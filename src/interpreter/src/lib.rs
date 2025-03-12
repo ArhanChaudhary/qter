@@ -1,8 +1,8 @@
-use std::{collections::VecDeque, sync::Arc};
+use std::{collections::VecDeque, mem, sync::Arc};
 
 use qter_core::{
     architectures::{Permutation, PermutationGroup},
-    discrete_math::{chinese_remainder_theorem, decode, lcm},
+    discrete_math::{decode, lcm},
     Facelets, Instruction, Int, PermutePuzzle, Program, RegisterGenerator, I, U,
 };
 
@@ -76,6 +76,22 @@ pub enum ExecutionState {
 struct TheoreticalState {
     state: Int<U>,
     order: Int<U>,
+}
+
+impl TheoreticalState {
+    fn add_to_i(&mut self, amt: Int<I>) {
+        self.add_to(amt % self.order);
+    }
+
+    fn add_to(&mut self, amt: Int<U>) {
+        assert!(amt < self.order);
+
+        self.state += amt % self.order;
+
+        if self.state >= self.order {
+            self.state -= self.order;
+        }
+    }
 }
 
 /// A collection of the states of every puzzle and theoretical register
@@ -162,34 +178,6 @@ impl PuzzleStates {
                 .iter()
                 .map(|facelet| generator.chromatic_orders_by_facelets()[*facelet])
                 .fold(Int::<U>::one(), lcm),
-        }
-    }
-
-    /// Explicitly add a number to a register
-    fn add_num_to(&mut self, register_idx: usize, which_reg: &RegisterGenerator, amt: Int<I>) {
-        match which_reg {
-            RegisterGenerator::Theoretical => {
-                let TheoreticalState { state, order } = &mut self.theoretical_states[register_idx];
-
-                assert!(amt < *order);
-
-                *state += amt % *order;
-
-                if *state >= *order {
-                    *state -= *order;
-                }
-            }
-            RegisterGenerator::Puzzle {
-                generator,
-                facelets: _,
-            } => {
-                let puzzle = &mut self.puzzle_states[register_idx];
-                let mut perm = generator.permutation().to_owned();
-
-                perm.exponentiate(amt);
-
-                puzzle.state.compose(&perm);
-            }
         }
     }
 
@@ -384,11 +372,8 @@ impl Interpreter {
                 amount,
             } => {
                 self.execution_state = ExecutionState::Running;
-                self.puzzle_states.add_num_to(
-                    *register_idx,
-                    &RegisterGenerator::Theoretical,
-                    (*amount).into(),
-                );
+
+                self.puzzle_states.theoretical_states[*register_idx].add_to(*amount);
 
                 self.program_counter += 1;
 
@@ -430,18 +415,19 @@ impl Interpreter {
         }
     }
 
-    /// Give an input to the interpreter
+    /// Give an input to the interpreter, returning the puzzle index and the algorithm performed `value` times if applicable
     ///
     /// Panics if the interpreter is not executing an `input` instruction
-    pub fn give_input(&mut self, value: Int<I>) -> Result<(), String> {
+    pub fn give_input(&mut self, value: Int<I>) -> Result<(usize, Option<PermutePuzzle>), String> {
         let ExecutionState::Paused(PausedState::Input {
             max_input,
-            register_idx,
-            register,
-        }) = self.execution_state()
+            register_idx: _,
+            register: _,
+        }) = &self.execution_state
         else {
             panic!("The interpreter isn't in an input state");
         };
+
         if value > *max_input {
             return Err(format!(
                 "Your input must not be greater than {}.",
@@ -452,14 +438,42 @@ impl Interpreter {
             return Err(format!("Your input must not be less than {}.", -*max_input));
         }
 
-        // TODO: the clone can absolutely be avoided here as the mutable and
-        // immutable parts of Interpreter are disjoint
-        self.puzzle_states
-            .add_num_to(*register_idx, &register.clone(), value);
+        // The code is weird to appease the borrow checker
+
+        let ExecutionState::Paused(PausedState::Input {
+            max_input: _,
+            register_idx,
+            register,
+        }) = mem::replace(&mut self.execution_state, ExecutionState::Running)
+        else {
+            unreachable!("Checked before")
+        };
+
+        let alg = match register {
+            RegisterGenerator::Theoretical => {
+                self.puzzle_states.theoretical_states[register_idx].add_to_i(value);
+
+                None
+            }
+            RegisterGenerator::Puzzle {
+                generator,
+                facelets: _,
+            } => {
+                let puzzle = &mut self.puzzle_states.puzzle_states[register_idx];
+                let mut perm = generator.permutation().to_owned();
+
+                perm.exponentiate(value);
+
+                puzzle.state.compose(&perm);
+
+                Some(generator)
+            }
+        };
 
         self.execution_state = ExecutionState::Running;
         self.program_counter += 1;
-        Ok(())
+
+        Ok((register_idx, alg))
     }
 }
 
