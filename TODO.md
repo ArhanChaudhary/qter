@@ -16,6 +16,7 @@
   - tANS table compression
 - Phase 1
 - Look into fixing a corner for even cubes/other puzzles
+- Schreier Sims & generating algs using it
 
 ## PuzzleGeometry
 
