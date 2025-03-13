@@ -1,4 +1,4 @@
-use crate::{architectures::Permutation, Int, PermutePuzzle, I, U};
+use crate::{architectures::Permutation, Int, Algorithm, I, U};
 
 /// Calculate the GCD of two numbers
 pub fn gcd(mut a: Int<U>, mut b: Int<U>) -> Int<U> {
@@ -136,7 +136,7 @@ pub fn length_of_substring_that_this_string_is_n_repeated_copies_of<'a>(
 pub fn decode(
     permutation: &Permutation,
     facelets: &[usize],
-    generator: &PermutePuzzle,
+    generator: &Algorithm,
 ) -> Option<Int<U>> {
     chinese_remainder_theorem(facelets.iter().map(|facelet| {
         let maps_to = permutation.mapping()[*facelet];
@@ -177,7 +177,7 @@ mod tests {
             decode, extended_euclid, gcd, lcm,
             length_of_substring_that_this_string_is_n_repeated_copies_of,
         },
-        Int, PermutePuzzle, U,
+        Int, Algorithm, U,
     };
 
     use super::chinese_remainder_theorem;
@@ -260,7 +260,7 @@ mod tests {
 
         let mut cube = group.group.identity();
 
-        let permutation = PermutePuzzle::new_from_generators(
+        let permutation = Algorithm::new_from_generators(
             Arc::clone(&group.group),
             vec![ArcIntern::from("U")],
         )

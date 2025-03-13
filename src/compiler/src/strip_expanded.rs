@@ -5,7 +5,7 @@ use itertools::Itertools;
 use pest::error::Error;
 use qter_core::{
     architectures::{Architecture, PermutationGroup},
-    mk_error, Facelets, Instruction, Int, PermutePuzzle, Program, RegisterGenerator, WithSpan, U,
+    mk_error, Algorithm, Facelets, Instruction, Int, Program, RegisterGenerator, WithSpan, U,
 };
 
 use crate::{
@@ -32,7 +32,7 @@ impl RegisterIdx {
         match self {
             RegisterIdx::Theoretical => RegisterGenerator::Theoretical,
             RegisterIdx::Real { idx, arch } => RegisterGenerator::Puzzle {
-                generator: PermutePuzzle::new_from_effect(arch, vec![(*idx, Int::<U>::one())]),
+                generator: Algorithm::new_from_effect(arch, vec![(*idx, Int::<U>::one())]),
                 facelets: arch.registers()[*idx].signature_facelets(),
             },
         }
@@ -79,7 +79,7 @@ fn coalesce_adds<V: Iterator<Item = WithSpan<ExpandedCode>>>(
                         ),
                         RegisterIdx::Real { idx: _, arch } => CoalescedAdds::AddPuzzle(
                             puzzle,
-                            PermutePuzzle::new_from_effect(
+                            Algorithm::new_from_effect(
                                 arch,
                                 adds.iter()
                                     .map(|v| {
@@ -103,13 +103,13 @@ fn coalesce_adds<V: Iterator<Item = WithSpan<ExpandedCode>>>(
 }
 
 enum CoalescedAdds {
-    AddPuzzle(usize, PermutePuzzle),
+    AddPuzzle(usize, Algorithm),
     AddTheoretical(usize, Int<U>),
     Instruction(ExpandedCode),
 }
 
 enum CoalescedAddsRemovedLabels {
-    AddPuzzle(usize, PermutePuzzle),
+    AddPuzzle(usize, Algorithm),
     AddTheoretical(usize, Int<U>),
     Instruction(Primitive),
 }
@@ -227,9 +227,9 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
             let instruction = match v.into_inner() {
                 CoalescedAddsRemovedLabels::AddPuzzle(puzzle, permutation) => {
                     return Ok(WithSpan::new(
-                        Instruction::PermutePuzzle {
+                        Instruction::Algorithm {
                             puzzle_idx: puzzle,
-                            permute_puzzle: permutation,
+                            algorithm: permutation,
                         },
                         span,
                     ))

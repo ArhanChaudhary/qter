@@ -15,7 +15,7 @@ use interpreter::{ExecutionState, Interpreter, PausedState};
 use itertools::Itertools;
 use qter_core::{
     table_encoding::{decode_table, encode_table},
-    Int, PermutePuzzle, I,
+    Algorithm, Int, I,
 };
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -228,7 +228,7 @@ fn interpret_fast(mut interpreter: Interpreter) -> color_eyre::Result<()> {
 
 fn give_number_input(
     interpreter: &mut Interpreter,
-) -> color_eyre::Result<(usize, Option<PermutePuzzle>, Int<I>)> {
+) -> color_eyre::Result<(usize, Option<Algorithm>, Int<I>)> {
     loop {
         let mut number = String::new();
         io::stdin().read_line(&mut number)?;

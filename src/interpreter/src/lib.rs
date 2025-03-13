@@ -3,7 +3,7 @@ use std::{collections::VecDeque, mem, sync::Arc};
 use qter_core::{
     architectures::{Permutation, PermutationGroup},
     discrete_math::{decode, lcm},
-    Facelets, Instruction, Int, PermutePuzzle, Program, RegisterGenerator, I, U,
+    Algorithm, Facelets, Instruction, Int, Program, RegisterGenerator, I, U,
 };
 
 /// Represents an instance of a `PermutationGroup`, in other words this simulates the puzzle
@@ -36,7 +36,7 @@ impl Puzzle {
     /// Decode the permutation using the register generator and the given facelets.
     ///
     /// In general, an arbitrary scramble cannot be decoded. If this is the case, the function will return `None`.
-    pub fn decode(&self, facelets: &[usize], generator: &PermutePuzzle) -> Option<Int<U>> {
+    pub fn decode(&self, facelets: &[usize], generator: &Algorithm) -> Option<Int<U>> {
         decode(self.state(), facelets, generator)
     }
 
@@ -133,7 +133,7 @@ pub enum ActionPerformed<'s> {
     },
     ExecutedAlgorithm {
         puzzle_idx: usize,
-        algorithm: &'s PermutePuzzle,
+        algorithm: &'s Algorithm,
     },
     Panicked,
 }
@@ -382,8 +382,8 @@ impl Interpreter {
                     amt: *amount,
                 }
             }
-            Instruction::PermutePuzzle {
-                permute_puzzle,
+            Instruction::Algorithm {
+                algorithm: permute_puzzle,
                 puzzle_idx,
             } => {
                 self.execution_state = ExecutionState::Running;
@@ -418,7 +418,7 @@ impl Interpreter {
     /// Give an input to the interpreter, returning the puzzle index and the algorithm performed `value` times if applicable
     ///
     /// Panics if the interpreter is not executing an `input` instruction
-    pub fn give_input(&mut self, value: Int<I>) -> Result<(usize, Option<PermutePuzzle>), String> {
+    pub fn give_input(&mut self, value: Int<I>) -> Result<(usize, Option<Algorithm>), String> {
         let ExecutionState::Paused(PausedState::Input {
             max_input,
             register_idx: _,
@@ -483,7 +483,7 @@ mod tests {
 
     use compiler::compile;
     use internment::ArcIntern;
-    use qter_core::{architectures::PuzzleDefinition, Int, PermutePuzzle, RegisterGenerator, U};
+    use qter_core::{architectures::PuzzleDefinition, Algorithm, Int, RegisterGenerator, U};
 
     use crate::{Interpreter, PausedState, Puzzle};
 
@@ -521,8 +521,8 @@ mod tests {
         let a_facelets = arch.registers()[0].signature_facelets();
         let b_facelets = arch.registers()[1].signature_facelets();
 
-        let a_permutation = PermutePuzzle::new_from_effect(&arch, vec![(0, Int::one())]);
-        let b_permutation = PermutePuzzle::new_from_effect(&arch, vec![(1, Int::one())]);
+        let a_permutation = Algorithm::new_from_effect(&arch, vec![(0, Int::one())]);
+        let b_permutation = Algorithm::new_from_effect(&arch, vec![(1, Int::one())]);
 
         let mut cube = Puzzle::initialize(Arc::clone(&group.group));
 

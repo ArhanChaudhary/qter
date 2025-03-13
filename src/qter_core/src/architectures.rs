@@ -11,7 +11,7 @@ use crate::{
     discrete_math::{decode, lcm_iter},
     puzzle_parser,
     shared_facelet_detection::algorithms_to_cycle_generators,
-    table_encoding, Int, PermutePuzzle, I, U,
+    table_encoding, Int, Algorithm, I, U,
 };
 
 pub(crate) const OPTIMIZED_TABLES: [&[u8]; 2] = [
@@ -639,7 +639,7 @@ impl Architecture {
                 .map(|v| {
                     (
                         v.signature_facelets(),
-                        PermutePuzzle::new_from_generators(
+                        Algorithm::new_from_generators(
                             Arc::clone(&self.group),
                             v.generator_sequence().to_owned(),
                         )
@@ -652,7 +652,7 @@ impl Architecture {
 
             let mut add_permutation = |alg: Vec<ArcIntern<str>>| {
                 let permutation =
-                    PermutePuzzle::new_from_generators(self.group_arc(), alg.to_owned()).unwrap();
+                    Algorithm::new_from_generators(self.group_arc(), alg.to_owned()).unwrap();
 
                 let maybe_decoded = registers_decoding_info
                     .iter()

@@ -2,22 +2,23 @@ use crate::architectures::{Architecture, Permutation, PermutationGroup};
 use crate::discrete_math::length_of_substring_that_this_string_is_n_repeated_copies_of;
 use crate::{Int, WithSpan, U};
 use internment::ArcIntern;
+use itertools::Itertools;
 use std::{cell::OnceCell, sync::Arc};
 
 /// Represents a sequence of moves to apply to a puzzle in the `Program`
 #[derive(Clone)]
-pub struct PermutePuzzle {
+pub struct Algorithm {
     group: Arc<PermutationGroup>,
     permutation: Permutation,
     generators: Vec<ArcIntern<str>>,
     chromatic_orders: OnceCell<Vec<Int<U>>>,
 }
 
-impl PermutePuzzle {
-    /// Create a `PermutePuzzle` from what values it should add to which registers.
+impl Algorithm {
+    /// Create an `Algorithm` from what values it should add to which registers.
     ///
     /// `effect` is a list of tuples of register indices and how much to add to add to them.
-    pub fn new_from_effect(arch: &Architecture, effect: Vec<(usize, Int<U>)>) -> PermutePuzzle {
+    pub fn new_from_effect(arch: &Architecture, effect: Vec<(usize, Int<U>)>) -> Algorithm {
         let mut generators = Vec::new();
 
         let mut expanded_effect = vec![Int::<U>::zero(); arch.registers().len()];
@@ -50,16 +51,16 @@ impl PermutePuzzle {
         Self::new_from_generators(arch.group_arc(), generators).unwrap()
     }
 
-    /// Create a `PermutePuzzle` instance from a list of generators
+    /// Create an `Algorithm` instance from a list of generators
     pub fn new_from_generators(
         group: Arc<PermutationGroup>,
         generators: Vec<ArcIntern<str>>,
-    ) -> Result<PermutePuzzle, ArcIntern<str>> {
+    ) -> Result<Algorithm, ArcIntern<str>> {
         let mut permutation = group.identity();
 
         group.compose_generators_into(&mut permutation, generators.iter())?;
 
-        Ok(PermutePuzzle {
+        Ok(Algorithm {
             group,
             permutation,
             generators,
@@ -67,7 +68,7 @@ impl PermutePuzzle {
         })
     }
 
-    /// Get the underlying permutation of the `PermutePuzzle` instance
+    /// Get the underlying permutation of the `Algorithm` instance
     pub fn permutation(&self) -> &Permutation {
         &self.permutation
     }
@@ -87,7 +88,7 @@ impl PermutePuzzle {
         Arc::clone(&self.group)
     }
 
-    /// Calculate the order of every cycle of facelets created by seeing this `PermutePuzzle` instance as a register generator.
+    /// Calculate the order of every cycle of facelets created by seeing this `Algorithm` instance as a register generator.
     ///
     /// Returns a list of chromatic orders where the index is the facelet.
     pub fn chromatic_orders_by_facelets(&self) -> &[Int<U>] {
@@ -109,19 +110,14 @@ impl PermutePuzzle {
     }
 }
 
-impl core::fmt::Debug for PermutePuzzle {
+impl core::fmt::Debug for Algorithm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PermutePuzzle")
+        f.debug_struct("Algorithm")
             .field("permutation", &self.permutation)
-            // .field(
-            //     "generators",
-            //     &self
-            //         .generators
-            //         .iter()
-            //         .map(|v| &**v)
-            //         .intersperse(" ")
-            //         .collect::<String>(),
-            // )
+            .field(
+                "generators",
+                &self.generators.iter().map(|v| &**v).join(" "),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -138,7 +134,7 @@ pub enum Facelets {
 pub enum RegisterGenerator {
     Theoretical,
     Puzzle {
-        generator: PermutePuzzle,
+        generator: Algorithm,
         facelets: Vec<usize>,
     },
 }
@@ -174,9 +170,9 @@ pub enum Instruction {
         register_idx: usize,
         amount: Int<U>,
     },
-    PermutePuzzle {
+    Algorithm {
         puzzle_idx: usize,
-        permute_puzzle: PermutePuzzle,
+        algorithm: Algorithm,
     },
 }
 
