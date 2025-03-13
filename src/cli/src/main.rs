@@ -71,17 +71,30 @@ enum Commands {
         /// Which file to test; must be a .qat file
         file: PathBuf,
     },
-    /// Interpret a QAT program using a cube-solving robot
+    /// Interpret a Qter program using a cube-solving robot
     ///
-    /// The program inputted with `command` should receive moves through stdin and upon completing the moves, output the cube state through stdout using the format specified by [rob-twophase](https://github.com/efrantar/rob-twophase/blob/d245031257d52b2663c5790c5410ef30aefd775f/src/face.h#L29).
+    /// The program inputted with `command` should receive signals through stdin and output signals through stdout.
     ///
-    /// The program may only use a single puzzle, and it may only be a 3x3 unless `solved-goto` is set to `cheat`. Feel free to PR if you have a different robot.
+    /// The Qter program may only use a single puzzle, and it may only be a 3x3 unless `--solved-goto` is set to `cheat`. Feel free to PR if you have a different robot.
     Robot {
         /// The program to control the robot along with arguments
+        ///
+        /// When the robot is ready to perform a new algorithm, the program must print the value of `--ready` followed by a line break through stdout. Then if it receives the `--perform` signal, the program will receive space separated sequence of cube moves to perform followed by a line break. If it receives the value of `--get-cube-state` followed by a line break, it will run the computer vision and print the cube state to stdout in the format of rob-twophase (https://github.com/efrantar/rob-twophase/blob/d245031257d52b2663c5790c5410ef30aefd775f/src/face.h#L29).
+        ///
+        /// If the robot does not have computer vision, you can use the option `--solved-goto cheat` to make Qter use a simulated cube state.
         command: String,
-        /// How to handle the cube state from the robot not matching the simulated cube state
+        /// How to handle the cube state returned by the robot not matching the simulated cube state
         #[arg(long, short, default_value_t = WrongSolvedGoto::PrintAccept)]
         solved_goto: WrongSolvedGoto,
+        /// The signal to send to the robot command's stdin to perform an algorithm
+        #[arg(long, short, default_value = "p")]
+        perform: String,
+        /// The signal to send to the robot command's stdin to print the cube state through stdout
+        #[arg(long, short, default_value = "s")]
+        get_cube_state: String,
+        /// The signal sent by the robot command's stdout signalling that it is ready to perform an algorithm
+        #[arg(long, short, default_value = "r")]
+        ready: String,
     },
     #[cfg(debug_assertions)]
     /// Compress an algorithm table into the special format (This subcommand will not be visible in release mode)
@@ -144,7 +157,10 @@ fn main() -> color_eyre::Result<()> {
         Commands::Robot {
             command,
             solved_goto,
-        } => todo!(),
+            perform,
+            get_cube_state,
+            ready,
+        } => {}
         #[cfg(debug_assertions)]
         Commands::Compress { input, output } => {
             let data = fs::read_to_string(input)?;
