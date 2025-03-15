@@ -1,19 +1,16 @@
 # TODO
 
-⭐for high priority items (ideally before we meet up with the robot guys)
-
 ## SCC
 
 - Phase 2
-  - standard symmetry
-  - inverse symmetry
-  - canonical sequences
-    - commutative ordering FSM
-      - prevent same face
-      - prevent antipodes
+  - fix sequence symmetry
+  - pruning table
+    - tANS table compression
+  - stabilizer
   - multithreading
-    - and microthreading
-  - tANS table compression
+    - microthreading
+  - standard symmetry
+  - antisymmetry
 - Phase 1
 - Look into fixing a corner for even cubes/other puzzles
 - Schreier Sims & generating algs using it
@@ -29,8 +26,8 @@
 
 ## QAT
 
-- ⭐Precompute tables for builtin architectures
-- ⭐`A%2` syntax
+- Precompute tables for builtin architectures
+- `A%2` syntax
 - Refactor register references so that they assume the register declaration is global
 - QAT Macros
   - Actual expansion
@@ -67,6 +64,6 @@
 
 ## Robot
 
-- ⭐Find calibration algorithms
+- Find calibration algorithms
 - Computer vision algorithm
 - The webapp and rust program that will run the Q program

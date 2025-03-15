@@ -1,5 +1,5 @@
 use super::{
-    canonical_fsm::{self, CanonicalFSM, CanonicalFSMState},
+    canonical_fsm::{CanonicalFSM, CanonicalFSMState},
     pruning::PruningTable,
     puzzle::{Move, MultiBvInterface, OrientedPartition, PuzzleDef, PuzzleState},
     puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryInterface},
@@ -38,34 +38,34 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
         mutable: &mut CycleTypeSolverMutable<P, H>,
         current_fsm_state: CanonicalFSMState,
         entry_index: usize,
-        sofar_cost: u8,
-        // TODO: make this `togo` and descending (see sc) and vcube does IDA*
-        // fundamentally differently, ie it returns est_remaining_cost instead
-        // of est_goal_cost.
-        cost_bound: u8,
-    ) -> u8 {
+        mut togo: u8,
+    ) {
         // SAFETY: This function calls `pop_stack` for every `push_stack` call.
         // Therefore, the `pop_stack` cannot be called more than `push_stack`.
         let last_puzzle_state = unsafe { mutable.puzzle_state_history.last_state_unchecked() };
         let est_remaining_cost = self.pruning_table.permissible_heuristic(last_puzzle_state);
-        let est_goal_cost = sofar_cost + est_remaining_cost;
 
-        if est_goal_cost > cost_bound {
-            return est_goal_cost;
-        }
-        if last_puzzle_state.induces_sorted_cycle_type(
-            &self.sorted_cycle_type,
-            mutable.multi_bv.reusable_ref(),
-            &self.puzzle_def.sorted_orbit_defs,
-        ) {
-            mutable.solutions.push(
-                mutable
-                    .puzzle_state_history
-                    .create_move_history(&self.puzzle_def),
-            );
+        if est_remaining_cost > togo {
+            // TODO: what the heck does this do
+            // https://github.com/cubing/twsearch/commit/a86177ac2bd462bb9d7d91af743e883449fbfb6b
+            return;
         }
 
-        let mut min_next_est_goal_cost = u8::MAX;
+        if togo == 0 {
+            if last_puzzle_state.induces_sorted_cycle_type(
+                &self.sorted_cycle_type,
+                mutable.multi_bv.reusable_ref(),
+                &self.puzzle_def.sorted_orbit_defs,
+            ) {
+                mutable.solutions.push(
+                    mutable
+                        .puzzle_state_history
+                        .create_move_history(&self.puzzle_def),
+                );
+            }
+            return;
+        }
+
         // TODO: this doesn't cover every symmetric sequence
         let mut next_entry_index = entry_index + 1;
         // SAFETY: `entry_index` starts at zero in the initial call, and
@@ -79,7 +79,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
                 .puzzle_state_history
                 .move_index_unchecked(entry_index)
         };
-        // TODO: make start nonzero
+        togo -= 1;
         for move_index in start..self.puzzle_def.moves.len() {
             let move_class_index = self.puzzle_def.moves[move_index].move_class_index;
             let Some(next_fsm_state) = self
@@ -101,13 +101,8 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
                     .puzzle_state_history
                     .push_stack_unchecked(move_index, &self.puzzle_def);
             }
-            let next_est_goal_cost = self.search_for_solution(
-                mutable,
-                next_fsm_state,
-                next_entry_index,
-                sofar_cost + 1,
-                cost_bound,
-            );
+            // TODO: Actual IDA* takes the min of this bound and uses it
+            self.search_for_solution(mutable, next_fsm_state, next_entry_index, togo);
             mutable.puzzle_state_history.pop_stack();
             next_entry_index = 0;
 
@@ -118,10 +113,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
             //         return est_goal_cost;
             //     }
             // }
-
-            min_next_est_goal_cost = min_next_est_goal_cost.min(next_est_goal_cost);
         }
-        min_next_est_goal_cost
     }
 
     pub fn solve<H: PuzzleStateHistoryInterface<P>>(&self) -> Vec<Box<[Move<P>]>> {
@@ -130,26 +122,23 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
             multi_bv: P::new_multi_bv(&self.puzzle_def.sorted_orbit_defs),
             solutions: vec![],
         };
-        let mut cost_bound = self.pruning_table.permissible_heuristic(
-            // SAFETY: `B::initialize` guarantees that the first entry is bound
+        let mut depth = self.pruning_table.permissible_heuristic(
+            // SAFETY: `H::initialize` when puzzle_state_history is created
+            // guarantees that the first entry is bound
             unsafe { mutable.puzzle_state_history.last_state_unchecked() },
         );
         mutable
             .puzzle_state_history
-            .resize_if_needed(cost_bound as usize + 1);
+            .resize_if_needed(depth as usize + 1);
         while mutable.solutions.is_empty() {
-            println!("Searching depth {}...", cost_bound);
-            cost_bound = self.search_for_solution(
-                &mut mutable,
-                CanonicalFSMState::default(),
-                0,
-                0,
-                cost_bound,
-            );
+            println!("Searching depth {}...", depth);
+            self.search_for_solution(&mut mutable, CanonicalFSMState::default(), 0, depth);
             mutable
                 .puzzle_state_history
-                .resize_if_needed(cost_bound as usize + 1);
+                .resize_if_needed(depth as usize + 1);
+            depth += 1;
         }
+
         mutable.solutions
     }
 }
