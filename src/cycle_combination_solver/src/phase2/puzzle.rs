@@ -74,8 +74,10 @@ pub struct StackPuzzle<const N: usize>(pub [u8; N]);
 #[derive(Clone, PartialEq, Debug, Hash)]
 pub struct HeapPuzzle(pub Box<[u8]>);
 
+#[derive(Debug)]
 pub struct PuzzleDef<P: PuzzleState> {
     pub moves: Box<[Move<P>]>,
+    // indicies into moves
     pub move_classes: Box<[usize]>,
     pub symmetries: Box<[Move<P>]>,
     pub sorted_orbit_defs: Box<[OrbitDef]>,
@@ -409,10 +411,20 @@ fn ksolve_move_to_slice_unchecked(
     let mut i = 0;
     for (transformation, orbit_def) in sorted_transformations.iter().zip(sorted_orbit_defs.iter()) {
         let piece_count = orbit_def.piece_count.get() as usize;
-        for j in 0..piece_count {
-            let (perm, orientation_delta) = transformation[j];
-            orbit_states[i + j + piece_count] = orientation_delta;
-            orbit_states[i + j] = perm;
+        // TODO: make this more efficient:
+        // - zero orientation mod optimization
+        // - avoid the transformation for identities entirely
+        if transformation.is_empty() {
+            for j in 0..piece_count {
+                orbit_states[i + j + piece_count] = 0;
+                orbit_states[i + j] = j as u8;
+            }
+        } else {
+            for j in 0..piece_count {
+                let (perm, orientation_delta) = transformation[j];
+                orbit_states[i + j + piece_count] = orientation_delta;
+                orbit_states[i + j] = perm;
+            }
         }
         i += piece_count * 2;
     }

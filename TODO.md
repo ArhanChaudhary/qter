@@ -3,14 +3,14 @@
 ## SCC
 
 - Phase 2
-  - fix sequence symmetry
   - pruning table
     - tANS table compression
   - stabilizer
-  - multithreading
-    - microthreading
   - standard symmetry
   - antisymmetry
+  - fix sequence symmetry
+  - multithreading
+    - microthreading
 - Phase 1
 - Look into fixing a corner for even cubes/other puzzles
 - Schreier Sims & generating algs using it

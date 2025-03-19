@@ -82,10 +82,10 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
         togo -= 1;
         for move_index in start..self.puzzle_def.moves.len() {
             let move_class_index = self.puzzle_def.moves[move_index].move_class_index;
-            let Some(next_fsm_state) = self
+            let next_fsm_state = self
                 .canonical_fsm
-                .next_state(current_fsm_state, move_class_index)
-            else {
+                .next_state(current_fsm_state, move_class_index);
+            if next_fsm_state.is_none() {
                 next_entry_index = 0;
                 continue;
             };
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn test_identity_cycle_type() {
         let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let canonical_fsm = (&puzzle_def).try_into().unwrap();
+        let canonical_fsm = (&puzzle_def).into();
         let solver: CycleTypeSolver<Cube3, _> =
             CycleTypeSolver::new(puzzle_def, canonical_fsm, vec![vec![], vec![]], ZeroTable);
         let solutions = solver.solve::<[Cube3; 21]>();
@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn test_single_quarter_turn() {
         let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let canonical_fsm = (&puzzle_def).try_into().unwrap();
+        let canonical_fsm = (&puzzle_def).into();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             puzzle_def,
             canonical_fsm,
@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn test_single_half_turn() {
         let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let canonical_fsm = (&puzzle_def).try_into().unwrap();
+        let canonical_fsm = (&puzzle_def).into();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             puzzle_def,
             canonical_fsm,
@@ -207,7 +207,7 @@ mod tests {
         let puzzle_def: PuzzleDef<Cube3> = (&KPUZZLE_3X3.clone().with_moves(&["F", "R", "U"]))
             .try_into()
             .unwrap();
-        let canonical_fsm = (&puzzle_def).try_into().unwrap();
+        let canonical_fsm = (&puzzle_def).into();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             puzzle_def,
             canonical_fsm,
@@ -230,7 +230,7 @@ mod tests {
         use std::time::Instant;
 
         let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let canonical_fsm = (&puzzle_def).try_into().unwrap();
+        let canonical_fsm = (&puzzle_def).into();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             puzzle_def,
             canonical_fsm,
