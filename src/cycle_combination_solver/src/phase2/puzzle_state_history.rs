@@ -231,7 +231,7 @@ mod tests {
         assert_eq!(puzzle_state_history.stack_pointer, 2);
 
         let r2_move = cube3_def.find_move("R2").unwrap();
-        assert_eq!(&puzzle_state_history.stack[2].0, &r2_move.puzzle_state);
+        assert_eq!(&puzzle_state_history.stack[2].0, &*r2_move.puzzle_state);
         assert_eq!(puzzle_state_history.stack[1].1, r_move_index);
         assert_eq!(puzzle_state_history.stack[2].1, r_move_index);
     }

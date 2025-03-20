@@ -1,6 +1,7 @@
 use num_traits::PrimInt;
 use puzzle_geometry::ksolve::KSolve;
 use std::hash::Hash;
+use std::rc::Rc;
 use std::{fmt::Debug, num::NonZeroU8};
 use thiserror::Error;
 
@@ -100,7 +101,7 @@ pub enum KSolveConversionError {
 
 #[derive(Debug, Clone)]
 pub struct Move<P: PuzzleState> {
-    pub puzzle_state: P,
+    pub puzzle_state: Rc<P>,
     pub move_class_index: usize,
     pub name: String,
 }
@@ -114,12 +115,16 @@ pub struct OrbitDef {
 pub type OrientedPartition = Vec<(NonZeroU8, bool)>;
 
 impl<P: PuzzleState> Move<P> {
-    pub fn commutes_with(&self, other: &Self, sorted_orbit_defs: &[OrbitDef]) -> bool {
-        let mut result = self.puzzle_state.clone();
-        let mut result2 = self.puzzle_state.clone();
+    pub fn commutes_with(
+        &self,
+        other: &Self,
+        result: &mut P,
+        result_2: &mut P,
+        sorted_orbit_defs: &[OrbitDef],
+    ) -> bool {
         result.replace_compose(&self.puzzle_state, &other.puzzle_state, sorted_orbit_defs);
-        result2.replace_compose(&other.puzzle_state, &self.puzzle_state, sorted_orbit_defs);
-        result == result2
+        result_2.replace_compose(&other.puzzle_state, &self.puzzle_state, sorted_orbit_defs);
+        result == result_2
     }
 }
 
@@ -218,23 +223,24 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                 let base_move = Move {
                     name: ksolve_move.name().to_owned(),
                     move_class_index: 0,
-                    puzzle_state,
+                    puzzle_state: Rc::new(puzzle_state),
                 };
                 symmetries.push(base_move);
                 continue;
             }
+
+            let mut result_1 = puzzle_state.clone();
+            let mut result_2 = puzzle_state.clone();
 
             let move_class = moves.len();
             let move_class_index = move_classes.len();
             let base_move = Move {
                 name: ksolve_move.name().to_owned(),
                 move_class_index,
-                puzzle_state,
+                puzzle_state: Rc::new(puzzle_state),
             };
 
             let solved: P = solved_state_from_sorted_orbit_defs(&sorted_orbit_defs);
-            let mut move_1 = base_move.clone();
-            let mut move_2 = base_move.clone();
 
             let base_name = base_move.name.clone();
             move_classes.push(move_class);
@@ -243,16 +249,12 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
             const MAX_MOVE_POWER: usize = 1_000_000;
 
             for _ in 0..MAX_MOVE_POWER {
-                move_1.puzzle_state.replace_compose(
-                    &move_2.puzzle_state,
-                    &base_move.puzzle_state,
-                    &sorted_orbit_defs,
-                );
-                if move_1.puzzle_state == solved {
+                result_1.replace_compose(&result_2, &base_move.puzzle_state, &sorted_orbit_defs);
+                if result_1 == solved {
                     break;
                 }
-                move_powers.push(move_1.puzzle_state.clone());
-                std::mem::swap(&mut move_1, &mut move_2);
+                move_powers.push(result_1.clone());
+                std::mem::swap(&mut result_1, &mut result_2);
             }
             moves.push(base_move);
 
@@ -274,7 +276,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                     expanded_name.push('\'');
                 }
                 moves.push(Move {
-                    puzzle_state: expanded_puzzle_state,
+                    puzzle_state: Rc::new(expanded_puzzle_state),
                     move_class_index,
                     name: expanded_name,
                 });
@@ -666,17 +668,54 @@ mod tests {
 
     fn commutes_with<P: PuzzleState>() {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let mut result_1 = cube3_def.new_solved_state();
+        let mut result_2 = result_1.clone();
+
         let u_move = cube3_def.find_move("U").unwrap();
         let d2_move = cube3_def.find_move("D2").unwrap();
         let r_move = cube3_def.find_move("R").unwrap();
-        assert!(u_move.commutes_with(u_move, &cube3_def.sorted_orbit_defs));
-        assert!(d2_move.commutes_with(d2_move, &cube3_def.sorted_orbit_defs));
-        assert!(u_move.commutes_with(d2_move, &cube3_def.sorted_orbit_defs));
-
-        assert!(!u_move.commutes_with(r_move, &cube3_def.sorted_orbit_defs));
-        assert!(!d2_move.commutes_with(r_move, &cube3_def.sorted_orbit_defs));
-        assert!(!r_move.commutes_with(u_move, &cube3_def.sorted_orbit_defs));
-        assert!(!r_move.commutes_with(d2_move, &cube3_def.sorted_orbit_defs));
+        assert!(u_move.commutes_with(
+            u_move,
+            &mut result_1,
+            &mut result_2,
+            &cube3_def.sorted_orbit_defs
+        ));
+        assert!(d2_move.commutes_with(
+            d2_move,
+            &mut result_1,
+            &mut result_2,
+            &cube3_def.sorted_orbit_defs
+        ));
+        assert!(u_move.commutes_with(
+            d2_move,
+            &mut result_1,
+            &mut result_2,
+            &cube3_def.sorted_orbit_defs
+        ));
+        assert!(!u_move.commutes_with(
+            r_move,
+            &mut result_1,
+            &mut result_2,
+            &cube3_def.sorted_orbit_defs
+        ));
+        assert!(!d2_move.commutes_with(
+            r_move,
+            &mut result_1,
+            &mut result_2,
+            &cube3_def.sorted_orbit_defs
+        ));
+        assert!(!r_move.commutes_with(
+            u_move,
+            &mut result_1,
+            &mut result_2,
+            &cube3_def.sorted_orbit_defs
+        ));
+        assert!(!r_move.commutes_with(
+            d2_move,
+            &mut result_1,
+            &mut result_2,
+            &cube3_def.sorted_orbit_defs
+        ));
     }
 
     #[test]

@@ -31,10 +31,14 @@ impl<P: PuzzleState> From<&PuzzleDef<P>> for CanonicalFSM<P> {
         // - The standard T-Perm (`R U R' U' R' F R2 U' R' U' R U R' F'`) has order 2.
         // - `R2 U2` has order 6.
         // - T-perm and `(R2 U2)3` commute.
+        let mut result_1 = puzzle_def.new_solved_state();
+        let mut result_2 = result_1.clone();
         for (i, move_class_1_index) in puzzle_def.move_classes.iter().copied().enumerate() {
             for (j, move_class_2_index) in puzzle_def.move_classes.iter().copied().enumerate() {
                 if !puzzle_def.moves[move_class_1_index].commutes_with(
                     &puzzle_def.moves[move_class_2_index],
+                    &mut result_1,
+                    &mut result_2,
                     &puzzle_def.sorted_orbit_defs,
                 ) {
                     commutes[i][j] = false;
@@ -174,6 +178,8 @@ mod tests {
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let canonical_fsm: CanonicalFSM<Cube3> = (&cube3_def).into();
 
+        let mut result_1 = cube3_def.new_solved_state();
+        let mut result_2 = result_1.clone();
         for (move_class_index_1, move_class_1) in cube3_def.move_classes.iter().copied().enumerate()
         {
             let move_1 = &cube3_def.moves[move_class_1];
@@ -181,7 +187,12 @@ mod tests {
                 cube3_def.move_classes.iter().copied().enumerate()
             {
                 let move_2 = &cube3_def.moves[move_class_2];
-                if !move_1.commutes_with(move_2, &cube3_def.sorted_orbit_defs) {
+                if !move_1.commutes_with(
+                    move_2,
+                    &mut result_1,
+                    &mut result_2,
+                    &cube3_def.sorted_orbit_defs,
+                ) {
                     continue;
                 }
 
@@ -225,6 +236,8 @@ mod tests {
         let cube4_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_4X4).try_into().unwrap();
         let canonical_fsm: CanonicalFSM<HeapPuzzle> = (&cube4_def).into();
 
+        let mut result_1 = cube4_def.new_solved_state();
+        let mut result_2 = result_1.clone();
         let mut commutes = vec![];
         for &move_class in &cube4_def.move_classes {
             let mut commute = vec![];
@@ -233,6 +246,8 @@ mod tests {
             {
                 if cube4_def.moves[move_class].commutes_with(
                     &cube4_def.moves[other_move_class],
+                    &mut result_1,
+                    &mut result_2,
                     &cube4_def.sorted_orbit_defs,
                 ) {
                     commute.push(other_move_class_index);
