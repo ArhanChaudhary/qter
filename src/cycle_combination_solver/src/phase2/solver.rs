@@ -16,6 +16,7 @@ struct CycleTypeSolverMutable<P: PuzzleState, H: PuzzleStateHistoryInterface<P>>
     puzzle_state_history: PuzzleStateHistory<P, H>,
     multi_bv: P::MultiBv,
     solutions: Vec<Box<[Move<P>]>>,
+    first_move_class_index: usize,
 }
 
 impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
@@ -38,6 +39,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
         mutable: &mut CycleTypeSolverMutable<P, H>,
         current_fsm_state: CanonicalFSMState,
         entry_index: usize,
+        root: bool,
         mut togo: u8,
     ) {
         // SAFETY: This function calls `pop_stack` for every `push_stack` call.
@@ -80,8 +82,16 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
                 .move_index_unchecked(entry_index)
         };
         togo -= 1;
-        for move_index in start..self.puzzle_def.moves.len() {
-            let move_class_index = self.puzzle_def.moves[move_index].move_class_index;
+        for (move_index, move_) in self.puzzle_def.moves.iter().enumerate().skip(start) {
+            let move_class_index = move_.move_class_index;
+            if root {
+                mutable.first_move_class_index = move_class_index;
+            } else if togo == 0 && move_class_index == mutable.first_move_class_index {
+                // we don't have to set `next_entry_index = 0` here because
+                // `togo` is already zero
+                continue;
+            }
+
             let next_fsm_state = self
                 .canonical_fsm
                 .next_state(current_fsm_state, move_class_index);
@@ -102,7 +112,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
                     .push_stack_unchecked(move_index, &self.puzzle_def);
             }
             // TODO: Actual IDA* takes the min of this bound and uses it
-            self.search_for_solution(mutable, next_fsm_state, next_entry_index, togo);
+            self.search_for_solution(mutable, next_fsm_state, next_entry_index, false, togo);
             mutable.puzzle_state_history.pop_stack();
             next_entry_index = 0;
 
@@ -121,6 +131,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
             puzzle_state_history: (&self.puzzle_def).into(),
             multi_bv: P::new_multi_bv(&self.puzzle_def.sorted_orbit_defs),
             solutions: vec![],
+            first_move_class_index: usize::default(),
         };
         let mut depth = self.pruning_table.permissible_heuristic(
             // SAFETY: `H::initialize` when puzzle_state_history is created
@@ -132,7 +143,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
             .resize_if_needed(depth as usize + 1);
         while mutable.solutions.is_empty() {
             println!("Searching depth {}...", depth);
-            self.search_for_solution(&mut mutable, CanonicalFSMState::default(), 0, depth);
+            self.search_for_solution(&mut mutable, CanonicalFSMState::default(), 0, true, depth);
             mutable
                 .puzzle_state_history
                 .resize_if_needed(depth as usize + 1);
