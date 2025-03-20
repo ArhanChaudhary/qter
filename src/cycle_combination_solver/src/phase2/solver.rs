@@ -54,8 +54,8 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
         if togo == 0 {
             if last_puzzle_state.induces_sorted_cycle_type(
                 &self.sorted_cycle_type,
-                mutable.multi_bv.reusable_ref(),
                 &self.puzzle_def.sorted_orbit_defs,
+                mutable.multi_bv.reusable_ref(),
             ) {
                 mutable.solutions.push(
                     mutable
@@ -226,7 +226,7 @@ mod tests {
     }
 
     #[test]
-    fn test_optimal_cycle() {
+    fn test_control_optimal_cycle() {
         use std::time::Instant;
 
         let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();

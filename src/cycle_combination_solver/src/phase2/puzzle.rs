@@ -30,8 +30,8 @@ pub trait PuzzleState: Hash + Clone + PartialEq + Debug {
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type: &[OrientedPartition],
-        multi_bv: <Self::MultiBv as MultiBvInterface>::MultiBvReusableRef<'_>,
         sorted_orbit_defs: &[OrbitDef],
+        multi_bv: <Self::MultiBv as MultiBvInterface>::MultiBvReusableRef<'_>,
     ) -> bool;
 }
 
@@ -69,10 +69,10 @@ impl MultiBvInterface for () {
 }
 
 #[derive(Clone, PartialEq, Debug, Hash)]
-pub struct StackPuzzle<const N: usize>(pub [u8; N]);
+pub struct StackPuzzle<const N: usize>([u8; N]);
 
 #[derive(Clone, PartialEq, Debug, Hash)]
-pub struct HeapPuzzle(pub Box<[u8]>);
+pub struct HeapPuzzle(Box<[u8]>);
 
 #[derive(Debug)]
 pub struct PuzzleDef<P: PuzzleState> {
@@ -335,10 +335,10 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type: &[OrientedPartition],
-        multi_bv: &mut [u8],
         sorted_orbit_defs: &[OrbitDef],
+        multi_bv: &mut [u8],
     ) -> bool {
-        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, multi_bv, sorted_orbit_defs)
+        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
     }
 }
 
@@ -383,10 +383,10 @@ impl PuzzleState for HeapPuzzle {
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type: &[OrientedPartition],
-        multi_bv: &mut [u8],
         sorted_orbit_defs: &[OrbitDef],
+        multi_bv: &mut [u8],
     ) -> bool {
-        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, multi_bv, sorted_orbit_defs)
+        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
     }
 }
 
@@ -531,8 +531,8 @@ fn replace_inverse_slice(orbit_states_mut: &mut [u8], a: &[u8], sorted_orbit_def
 fn induces_sorted_cycle_type_slice(
     orbit_states: &[u8],
     sorted_cycle_type: &[OrientedPartition],
-    multi_bv: &mut [u8],
     sorted_orbit_defs: &[OrbitDef],
+    multi_bv: &mut [u8],
 ) -> bool {
     let mut base = 0;
     for (
@@ -867,15 +867,15 @@ mod tests {
         ];
         assert!(order_1260.induces_sorted_cycle_type(
             &sorted_cycle_type,
-            multi_bv.reusable_ref(),
             &cube3_def.sorted_orbit_defs,
+            multi_bv.reusable_ref(),
         ));
 
         let order_1260_in_cycle = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 209);
         assert!(order_1260_in_cycle.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
     }
 
@@ -895,8 +895,8 @@ mod tests {
         let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
         assert!(solved.induces_sorted_cycle_type(
             &[vec![], vec![]],
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
 
         let random_state = apply_moves(
@@ -908,13 +908,13 @@ mod tests {
         let sorted_cycle_type = [ct(&[(1, true), (3, true)]), ct(&[(1, true), (5, true)])];
         assert!(random_state.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
         assert!(!solved.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
 
         let random_state = apply_moves(
@@ -926,13 +926,13 @@ mod tests {
         let sorted_cycle_type = [ct(&[(1, true), (5, true)]), ct(&[(1, true), (7, true)])];
         assert!(random_state.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
         assert!(!solved.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
 
         let random_state = apply_moves(
@@ -944,13 +944,13 @@ mod tests {
         let sorted_cycle_type = [ct(&[(1, true), (3, true)]), ct(&[(1, true), (7, true)])];
         assert!(random_state.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
         assert!(!solved.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
 
         let random_state = apply_moves(
@@ -965,13 +965,13 @@ mod tests {
         ];
         assert!(random_state.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
         assert!(!solved.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
 
         let random_state = apply_moves(
@@ -983,13 +983,13 @@ mod tests {
         let sorted_cycle_type = [ct(&[(2, true), (3, true)]), ct(&[(4, true), (5, true)])];
         assert!(random_state.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
         assert!(!solved.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
 
         let random_state = apply_moves(
@@ -1004,13 +1004,13 @@ mod tests {
         ];
         assert!(random_state.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
         assert!(!solved.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
 
         let random_state = apply_moves(
@@ -1025,13 +1025,13 @@ mod tests {
         ];
         assert!(random_state.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
         assert!(!solved.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
 
         let random_state = apply_moves(
@@ -1046,13 +1046,13 @@ mod tests {
         ];
         assert!(random_state.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
         assert!(!solved.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
 
         let random_state = apply_moves(
@@ -1067,13 +1067,13 @@ mod tests {
         ];
         assert!(random_state.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
         assert!(!solved.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
 
         let random_state = apply_moves(
@@ -1088,13 +1088,13 @@ mod tests {
         ];
         assert!(random_state.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
         assert!(!solved.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
 
         let random_state = apply_moves(&cube3_def, &solved, "U L U L2 U2 B2", 1);
@@ -1104,26 +1104,26 @@ mod tests {
         ];
         assert!(random_state.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
         assert!(!solved.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
 
         let random_state = apply_moves(&cube3_def, &solved, "U", 1);
         let sorted_cycle_type = [ct(&[(4, false)]), ct(&[(4, false)])];
         assert!(random_state.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
         assert!(!solved.induces_sorted_cycle_type(
             &sorted_cycle_type,
+            &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
-            &cube3_def.sorted_orbit_defs
         ));
     }
 
@@ -1173,8 +1173,8 @@ mod tests {
         b.iter(|| {
             test::black_box(&order_1260).induces_sorted_cycle_type(
                 test::black_box(&sorted_cycle_type),
-                multi_bv.reusable_ref(),
                 &cube3_def.sorted_orbit_defs,
+                multi_bv.reusable_ref(),
             );
         });
     }
@@ -1228,8 +1228,8 @@ mod tests {
             test::black_box(unsafe { random_iter.next().unwrap_unchecked() })
                 .induces_sorted_cycle_type(
                     test::black_box(unsafe { sorted_cycle_type_iter.next().unwrap_unchecked() }),
-                    multi_bv.reusable_ref(),
                     &cube3_def.sorted_orbit_defs,
+                    multi_bv.reusable_ref(),
                 );
         });
     }

@@ -110,10 +110,6 @@ impl Cube3Interface for Cube3 {
     }
 
     fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
-        // TODO: index-level representation of cycle type, is this faster?
-        // TODO: check just permutation first, then orientation, find a balance
-        // between worst and average case
-
         // Benchmarked on a 2020 Mac M1: 19.97ns (worst case) 5.42ns (average)
 
         // Helps avoid bounds checks in codegen

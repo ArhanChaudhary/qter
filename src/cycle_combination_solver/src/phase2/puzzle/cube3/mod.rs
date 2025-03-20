@@ -53,8 +53,8 @@ mod common {
         fn induces_sorted_cycle_type(
             &self,
             sorted_cycle_type: &[OrientedPartition],
-            _multi_bv: (),
             _sorted_orbit_defs: &[OrbitDef],
+            _multi_bv: (),
         ) -> bool {
             // SAFETY: `try_from_transformation_meta` guarantees that this will
             // always be length 2
