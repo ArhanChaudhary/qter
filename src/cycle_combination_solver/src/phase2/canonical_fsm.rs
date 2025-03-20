@@ -257,6 +257,12 @@ mod tests {
         }
         commutes.dedup();
 
+        // there are three axes of a cube whose move classes can commute
+        assert_eq!(commutes.len(), 3);
+        // for each axis, there are four commuting move classes for each slice
+        // plus two more for wide moves
+        assert!(commutes.iter().all(|commute| commute.len() == 6));
+
         for commute in commutes {
             for &move_class_index in &commute {
                 for &other_move_class_index in &commute {
