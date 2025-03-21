@@ -626,6 +626,58 @@ fn induces_sorted_cycle_type_slice(
     true
 }
 
+impl HeapPuzzle {
+    /// Utility function for testing. Not optimized.
+    pub fn cycle_type(
+        &self,
+        sorted_orbit_defs: &[OrbitDef],
+        multi_bv: &mut [u8],
+    ) -> Vec<Vec<(NonZeroU8, bool)>> {
+        let mut cycle_type = vec![];
+        let mut base = 0;
+        for &OrbitDef {
+            piece_count,
+            orientation_count,
+        } in sorted_orbit_defs
+        {
+            let mut cycle_type_piece = vec![];
+            multi_bv.fill(0);
+            let piece_count = piece_count.get() as usize;
+            for i in 0..piece_count {
+                let (div, rem) = (i / 4, i % 4);
+                if multi_bv[div] & (1 << rem) != 0 {
+                    continue;
+                }
+
+                multi_bv[div] |= 1 << rem;
+                let mut actual_cycle_length = 1;
+                let mut piece = self.0[base + i] as usize;
+                let mut orientation_sum = self.0[base + piece + piece_count];
+
+                while piece != i {
+                    actual_cycle_length += 1;
+                    let (div, rem) = (piece / 4, piece % 4);
+                    multi_bv[div] |= 1 << rem;
+                    piece = self.0[base + piece] as usize;
+                    orientation_sum += self.0[base + piece + piece_count];
+                }
+
+                let actual_orients = orientation_sum % orientation_count != 0;
+                if actual_cycle_length != 1 || actual_orients {
+                    cycle_type_piece
+                        .push((NonZeroU8::new(actual_cycle_length).unwrap(), actual_orients))
+                }
+            }
+            base += piece_count * 2;
+            cycle_type_piece.sort();
+            cycle_type.push(cycle_type_piece);
+        }
+        // We don't actually need to test this function because we have this
+        assert!(self.induces_sorted_cycle_type(&cycle_type, sorted_orbit_defs, multi_bv));
+        cycle_type
+    }
+}
+
 #[cfg(test)]
 mod tests {
     extern crate test;
@@ -649,21 +701,21 @@ mod tests {
         moves: &str,
         repeat: u32,
     ) -> P {
-        let mut result = puzzle_state.clone();
-        let mut prev_result = puzzle_state.clone();
+        let mut result_1 = puzzle_state.clone();
+        let mut result_2 = puzzle_state.clone();
 
         for _ in 0..repeat {
             for name in moves.split_whitespace() {
-                let m = puzzle_def.find_move(name).unwrap();
-                prev_result.replace_compose(
-                    &result,
-                    &m.puzzle_state,
+                let move_ = puzzle_def.find_move(name).unwrap();
+                result_2.replace_compose(
+                    &result_1,
+                    &move_.puzzle_state,
                     &puzzle_def.sorted_orbit_defs,
                 );
-                std::mem::swap(&mut result, &mut prev_result);
+                std::mem::swap(&mut result_1, &mut result_2);
             }
         }
-        result
+        result_1
     }
 
     fn commutes_with<P: PuzzleState>() {
@@ -759,18 +811,18 @@ mod tests {
         let s_u4_symmetry = cube3_def.find_symmetry("S_U4").unwrap();
         let solved = cube3_def.new_solved_state();
 
-        let mut result = solved.clone();
-        let mut prev_result = solved.clone();
+        let mut result_1 = solved.clone();
+        let mut result_2 = solved.clone();
         for _ in 0..4 {
-            prev_result.replace_compose(
-                &result,
+            result_2.replace_compose(
+                &result_1,
                 &s_u4_symmetry.puzzle_state,
                 &cube3_def.sorted_orbit_defs,
             );
-            std::mem::swap(&mut result, &mut prev_result);
+            std::mem::swap(&mut result_1, &mut result_2);
         }
 
-        assert_eq!(result, solved);
+        assert_eq!(result_1, solved);
     }
 
     #[test]
@@ -845,21 +897,21 @@ mod tests {
         let solved = cube3_def.new_solved_state();
 
         for _ in 0..100 {
-            let mut prev_result = solved.clone();
-            let mut result = solved.clone();
+            let mut result_1 = solved.clone();
+            let mut result_2 = solved.clone();
             for _ in 0..20 {
                 let move_index = fastrand::choice(0_u8..18).unwrap();
                 let move_ = &cube3_def.moves[move_index as usize];
-                prev_result.replace_compose(
-                    &result,
+                result_1.replace_compose(
+                    &result_2,
                     &move_.puzzle_state,
                     &cube3_def.sorted_orbit_defs,
                 );
-                std::mem::swap(&mut result, &mut prev_result);
+                std::mem::swap(&mut result_2, &mut result_1);
             }
-            prev_result.replace_inverse(&result, &cube3_def.sorted_orbit_defs);
-            result.replace_compose(&prev_result, &result.clone(), &cube3_def.sorted_orbit_defs);
-            assert_eq!(result, solved);
+            result_1.replace_inverse(&result_2, &cube3_def.sorted_orbit_defs);
+            result_2.replace_compose(&result_1, &result_2.clone(), &cube3_def.sorted_orbit_defs);
+            assert_eq!(result_2, solved);
         }
     }
 
@@ -1245,19 +1297,19 @@ mod tests {
 
         let random_1000: Vec<P> = (0..1000)
             .map(|_| {
-                let mut prev_result = solved.clone();
-                let mut result = solved.clone();
+                let mut result_1 = solved.clone();
+                let mut result_2 = solved.clone();
                 for _ in 0..20 {
                     let move_index = fastrand::choice(0_u8..18).unwrap();
                     let move_ = &cube3_def.moves[move_index as usize];
-                    prev_result.replace_compose(
-                        &result,
+                    result_1.replace_compose(
+                        &result_2,
                         &move_.puzzle_state,
                         &cube3_def.sorted_orbit_defs,
                     );
-                    std::mem::swap(&mut result, &mut prev_result);
+                    std::mem::swap(&mut result_2, &mut result_1);
                 }
-                result
+                result_2
             })
             .collect();
         let mut random_iter = random_1000.iter().cycle();
@@ -1339,5 +1391,14 @@ mod tests {
     #[cfg_attr(not(avx2), ignore)]
     fn bench_induces_sorted_cycle_type_cube3_avx2_average(b: &mut Bencher) {
         bench_induces_sorted_cycle_type_average_helper::<cube3::avx2::Cube3>(b);
+    }
+
+    #[test]
+    fn test_thing() {
+        let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let solved = cube3_def.new_solved_state();
+        let trans = apply_moves(&cube3_def, &solved, "U R U' F", 1);
+
+        dbg!(trans);
     }
 }

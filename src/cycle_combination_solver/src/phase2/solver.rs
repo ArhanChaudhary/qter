@@ -34,6 +34,10 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
         }
     }
 
+    pub fn set_sorted_cycle_type(&mut self, sorted_cycle_type: Vec<OrientedPartition>) {
+        self.sorted_cycle_type = sorted_cycle_type;
+    }
+
     fn search_for_solution<H: PuzzleStateHistoryInterface<P>>(
         &self,
         mutable: &mut CycleTypeSolverMutable<P, H>,
@@ -84,6 +88,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
         togo -= 1;
         for (move_index, move_) in self.puzzle_def.moves.iter().enumerate().skip(start) {
             let move_class_index = move_.move_class_index;
+            // branches should have high predictability
             if root {
                 mutable.first_move_class_index = move_class_index;
             } else if togo == 0 && move_class_index == mutable.first_move_class_index {
@@ -142,7 +147,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
             .puzzle_state_history
             .resize_if_needed(depth as usize + 1);
         while mutable.solutions.is_empty() {
-            println!("Searching depth {}...", depth);
+            eprintln!("Searching depth {}...", depth);
             self.search_for_solution(&mut mutable, CanonicalFSMState::default(), 0, true, depth);
             mutable
                 .puzzle_state_history
@@ -157,7 +162,10 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::phase2::{pruning::ZeroTable, puzzle::cube3::Cube3};
+    use crate::phase2::{
+        pruning::ZeroTable,
+        puzzle::{cube3::Cube3, HeapPuzzle},
+    };
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
     #[test]
@@ -255,7 +263,7 @@ mod tests {
         let start = Instant::now();
         let solutions = solver.solve::<[Cube3; 21]>();
         let duration = start.elapsed();
-        println!("Time to find optimal cycle: {:?}", duration);
+        eprintln!("Time to find optimal cycle: {:?}", duration);
         // for solution in solutions.iter() {
         //     for move_ in solution.iter() {
         //         print!("{} ", &move_.name);
@@ -264,5 +272,292 @@ mod tests {
         // }
         assert_eq!(solutions.len(), 260); // TODO: should be 480
         assert!(solutions.iter().all(|solution| solution.len() == 5));
+    }
+
+    #[test]
+    fn test_many_optimal_cycles() {
+        let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let cube3_def_clone: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let canonical_fsm = (&cube3_def).into();
+
+        let mut solver: CycleTypeSolver<HeapPuzzle, _> =
+            CycleTypeSolver::new(cube3_def, canonical_fsm, Vec::default(), ZeroTable);
+
+        #[allow(dead_code)]
+        struct OptimalCycleTypeTest {
+            moves_str: &'static str,
+            expected_partial_count: usize,
+            expected_count: usize,
+        }
+
+        // Test cases taken from Michael Gottlieb's order table [1]. These were
+        // chosen to increase the variability of the test cases.
+        // [1]: https://mzrg.com/rubik/orders.shtml
+        let optimal_cycle_type_tests = [
+            OptimalCycleTypeTest {
+                moves_str: "U2 R2 U2 R2",
+                expected_partial_count: 24,
+                expected_count: 24,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R U R'",
+                expected_partial_count: 188,
+                expected_count: 192,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U2 R2",
+                expected_partial_count: 24,
+                expected_count: 24,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R U' F",
+                expected_partial_count: 360,
+                expected_count: 384,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R2 D",
+                expected_partial_count: 92,
+                expected_count: 144,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R F2",
+                expected_partial_count: 140,
+                expected_count: 144,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R U' F2",
+                expected_partial_count: 368,
+                expected_count: 384,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R2 B2",
+                expected_partial_count: 142,
+                expected_count: 144,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R2 U R2",
+                expected_partial_count: 96,
+                expected_count: 96,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R U' L2",
+                expected_partial_count: 372,
+                expected_count: 384,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R2 F R2",
+                expected_partial_count: 472,
+                expected_count: 480,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R2 D2",
+                expected_partial_count: 282,
+                expected_count: 432,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R U' L",
+                expected_partial_count: 368,
+                expected_count: 384,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R2",
+                expected_partial_count: 96,
+                expected_count: 96,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R F' D'",
+                expected_partial_count: 212,
+                expected_count: 384,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R2 D' R2",
+                expected_partial_count: 96,
+                expected_count: 96,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R B2",
+                expected_partial_count: 140,
+                expected_count: 144,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R U2 L",
+                expected_partial_count: 744,
+                expected_count: 768,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R2 U2 R'",
+                expected_partial_count: 188,
+                expected_count: 192,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R B' D'",
+                expected_partial_count: 212,
+                expected_count: 384,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R U L",
+                expected_partial_count: 282,
+                expected_count: 288,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R U2 B",
+                expected_partial_count: 182,
+                expected_count: 192,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R B' L2",
+                expected_partial_count: 804,
+                expected_count: 1152,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R B'",
+                expected_partial_count: 138,
+                expected_count: 144,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R'",
+                expected_partial_count: 48,
+                expected_count: 48,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R U F'",
+                expected_partial_count: 368,
+                expected_count: 384,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R B' L",
+                expected_partial_count: 180,
+                expected_count: 192,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R B",
+                expected_partial_count: 46,
+                expected_count: 48,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R F",
+                expected_partial_count: 46,
+                expected_count: 48,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R D",
+                expected_partial_count: 90,
+                expected_count: 144,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R2 F L2",
+                expected_partial_count: 184,
+                expected_count: 192,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R",
+                expected_partial_count: 48,
+                expected_count: 48,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R U L2",
+                expected_partial_count: 376,
+                expected_count: 384,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R U F2",
+                expected_partial_count: 372,
+                expected_count: 384,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R F' L",
+                expected_partial_count: 180,
+                expected_count: 192,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R' U F'",
+                expected_partial_count: 184,
+                expected_count: 192,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R D2",
+                expected_partial_count: 184,
+                expected_count: 288,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R D'",
+                expected_partial_count: 180,
+                expected_count: 288,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R B2 F2",
+                expected_partial_count: 228,
+                expected_count: 384,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R2 U F'",
+                expected_partial_count: 372,
+                expected_count: 384,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R F2 L2",
+                expected_partial_count: 2432,
+                expected_count: 3456,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R2 B L'",
+                expected_partial_count: 182,
+                expected_count: 192,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R F L",
+                expected_partial_count: 90,
+                expected_count: 96,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R D L",
+                expected_partial_count: 46,
+                expected_count: 48,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R F'",
+                expected_partial_count: 138,
+                expected_count: 144,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R U2 F",
+                expected_partial_count: 182,
+                expected_count: 192,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R2 F L'",
+                expected_partial_count: 182,
+                expected_count: 192,
+            },
+            OptimalCycleTypeTest {
+                moves_str: "U R B2 F'",
+                expected_partial_count: 220,
+                expected_count: 384,
+            },
+        ];
+
+        let solved = cube3_def_clone.new_solved_state();
+        let mut multi_bv = HeapPuzzle::new_multi_bv(&cube3_def_clone.sorted_orbit_defs);
+
+        for optimal_cycle_test in optimal_cycle_type_tests.iter() {
+            let mut result_1 = solved.clone();
+            let mut result_2 = solved.clone();
+            for name in optimal_cycle_test.moves_str.split_whitespace() {
+                let move_ = cube3_def_clone.find_move(name).unwrap();
+                result_2.replace_compose(
+                    &result_1,
+                    &move_.puzzle_state,
+                    &cube3_def_clone.sorted_orbit_defs,
+                );
+                std::mem::swap(&mut result_1, &mut result_2);
+            }
+
+            let cycle_type =
+                result_1.cycle_type(&cube3_def_clone.sorted_orbit_defs, multi_bv.reusable_ref());
+            solver.set_sorted_cycle_type(cycle_type);
+
+            let solutions = solver.solve::<Vec<_>>();
+            assert_eq!(solutions.len(), optimal_cycle_test.expected_partial_count);
+        }
     }
 }

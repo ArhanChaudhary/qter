@@ -399,17 +399,17 @@ mod tests {
         }
 
         for _ in 0..100 {
-            let mut prev_result = solved.clone();
-            let mut result = solved.clone();
+            let mut result_1 = solved.clone();
+            let mut result_2 = solved.clone();
             for _ in 0..20 {
                 let move_index = fastrand::choice(0_u8..18).unwrap();
                 let move_ = &cube3_def.moves[move_index as usize];
-                prev_result.replace_compose(&result, &move_.puzzle_state);
-                std::mem::swap(&mut result, &mut prev_result);
+                result_1.replace_compose(&result_2, &move_.puzzle_state);
+                std::mem::swap(&mut result_2, &mut result_1);
             }
-            prev_result.replace_inverse_brute(&result);
-            result.replace_compose(&prev_result, &result.clone());
-            assert_eq!(result, solved);
+            result_1.replace_inverse_brute(&result_2);
+            result_2.replace_compose(&result_1, &result_2.clone());
+            assert_eq!(result_2, solved);
         }
     }
 

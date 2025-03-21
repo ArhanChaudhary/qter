@@ -6,9 +6,9 @@
   - pruning table
     - tANS table compression
   - stabilizer
+  - avoid symmetric moves from the start
   - fix corner in stabilizer for 4x4
   - solved state for 4x4
-  - wide moves to 4x4 def
   - standard symmetry
   - antisymmetry
   - fix sequence symmetry
