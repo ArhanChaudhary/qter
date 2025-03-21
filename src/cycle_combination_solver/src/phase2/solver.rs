@@ -5,8 +5,8 @@ use super::{
     puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryInterface},
 };
 
-pub struct CycleTypeSolver<P: PuzzleState, T: PruningTable<P>> {
-    puzzle_def: PuzzleDef<P>,
+pub struct CycleTypeSolver<'a, P: PuzzleState, T: PruningTable<P>> {
+    puzzle_def: &'a PuzzleDef<P>,
     canonical_fsm: CanonicalFSM<P>,
     sorted_cycle_type: Vec<OrientedPartition>,
     pruning_table: T,
@@ -19,9 +19,9 @@ struct CycleTypeSolverMutable<P: PuzzleState, H: PuzzleStateHistoryInterface<P>>
     first_move_class_index: usize,
 }
 
-impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
+impl<'a, P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<'a, P, T> {
     pub fn new(
-        puzzle_def: PuzzleDef<P>,
+        puzzle_def: &'a PuzzleDef<P>,
         canonical_fsm: CanonicalFSM<P>,
         sorted_cycle_type: Vec<OrientedPartition>,
         pruning_table: T,
@@ -66,7 +66,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
                 mutable.solutions.push(
                     mutable
                         .puzzle_state_history
-                        .create_move_history(&self.puzzle_def),
+                        .create_move_history(self.puzzle_def),
                 );
             }
             return;
@@ -114,7 +114,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
             unsafe {
                 mutable
                     .puzzle_state_history
-                    .push_stack_unchecked(move_index, &self.puzzle_def);
+                    .push_stack_unchecked(move_index, self.puzzle_def);
             }
             // TODO: Actual IDA* takes the min of this bound and uses it
             self.search_for_solution(mutable, next_fsm_state, next_entry_index, false, togo);
@@ -133,7 +133,7 @@ impl<P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<P, T> {
 
     pub fn solve<H: PuzzleStateHistoryInterface<P>>(&self) -> Vec<Box<[Move<P>]>> {
         let mut mutable: CycleTypeSolverMutable<P, H> = CycleTypeSolverMutable {
-            puzzle_state_history: (&self.puzzle_def).into(),
+            puzzle_state_history: self.puzzle_def.into(),
             multi_bv: P::new_multi_bv(&self.puzzle_def.sorted_orbit_defs),
             solutions: vec![],
             first_move_class_index: usize::default(),
@@ -173,7 +173,7 @@ mod tests {
         let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let canonical_fsm = (&puzzle_def).into();
         let solver: CycleTypeSolver<Cube3, _> =
-            CycleTypeSolver::new(puzzle_def, canonical_fsm, vec![vec![], vec![]], ZeroTable);
+            CycleTypeSolver::new(&puzzle_def, canonical_fsm, vec![vec![], vec![]], ZeroTable);
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 1);
         assert_eq!(solutions[0].len(), 0);
@@ -184,7 +184,7 @@ mod tests {
         let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let canonical_fsm = (&puzzle_def).into();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            puzzle_def,
+            &puzzle_def,
             canonical_fsm,
             vec![
                 vec![(4.try_into().unwrap(), false)],
@@ -202,7 +202,7 @@ mod tests {
         let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let canonical_fsm = (&puzzle_def).into();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            puzzle_def,
+            &puzzle_def,
             canonical_fsm,
             vec![
                 vec![
@@ -228,7 +228,7 @@ mod tests {
             .unwrap();
         let canonical_fsm = (&puzzle_def).into();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            puzzle_def,
+            &puzzle_def,
             canonical_fsm,
             vec![
                 vec![
@@ -251,7 +251,7 @@ mod tests {
         let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let canonical_fsm = (&puzzle_def).into();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            puzzle_def,
+            &puzzle_def,
             canonical_fsm,
             vec![
                 vec![(1.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
@@ -277,11 +277,10 @@ mod tests {
     #[test]
     fn test_many_optimal_cycles() {
         let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let cube3_def_clone: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
         let canonical_fsm = (&cube3_def).into();
 
         let mut solver: CycleTypeSolver<HeapPuzzle, _> =
-            CycleTypeSolver::new(cube3_def, canonical_fsm, Vec::default(), ZeroTable);
+            CycleTypeSolver::new(&cube3_def, canonical_fsm, Vec::default(), ZeroTable);
 
         #[allow(dead_code)]
         struct OptimalCycleTypeTest {
@@ -536,24 +535,24 @@ mod tests {
             },
         ];
 
-        let solved = cube3_def_clone.new_solved_state();
-        let mut multi_bv = HeapPuzzle::new_multi_bv(&cube3_def_clone.sorted_orbit_defs);
+        let solved = cube3_def.new_solved_state();
+        let mut multi_bv = HeapPuzzle::new_multi_bv(&cube3_def.sorted_orbit_defs);
 
         for optimal_cycle_test in optimal_cycle_type_tests.iter() {
             let mut result_1 = solved.clone();
             let mut result_2 = solved.clone();
             for name in optimal_cycle_test.moves_str.split_whitespace() {
-                let move_ = cube3_def_clone.find_move(name).unwrap();
+                let move_ = cube3_def.find_move(name).unwrap();
                 result_2.replace_compose(
                     &result_1,
                     &move_.puzzle_state,
-                    &cube3_def_clone.sorted_orbit_defs,
+                    &cube3_def.sorted_orbit_defs,
                 );
                 std::mem::swap(&mut result_1, &mut result_2);
             }
 
             let cycle_type =
-                result_1.cycle_type(&cube3_def_clone.sorted_orbit_defs, multi_bv.reusable_ref());
+                result_1.cycle_type(&cube3_def.sorted_orbit_defs, multi_bv.reusable_ref());
             solver.set_sorted_cycle_type(cycle_type);
 
             let solutions = solver.solve::<Vec<_>>();
