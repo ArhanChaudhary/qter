@@ -72,6 +72,6 @@
 
 ## Robot
 
-- Find calibration algorithms
-- Computer vision algorithm
-- The webapp and rust program that will run the Q program
+- Allow the robot guys' TUI to output the current cube state
+- Fill in the `robot` command for our CLI that interacts with an external program that can interact with the robot
+- Write an adapter program between the Qter CLI and the robot guys' TUI
