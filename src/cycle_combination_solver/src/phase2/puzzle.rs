@@ -1,7 +1,6 @@
 use num_traits::PrimInt;
 use puzzle_geometry::ksolve::KSolve;
 use std::hash::Hash;
-use std::rc::Rc;
 use std::{fmt::Debug, num::NonZeroU8};
 use thiserror::Error;
 
@@ -101,7 +100,7 @@ pub enum KSolveConversionError {
 
 #[derive(Debug, Clone)]
 pub struct Move<P: PuzzleState> {
-    pub puzzle_state: Rc<P>,
+    pub puzzle_state: P,
     pub move_class_index: usize,
     pub name: String,
 }
@@ -223,7 +222,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                 let base_move = Move {
                     name: ksolve_move.name().to_owned(),
                     move_class_index: 0,
-                    puzzle_state: Rc::new(puzzle_state),
+                    puzzle_state,
                 };
                 symmetries.push(base_move);
                 continue;
@@ -237,7 +236,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
             let base_move = Move {
                 name: ksolve_move.name().to_owned(),
                 move_class_index,
-                puzzle_state: Rc::new(puzzle_state),
+                puzzle_state,
             };
 
             let solved: P = solved_state_from_sorted_orbit_defs(&sorted_orbit_defs);
@@ -276,7 +275,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                     expanded_name.push('\'');
                 }
                 moves.push(Move {
-                    puzzle_state: Rc::new(expanded_puzzle_state),
+                    puzzle_state: expanded_puzzle_state,
                     move_class_index,
                     name: expanded_name,
                 });
