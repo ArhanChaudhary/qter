@@ -3,8 +3,12 @@
 ## SCC
 
 - Phase 2
+  - revert the Rc thing
   - pruning table
     - tANS table compression
+    - cycle type pruning table
+      - with fewer state spaces, go back to an exact pruning table
+    - with fewer goal states, go back to an approximate table
   - stabilizer
   - avoid symmetric moves from the start
   - fix corner in stabilizer for 4x4

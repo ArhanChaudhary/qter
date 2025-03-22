@@ -8,64 +8,213 @@
 //! from the solved state. For each state, the depth is recorded in a vector
 //! of the appropriate size.
 
-use super::puzzle::PuzzleState;
+use super::puzzle::{PuzzleDef, PuzzleState};
 
-pub trait PruningTable<P: PuzzleState> {
-    fn insert(&mut self, puzzle_state: &P, depth: u8);
-    fn commit_depth_traversed(&mut self, depth: u8);
+// Trait declarations
+
+pub trait PruningTable<'a, P: PuzzleState + 'a> {
+    type GenerateMeta;
+
+    fn generate(generate_meta: Self::GenerateMeta) -> Self;
     fn permissible_heuristic(&self, puzzle_state: &P) -> u8;
 }
 
-pub struct ApproximatePruningTable<P: PuzzleState> {
-    // u8::MAX means unvisited
-    table: Box<[u8]>,
-    depth_traversed: u8,
+trait StorageBackend {
+    fn insert(&mut self, hash: u64, orbit_prune_heuristic: OrbitPruneHeuristic);
+    fn index(&self, hash: u64) -> u8;
+    // TODO: leaky abstraction?
+    fn commit_depth_traversed(&mut self, depth_traversed: u8);
+}
+
+// Data structure declarations
+
+// Each entry in an orbit pruning table has a storage backend and a puzzle
+// state hasher. Dynamic dispatch supports mutliple pruning tables for
+// different orbits. For example on the 4x4 we might want an uncompressed table
+// for corners and a cycle type table for centers
+struct OrbitPrune {
+    storage_backend: Box<dyn StorageBackend>,
+    puzzle_state_hasher: PuzzleStateHasher,
+}
+
+struct OrbitPruningTable<'a, P: PuzzleState> {
+    orbit_pruning_table: Box<[OrbitPrune]>,
+    puzzle_def: &'a PuzzleDef<P>,
     _marker: std::marker::PhantomData<P>,
 }
 
-impl<P: PuzzleState> ApproximatePruningTable<P> {
-    pub fn new(entries: usize) -> ApproximatePruningTable<P> {
-        ApproximatePruningTable {
-            table: vec![u8::MAX; entries].into_boxed_slice(),
-            depth_traversed: 0,
-            _marker: std::marker::PhantomData,
-        }
-    }
-
-    fn hash_to_index(&self, hash: u64) -> usize {
-        (hash % (self.table.len() as u64)) as usize
-    }
+struct OrbitPruningTableGenerateMeta<'a, P: PuzzleState> {
+    puzzle_def: &'a PuzzleDef<P>,
+    entries: usize,
 }
 
-impl<P: PuzzleState> PruningTable<P> for ApproximatePruningTable<P> {
-    fn insert(&mut self, puzzle_state: &P, depth: u8) {
-        assert!(depth < u8::MAX);
+enum PuzzleStateHasher {
+    Exact,
+    Approximate,
+    CycleType,
+    Zero,
+}
 
-        let entry = &mut self.table[self.hash_to_index(fxhash::hash64(puzzle_state))];
-        *entry = (*entry).min(depth);
-    }
+pub struct UncompressedStorageBackend {
+    data: Box<[OrbitPruneHeuristic]>,
+    depth_traversed: u8,
+}
 
-    fn commit_depth_traversed(&mut self, depth: u8) {
-        assert!(self.depth_traversed <= depth);
-        self.depth_traversed = depth;
-    }
+struct TANSStorageEncodingTable {
+    // silly things here
+}
 
-    fn permissible_heuristic(&self, puzzle_state: &P) -> u8 {
-        match self.table[self.hash_to_index(fxhash::hash64(puzzle_state))] {
-            u8::MAX => self.depth_traversed,
-            v => v,
-        }
-    }
+pub struct TANSStorageBackend {
+    data: Box<[OrbitPruneHeuristic]>,
+    counts_by_depth: Box<[u64]>,
+    encoding_tables: Box<[TANSStorageEncodingTable]>,
 }
 
 pub struct ZeroTable;
 
-impl<P: PuzzleState> PruningTable<P> for ZeroTable {
-    fn insert(&mut self, _puzzle_state: &P, _depth: u8) {}
+// Implementations
 
-    fn commit_depth_traversed(&mut self, _depth: u8) {}
+use private::OrbitPruneHeuristic;
+mod private {
+    pub struct OrbitPruneHeuristic(u8);
+
+    impl OrbitPruneHeuristic {
+        const VACANT: u8 = u8::MAX;
+
+        pub fn vacant() -> OrbitPruneHeuristic {
+            OrbitPruneHeuristic(Self::VACANT)
+        }
+
+        pub fn occupied(depth_traversed: u8) -> Option<OrbitPruneHeuristic> {
+            if depth_traversed == Self::VACANT {
+                None
+            } else {
+                Some(OrbitPruneHeuristic(depth_traversed))
+            }
+        }
+
+        pub fn is_vacant(&self) -> bool {
+            self.0 == Self::VACANT
+        }
+
+        pub fn get_occupied(&self) -> Option<u8> {
+            if self.is_vacant() {
+                None
+            } else {
+                Some(self.0)
+            }
+        }
+    }
+}
+
+impl<'a, P: PuzzleState> PruningTable<'a, P> for OrbitPruningTable<'a, P> {
+    type GenerateMeta = OrbitPruningTableGenerateMeta<'a, P>;
+
+    fn generate(generate_meta: OrbitPruningTableGenerateMeta<P>) -> OrbitPruningTable<P> {
+        todo!();
+    }
+
+    fn permissible_heuristic(&self, puzzle_state: &P) -> u8 {
+        self.orbit_pruning_table.iter().enumerate().fold(
+            0,
+            |best_bound,
+             (
+                orbit_index,
+                OrbitPrune {
+                    storage_backend,
+                    puzzle_state_hasher,
+                },
+            )| {
+                best_bound.max(storage_backend.index(puzzle_state_hasher.hash_puzzle_state(
+                    puzzle_state,
+                    self.puzzle_def,
+                    orbit_index,
+                )))
+            },
+        )
+    }
+}
+
+impl PuzzleStateHasher {
+    fn hash_puzzle_state<P: PuzzleState>(
+        &self,
+        puzzle_state: &P,
+        puzzle_def: &PuzzleDef<P>,
+        orbit_index: usize,
+    ) -> u64 {
+        match self {
+            PuzzleStateHasher::Exact => todo!(),
+            PuzzleStateHasher::Approximate => fxhash::hash64(
+                &puzzle_state.orbit_bytes_by_index(orbit_index, &puzzle_def.sorted_orbit_defs),
+            ),
+            PuzzleStateHasher::CycleType => todo!(),
+            PuzzleStateHasher::Zero => 0,
+        }
+    }
+}
+
+impl StorageBackend for UncompressedStorageBackend {
+    fn insert(&mut self, hash: u64, orbit_prune_heuristic: OrbitPruneHeuristic) {
+        self.data[hash as usize] = orbit_prune_heuristic;
+    }
+
+    fn index(&self, hash: u64) -> u8 {
+        self.data[hash as usize]
+            .get_occupied()
+            .unwrap_or(self.depth_traversed)
+    }
+
+    fn commit_depth_traversed(&mut self, depth_traversed: u8) {
+        self.depth_traversed = depth_traversed;
+    }
+}
+
+impl StorageBackend for TANSStorageBackend {
+    fn insert(&mut self, hash: u64, orbit_prune_heuristic: OrbitPruneHeuristic) {
+        todo!();
+    }
+
+    fn index(&self, hash: u64) -> u8 {
+        todo!();
+    }
+
+    fn commit_depth_traversed(&mut self, depth_traversed: u8) {
+        todo!();
+    }
+}
+
+// Miscellanous implementations
+
+impl<'a, P: PuzzleState + 'a> PruningTable<'a, P> for ZeroTable {
+    type GenerateMeta = ();
+
+    fn generate(_generate_meta: ()) -> Self {
+        ZeroTable
+    }
 
     fn permissible_heuristic(&self, _puzzle_state: &P) -> u8 {
         0
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_orbit_prune_heuristic_invariants() {
+        let vacant = OrbitPruneHeuristic::vacant();
+        assert!(vacant.is_vacant());
+        assert_eq!(vacant.get_occupied(), None);
+
+        let occupied = OrbitPruneHeuristic::occupied(5).unwrap();
+        assert!(!occupied.is_vacant());
+        assert_eq!(occupied.get_occupied(), Some(5));
+
+        let occupied = OrbitPruneHeuristic::occupied(255);
+        assert!(occupied.is_none());
+    }
+
+    #[test]
+    fn test_all_puzzle_hashers() {}
 }

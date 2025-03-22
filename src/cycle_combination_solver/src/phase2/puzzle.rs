@@ -14,9 +14,8 @@ pub trait PuzzleState: Hash + Clone + PartialEq + Debug {
     fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv;
     /// Try to create a puzzle state from a sorted transformation and sorted
     /// orbit defs, checking if a puzzle state can be created from the orbit
-    /// defs. For example StackPuzzle<39> cannot hold a 3x3 simd cube state
-    /// cannot hold a 4x4 cube state. `sorted_transformations` is guaranteed to
-    /// correspond to `sorted_orbit_defs`.
+    /// defs. `sorted_transformations` is guaranteed to correspond to
+    /// `sorted_orbit_defs`.
     fn try_from_transformation_meta(
         sorted_transformations: &[Vec<(u8, u8)>],
         sorted_orbit_defs: &[OrbitDef],
@@ -25,15 +24,16 @@ pub trait PuzzleState: Hash + Clone + PartialEq + Debug {
     fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: &[OrbitDef]);
     /// Inverse of a puzzle state
     fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]);
-    /// The goal state for IDA* search, may use unchecked operations for speed
-    /// as long as validate_sorted_orbit_defs has been called. I choose to not
-    /// make this an unsafe function but I may in the future.
+    /// The goal state for IDA* search
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type: &[OrientedPartition],
         sorted_orbit_defs: &[OrbitDef],
         multi_bv: <Self::MultiBv as MultiBvInterface>::MultiBvReusableRef<'_>,
     ) -> bool;
+    /// Get the bytes of the specified orbit index in the form (permutation
+    /// vector, orientation vector).
+    fn orbit_bytes_by_index(&self, index: usize, sorted_orbit_defs: &[OrbitDef]) -> (&[u8], &[u8]);
 }
 
 pub trait MultiBvInterface {
@@ -118,13 +118,13 @@ impl<P: PuzzleState> Move<P> {
     pub fn commutes_with(
         &self,
         other: &Self,
-        result: &mut P,
+        result_1: &mut P,
         result_2: &mut P,
         sorted_orbit_defs: &[OrbitDef],
     ) -> bool {
-        result.replace_compose(&self.puzzle_state, &other.puzzle_state, sorted_orbit_defs);
+        result_1.replace_compose(&self.puzzle_state, &other.puzzle_state, sorted_orbit_defs);
         result_2.replace_compose(&other.puzzle_state, &self.puzzle_state, sorted_orbit_defs);
-        result == result_2
+        result_1 == result_2
     }
 }
 
@@ -342,6 +342,10 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
     ) -> bool {
         induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
     }
+
+    fn orbit_bytes_by_index(&self, index: usize, sorted_orbit_defs: &[OrbitDef]) -> (&[u8], &[u8]) {
+        orbit_bytes_by_index_slice(&self.0, index, sorted_orbit_defs)
+    }
 }
 
 impl PuzzleState for HeapPuzzle {
@@ -389,6 +393,10 @@ impl PuzzleState for HeapPuzzle {
         multi_bv: &mut [u8],
     ) -> bool {
         induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
+    }
+
+    fn orbit_bytes_by_index(&self, index: usize, sorted_orbit_defs: &[OrbitDef]) -> (&[u8], &[u8]) {
+        orbit_bytes_by_index_slice(&self.0, index, sorted_orbit_defs)
     }
 }
 
@@ -624,6 +632,14 @@ fn induces_sorted_cycle_type_slice(
         base += piece_count * 2;
     }
     true
+}
+
+fn orbit_bytes_by_index_slice<'a>(
+    orbit_states: &'a [u8],
+    index: usize,
+    sorted_orbit_defs: &[OrbitDef],
+) -> (&'a [u8], &'a [u8]) {
+    todo!();
 }
 
 impl HeapPuzzle {

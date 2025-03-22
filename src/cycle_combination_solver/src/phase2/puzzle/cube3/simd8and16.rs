@@ -234,6 +234,10 @@ impl Cube3Interface for Cube3 {
 
         cycle_type_pointer == sorted_cycle_type[1].len()
     }
+
+    fn orbit_bytes_by_index(&self, index: usize) -> (&[u8], &[u8]) {
+        todo!();
+    }
 }
 
 impl Cube3 {

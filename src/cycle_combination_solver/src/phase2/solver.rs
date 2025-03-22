@@ -5,7 +5,7 @@ use super::{
     puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryInterface},
 };
 
-pub struct CycleTypeSolver<'a, P: PuzzleState, T: PruningTable<P>> {
+pub struct CycleTypeSolver<'a, P: PuzzleState, T: PruningTable<'a, P>> {
     puzzle_def: &'a PuzzleDef<P>,
     canonical_fsm: CanonicalFSM<P>,
     sorted_cycle_type: Vec<OrientedPartition>,
@@ -19,7 +19,7 @@ struct CycleTypeSolverMutable<P: PuzzleState, H: PuzzleStateHistoryInterface<P>>
     first_move_class_index: usize,
 }
 
-impl<'a, P: PuzzleState, T: PruningTable<P>> CycleTypeSolver<'a, P, T> {
+impl<'a, P: PuzzleState, T: PruningTable<'a, P>> CycleTypeSolver<'a, P, T> {
     pub fn new(
         puzzle_def: &'a PuzzleDef<P>,
         canonical_fsm: CanonicalFSM<P>,
@@ -925,4 +925,27 @@ mod tests {
                 .all(|solution| solution.len() == move_count));
         }
     }
+
+    //     let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
+    //         puzzle_def,
+    //         canonical_fsm,
+    //         vec![
+    //             vec![(1.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
+    //             vec![(1.try_into().unwrap(), true), (1.try_into().unwrap(), true)],
+    //         ],
+    //         ZeroTable,
+    //     );
+
+    //     let start = Instant::now();
+    //     let solutions = solver.solve::<[Cube3; 21]>();
+    //     let duration = start.elapsed();
+    //     eprintln!("Time to find 30-cycle: {:?}", duration);
+    //     for solution in solutions.iter() {
+    //         for move_ in solution.iter() {
+    //             print!("{} ", &move_.name);
+    //         }
+    //         println!();
+    //     }
+    //     assert_eq!(solutions.len(), 0);
+    // }
 }
