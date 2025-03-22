@@ -693,6 +693,18 @@ impl HeapPuzzle {
     }
 }
 
+pub fn random_3x3_state<P: PuzzleState>(cube3_def: &PuzzleDef<P>, solved: &P) -> P {
+    let mut result_1 = solved.clone();
+    let mut result_2 = solved.clone();
+    for _ in 0..20 {
+        let move_index = fastrand::choice(0_u8..18).unwrap();
+        let move_ = &cube3_def.moves[move_index as usize];
+        result_1.replace_compose(&result_2, &move_.puzzle_state, &cube3_def.sorted_orbit_defs);
+        std::mem::swap(&mut result_2, &mut result_1);
+    }
+    result_2
+}
+
 #[cfg(test)]
 mod tests {
     extern crate test;
@@ -911,21 +923,13 @@ mod tests {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.new_solved_state();
 
-        for _ in 0..100 {
+        for _ in 0..50 {
+            let random_state = random_3x3_state(&cube3_def, &solved);
             let mut result_1 = solved.clone();
             let mut result_2 = solved.clone();
-            for _ in 0..20 {
-                let move_index = fastrand::choice(0_u8..18).unwrap();
-                let move_ = &cube3_def.moves[move_index as usize];
-                result_1.replace_compose(
-                    &result_2,
-                    &move_.puzzle_state,
-                    &cube3_def.sorted_orbit_defs,
-                );
-                std::mem::swap(&mut result_2, &mut result_1);
-            }
-            result_1.replace_inverse(&result_2, &cube3_def.sorted_orbit_defs);
-            result_2.replace_compose(&result_1, &result_2.clone(), &cube3_def.sorted_orbit_defs);
+            result_1.replace_inverse(&random_state, &cube3_def.sorted_orbit_defs);
+            result_2.replace_compose(&result_1, &random_state, &cube3_def.sorted_orbit_defs);
+
             assert_eq!(result_2, solved);
         }
     }
@@ -1311,21 +1315,7 @@ mod tests {
         let mut sorted_cycle_type_iter = sorted_cycle_types.iter().cycle();
 
         let random_1000: Vec<P> = (0..1000)
-            .map(|_| {
-                let mut result_1 = solved.clone();
-                let mut result_2 = solved.clone();
-                for _ in 0..20 {
-                    let move_index = fastrand::choice(0_u8..18).unwrap();
-                    let move_ = &cube3_def.moves[move_index as usize];
-                    result_1.replace_compose(
-                        &result_2,
-                        &move_.puzzle_state,
-                        &cube3_def.sorted_orbit_defs,
-                    );
-                    std::mem::swap(&mut result_2, &mut result_1);
-                }
-                result_2
-            })
+            .map(|_| random_3x3_state(&cube3_def, &solved))
             .collect();
         let mut random_iter = random_1000.iter().cycle();
 

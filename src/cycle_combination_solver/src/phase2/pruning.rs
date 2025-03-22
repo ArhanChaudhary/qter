@@ -52,7 +52,6 @@ enum PuzzleStateHasher {
     Exact,
     Approximate,
     CycleType,
-    Zero,
 }
 
 pub struct UncompressedStorageBackend {
@@ -70,12 +69,15 @@ pub struct TANSStorageBackend {
     encoding_tables: Box<[TANSStorageEncodingTable]>,
 }
 
-pub struct ZeroTable;
+pub struct ZeroStorageBackend;
+
+pub struct ZeroTable<P>(std::marker::PhantomData<P>);
 
 // Implementations
 
 use private::OrbitPruneHeuristic;
 mod private {
+    #[derive(Clone)]
     pub struct OrbitPruneHeuristic(u8);
 
     impl OrbitPruneHeuristic {
@@ -148,7 +150,6 @@ impl PuzzleStateHasher {
                 &puzzle_state.orbit_bytes_by_index(orbit_index, &puzzle_def.sorted_orbit_defs),
             ),
             PuzzleStateHasher::CycleType => todo!(),
-            PuzzleStateHasher::Zero => 0,
         }
     }
 }
@@ -183,13 +184,23 @@ impl StorageBackend for TANSStorageBackend {
     }
 }
 
+impl StorageBackend for ZeroStorageBackend {
+    fn insert(&mut self, _hash: u64, _orbit_prune_heuristic: OrbitPruneHeuristic) {}
+
+    fn index(&self, _hash: u64) -> u8 {
+        0
+    }
+
+    fn commit_depth_traversed(&mut self, _depth_traversed: u8) {}
+}
+
 // Miscellanous implementations
 
-impl<'a, P: PuzzleState + 'a> PruningTable<'a, P> for ZeroTable {
+impl<'a, P: PuzzleState + 'a> PruningTable<'a, P> for ZeroTable<P> {
     type GenerateMeta = ();
 
     fn generate(_generate_meta: ()) -> Self {
-        ZeroTable
+        ZeroTable(std::marker::PhantomData)
     }
 
     fn permissible_heuristic(&self, _puzzle_state: &P) -> u8 {
@@ -200,6 +211,8 @@ impl<'a, P: PuzzleState + 'a> PruningTable<'a, P> for ZeroTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::phase2::puzzle::{cube3::Cube3, random_3x3_state};
+    use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
     #[test]
     fn test_orbit_prune_heuristic_invariants() {
@@ -216,5 +229,34 @@ mod tests {
     }
 
     #[test]
-    fn test_all_puzzle_hashers() {}
+    fn test_uncompressed_storage_backend_works() {
+        let mut storage = UncompressedStorageBackend {
+            data: vec![OrbitPruneHeuristic::vacant(); 100].into_boxed_slice(),
+            depth_traversed: 0,
+        };
+
+        storage.insert(5, OrbitPruneHeuristic::occupied(3).unwrap());
+        assert_eq!(storage.index(5), 3);
+
+        assert_eq!(storage.index(6), 0);
+        storage.commit_depth_traversed(4);
+        assert_eq!(storage.index(6), 4);
+    }
+
+    #[test]
+    fn test_zero_storage_backend_gives_zero() {
+        let storage = ZeroStorageBackend;
+        assert_eq!(storage.index(0), 0);
+        assert_eq!(storage.index(1), 0);
+        assert_eq!(storage.index(2), 0);
+    }
+
+    #[test]
+    fn test_zero_table() {
+        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let zero_table = ZeroTable::generate(());
+
+        let random_state = random_3x3_state(&cube3_def, &cube3_def.new_solved_state());
+        assert_eq!(zero_table.permissible_heuristic(&random_state), 0);
+    }
 }

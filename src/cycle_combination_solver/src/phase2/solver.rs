@@ -172,8 +172,12 @@ mod tests {
     fn test_identity_cycle_type() {
         let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let canonical_fsm = (&puzzle_def).into();
-        let solver: CycleTypeSolver<Cube3, _> =
-            CycleTypeSolver::new(&puzzle_def, canonical_fsm, vec![vec![], vec![]], ZeroTable);
+        let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
+            &puzzle_def,
+            canonical_fsm,
+            vec![vec![], vec![]],
+            ZeroTable::generate(()),
+        );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 1);
         assert_eq!(solutions[0].len(), 0);
@@ -190,7 +194,7 @@ mod tests {
                 vec![(4.try_into().unwrap(), false)],
                 vec![(4.try_into().unwrap(), false)],
             ],
-            ZeroTable,
+            ZeroTable::generate(()),
         );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 12);
@@ -214,7 +218,7 @@ mod tests {
                     (2.try_into().unwrap(), false),
                 ],
             ],
-            ZeroTable,
+            ZeroTable::generate(()),
         );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 6);
@@ -237,7 +241,7 @@ mod tests {
                 ],
                 vec![(1.try_into().unwrap(), true), (8.try_into().unwrap(), true)],
             ],
-            ZeroTable,
+            ZeroTable::generate(()),
         );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 22); // TODO: should be 24
@@ -257,7 +261,7 @@ mod tests {
                 vec![(1.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
                 vec![(1.try_into().unwrap(), true), (7.try_into().unwrap(), true)],
             ],
-            ZeroTable,
+            ZeroTable::generate(()),
         );
 
         let start = Instant::now();
@@ -286,8 +290,12 @@ mod tests {
         let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
         let canonical_fsm = (&cube3_def).into();
 
-        let mut solver: CycleTypeSolver<HeapPuzzle, _> =
-            CycleTypeSolver::new(&cube3_def, canonical_fsm, Vec::default(), ZeroTable);
+        let mut solver: CycleTypeSolver<HeapPuzzle, _> = CycleTypeSolver::new(
+            &cube3_def,
+            canonical_fsm,
+            Vec::default(),
+            ZeroTable::generate(()),
+        );
 
         // Test cases taken from Michael Gottlieb's order table
         // https://mzrg.com/rubik/orders.shtml
@@ -569,8 +577,12 @@ mod tests {
         let cube4_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_4X4).try_into().unwrap();
         let canonical_fsm = (&cube4_def).into();
 
-        let mut solver: CycleTypeSolver<HeapPuzzle, _> =
-            CycleTypeSolver::new(&cube4_def, canonical_fsm, Vec::default(), ZeroTable);
+        let mut solver: CycleTypeSolver<HeapPuzzle, _> = CycleTypeSolver::new(
+            &cube4_def,
+            canonical_fsm,
+            Vec::default(),
+            ZeroTable::generate(()),
+        );
 
         // Test cases taken from Michael Gottlieb's order table
         // https://mzrg.com/rubik/orders.shtml
