@@ -171,7 +171,7 @@ impl Cube3Interface for Cube3 {
             }
             // SAFETY: this loop will only ever run 8 times at max because that
             // is the longest cycle length among corners
-            i = unsafe { i.unchecked_add(1) };
+            i = unsafe { NonZeroU8::new_unchecked(i.get() + 1) };
         }
 
         if cycle_type_pointer != sorted_cycle_type[0].len() {
@@ -229,7 +229,7 @@ impl Cube3Interface for Cube3 {
             }
             // SAFETY: this loop will only ever run 12 times at max because that
             // is the longest cycle length among edges
-            i = unsafe { i.unchecked_add(1) };
+            i = unsafe { NonZeroU8::new_unchecked(i.get() + 1) };
         }
 
         cycle_type_pointer == sorted_cycle_type[1].len()
