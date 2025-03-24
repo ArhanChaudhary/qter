@@ -3,7 +3,6 @@
 ## SCC
 
 - Phase 2
-  - revert the Rc thing
   - pruning table
     - tANS table compression
     - cycle type pruning table

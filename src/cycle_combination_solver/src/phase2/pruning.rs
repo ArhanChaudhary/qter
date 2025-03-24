@@ -20,7 +20,12 @@ pub trait PruningTable<'a, P: PuzzleState + 'a> {
 }
 
 trait StorageBackend {
-    fn insert(&mut self, hash: u64, orbit_prune_heuristic: OrbitPruneHeuristic);
+    fn insert(
+        &mut self,
+        hash: u64,
+        orbit_prune_heuristic: OrbitPruneHeuristic,
+        puzzle_state_hasher: PuzzleStateHasher,
+    );
     fn index(&self, hash: u64) -> u8;
     // TODO: leaky abstraction?
     fn commit_depth_traversed(&mut self, depth_traversed: u8);
@@ -38,9 +43,8 @@ struct OrbitPrune {
 }
 
 struct OrbitPruningTable<'a, P: PuzzleState> {
-    orbit_pruning_table: Box<[OrbitPrune]>,
     puzzle_def: &'a PuzzleDef<P>,
-    _marker: std::marker::PhantomData<P>,
+    orbit_pruning_table: Box<[OrbitPrune]>,
 }
 
 struct OrbitPruningTableGenerateMeta<'a, P: PuzzleState> {
@@ -48,6 +52,7 @@ struct OrbitPruningTableGenerateMeta<'a, P: PuzzleState> {
     entries: usize,
 }
 
+#[derive(Copy, Clone)]
 enum PuzzleStateHasher {
     Exact,
     Approximate,
@@ -77,7 +82,7 @@ pub struct ZeroTable<P>(std::marker::PhantomData<P>);
 
 use private::OrbitPruneHeuristic;
 mod private {
-    #[derive(Clone)]
+    #[derive(Clone, PartialOrd, Ord, PartialEq, Eq)]
     pub struct OrbitPruneHeuristic(u8);
 
     impl OrbitPruneHeuristic {
@@ -105,6 +110,22 @@ mod private {
             } else {
                 Some(self.0)
             }
+        }
+    }
+}
+
+fn permissible_insert(
+    data: &mut [OrbitPruneHeuristic],
+    hash: u64,
+    orbit_prune_heuristic: OrbitPruneHeuristic,
+    puzzle_state_hasher: PuzzleStateHasher,
+) {
+    match puzzle_state_hasher {
+        PuzzleStateHasher::Approximate => {
+            data[hash as usize] = data[hash as usize].clone().min(orbit_prune_heuristic);
+        }
+        _ => {
+            data[hash as usize] = orbit_prune_heuristic;
         }
     }
 }
@@ -155,8 +176,18 @@ impl PuzzleStateHasher {
 }
 
 impl StorageBackend for UncompressedStorageBackend {
-    fn insert(&mut self, hash: u64, orbit_prune_heuristic: OrbitPruneHeuristic) {
-        self.data[hash as usize] = orbit_prune_heuristic;
+    fn insert(
+        &mut self,
+        hash: u64,
+        orbit_prune_heuristic: OrbitPruneHeuristic,
+        puzzle_state_hasher: PuzzleStateHasher,
+    ) {
+        permissible_insert(
+            &mut self.data,
+            hash,
+            orbit_prune_heuristic,
+            puzzle_state_hasher,
+        );
     }
 
     fn index(&self, hash: u64) -> u8 {
@@ -171,7 +202,12 @@ impl StorageBackend for UncompressedStorageBackend {
 }
 
 impl StorageBackend for TANSStorageBackend {
-    fn insert(&mut self, hash: u64, orbit_prune_heuristic: OrbitPruneHeuristic) {
+    fn insert(
+        &mut self,
+        hash: u64,
+        orbit_prune_heuristic: OrbitPruneHeuristic,
+        puzzle_state_hasher: PuzzleStateHasher,
+    ) {
         todo!();
     }
 
@@ -185,7 +221,13 @@ impl StorageBackend for TANSStorageBackend {
 }
 
 impl StorageBackend for ZeroStorageBackend {
-    fn insert(&mut self, _hash: u64, _orbit_prune_heuristic: OrbitPruneHeuristic) {}
+    fn insert(
+        &mut self,
+        _hash: u64,
+        _orbit_prune_heuristic: OrbitPruneHeuristic,
+        _puzzle_state_hasher: PuzzleStateHasher,
+    ) {
+    }
 
     fn index(&self, _hash: u64) -> u8 {
         0
@@ -235,12 +277,39 @@ mod tests {
             depth_traversed: 0,
         };
 
-        storage.insert(5, OrbitPruneHeuristic::occupied(3).unwrap());
+        storage.insert(
+            5,
+            OrbitPruneHeuristic::occupied(3).unwrap(),
+            PuzzleStateHasher::Exact,
+        );
         assert_eq!(storage.index(5), 3);
 
         assert_eq!(storage.index(6), 0);
         storage.commit_depth_traversed(4);
         assert_eq!(storage.index(6), 4);
+        assert_eq!(storage.index(5), 3);
+    }
+
+    #[test]
+    fn test_permissible_insert() {
+        let mut storage = UncompressedStorageBackend {
+            data: vec![OrbitPruneHeuristic::vacant(); 100].into_boxed_slice(),
+            depth_traversed: 0,
+        };
+
+        storage.insert(
+            6,
+            OrbitPruneHeuristic::occupied(3).unwrap(),
+            PuzzleStateHasher::Approximate,
+        );
+        assert_eq!(storage.index(6), 3);
+
+        storage.insert(
+            6,
+            OrbitPruneHeuristic::occupied(2).unwrap(),
+            PuzzleStateHasher::Approximate,
+        );
+        assert_eq!(storage.index(6), 2);
     }
 
     #[test]
