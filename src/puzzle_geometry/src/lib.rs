@@ -262,8 +262,8 @@ impl<'a> PuzzleGeometryDefinition<'a> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        shapes::{CUBE, TETRAHEDRON},
         CutAxis, CutAxisNames, Error, Face, Point, Polyhedron, PuzzleGeometryDefinition,
+        shapes::{CUBE, TETRAHEDRON},
     };
     use nalgebra::{Rotation3, Unit, Vector3};
 

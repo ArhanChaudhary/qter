@@ -140,7 +140,7 @@ impl<P: PuzzleState> CanonicalFSM<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::phase2::puzzle::{cube3::Cube3, HeapPuzzle, PuzzleDef};
+    use crate::phase2::puzzle::{HeapPuzzle, PuzzleDef, cube3::Cube3};
     use puzzle_geometry::ksolve::{KPUZZLE_3X3, KPUZZLE_4X4};
 
     #[test]
@@ -149,9 +149,11 @@ mod tests {
         let canonical_fsm: CanonicalFSM<Cube3> = (&cube3_def).into();
 
         for move_class_index in 0..cube3_def.move_classes.len() {
-            assert!(canonical_fsm
-                .next_state(CanonicalFSMState::default(), move_class_index)
-                .is_some());
+            assert!(
+                canonical_fsm
+                    .next_state(CanonicalFSMState::default(), move_class_index)
+                    .is_some()
+            );
         }
     }
 
@@ -160,16 +162,18 @@ mod tests {
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let canonical_fsm: CanonicalFSM<Cube3> = (&cube3_def).into();
         for move_class_index in 0..cube3_def.move_classes.len() {
-            assert!(canonical_fsm
-                .next_state(
-                    Some(
-                        canonical_fsm
-                            .next_state(CanonicalFSMState::default(), move_class_index)
-                            .unwrap()
-                    ),
-                    move_class_index
-                )
-                .is_none());
+            assert!(
+                canonical_fsm
+                    .next_state(
+                        Some(
+                            canonical_fsm
+                                .next_state(CanonicalFSMState::default(), move_class_index)
+                                .unwrap()
+                        ),
+                        move_class_index
+                    )
+                    .is_none()
+            );
         }
     }
 

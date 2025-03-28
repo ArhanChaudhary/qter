@@ -4,12 +4,13 @@ use internment::ArcIntern;
 use itertools::Itertools;
 use pest::error::Error;
 use qter_core::{
+    Algorithm, Facelets, Instruction, Int, Program, RegisterGenerator, U, WithSpan,
     architectures::{Architecture, PermutationGroup},
-    mk_error, Algorithm, Facelets, Instruction, Int, Program, RegisterGenerator, WithSpan, U,
+    mk_error,
 };
 
 use crate::{
-    parsing::Rule, BlockID, Expanded, ExpandedCode, LabelReference, Primitive, RegisterReference,
+    BlockID, Expanded, ExpandedCode, LabelReference, Primitive, RegisterReference, parsing::Rule,
 };
 
 #[derive(Clone, Debug)]
@@ -232,7 +233,7 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
                             algorithm: permutation,
                         },
                         span,
-                    ))
+                    ));
                 }
                 CoalescedAddsRemovedLabels::AddTheoretical(idx, amt) => {
                     return Ok(WithSpan::new(
@@ -241,7 +242,7 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
                             amount: amt,
                         },
                         span,
-                    ))
+                    ));
                 }
                 CoalescedAddsRemovedLabels::Instruction(v) => v,
             };

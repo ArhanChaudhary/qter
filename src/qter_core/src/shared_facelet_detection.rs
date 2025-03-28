@@ -4,10 +4,10 @@ use internment::ArcIntern;
 use itertools::Itertools;
 
 use crate::{
+    Int,
     architectures::{CycleGenerator, CycleGeneratorSubcycle, Permutation, PermutationGroup},
     discrete_math::{lcm, length_of_substring_that_this_string_is_n_repeated_copies_of},
     union_find::{SetInfo, UnionFind},
-    Int,
 };
 
 struct FaceletSources(HashSet<usize>);
@@ -119,8 +119,8 @@ pub fn algorithms_to_cycle_generators(
 #[cfg(test)]
 mod tests {
     use crate::{
-        architectures::{CycleGeneratorSubcycle, PuzzleDefinition},
         Int,
+        architectures::{CycleGeneratorSubcycle, PuzzleDefinition},
     };
 
     #[test]

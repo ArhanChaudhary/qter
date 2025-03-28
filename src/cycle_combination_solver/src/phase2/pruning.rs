@@ -105,11 +105,7 @@ mod private {
         }
 
         pub fn get_occupied(&self) -> Option<u8> {
-            if self.is_vacant() {
-                None
-            } else {
-                Some(self.0)
-            }
+            if self.is_vacant() { None } else { Some(self.0) }
         }
     }
 }

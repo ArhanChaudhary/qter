@@ -8,10 +8,11 @@ use internment::ArcIntern;
 use itertools::Itertools;
 
 use crate::{
+    Algorithm, I, Int, U,
     discrete_math::{decode, lcm_iter},
     puzzle_parser,
     shared_facelet_detection::algorithms_to_cycle_generators,
-    table_encoding, Int, Algorithm, I, U,
+    table_encoding,
 };
 
 pub(crate) const OPTIMIZED_TABLES: [&[u8]; 2] = [
@@ -728,7 +729,7 @@ mod tests {
     use internment::ArcIntern;
     use itertools::Itertools;
 
-    use crate::{Int, I, U};
+    use crate::{I, Int, U};
 
     use super::{Architecture, PuzzleDefinition};
 

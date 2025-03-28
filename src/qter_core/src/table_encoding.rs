@@ -593,7 +593,7 @@ mod tests {
     use internment::ArcIntern;
     use itertools::Itertools;
 
-    use crate::table_encoding::{ans_decode, decode_table, N};
+    use crate::table_encoding::{N, ans_decode, decode_table};
 
     use super::{ans_encode, encode_table};
 

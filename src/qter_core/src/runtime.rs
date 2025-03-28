@@ -1,6 +1,6 @@
 use crate::architectures::{Architecture, Permutation, PermutationGroup};
 use crate::discrete_math::length_of_substring_that_this_string_is_n_repeated_copies_of;
-use crate::{Int, WithSpan, U};
+use crate::{Int, U, WithSpan};
 use internment::ArcIntern;
 use itertools::Itertools;
 use std::{cell::OnceCell, sync::Arc};

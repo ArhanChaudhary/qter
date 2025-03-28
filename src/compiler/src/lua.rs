@@ -1,5 +1,5 @@
 use mlua::{AnyUserData, IntoLua, Lua, UserDataMethods, UserDataRegistry, Value};
-use qter_core::{Int, I};
+use qter_core::{I, Int};
 
 #[derive(Clone, Debug)]
 pub struct LuaMacros {
@@ -93,7 +93,7 @@ impl LuaMacros {
 #[cfg(test)]
 mod tests {
     use mlua::{AnyUserData, Function};
-    use qter_core::{Int, I};
+    use qter_core::{I, Int};
 
     use super::LuaMacros;
 
@@ -120,13 +120,14 @@ mod tests {
         )
         .unwrap();
 
-        assert!(lua
-            .lua
-            .globals()
-            .get::<Function>("fail")
-            .unwrap()
-            .call::<()>(())
-            .is_err());
+        assert!(
+            lua.lua
+                .globals()
+                .get::<Function>("fail")
+                .unwrap()
+                .call::<()>(())
+                .is_err()
+        );
 
         let too_big = Int::<I>::from(u64::MAX - 5);
         let too_big = too_big * too_big;

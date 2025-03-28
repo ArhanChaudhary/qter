@@ -15,6 +15,7 @@ pub struct CycleTypeSolver<'a, P: PuzzleState, T: PruningTable<'a, P>> {
 struct CycleTypeSolverMutable<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> {
     puzzle_state_history: PuzzleStateHistory<P, H>,
     multi_bv: P::MultiBv,
+    // TODO: list of usize until the very end at fn return
     solutions: Vec<Box<[Move<P>]>>,
     first_move_class_index: usize,
 }
@@ -164,7 +165,7 @@ mod tests {
     use super::*;
     use crate::phase2::{
         pruning::ZeroTable,
-        puzzle::{cube3::Cube3, HeapPuzzle},
+        puzzle::{HeapPuzzle, cube3::Cube3},
     };
     use puzzle_geometry::ksolve::{KPUZZLE_3X3, KPUZZLE_4X4};
 
@@ -566,9 +567,11 @@ mod tests {
 
             let solutions = solver.solve::<Vec<_>>();
             assert_eq!(solutions.len(), optimal_cycle_test.expected_partial_count);
-            assert!(solutions
-                .iter()
-                .all(|solution| solution.len() == move_count));
+            assert!(
+                solutions
+                    .iter()
+                    .all(|solution| solution.len() == move_count)
+            );
         }
     }
 
@@ -932,9 +935,11 @@ mod tests {
 
             let solutions = solver.solve::<Vec<_>>();
             assert_eq!(solutions.len(), optimal_cycle_test.expected_partial_count);
-            assert!(solutions
-                .iter()
-                .all(|solution| solution.len() == move_count));
+            assert!(
+                solutions
+                    .iter()
+                    .all(|solution| solution.len() == move_count)
+            );
         }
     }
 

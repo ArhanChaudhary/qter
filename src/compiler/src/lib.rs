@@ -2,9 +2,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use internment::ArcIntern;
 use lua::LuaMacros;
-use parsing::{parse, Rule};
+use parsing::{Rule, parse};
 use pest::error::Error;
-use qter_core::{architectures::Architecture, Int, Program, WithSpan, U};
+use qter_core::{Int, Program, U, WithSpan, architectures::Architecture};
 use strip_expanded::strip_expanded;
 
 use crate::macro_expansion::expand;

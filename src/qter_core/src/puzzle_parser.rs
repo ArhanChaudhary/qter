@@ -2,14 +2,14 @@ use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use internment::ArcIntern;
 use itertools::Itertools;
-use pest::{error::Error, Parser};
+use pest::{Parser, error::Error};
 use pest_derive::Parser;
 
 use crate::{
-    architectures::{
-        Architecture, Permutation, PermutationGroup, PuzzleDefinition, OPTIMIZED_TABLES,
-    },
     Int, U,
+    architectures::{
+        Architecture, OPTIMIZED_TABLES, Permutation, PermutationGroup, PuzzleDefinition,
+    },
 };
 
 #[derive(Parser)]
@@ -136,7 +136,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
                         ),
                     },
                     permutation_name.as_span(),
-                )))
+                )));
             }
         };
 
@@ -152,7 +152,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
                             ),
                         },
                         permutation_name.as_span(),
-                    )))
+                    )));
                 }
             };
 
@@ -202,7 +202,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
                         message: format!("Generator doesn't exist: {e}"),
                     },
                     algorithm_span,
-                )))
+                )));
             }
         };
 
@@ -215,7 +215,13 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
         for (register, order) in architecture.registers().iter().zip(orders.into_iter()) {
             if register.order() != order {
                 return Err(Box::new(Error::new_from_span(
-                    pest::error::ErrorVariant::CustomError { message: format!("The algorithm {} has an incorrect order. Expected order {order} but found order {}.", register.generator_sequence.iter().join(" "), register.order()) },
+                    pest::error::ErrorVariant::CustomError {
+                        message: format!(
+                            "The algorithm {} has an incorrect order. Expected order {order} but found order {}.",
+                            register.generator_sequence.iter().join(" "),
+                            register.order()
+                        ),
+                    },
                     algorithm_span,
                 )));
             }

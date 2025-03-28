@@ -1,9 +1,9 @@
 use std::{collections::VecDeque, mem, sync::Arc};
 
 use qter_core::{
+    Algorithm, Facelets, I, Instruction, Int, Program, RegisterGenerator, U,
     architectures::{Permutation, PermutationGroup},
     discrete_math::{decode, lcm},
-    Algorithm, Facelets, Instruction, Int, Program, RegisterGenerator, I, U,
 };
 
 /// Represents an instance of a `PermutationGroup`, in other words this simulates the puzzle
@@ -255,7 +255,10 @@ impl Interpreter {
         let instruction = match self.program.instructions.get(self.program_counter) {
             Some(v) => v,
             None => {
-                return interpreter_panic!(self, "Execution fell through the end of the program without reaching a halt instruction!");
+                return interpreter_panic!(
+                    self,
+                    "Execution fell through the end of the program without reaching a halt instruction!"
+                );
             }
         };
 
@@ -483,7 +486,7 @@ mod tests {
 
     use compiler::compile;
     use internment::ArcIntern;
-    use qter_core::{architectures::PuzzleDefinition, Algorithm, Int, RegisterGenerator, U};
+    use qter_core::{Algorithm, Int, RegisterGenerator, U, architectures::PuzzleDefinition};
 
     use crate::{Interpreter, PausedState, Puzzle};
 

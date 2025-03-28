@@ -1,10 +1,10 @@
 use internment::ArcIntern;
 use pest::error::Error;
-use qter_core::{mk_error, Span, WithSpan};
+use qter_core::{Span, WithSpan, mk_error};
 
 use crate::{
-    parsing::Rule, BlockID, Code, ExpansionInfo, Instruction, LabelReference, Macro, Primitive,
-    RegisterReference, Value,
+    BlockID, Code, ExpansionInfo, Instruction, LabelReference, Macro, Primitive, RegisterReference,
+    Value, parsing::Rule,
 };
 
 use std::collections::HashMap;

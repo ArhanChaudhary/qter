@@ -6,7 +6,7 @@ use std::{
 
 use clap::{ArgAction, Parser, ValueEnum};
 use color_eyre::{
-    eyre::{eyre, OptionExt},
+    eyre::{OptionExt, eyre},
     owo_colors::OwoColorize,
 };
 use compiler::compile;
@@ -14,8 +14,8 @@ use internment::ArcIntern;
 use interpreter::{ExecutionState, Interpreter, PausedState};
 use itertools::Itertools;
 use qter_core::{
+    Algorithm, I, Int,
     table_encoding::{decode_table, encode_table},
-    Algorithm, Int, I,
 };
 
 #[derive(Clone, Copy, ValueEnum)]

@@ -1,21 +1,22 @@
-use crate::{builtin_macros::builtin_macros, BlockInfoTracker, ExpansionInfo};
+use crate::{BlockInfoTracker, ExpansionInfo, builtin_macros::builtin_macros};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, LazyLock},
 };
 
 use internment::ArcIntern;
-use pest::{error::Error, iterators::Pair, Parser};
+use pest::{Parser, error::Error, iterators::Pair};
 use pest_derive::Parser;
 use qter_core::{
-    architectures::{puzzle_by_name, Architecture},
-    mk_error, Int, WithSpan, U,
+    Int, U, WithSpan,
+    architectures::{Architecture, puzzle_by_name},
+    mk_error,
 };
 
 use crate::{
-    lua::LuaMacros, Block, BlockID, BlockInfo, Code, Define, DefinedValue, Label, LuaCall, Macro,
-    MacroBranch, MacroCall, ParsedSyntax, Pattern, PatternArgTy, PatternComponent, Puzzle,
-    RegisterDecl, Value,
+    Block, BlockID, BlockInfo, Code, Define, DefinedValue, Label, LuaCall, Macro, MacroBranch,
+    MacroCall, ParsedSyntax, Pattern, PatternArgTy, PatternComponent, Puzzle, RegisterDecl, Value,
+    lua::LuaMacros,
 };
 
 use super::Instruction;
@@ -26,7 +27,9 @@ static PRELUDE: LazyLock<ParsedSyntax> = LazyLock::new(|| {
     let mut prelude = match parse(
         &str,
         &|_| {
-            panic!("Prelude should not import files (because it's easier not to implement; message henry if you need this feature)")
+            panic!(
+                "Prelude should not import files (because it's easier not to implement; message henry if you need this feature)"
+            )
         },
         true,
     ) {
@@ -130,7 +133,7 @@ pub fn parse(
                 let import = match find_import(*name) {
                     Ok(v) => v,
                     Err(e) => {
-                        return Err(mk_error(format!("Unable to find import: {e}"), name.span()))
+                        return Err(mk_error(format!("Unable to find import: {e}"), name.span()));
                     }
                 };
 
@@ -229,7 +232,7 @@ fn parse_registers(pair: Pair<'_, Rule>) -> Result<RegisterDecl, Box<Error<Rule>
                             return Err(mk_error(
                                 "Cannot create a switchable puzzle with a theoretical register",
                                 span,
-                            ))
+                            ));
                         }
                         Puzzle::Real { architectures } => decls.extend_from_slice(&architectures),
                     }
@@ -346,7 +349,12 @@ fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Puzzle, Box<Error<Rule>>> {
 
                     match puzzle.get_preset(&orders) {
                         Some(arch) => arch,
-                        None => return Err(mk_error("Could not find a builtin architecture for the given puzzle with the given orders", span)),
+                        None => {
+                            return Err(mk_error(
+                                "Could not find a builtin architecture for the given puzzle with the given orders",
+                                span,
+                            ));
+                        }
                     }
                 }
                 Rule::custom_architecture => {
@@ -553,7 +561,13 @@ fn parse_macro(
 
         for branch in branches.iter() {
             if let Some(counterexample) = pattern.conflicts_with(name_str, &branch.pattern) {
-                return Err(mk_error(format!("This macro branch conflicts with the macro branch with the pattern `{}`. A counterexample matching both is `{counterexample}`.", branch.pattern.span().slice()), span));
+                return Err(mk_error(
+                    format!(
+                        "This macro branch conflicts with the macro branch with the pattern `{}`. A counterexample matching both is `{counterexample}`.",
+                        branch.pattern.span().slice()
+                    ),
+                    span,
+                ));
             }
         }
 

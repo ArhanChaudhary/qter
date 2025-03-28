@@ -1,4 +1,4 @@
-use crate::{architectures::Permutation, Int, Algorithm, I, U};
+use crate::{Algorithm, I, Int, U, architectures::Permutation};
 
 /// Calculate the GCD of two numbers
 pub fn gcd(mut a: Int<U>, mut b: Int<U>) -> Int<U> {
@@ -172,12 +172,12 @@ mod tests {
     use internment::ArcIntern;
 
     use crate::{
+        Algorithm, Int, U,
         architectures::PuzzleDefinition,
         discrete_math::{
             decode, extended_euclid, gcd, lcm,
             length_of_substring_that_this_string_is_n_repeated_copies_of,
         },
-        Int, Algorithm, U,
     };
 
     use super::chinese_remainder_theorem;
@@ -260,11 +260,9 @@ mod tests {
 
         let mut cube = group.group.identity();
 
-        let permutation = Algorithm::new_from_generators(
-            Arc::clone(&group.group),
-            vec![ArcIntern::from("U")],
-        )
-        .unwrap();
+        let permutation =
+            Algorithm::new_from_generators(Arc::clone(&group.group), vec![ArcIntern::from("U")])
+                .unwrap();
 
         assert_eq!(decode(&cube, &[8], &permutation).unwrap(), Int::<U>::zero());
 

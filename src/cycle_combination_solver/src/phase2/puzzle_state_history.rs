@@ -1,4 +1,4 @@
-use super::puzzle::{cube3::Cube3, Move, PuzzleDef, PuzzleState};
+use super::puzzle::{Move, PuzzleDef, PuzzleState, cube3::Cube3};
 use std::{ops::Index, slice::SliceIndex};
 
 pub trait PuzzleStateHistoryInterface<P: PuzzleState> {

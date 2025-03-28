@@ -7,7 +7,7 @@ use std::{
     simd::{
         cmp::{SimdPartialEq, SimdPartialOrd},
         num::SimdInt,
-        u8x16, u8x8,
+        u8x8, u8x16,
     },
 };
 
@@ -314,7 +314,7 @@ impl Cube3 {
 mod tests {
     extern crate test;
     use super::*;
-    use crate::phase2::puzzle::{tests::apply_moves, PuzzleDef};
+    use crate::phase2::puzzle::{PuzzleDef, tests::apply_moves};
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
     #[test]

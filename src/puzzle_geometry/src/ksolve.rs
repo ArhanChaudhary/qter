@@ -1,5 +1,5 @@
 use std::{
-    num::{NonZeroU16, NonZeroU8},
+    num::{NonZeroU8, NonZeroU16},
     sync::LazyLock,
 };
 use thiserror::Error;
@@ -196,7 +196,7 @@ impl TryFrom<KSolveFields> for KSolve {
                             return Err(KSolveConstructionError::PermutationOutOfRange(
                                 expected_piece_count,
                                 perm.get(),
-                            ))
+                            ));
                         }
                     }
                 }

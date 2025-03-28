@@ -3,7 +3,7 @@ use std::{cell::OnceCell, mem};
 use internment::ArcIntern;
 use itertools::Itertools;
 use pest::error::Error;
-use qter_core::{mk_error, WithSpan};
+use qter_core::{WithSpan, mk_error};
 
 use crate::{BlockID, Code, Expanded, ExpandedCode, ExpansionInfo, Instruction, ParsedSyntax};
 
