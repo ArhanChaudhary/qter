@@ -1,6 +1,6 @@
 use crate::architectures::{Architecture, Permutation, PermutationGroup};
 use crate::discrete_math::length_of_substring_that_this_string_is_n_repeated_copies_of;
-use crate::{Int, U, WithSpan};
+use crate::{I, Int, U, WithSpan};
 use internment::ArcIntern;
 use itertools::Itertools;
 use std::{cell::OnceCell, sync::Arc};
@@ -12,6 +12,7 @@ pub struct Algorithm {
     permutation: Permutation,
     generators: Vec<ArcIntern<str>>,
     chromatic_orders: OnceCell<Vec<Int<U>>>,
+    repeat: Int<I>,
 }
 
 impl Algorithm {
@@ -65,12 +66,21 @@ impl Algorithm {
             permutation,
             generators,
             chromatic_orders: OnceCell::new(),
+            repeat: Int::<I>::one(),
         })
     }
 
     /// Get the underlying permutation of the `Algorithm` instance
     pub fn permutation(&self) -> &Permutation {
         &self.permutation
+    }
+
+    /// Find the result of applying the algorithm to the identity `exponent` times.
+    ///
+    /// This calculates the value in O(1) time with respect to `exponent`.
+    pub fn exponentiate(&mut self, exponent: Int<I>) {
+        self.repeat = exponent;
+        self.permutation.exponentiate(exponent);
     }
 
     /// Returns a list of generators that when composed, give the same result as applying `.permutation()`
@@ -81,6 +91,10 @@ impl Algorithm {
     /// Return the permutation group that this alg operates on
     pub fn group(&self) -> &PermutationGroup {
         &self.group
+    }
+
+    pub fn repeat(&self) -> Int<I> {
+        self.repeat
     }
 
     /// Return the permutation group that this alg operates on in an Arc
@@ -131,11 +145,12 @@ pub enum Facelets {
 
 /// The generator of a register along with the facelets needed to decode it
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum RegisterGenerator {
     Theoretical,
     Puzzle {
         generator: Algorithm,
-        facelets: Vec<usize>,
+        solved_goto_facelets: Vec<usize>,
     },
 }
 

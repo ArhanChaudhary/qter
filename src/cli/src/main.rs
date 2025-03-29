@@ -11,10 +11,11 @@ use color_eyre::{
 };
 use compiler::compile;
 use internment::ArcIntern;
-use interpreter::{ExecutionState, Interpreter, PausedState};
+use interpreter::{ExecutionState, Interpreter, PausedState, PuzzleState};
 use itertools::Itertools;
 use qter_core::{
     Algorithm, I, Int,
+    architectures::Permutation,
     table_encoding::{decode_table, encode_table},
 };
 
@@ -144,7 +145,7 @@ fn main() -> color_eyre::Result<()> {
                 }
             };
 
-            let interpreter = Interpreter::new(program);
+            let interpreter: Interpreter<Permutation> = Interpreter::new(program);
 
             if trace == 0 {
                 interpret_fast(interpreter)?;
@@ -201,7 +202,7 @@ fn main() -> color_eyre::Result<()> {
     Ok(())
 }
 
-fn interpret_fast(mut interpreter: Interpreter) -> color_eyre::Result<()> {
+fn interpret_fast<P: PuzzleState>(mut interpreter: Interpreter<P>) -> color_eyre::Result<()> {
     loop {
         let state = interpreter.step_until_halt();
 
@@ -226,15 +227,17 @@ fn interpret_fast(mut interpreter: Interpreter) -> color_eyre::Result<()> {
     }
 }
 
-fn give_number_input(
-    interpreter: &mut Interpreter,
-) -> color_eyre::Result<(usize, Option<Algorithm>, Int<I>)> {
+fn give_number_input<P: PuzzleState>(
+    interpreter: &mut Interpreter<P>,
+) -> color_eyre::Result<(usize, Option<Algorithm>)> {
     loop {
         let mut number = String::new();
         io::stdin().read_line(&mut number)?;
         match number.parse::<Int<I>>() {
             Ok(v) => match interpreter.give_input(v) {
-                Ok((puzzle_idx, alg)) => break Ok((puzzle_idx, alg, v)),
+                Ok((puzzle_idx, exponentiated_alg)) => {
+                    break Ok((puzzle_idx, exponentiated_alg));
+                }
                 Err(e) => println!("{e}"),
             },
             Err(_) => println!("Please input an integer"),
@@ -242,7 +245,10 @@ fn give_number_input(
     }
 }
 
-fn interpret_slow(mut interpreter: Interpreter, trace: u8) -> color_eyre::Result<()> {
+fn interpret_slow<P: PuzzleState>(
+    mut interpreter: Interpreter<P>,
+    trace: u8,
+) -> color_eyre::Result<()> {
     let pad_amt = ((interpreter.program().instructions.len() - 1).ilog10() + 1) as usize;
 
     loop {
@@ -343,10 +349,11 @@ fn interpret_slow(mut interpreter: Interpreter, trace: u8) -> color_eyre::Result
         }
 
         if should_give_input {
-            let (puzzle_idx, alg, mut count) = give_number_input(&mut interpreter)?;
+            let (puzzle_idx, exponentiated_alg) = give_number_input(&mut interpreter)?;
 
-            if let Some(alg) = alg {
+            if let Some(alg) = exponentiated_alg {
                 let mut seq = alg.generators().to_owned();
+                let mut count = alg.repeat();
 
                 if count < Int::<I>::zero() {
                     alg.group().invert_alg(&mut seq);

@@ -34,7 +34,7 @@ impl RegisterIdx {
             RegisterIdx::Theoretical => RegisterGenerator::Theoretical,
             RegisterIdx::Real { idx, arch } => RegisterGenerator::Puzzle {
                 generator: Algorithm::new_from_effect(arch, vec![(*idx, Int::<U>::one())]),
-                facelets: arch.registers()[*idx].signature_facelets(),
+                solved_goto_facelets: arch.registers()[*idx].signature_facelets(),
             },
         }
     }
