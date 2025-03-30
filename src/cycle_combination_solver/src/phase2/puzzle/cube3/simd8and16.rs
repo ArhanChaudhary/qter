@@ -3,9 +3,10 @@
 use super::common::Cube3Interface;
 use crate::phase2::puzzle::OrientedPartition;
 use std::{
+    fmt,
     num::NonZeroU8,
     simd::{
-        cmp::{SimdPartialEq, SimdPartialOrd},
+        cmp::{SimdOrd, SimdPartialEq, SimdPartialOrd},
         num::SimdInt,
         u8x8, u8x16,
     },
@@ -23,6 +24,12 @@ const CO_INV_SWIZZLE: u8x8 = u8x8::from_array([0, 2, 1, 0, 2, 1, 0, 0]);
 const EP_IDENTITY: u8x16 =
     u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
 const CP_IDENTITY: u8x8 = u8x8::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
+
+const EDGE_ORI_MASK: u8x16 = u8x16::splat(0b0001_0000);
+const EDGE_PERM_MASK: u8x16 = u8x16::splat(0b0000_1111);
+const CORNER_ORI_MASK: u8x8 = u8x8::splat(0b0011_0000);
+const CORNER_PERM_MASK: u8x8 = u8x8::splat(0b0000_0111);
+const CORNER_ORI_CARRY: u8x8 = u8x8::splat(0x30);
 
 impl Cube3Interface for Cube3 {
     fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self {
@@ -55,7 +62,7 @@ impl Cube3Interface for Cube3 {
     }
 
     fn replace_compose(&mut self, a: &Self, b: &Self) {
-        // Benchmarked on a 2020 Mac M1: 1.93ns
+        // Benchmarked on a 2025 Mac M4: 1.67ns
         self.ep = a.ep.swizzle_dyn(b.ep);
         self.eo = (a.eo.swizzle_dyn(b.ep) + b.eo) & u8x16::splat(1);
         self.cp = a.cp.swizzle_dyn(b.cp);
@@ -69,7 +76,7 @@ impl Cube3Interface for Cube3 {
         // [1] https://github.com/Voltara/vcube
         // [2] http://wwwhomes.uni-bielefeld.de/achim/addition_chain.html
         //
-        // Benchmarked on a 2020 Mac M1: 3.58ns
+        // Benchmarked on a 2025 Mac M4: 2.5ns
         //
         // Note that there does not seem to be any speed difference when these
         // instructions are reordered (codegen puts all u8x8 and u8x16 swizzles
@@ -110,7 +117,7 @@ impl Cube3Interface for Cube3 {
     }
 
     fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
-        // Benchmarked on a 2020 Mac M1: 19.97ns (worst case) 5.42ns (average)
+        // Benchmarked on a 2025 Mac M4: 14.34ns (worst case) 4.04ns (average)
 
         // Helps avoid bounds checks in codegen
         #![allow(clippy::int_plus_one)]
@@ -240,9 +247,88 @@ impl Cube3Interface for Cube3 {
     }
 }
 
+#[derive(PartialEq, Clone, Hash)]
+pub struct CompressedCube3 {
+    edges: u8x16,
+    corners: u8x8,
+}
+
+impl fmt::Debug for CompressedCube3 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut ep = [0; 16];
+        let mut eo = [0; 16];
+        let mut cp = [0; 8];
+        let mut co = [0; 8];
+
+        for i in 0..16 {
+            ep[i] = self.edges[i] & 0b1111;
+            eo[i] = self.edges[i] >> 4;
+        }
+
+        for i in 0..8 {
+            cp[i] = self.corners[i] & 0b111;
+            co[i] = self.corners[i] >> 4;
+        }
+
+        f.debug_struct("CompressedCube3")
+            .field("ep", &ep)
+            .field("eo", &eo)
+            .field("cp", &cp)
+            .field("co", &co)
+            .finish()
+    }
+}
+
+impl Cube3Interface for CompressedCube3 {
+    fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self {
+        let corners_transformation = &sorted_transformations[0];
+        let edges_transformation = &sorted_transformations[1];
+
+        let mut edges = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15]);
+        let mut corners = u8x8::splat(0);
+
+        for i in 0..12 {
+            let (perm, orientation_delta) = edges_transformation[i];
+            edges[i] = perm | (orientation_delta << 4);
+        }
+
+        for i in 0..8 {
+            let (perm, orientation) = corners_transformation[i];
+            corners[i] = perm | (orientation << 4);
+        }
+
+        CompressedCube3 { edges, corners }
+    }
+
+    fn replace_compose(&mut self, a: &Self, b: &Self) {
+        // Benchmarked on a 2025 Mac M4: 1.12ns
+        let mut edges_composed = a.edges.swizzle_dyn(b.edges & EDGE_PERM_MASK);
+        edges_composed ^= b.edges & EDGE_ORI_MASK;
+
+        let mut corners_composed = a.corners.swizzle_dyn(b.corners & CORNER_PERM_MASK);
+        corners_composed += b.corners & CORNER_ORI_MASK;
+        corners_composed = corners_composed.simd_min(corners_composed - CORNER_ORI_CARRY);
+
+        self.edges = edges_composed;
+        self.corners = corners_composed;
+    }
+
+    fn replace_inverse(&mut self, _a: &Self) {
+        unimplemented!();
+    }
+
+    fn induces_sorted_cycle_type(&self, _sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
+        unimplemented!();
+    }
+
+    fn orbit_bytes_by_index(&self, _index: usize) -> (&[u8], &[u8]) {
+        unimplemented!();
+    }
+}
+
 impl Cube3 {
     pub fn replace_inverse_brute(&mut self, a: &Self) {
-        // Benchmarked on a 2020 Mac M1: 5.69ns
+        // Benchmarked on a 2025 Mac M4: 4.11ns
         self.ep = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15]);
         self.cp = u8x8::splat(0);
         // Brute force the inverse by checking all possible values and
@@ -290,7 +376,7 @@ impl Cube3 {
     }
 
     pub fn replace_inverse_raw(&mut self, a: &Self) {
-        // Benchmarked on a 2020 Mac M1: 7.1ns
+        // Benchmarked on a 2025 Mac M4: 3.8ns
 
         for i in 0..12 {
             // SAFETY: ep is length 12, so i is always in bounds

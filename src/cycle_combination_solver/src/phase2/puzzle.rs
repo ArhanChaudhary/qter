@@ -831,6 +831,8 @@ mod tests {
         many_compositions::<HeapPuzzle>();
         #[cfg(simd8and16)]
         many_compositions::<cube3::simd8and16::Cube3>();
+        #[cfg(simd8and16)]
+        many_compositions::<cube3::simd8and16::CompressedCube3>();
         #[cfg(avx2)]
         many_compositions::<cube3::avx2::Cube3>();
     }
@@ -882,6 +884,8 @@ mod tests {
         expanded_move::<HeapPuzzle>();
         #[cfg(simd8and16)]
         expanded_move::<cube3::simd8and16::Cube3>();
+        #[cfg(simd8and16)]
+        expanded_move::<cube3::simd8and16::CompressedCube3>();
         #[cfg(avx2)]
         expanded_move::<cube3::avx2::Cube3>();
     }
@@ -1377,6 +1381,12 @@ mod tests {
     }
 
     #[bench]
+    #[cfg_attr(not(simd8and16), ignore)]
+    fn bench_compose_cube3_simd8and16_compressed(b: &mut Bencher) {
+        bench_compose_helper::<cube3::simd8and16::CompressedCube3>(b);
+    }
+
+    #[bench]
     #[cfg_attr(not(avx2), ignore)]
     fn bench_compose_cube3_avx2(b: &mut Bencher) {
         bench_compose_helper::<cube3::avx2::Cube3>(b);
@@ -1398,14 +1408,5 @@ mod tests {
     #[cfg_attr(not(avx2), ignore)]
     fn bench_induces_sorted_cycle_type_cube3_avx2_average(b: &mut Bencher) {
         bench_induces_sorted_cycle_type_average_helper::<cube3::avx2::Cube3>(b);
-    }
-
-    #[test]
-    fn test_thing() {
-        let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let solved = cube3_def.new_solved_state();
-        let trans = apply_moves(&cube3_def, &solved, "U R U' F", 1);
-
-        dbg!(trans);
     }
 }
