@@ -11,7 +11,7 @@ use color_eyre::{
 };
 use compiler::compile;
 use internment::ArcIntern;
-use interpreter::{ExecutionState, Interpreter, PausedState, PuzzleState};
+use interpreter::{ActionPerformed, ExecutionState, Interpreter, PausedState, PuzzleState};
 use itertools::Itertools;
 use qter_core::{
     Algorithm, I, Int,
@@ -118,13 +118,16 @@ fn main() -> color_eyre::Result<()> {
 
     match args {
         Commands::Compile { file: _ } => todo!(),
-        Commands::Interpret { file, trace } => {
+        Commands::Interpret {
+            file,
+            trace: trace_level,
+        } => {
             let program = match file.extension().and_then(|v| v.to_str()) {
                 Some("q") => todo!(),
                 Some("qat") => {
-                    let text = fs::read_to_string(file)?;
+                    let qat = fs::read_to_string(file)?;
 
-                    compile(&text, |name| {
+                    compile(&qat, |name| {
                         let path = PathBuf::from(name);
 
                         if path.ancestors().count() > 1 {
@@ -147,10 +150,10 @@ fn main() -> color_eyre::Result<()> {
 
             let interpreter: Interpreter<Permutation> = Interpreter::new(program);
 
-            if trace == 0 {
-                interpret_fast(interpreter)?;
+            if trace_level == 0 {
+                interpret_normal(interpreter)?;
             } else {
-                interpret_slow(interpreter, trace)?;
+                interpret_traced(interpreter, trace_level)?;
             }
         }
         Commands::Debug { file: _ } => todo!(),
@@ -193,8 +196,8 @@ fn main() -> color_eyre::Result<()> {
 
             let decoded = decode_table(&data).ok_or_eyre("Could not decode the table")?;
 
-            for alg in decoded {
-                println!("{}", alg.iter().join(" "));
+            for moves in decoded {
+                println!("{}", moves.iter().join(" "));
             }
         }
     }
@@ -202,15 +205,15 @@ fn main() -> color_eyre::Result<()> {
     Ok(())
 }
 
-fn interpret_fast<P: PuzzleState>(mut interpreter: Interpreter<P>) -> color_eyre::Result<()> {
+fn interpret_normal<P: PuzzleState>(mut interpreter: Interpreter<P>) -> color_eyre::Result<()> {
     loop {
-        let state = interpreter.step_until_halt();
+        let paused_state = interpreter.step_until_halt();
 
-        let is_input = matches!(
-            state,
+        let is_input_state = matches!(
+            paused_state,
             PausedState::Input {
                 max_input: _,
-                register_idx: _,
+                puzzle_idx: _,
                 register: _
             }
         );
@@ -219,7 +222,7 @@ fn interpret_fast<P: PuzzleState>(mut interpreter: Interpreter<P>) -> color_eyre
             println!("{message}");
         }
 
-        if is_input {
+        if is_input_state {
             give_number_input(&mut interpreter)?;
         } else {
             break Ok(());
@@ -234,7 +237,7 @@ fn give_number_input<P: PuzzleState>(
         let mut number = String::new();
         io::stdin().read_line(&mut number)?;
         match number.parse::<Int<I>>() {
-            Ok(v) => match interpreter.give_input(v) {
+            Ok(value) => match interpreter.give_input(value) {
                 Ok((puzzle_idx, exponentiated_alg)) => {
                     break Ok((puzzle_idx, exponentiated_alg));
                 }
@@ -245,21 +248,21 @@ fn give_number_input<P: PuzzleState>(
     }
 }
 
-fn interpret_slow<P: PuzzleState>(
+fn interpret_traced<P: PuzzleState>(
     mut interpreter: Interpreter<P>,
-    trace: u8,
+    trace_level: u8,
 ) -> color_eyre::Result<()> {
-    let pad_amt = ((interpreter.program().instructions.len() - 1).ilog10() + 1) as usize;
+    let pad_amount = ((interpreter.program().instructions.len() - 1).ilog10() + 1) as usize;
 
     loop {
-        if trace >= 3 {
-            let mut string = interpreter.program_counter().to_string();
+        if trace_level >= 3 {
+            let mut program_counter = interpreter.program_counter().to_string();
 
-            while string.len() < pad_amt {
-                string.push(' ');
+            while program_counter.len() < pad_amount {
+                program_counter.push(' ');
             }
 
-            eprint!("{} | ", string);
+            eprint!("{} | ", program_counter);
         }
 
         let action = interpreter.step();
@@ -268,80 +271,83 @@ fn interpret_slow<P: PuzzleState>(
         let mut halted = false;
 
         match action {
-            interpreter::ActionPerformed::None => {
-                if trace >= 2 {
+            ActionPerformed::None => {
+                if trace_level >= 2 {
                     eprintln!("Printing");
                 }
             }
-            interpreter::ActionPerformed::Paused => {
+            ActionPerformed::Paused => {
                 let is_input = matches!(
                     interpreter.execution_state(),
                     ExecutionState::Paused(PausedState::Input {
                         max_input: _,
-                        register_idx: _,
+                        puzzle_idx: _,
                         register: _
                     })
                 );
 
                 if is_input {
-                    if trace >= 2 {
+                    if trace_level >= 2 {
                         eprintln!("Accepting input");
                     }
 
                     should_give_input = true;
                 } else {
-                    if trace >= 2 {
+                    if trace_level >= 2 {
                         eprintln!("Halting");
                     }
 
                     halted = true;
                 }
             }
-            interpreter::ActionPerformed::Goto { location: _ } => {
-                if trace >= 3 {
+            ActionPerformed::Goto { instruction_idx: _ } => {
+                if trace_level >= 3 {
                     eprintln!("Jumping");
                 }
             }
-            interpreter::ActionPerformed::FailedSolvedGoto {
+            ActionPerformed::FailedSolvedGoto {
                 puzzle_idx,
                 facelets: _,
             } => {
-                if trace >= 2 {
+                if trace_level >= 2 {
                     eprintln!("Inspect puzzle {puzzle_idx} - {}", "NOT TAKEN".red());
                 }
             }
-            interpreter::ActionPerformed::SucceededSolvedGoto {
+            ActionPerformed::SucceededSolvedGoto {
                 puzzle_idx,
                 facelets: _,
-                location: _,
+                instruction_idx: _,
             } => {
-                if trace >= 2 {
+                if trace_level >= 2 {
                     eprintln!("Inspect puzzle {puzzle_idx} - {}", "TAKEN".green());
                 }
             }
-            interpreter::ActionPerformed::AddedToTheoretical { register_idx, amt } => {
+            ActionPerformed::AddedToTheoretical {
+                puzzle_idx: register_idx,
+                amt,
+            } => {
                 eprintln!("Theoretical {register_idx} += {amt}");
             }
-            interpreter::ActionPerformed::ExecutedAlgorithm {
+            ActionPerformed::ExecutedAlgorithm {
                 puzzle_idx,
                 algorithm,
             } => {
                 eprint!("Puzzle {puzzle_idx}:");
 
-                for generator in algorithm.generators() {
-                    eprint!(" {generator}");
+                for move_ in algorithm.move_seq() {
+                    eprint!(" {move_}");
                 }
 
                 eprintln!();
             }
-            interpreter::ActionPerformed::Panicked => {
+            ActionPerformed::Panicked => {
                 eprintln!("{}", "Panicked!".red());
                 halted = true;
             }
         }
 
-        while let Some(message) = interpreter.messages().pop_front() {
-            println!("{message}");
+        while let Some(interpreter_message) = interpreter.messages().pop_front() {
+            println!("{interpreter_message}");
         }
 
         if halted {
@@ -351,27 +357,31 @@ fn interpret_slow<P: PuzzleState>(
         if should_give_input {
             let (puzzle_idx, exponentiated_alg) = give_number_input(&mut interpreter)?;
 
-            if let Some(alg) = exponentiated_alg {
-                let mut seq = alg.generators().to_owned();
-                let mut count = alg.repeat();
+            let Some(exponentiated_puzzle_alg) = exponentiated_alg else {
+                continue;
+            };
 
-                if count < Int::<I>::zero() {
-                    alg.group().invert_alg(&mut seq);
-                    count = -count;
-                }
+            let mut move_seq = exponentiated_puzzle_alg.move_seq().to_owned();
+            let mut repeat = exponentiated_puzzle_alg.repeat();
 
-                eprint!("Puzzle {puzzle_idx}:");
-
-                while count > Int::<I>::zero() {
-                    for generator in &seq {
-                        eprint!(" {generator}");
-                    }
-
-                    count -= Int::<I>::one();
-                }
-
-                eprintln!();
+            if repeat < Int::<I>::zero() {
+                exponentiated_puzzle_alg
+                    .group()
+                    .invert_generator_moves(&mut move_seq);
+                repeat = -repeat;
             }
+
+            eprint!("Puzzle {puzzle_idx}:");
+
+            while repeat > Int::<I>::zero() {
+                for move_ in &move_seq {
+                    eprint!(" {move_}");
+                }
+
+                repeat -= Int::<I>::one();
+            }
+
+            eprintln!();
         }
     }
 }

@@ -230,5 +230,5 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
         presets.push(Arc::new(architecture));
     }
 
-    Ok(PuzzleDefinition { group, presets })
+    Ok(PuzzleDefinition { perm_group: group, presets })
 }

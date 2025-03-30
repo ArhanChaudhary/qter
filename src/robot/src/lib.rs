@@ -46,16 +46,16 @@ pub fn validate_calibration_alg(
         .collect::<HashSet<_>>();
 
     let mut process_position = |puzzle: &Permutation| {
-        for ((colors_found, maps_to), pattern) in unique_colors_found
+        for ((colors_found, &maps_to), (mapping, pattern)) in unique_colors_found
             .iter_mut()
             .zip(puzzle.mapping())
             .zip(patterns.iter_mut())
         {
-            let color = group.facelet_colors()[*maps_to].to_owned();
+            let color = group.facelet_colors()[maps_to].to_owned();
 
-            let len = pattern.0.len();
-            let code = pattern.0.entry(color.to_owned()).or_insert(len);
-            pattern.1.push(*code);
+            let len = mapping.len();
+            let code = *mapping.entry(color.to_owned()).or_insert(len);
+            pattern.push(code);
 
             colors_found.insert(color);
         }
@@ -81,12 +81,12 @@ pub fn validate_calibration_alg(
 
     failures.identical_patterns = patterns
         .into_iter()
-        .map(|v| v.1)
+        .map(|(_, pattern)| pattern)
         .enumerate()
         .sorted_by(|a, b| a.1.cmp(&b.1))
-        .map(|v| IdenticalPatternEquivalenceClass {
-            facelets: vec![v.0],
-            pattern_shared: v.1,
+        .map(|(i, pattern)| IdenticalPatternEquivalenceClass {
+            facelets: vec![i],
+            pattern_shared: pattern,
         })
         .coalesce(|mut a, b| {
             if a.pattern_shared == b.pattern_shared {
@@ -133,8 +133,8 @@ pub fn find_calibration_scramble(
     let mut affected_by = vec![Vec::new(); group.facelet_count()];
 
     for (generator, perm) in group.generators() {
-        for facelet in perm.cycles().iter().flat_map(|v| v.iter()) {
-            affected_by[*facelet].push(generator.to_owned());
+        for &facelet in perm.cycles().iter().flat_map(|cycle| cycle.iter()) {
+            affected_by[facelet].push(generator.to_owned());
         }
     }
 
@@ -202,7 +202,7 @@ mod tests {
         let cube =
             PuzzleDefinition::parse(include_str!("../../qter_core/puzzles/3x3.txt")).unwrap();
 
-        cube.group
+        cube.perm_group
     }
 
     #[test]
@@ -327,7 +327,7 @@ mod tests {
         );
 
         let mut descramble = alg.to_owned();
-        group.invert_alg(&mut descramble);
+        group.invert_generator_moves(&mut descramble);
         alg.extend_from_slice(&descramble);
 
         let err = validate_calibration_alg(&group, &alg);

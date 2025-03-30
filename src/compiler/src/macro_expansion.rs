@@ -5,29 +5,32 @@ use itertools::Itertools;
 use pest::error::Error;
 use qter_core::{WithSpan, mk_error};
 
-use crate::{BlockID, Code, Expanded, ExpandedCode, ExpansionInfo, Instruction, ParsedSyntax};
+use crate::{
+    BlockID, Code, ExpandedCode, ExpandedCodeComponent, ExpansionInfo, Instruction, Macro,
+    ParsedSyntax, TaggedInstruction,
+};
 
 use super::parsing::Rule;
 
-pub fn expand(mut parsed: ParsedSyntax) -> Result<Expanded, Box<Error<Rule>>> {
+pub fn expand(mut parsed: ParsedSyntax) -> Result<ExpandedCode, Box<Error<Rule>>> {
     // TODO: Logic of `after`
     while expand_block(BlockID(0), &mut parsed.expansion_info, &mut parsed.code)? {}
 
-    Ok(Expanded {
+    Ok(ExpandedCode {
         block_info: parsed.expansion_info.block_info,
-        code: parsed
+        expanded_code_components: parsed
             .code
             .into_iter()
-            .map(|v| {
-                let span = v.span().to_owned();
-                let (instruction, id) = v.into_inner();
+            .map(|tagged_instruction| {
+                let span = tagged_instruction.span().to_owned();
+                let (instruction, maybe_block_id) = tagged_instruction.into_inner();
 
                 let expanded = match instruction {
-                    Instruction::Label(label) => ExpandedCode::Label(label),
+                    Instruction::Label(label) => ExpandedCodeComponent::Label(label),
                     Instruction::Code(Code::Primitive(primitive)) => {
-                        ExpandedCode::Instruction(primitive, id.unwrap())
+                        ExpandedCodeComponent::Instruction(primitive, maybe_block_id.unwrap())
                     }
-                    i => unreachable!("{i:?}"),
+                    illegal => unreachable!("{illegal:?}"),
                 };
 
                 WithSpan::new(expanded, span)
@@ -38,42 +41,43 @@ pub fn expand(mut parsed: ParsedSyntax) -> Result<Expanded, Box<Error<Rule>>> {
 
 /// Returns whether any changes were made
 fn expand_block(
-    id: BlockID,
-    info: &mut ExpansionInfo,
-    code: &mut Vec<WithSpan<(Instruction, Option<BlockID>)>>,
+    block_id: BlockID,
+    expansion_info: &mut ExpansionInfo,
+    code: &mut Vec<WithSpan<TaggedInstruction>>,
 ) -> Result<bool, Box<Error<Rule>>> {
     // Will be set if anything is ever changed
     let changed = OnceCell::<()>::new();
 
     *code = mem::take(code)
         .into_iter()
-        .map(|mut instruction| {
-            if instruction.1.is_none() {
-                instruction.1 = Some(id);
+        .map(|mut tagged_instruction| {
+            let maybe_block_id = &mut tagged_instruction.1;
+            if maybe_block_id.is_none() {
+                *maybe_block_id = Some(block_id);
                 let _ = changed.set(());
             }
 
-            instruction
+            tagged_instruction
         })
-        .flat_map(|v| {
-            let id = v.1.unwrap();
+        .flat_map(|tagged_instruction| {
+            let span = tagged_instruction.span().to_owned();
 
-            let block_info = info.block_info.0.get_mut(&id).unwrap();
+            let (instruction, maybe_block_id) = tagged_instruction.into_inner();
+            let block_id = maybe_block_id.unwrap();
 
-            let span = v.span().to_owned();
-            let instruction = v.into_inner();
+            let block_info = expansion_info.block_info.0.get_mut(&block_id).unwrap();
 
-            match instruction.0 {
+            match instruction {
                 Instruction::Label(mut label) => {
-                    if label.block.is_none() {
-                        label.block = Some(id);
+                    if label.maybe_block_id.is_none() {
+                        label.maybe_block_id = Some(block_id);
                         let _ = changed.set(());
                     }
 
                     block_info.labels.push(label.to_owned());
 
                     vec![Ok(WithSpan::new(
-                        (Instruction::Label(label), instruction.1),
+                        (Instruction::Label(label), maybe_block_id),
                         span,
                     ))]
                 }
@@ -107,10 +111,12 @@ fn expand_block(
                     }
                 },
                 Instruction::Code(code) => {
-                    match expand_code(instruction.1.unwrap(), info, code, &changed) {
-                        Ok(v) => v
+                    match expand_code(block_id, expansion_info, code, &changed) {
+                        Ok(tagged_instructions) => tagged_instructions
                             .into_iter()
-                            .map(|v| Ok(WithSpan::new(v, span.to_owned())))
+                            .map(|tagged_instruction| {
+                                Ok(WithSpan::new(tagged_instruction, span.to_owned()))
+                            })
                             .collect_vec(),
                         Err(e) => vec![Err(e)],
                     }
@@ -125,23 +131,28 @@ fn expand_block(
 }
 
 fn expand_code(
-    id: BlockID,
-    info: &mut ExpansionInfo,
+    block_id: BlockID,
+    expansion_info: &mut ExpansionInfo,
     code: Code,
     changed: &OnceCell<()>,
-) -> Result<Vec<(Instruction, Option<BlockID>)>, Box<Error<Rule>>> {
+) -> Result<Vec<TaggedInstruction>, Box<Error<Rule>>> {
     let macro_call = match code {
-        Code::Primitive(v) => return Ok(vec![(Instruction::Code(Code::Primitive(v)), Some(id))]),
-        Code::Macro(v) => v,
+        Code::Primitive(prim) => {
+            return Ok(vec![(
+                Instruction::Code(Code::Primitive(prim)),
+                Some(block_id),
+            )]);
+        }
+        Code::Macro(mac) => mac,
     };
 
     let _ = changed.set(());
 
-    let macro_access = match info.available_macros.get(&(
+    let macro_access = match expansion_info.available_macros.get(&(
         macro_call.name.span().source(),
         ArcIntern::clone(&*macro_call.name),
     )) {
-        Some(v) => v,
+        Some(macro_name) => macro_name,
         None => {
             return Err(mk_error(
                 "Macro was not found in this scope",
@@ -150,7 +161,7 @@ fn expand_code(
         }
     };
 
-    let macro_def = info
+    let macro_def = expansion_info
         .macros
         .get(&(
             ArcIntern::clone(macro_access),
@@ -159,13 +170,13 @@ fn expand_code(
         .unwrap();
 
     Ok(match &**macro_def {
-        crate::Macro::Splice {
+        Macro::UserDefined {
             branches: _,
             after: _,
         } => todo!(),
-        crate::Macro::Builtin(call) => call(info, macro_call.arguments, id)?
+        Macro::Builtin(macro_fn) => macro_fn(expansion_info, macro_call.arguments, block_id)?
             .into_iter()
-            .map(|v| (v, Some(id)))
+            .map(|instruction| (instruction, Some(block_id)))
             .collect_vec(),
     })
 }

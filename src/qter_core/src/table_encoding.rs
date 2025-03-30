@@ -46,7 +46,7 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
                         stats.frequencies.push(0);
                         idx
                     }
-                    Some(idx) => *idx,
+                    Some(&idx) => idx,
                 };
 
                 stats.frequencies[idx as usize] += 1;
@@ -54,13 +54,13 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
 
             // Note: `disallowed_pairs` will actually contain the set of allowed pairs and we will take the complement of the set later
             for (a, b) in alg.iter().tuple_windows() {
-                let a = symbol_indices.get(a).unwrap();
-                let b = symbol_indices.get(b).unwrap();
+                let a = *symbol_indices.get(a).unwrap();
+                let b = *symbol_indices.get(b).unwrap();
 
                 if a < b {
-                    stats.disallowed_pairs.insert((*a, *b));
+                    stats.disallowed_pairs.insert((a, b));
                 } else {
-                    stats.disallowed_pairs.insert((*b, *a));
+                    stats.disallowed_pairs.insert((b, a));
                 }
             }
 
@@ -97,8 +97,8 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
 
     stream.extend_from_slice(&(stats.frequencies.len() as u32).to_le_bytes());
 
-    for (symbol, idx) in symbol_indices.iter().sorted_unstable_by_key(|(_, i)| **i) {
-        let freq = stats.frequencies[*idx as usize];
+    for (symbol, &idx) in symbol_indices.iter().sorted_unstable_by_key(|(_, i)| **i) {
+        let freq = stats.frequencies[idx as usize];
 
         stream.extend_from_slice(&(symbol.len() as u32).to_le_bytes());
         stream.extend_from_slice(symbol.as_bytes());

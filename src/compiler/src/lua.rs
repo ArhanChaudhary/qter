@@ -3,24 +3,25 @@ use qter_core::{I, Int};
 
 #[derive(Clone, Debug)]
 pub struct LuaMacros {
-    lua: Lua,
+    lua_vm: Lua,
 }
 
 impl LuaMacros {
     pub fn new() -> mlua::Result<LuaMacros> {
-        let lua = Lua::new();
+        let lua_vm = Lua::new();
 
-        lua.register_userdata_type(Self::int_userdata)?;
+        lua_vm.register_userdata_type(Self::init_userdata)?;
 
-        let big = lua.create_function(|_lua, v| Ok(AnyUserData::wrap(Self::value_to_int(v)?)))?;
+        let to_big =
+            lua_vm.create_function(|_, v| Ok(AnyUserData::wrap(Self::value_to_int(v)?)))?;
 
-        lua.globals().set("big", big)?;
+        lua_vm.globals().set("big", to_big)?;
 
-        Ok(LuaMacros { lua })
+        Ok(LuaMacros { lua_vm })
     }
 
-    pub fn add_chunk(&self, code: &str) -> mlua::Result<()> {
-        self.lua.load(code).exec()
+    pub fn add_code(&self, code: &str) -> mlua::Result<()> {
+        self.lua_vm.load(code).exec()
     }
 
     fn value_to_int(v: Value) -> mlua::Result<Int<I>> {
@@ -31,61 +32,61 @@ impl LuaMacros {
         }
     }
 
-    fn int_userdata(registry: &mut UserDataRegistry<Int<I>>) {
-        registry.add_meta_function("__add", |_lua, (lhs, rhs): (Value, Value)| {
+    fn init_userdata(registry: &mut UserDataRegistry<Int<I>>) {
+        registry.add_meta_function("__add", |_, (lhs, rhs): (Value, Value)| {
             Ok(AnyUserData::wrap(
                 Self::value_to_int(lhs)? + Self::value_to_int(rhs)?,
             ))
         });
 
-        registry.add_meta_function("__sub", |_lua, (lhs, rhs): (Value, Value)| {
+        registry.add_meta_function("__sub", |_, (lhs, rhs): (Value, Value)| {
             Ok(AnyUserData::wrap(
                 Self::value_to_int(lhs)? - Self::value_to_int(rhs)?,
             ))
         });
 
-        registry.add_meta_function("__mul", |_lua, (lhs, rhs): (Value, Value)| {
+        registry.add_meta_function("__mul", |_, (lhs, rhs): (Value, Value)| {
             Ok(AnyUserData::wrap(
                 Self::value_to_int(lhs)? * Self::value_to_int(rhs)?,
             ))
         });
 
-        registry.add_meta_function("__div", |_lua, (lhs, rhs): (Value, Value)| {
+        registry.add_meta_function("__div", |_, (lhs, rhs): (Value, Value)| {
             Ok(AnyUserData::wrap(
                 Self::value_to_int(lhs)? / Self::value_to_int(rhs)?,
             ))
         });
 
-        registry.add_meta_function("__mod", |_lua, (lhs, rhs): (Value, Value)| {
+        registry.add_meta_function("__mod", |_, (lhs, rhs): (Value, Value)| {
             Ok(AnyUserData::wrap(Int::<I>::from(
                 Self::value_to_int(lhs)? % Self::value_to_int(rhs)?,
             )))
         });
 
-        registry.add_meta_function("__unm", |_lua, v: Value| {
+        registry.add_meta_function("__unm", |_, v: Value| {
             Ok(AnyUserData::wrap(-Self::value_to_int(v)?))
         });
 
-        registry.add_meta_function("__eq", |_lua, (lhs, rhs): (Value, Value)| {
+        registry.add_meta_function("__eq", |_, (lhs, rhs): (Value, Value)| {
             Ok(Value::Boolean(
                 Self::value_to_int(lhs)? == Self::value_to_int(rhs)?,
             ))
         });
 
-        registry.add_meta_function("__lt", |_lua, (lhs, rhs): (Value, Value)| {
+        registry.add_meta_function("__lt", |_, (lhs, rhs): (Value, Value)| {
             Ok(Value::Boolean(
                 Self::value_to_int(lhs)? < Self::value_to_int(rhs)?,
             ))
         });
 
-        registry.add_meta_function("__le", |_lua, (lhs, rhs): (Value, Value)| {
+        registry.add_meta_function("__le", |_, (lhs, rhs): (Value, Value)| {
             Ok(Value::Boolean(
                 Self::value_to_int(lhs)? <= Self::value_to_int(rhs)?,
             ))
         });
 
-        registry.add_meta_function("__tostring", |lua, v: Value| {
-            mlua::String::wrap(Self::value_to_int(v)?.to_string().as_bytes()).into_lua(lua)
+        registry.add_meta_function("__tostring", |lua_vm, v: Value| {
+            mlua::String::wrap(Self::value_to_int(v)?.to_string().as_bytes()).into_lua(lua_vm)
         });
     }
 }
@@ -99,10 +100,11 @@ mod tests {
 
     #[test]
     fn custom_numeric() {
-        let lua = LuaMacros::new().unwrap();
+        let lua_vm = LuaMacros::new().unwrap();
 
-        lua.add_chunk(
-            "
+        lua_vm
+            .add_code(
+                "
             function fail()
                 assert(false)
             end
@@ -117,11 +119,12 @@ mod tests {
                 assert(-big(10) == big(-10))
             end
         ",
-        )
-        .unwrap();
+            )
+            .unwrap();
 
         assert!(
-            lua.lua
+            lua_vm
+                .lua_vm
                 .globals()
                 .get::<Function>("fail")
                 .unwrap()
@@ -132,7 +135,8 @@ mod tests {
         let too_big = Int::<I>::from(u64::MAX - 5);
         let too_big = too_big * too_big;
 
-        lua.lua
+        lua_vm
+            .lua_vm
             .globals()
             .get::<Function>("test")
             .unwrap()

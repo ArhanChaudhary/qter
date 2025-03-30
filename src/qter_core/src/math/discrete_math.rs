@@ -138,20 +138,20 @@ pub fn decode(
     facelets: &[usize],
     generator: &Algorithm,
 ) -> Option<Int<U>> {
-    chinese_remainder_theorem(facelets.iter().map(|facelet| {
-        let maps_to = permutation.mapping()[*facelet];
+    chinese_remainder_theorem(facelets.iter().map(|&facelet| {
+        let maps_to = permutation.mapping()[facelet];
 
-        let chromatic_order = generator.chromatic_orders_by_facelets()[*facelet];
+        let chromatic_order = generator.chromatic_orders_by_facelets()[facelet];
 
-        if maps_to == *facelet {
+        if maps_to == facelet {
             return Some((Int::zero(), chromatic_order));
         }
 
         let mut i = Int::<U>::one();
         let mut maps_to_found_at = None;
-        let mut facelet_at = generator.permutation().mapping()[*facelet];
+        let mut facelet_at = generator.permutation().mapping()[facelet];
 
-        while facelet_at != *facelet {
+        while facelet_at != facelet {
             if facelet_at == maps_to {
                 maps_to_found_at = Some(i);
                 break;
@@ -254,15 +254,17 @@ mod tests {
 
     #[test]
     fn test_decode() {
-        let group = Arc::new(
+        let cube_def = Arc::new(
             PuzzleDefinition::parse(include_str!("../../../qter_core/puzzles/3x3.txt")).unwrap(),
         );
 
-        let mut cube = group.group.identity();
+        let mut cube = cube_def.perm_group.identity();
 
-        let permutation =
-            Algorithm::new_from_generators(Arc::clone(&group.group), vec![ArcIntern::from("U")])
-                .unwrap();
+        let permutation = Algorithm::new_from_move_seq(
+            Arc::clone(&cube_def.perm_group),
+            vec![ArcIntern::from("U")],
+        )
+        .unwrap();
 
         assert_eq!(decode(&cube, &[8], &permutation).unwrap(), Int::<U>::zero());
 

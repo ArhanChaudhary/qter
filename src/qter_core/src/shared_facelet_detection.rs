@@ -92,7 +92,7 @@ pub fn algorithms_to_cycle_generators(
 
                     let chromatic_order =
                         length_of_substring_that_this_string_is_n_repeated_copies_of(
-                            cycle.iter().map(|v| &*group.facelet_colors()[*v]),
+                            cycle.iter().map(|&idx| &*group.facelet_colors()[idx]),
                         );
 
                     unshared_cycles.push(CycleGeneratorSubcycle {
@@ -104,9 +104,9 @@ pub fn algorithms_to_cycle_generators(
                 CycleGenerator {
                     generator_sequence: algorithm.to_owned(),
                     permutation,
-                    order: unshared_cycles
-                        .iter()
-                        .fold(Int::one(), |a, v| lcm(a, v.chromatic_order)),
+                    order: unshared_cycles.iter().fold(Int::one(), |acc, subcycle| {
+                        lcm(acc, subcycle.chromatic_order)
+                    }),
                     unshared_cycles,
                     group: Arc::clone(&group),
                 }
@@ -125,7 +125,10 @@ mod tests {
 
     #[test]
     fn simple() {
-        let PuzzleDefinition { group: _, presets } = PuzzleDefinition::parse(
+        let PuzzleDefinition {
+            perm_group: _,
+            presets,
+        } = PuzzleDefinition::parse(
             "
                 COLORS
 

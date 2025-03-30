@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter::Peekable, sync::Arc};
+use std::{collections::HashMap, iter::Peekable, ops::Deref, sync::Arc};
 
 use internment::ArcIntern;
 use itertools::Itertools;
@@ -10,7 +10,8 @@ use qter_core::{
 };
 
 use crate::{
-    BlockID, Expanded, ExpandedCode, LabelReference, Primitive, RegisterReference, parsing::Rule,
+    BlockID, ExpandedCode, ExpandedCodeComponent, LabelReference, Primitive, Puzzle,
+    RegisterReference, parsing::Rule,
 };
 
 #[derive(Clone, Debug)]
@@ -23,8 +24,8 @@ impl RegisterIdx {
     fn facelets(&self) -> Facelets {
         match self {
             RegisterIdx::Theoretical => Facelets::Theoretical,
-            RegisterIdx::Real { idx, arch } => Facelets::Puzzle {
-                facelets: arch.registers()[*idx].signature_facelets(),
+            &RegisterIdx::Real { idx, ref arch } => Facelets::Puzzle {
+                facelets: arch.registers()[idx].signature_facelets(),
             },
         }
     }
@@ -32,81 +33,83 @@ impl RegisterIdx {
     fn generator(&self) -> RegisterGenerator {
         match self {
             RegisterIdx::Theoretical => RegisterGenerator::Theoretical,
-            RegisterIdx::Real { idx, arch } => RegisterGenerator::Puzzle {
-                generator: Algorithm::new_from_effect(arch, vec![(*idx, Int::<U>::one())]),
-                solved_goto_facelets: arch.registers()[*idx].signature_facelets(),
+            &RegisterIdx::Real { idx, ref arch } => RegisterGenerator::Puzzle {
+                generator: Algorithm::new_from_effect(arch, vec![(idx, Int::<U>::one())]),
+                solved_goto_facelets: arch.registers()[idx].signature_facelets(),
             },
         }
     }
 }
 
-fn coalesce_adds<V: Iterator<Item = WithSpan<ExpandedCode>>>(
-    iter: &mut Peekable<V>,
+fn coalesce_adds<V: Iterator<Item = WithSpan<ExpandedCodeComponent>>>(
+    code_components_iter: &mut Peekable<V>,
     global_regs: &GlobalRegs,
 ) -> Option<Vec<WithSpan<CoalescedAdds>>> {
     let mut adds = HashMap::new();
 
-    while let Some(ExpandedCode::Instruction(Primitive::Add { amt, register }, _)) =
-        iter.peek().map(|v| &**v)
+    while let Some(ExpandedCodeComponent::Instruction(Primitive::Add { amt, register }, _)) =
+        code_components_iter.peek().map(|v| &**v)
     {
-        let reg = global_regs.get_reg(register);
-        adds.entry(reg.1)
+        let (reg_idx, puzzle_idx) = global_regs.get_reg(register);
+        adds.entry(puzzle_idx)
             .or_insert(Vec::new())
-            .push((reg.0, amt.to_owned()));
-        iter.next();
+            .push((reg_idx, amt.to_owned()));
+        code_components_iter.next();
     }
 
     if adds.is_empty() {
-        return iter
+        return code_components_iter
             .next()
             .map(|next| vec![next.map(CoalescedAdds::Instruction)]);
     }
 
     Some(
         adds.into_iter()
-            .sorted_unstable_by_key(|v| v.0)
-            .map(|(puzzle, adds)| {
-                let span = adds
+            .sorted_unstable_by_key(|&(puzzle_idx, _)| puzzle_idx)
+            .map(|(puzzle_idx, adds)| {
+                let merged_adds = adds
                     .iter()
-                    .map(|v| v.1.span().to_owned())
-                    .reduce(|a, v| a.merge(&v))
+                    .map(|(_, add)| add.span().to_owned())
+                    .reduce(|acc, add| acc.merge(&add))
                     .unwrap();
 
                 WithSpan::new(
                     match &adds[0].0 {
                         RegisterIdx::Theoretical => CoalescedAdds::AddTheoretical(
-                            puzzle,
-                            adds.iter().map(|v| *v.1).sum::<Int<U>>(),
+                            puzzle_idx,
+                            adds.iter().map(|(_, amt)| *amt.deref()).sum::<Int<U>>(),
                         ),
                         RegisterIdx::Real { idx: _, arch } => CoalescedAdds::AddPuzzle(
-                            puzzle,
+                            puzzle_idx,
                             Algorithm::new_from_effect(
                                 arch,
                                 adds.iter()
-                                    .map(|v| {
+                                    .map(|(reg_idx, add)| {
                                         (
-                                            match &v.0 {
+                                            match reg_idx {
                                                 RegisterIdx::Theoretical => unreachable!(),
                                                 RegisterIdx::Real { idx, arch: _ } => *idx,
                                             },
-                                            *v.1,
+                                            *add.deref(),
                                         )
                                     })
                                     .collect_vec(),
                             ),
                         ),
                     },
-                    span,
+                    merged_adds,
                 )
             })
             .collect_vec(),
     )
 }
 
+// all usize here is puzzle index
+
 enum CoalescedAdds {
     AddPuzzle(usize, Algorithm),
     AddTheoretical(usize, Int<U>),
-    Instruction(ExpandedCode),
+    Instruction(ExpandedCodeComponent),
 }
 
 enum CoalescedAddsRemovedLabels {
@@ -123,14 +126,18 @@ struct GlobalRegs {
 
 impl GlobalRegs {
     fn get_reg(&self, reference: &RegisterReference) -> (RegisterIdx, usize) {
-        match reference.block == BlockID(0) {
-            true => self.register_table.get(&reference.name).unwrap().to_owned(),
+        match reference.block_id == BlockID(0) {
+            true => self
+                .register_table
+                .get(&reference.reg_name)
+                .unwrap()
+                .to_owned(),
             false => todo!(),
         }
     }
 }
 
-pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
+pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>>> {
     let mut label_locations = HashMap::new();
 
     let mut global_regs = GlobalRegs {
@@ -142,7 +149,7 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
     if let Some(decl) = &expanded.block_info.0.get(&BlockID(0)).unwrap().registers {
         for puzzle in &decl.puzzles {
             match puzzle {
-                crate::Puzzle::Theoretical { name, order } => {
+                Puzzle::Theoretical { name, order } => {
                     global_regs.register_table.insert(
                         ArcIntern::clone(name),
                         (RegisterIdx::Theoretical, global_regs.theoretical.len()),
@@ -150,17 +157,13 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
 
                     global_regs.theoretical.push(order.to_owned());
                 }
-                crate::Puzzle::Real { architectures } => {
+                Puzzle::Real { architectures } => {
                     // TODO: Support for architecture switching
                     // Just take the first architecture
                     let (names, architecture) = &architectures[0];
-                    for (i, reg) in names
-                        .iter()
-                        .zip(architecture.registers().iter())
-                        .enumerate()
-                    {
+                    for (i, name) in names.iter().enumerate() {
                         global_regs.register_table.insert(
-                            ArcIntern::clone(reg.0),
+                            ArcIntern::clone(name),
                             (
                                 RegisterIdx::Real {
                                     idx: i,
@@ -185,36 +188,36 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
     let mut program_counter = 0;
 
     let instructions = expanded
-        .code
+        .expanded_code_components
         .into_iter()
         .peekable()
-        .batching(|iter| coalesce_adds(iter, &global_regs))
+        .batching(|code_components_iter| coalesce_adds(code_components_iter, &global_regs))
         .flatten()
-        .filter_map(|v| {
-            let span = v.span().to_owned();
+        .filter_map(|coalesced_adds| {
+            let span = coalesced_adds.span().to_owned();
 
-            match v.into_inner() {
-                CoalescedAdds::Instruction(ExpandedCode::Instruction(primitive, _block)) => {
+            match coalesced_adds.into_inner() {
+                CoalescedAdds::Instruction(ExpandedCodeComponent::Instruction(primitive, _)) => {
                     program_counter += 1;
                     Some(CoalescedAddsRemovedLabels::Instruction(primitive))
                 }
-                CoalescedAdds::Instruction(ExpandedCode::Label(label)) => {
+                CoalescedAdds::Instruction(ExpandedCodeComponent::Label(label)) => {
                     label_locations.insert(
                         LabelReference {
                             name: label.name,
-                            block: label.block.unwrap(),
+                            block_id: label.maybe_block_id.unwrap(),
                         },
                         program_counter,
                     );
                     None
                 }
-                CoalescedAdds::AddPuzzle(puzzle, permutation) => {
+                CoalescedAdds::AddPuzzle(puzzle_idx, alg) => {
                     program_counter += 1;
-                    Some(CoalescedAddsRemovedLabels::AddPuzzle(puzzle, permutation))
+                    Some(CoalescedAddsRemovedLabels::AddPuzzle(puzzle_idx, alg))
                 }
-                CoalescedAdds::AddTheoretical(idx, amt) => {
+                CoalescedAdds::AddTheoretical(puzzle_idx, amt) => {
                     program_counter += 1;
-                    Some(CoalescedAddsRemovedLabels::AddTheoretical(idx, amt))
+                    Some(CoalescedAddsRemovedLabels::AddTheoretical(puzzle_idx, amt))
                 }
             }
             .map(|v| WithSpan::new(v, span))
@@ -223,22 +226,23 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
 
     let instructions = instructions
         .into_iter()
-        .map(|v| {
-            let span = v.span().to_owned();
-            let instruction = match v.into_inner() {
-                CoalescedAddsRemovedLabels::AddPuzzle(puzzle, permutation) => {
+        .map(|fully_simplified| {
+            let span = fully_simplified.span().to_owned();
+
+            let prim = match fully_simplified.into_inner() {
+                CoalescedAddsRemovedLabels::AddPuzzle(puzzle_idx, alg) => {
                     return Ok(WithSpan::new(
                         Instruction::Algorithm {
-                            puzzle_idx: puzzle,
-                            algorithm: permutation,
+                            puzzle_idx,
+                            algorithm: alg,
                         },
                         span,
                     ));
                 }
-                CoalescedAddsRemovedLabels::AddTheoretical(idx, amt) => {
+                CoalescedAddsRemovedLabels::AddTheoretical(puzzle_idx, amt) => {
                     return Ok(WithSpan::new(
                         Instruction::AddTheoretical {
-                            register_idx: idx,
+                            puzzle_idx,
                             amount: amt,
                         },
                         span,
@@ -247,7 +251,7 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
                 CoalescedAddsRemovedLabels::Instruction(v) => v,
             };
 
-            let instruction = match instruction {
+            let instruction = match prim {
                 Primitive::Add {
                     amt: _,
                     register: _,
@@ -274,52 +278,52 @@ pub fn strip_expanded(expanded: Expanded) -> Result<Program, Box<Error<Rule>>> {
                         }
                     };
 
-                    let (reg, idx) = global_regs.get_reg(&register);
+                    let (reg_idx, puzzle_idx) = global_regs.get_reg(&register);
 
                     Instruction::SolvedGoto {
                         instruction_idx: *label_locations.get(&label).unwrap(),
-                        register_idx: idx,
-                        facelets: reg.facelets(),
+                        puzzle_idx,
+                        facelets: reg_idx.facelets(),
                     }
                 }
                 Primitive::Input { message, register } => {
-                    let (reg, idx) = global_regs.get_reg(&register);
+                    let (reg_idx, puzzle_idx) = global_regs.get_reg(&register);
 
                     Instruction::Input {
                         message: message.into_inner(),
-                        register_idx: idx,
-                        register: reg.generator(),
+                        puzzle_idx,
+                        register: reg_idx.generator(),
                     }
                 }
                 Primitive::Halt { message, register } => match register {
                     Some(register) => {
-                        let (reg, idx) = global_regs.get_reg(&register);
+                        let (reg_idx, puzzle_idx) = global_regs.get_reg(&register);
 
                         Instruction::Halt {
                             message: message.into_inner(),
-                            register_idx: Some(idx),
-                            register: Some(reg.generator()),
+                            maybe_puzzle_idx: Some(puzzle_idx),
+                            maybe_register: Some(reg_idx.generator()),
                         }
                     }
                     None => Instruction::Halt {
                         message: message.into_inner(),
-                        register_idx: None,
-                        register: None,
+                        maybe_puzzle_idx: None,
+                        maybe_register: None,
                     },
                 },
                 Primitive::Print { message, register } => match register {
                     Some(register) => {
-                        let (reg, idx) = global_regs.get_reg(&register);
+                        let (reg_idx, puzzle_idx) = global_regs.get_reg(&register);
                         Instruction::Print {
                             message: message.into_inner(),
-                            register_idx: Some(idx),
-                            register: Some(reg.generator()),
+                            maybe_puzzle_idx: Some(puzzle_idx),
+                            maybe_register: Some(reg_idx.generator()),
                         }
                     }
                     None => Instruction::Print {
                         message: message.into_inner(),
-                        register_idx: None,
-                        register: None,
+                        maybe_puzzle_idx: None,
+                        maybe_register: None,
                     },
                 },
             };

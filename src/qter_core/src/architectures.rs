@@ -24,7 +24,7 @@ pub(crate) const OPTIMIZED_TABLES: [&[u8]; 2] = [
 #[derive(Debug)]
 pub struct PuzzleDefinition {
     /// The permutation group of the puzzle
-    pub group: Arc<PermutationGroup>,
+    pub perm_group: Arc<PermutationGroup>,
     /// A list of preset architectures
     pub presets: Vec<Arc<Architecture>>,
 }
@@ -46,7 +46,7 @@ impl PuzzleDefinition {
         for (i, order) in orders.iter().enumerate() {
             let mut found_one = false;
 
-            for (j, cycle) in architecture.cycle_generators.iter().enumerate() {
+            for (j, cycle) in architecture.registers.iter().enumerate() {
                 if !used[j] && cycle.order() == *order {
                     used[j] = true;
                     found_one = true;
@@ -69,7 +69,7 @@ impl PuzzleDefinition {
         new_arch.decoded_table = OnceLock::new();
 
         for i in 0..swizzle.len() {
-            new_arch.cycle_generators.swap(i, swizzle[i]);
+            new_arch.registers.swap(i, swizzle[i]);
 
             for j in i..swizzle.len() {
                 if i == swizzle[j] {
@@ -85,7 +85,7 @@ impl PuzzleDefinition {
     /// Find a preset with the specified cycle orders
     pub fn get_preset(&self, orders: &[Int<U>]) -> Option<Arc<Architecture>> {
         for preset in &self.presets {
-            if preset.cycle_generators.len() != orders.len() {
+            if preset.registers.len() != orders.len() {
                 continue;
             }
 
@@ -120,17 +120,17 @@ impl PermutationGroup {
             assert!(generator.facelet_count <= facelet_colors.len());
         }
 
-        for generator in generators.iter_mut() {
-            generator.1.facelet_count = facelet_colors.len();
+        for (_, perm) in generators.iter_mut() {
+            perm.facelet_count = facelet_colors.len();
         }
 
         let mut generator_inverses = HashMap::new();
 
         'next_item: for (name, generator) in generators.iter() {
-            let mut inverse = generator.to_owned();
-            inverse.exponentiate(Int::from(-1));
+            let mut inverse_perm = generator.to_owned();
+            inverse_perm.exponentiate(Int::from(-1));
             for (name2, generator2) in generators.iter() {
-                if *generator2 == inverse {
+                if generator2 == &inverse_perm {
                     generator_inverses.insert(ArcIntern::clone(name), ArcIntern::clone(name2));
                     continue 'next_item;
                 }
@@ -188,7 +188,7 @@ impl PermutationGroup {
     ) -> Result<(), ArcIntern<str>> {
         for generator in generators {
             let generator = match self.generators.get(&ArcIntern::from(generator.as_ref())) {
-                Some(idx) => idx,
+                Some(v) => v,
                 None => return Err(ArcIntern::clone(generator)),
             };
 
@@ -198,12 +198,13 @@ impl PermutationGroup {
         Ok(())
     }
 
-    /// Find the inverse of an algorithm expressed as a product of generators
-    pub fn invert_alg(&self, alg: &mut [ArcIntern<str>]) {
-        alg.reverse();
+    /// Find the inverse of a move sequence expressed as a product of generators
+    pub fn invert_generator_moves(&self, generator_moves: &mut [ArcIntern<str>]) {
+        generator_moves.reverse();
 
-        for generator in alg {
-            *generator = ArcIntern::clone(self.generator_inverses.get(generator).unwrap());
+        for generator_move in generator_moves {
+            *generator_move =
+                ArcIntern::clone(self.generator_inverses.get(generator_move).unwrap());
         }
     }
 }
@@ -243,7 +244,7 @@ impl core::fmt::Debug for Permutation {
 impl Permutation {
     /// Create a permutation using cycles notation. `cycles` is a list of cycles where each cycle is a list of facelet indices.
     pub fn from_cycles(mut cycles: Vec<Vec<usize>>) -> Permutation {
-        cycles.retain(|v| v.len() > 1);
+        cycles.retain(|cycle| cycle.len() > 1);
 
         assert!(cycles.iter().all_unique());
 
@@ -268,8 +269,8 @@ impl Permutation {
             let mut mapping = (0..self.facelet_count).collect::<Vec<_>>();
 
             for cycle in cycles {
-                for (start, end) in cycle.iter().cycle().tuple_windows().take(cycle.len()) {
-                    mapping[*start] = *end;
+                for (&start, &end) in cycle.iter().cycle().tuple_windows().take(cycle.len()) {
+                    mapping[start] = end;
                 }
             }
 
@@ -443,15 +444,18 @@ impl CycleGenerator {
 
         let mut cycles = Vec::<(Int<U>, usize)>::new();
 
-        for (i, (cycle_order, cycle_idx)) in cycles_with_extras.iter().enumerate() {
+        for (i, &(cycle_order, cycle_idx)) in cycles_with_extras.iter().enumerate() {
             if self.order()
                 != lcm_iter(
-                    cycles.iter().map(|v| v.0).chain(
-                        (i + 1..cycles_with_extras.len()).map(|idx| cycles_with_extras[idx].0),
-                    ),
+                    cycles
+                        .iter()
+                        .map(|&(chromatic_order, _)| chromatic_order)
+                        .chain(
+                            (i + 1..cycles_with_extras.len()).map(|idx| cycles_with_extras[idx].0),
+                        ),
                 )
             {
-                cycles.push((*cycle_order, *cycle_idx));
+                cycles.push((cycle_order, cycle_idx));
             }
         }
 
@@ -582,9 +586,9 @@ impl DecodingTable {
             }
         }
 
-        let closest = closest.unwrap();
+        let (_, remaining_offset, alg) = closest.unwrap();
 
-        (closest.1, closest.2)
+        (remaining_offset, alg)
     }
 
     pub(crate) fn orders(&self) -> &[Int<U>] {
@@ -595,8 +599,8 @@ impl DecodingTable {
 /// An architecture of a `PermutationGroup`
 #[derive(Debug, Clone)]
 pub struct Architecture {
-    group: Arc<PermutationGroup>,
-    cycle_generators: Vec<CycleGenerator>,
+    perm_group: Arc<PermutationGroup>,
+    registers: Vec<CycleGenerator>,
     shared_facelets: Vec<usize>,
     optimized_table: Option<Cow<'static, [u8]>>,
     decoded_table: OnceLock<DecodingTable>,
@@ -605,15 +609,16 @@ pub struct Architecture {
 impl Architecture {
     /// Create a new architecture from a permutation group and a list of algorithms.
     pub fn new(
-        group: Arc<PermutationGroup>,
+        perm_group: Arc<PermutationGroup>,
         algorithms: Vec<Vec<ArcIntern<str>>>,
     ) -> Result<Architecture, ArcIntern<str>> {
-        let processed = algorithms_to_cycle_generators(Arc::clone(&group), &algorithms)?;
+        let (registers, shared_facelets) =
+            algorithms_to_cycle_generators(Arc::clone(&perm_group), &algorithms)?;
 
         Ok(Architecture {
-            group,
-            cycle_generators: processed.0,
-            shared_facelets: processed.1,
+            perm_group,
+            registers,
+            shared_facelets,
             optimized_table: None,
             decoded_table: OnceLock::new(),
         })
@@ -627,7 +632,7 @@ impl Architecture {
     }
 
     /// Retrieve a table of optimized algorithms by how they affect each cycle type.
-    pub fn get_table(&self) -> &DecodingTable {
+    pub fn decoding_table(&self) -> &DecodingTable {
         self.decoded_table.get_or_init(|| {
             let table = match &self.optimized_table {
                 Some(encoded) => table_encoding::decode_table(encoded).unwrap(),
@@ -637,12 +642,12 @@ impl Architecture {
             let registers_decoding_info = self
                 .registers()
                 .iter()
-                .map(|v| {
+                .map(|register| {
                     (
-                        v.signature_facelets(),
-                        Algorithm::new_from_generators(
-                            Arc::clone(&self.group),
-                            v.generator_sequence().to_owned(),
+                        register.signature_facelets(),
+                        Algorithm::new_from_move_seq(
+                            Arc::clone(&self.perm_group),
+                            register.generator_sequence().to_owned(),
                         )
                         .unwrap(),
                     )
@@ -653,11 +658,13 @@ impl Architecture {
 
             let mut add_permutation = |alg: Vec<ArcIntern<str>>| {
                 let permutation =
-                    Algorithm::new_from_generators(self.group_arc(), alg.to_owned()).unwrap();
+                    Algorithm::new_from_move_seq(self.group_arc(), alg.to_owned()).unwrap();
 
                 let maybe_decoded = registers_decoding_info
                     .iter()
-                    .map(|reg| decode(permutation.permutation(), &reg.0, &reg.1))
+                    .map(|(facelets, generators)| {
+                        decode(permutation.permutation(), facelets, generators)
+                    })
                     .collect::<Option<Vec<_>>>();
 
                 if let Some(decoded) = maybe_decoded {
@@ -665,17 +672,17 @@ impl Architecture {
                 }
             };
 
-            for item in self.registers().iter().flat_map(|v| {
-                let mut inverse = v.generator_sequence.to_owned();
-                self.group.invert_alg(&mut inverse);
-                [v.generator_sequence.to_owned(), inverse]
+            for item in self.registers().iter().flat_map(|register| {
+                let mut inverse = register.generator_sequence.to_owned();
+                self.perm_group.invert_generator_moves(&mut inverse);
+                [register.generator_sequence.to_owned(), inverse]
             }) {
                 add_permutation(item);
             }
 
-            for item in table.iter().map(|v| {
-                let mut inverse = v.to_owned();
-                self.group.invert_alg(&mut inverse);
+            for item in table.iter().map(|inverse| {
+                let mut inverse = inverse.to_owned();
+                self.perm_group.invert_generator_moves(&mut inverse);
                 inverse
             }) {
                 add_permutation(item);
@@ -687,24 +694,28 @@ impl Architecture {
 
             DecodingTable {
                 table: data,
-                orders: self.registers().iter().map(|v| v.order()).collect(),
+                orders: self
+                    .registers()
+                    .iter()
+                    .map(|register| register.order())
+                    .collect(),
             }
         })
     }
 
     /// Get the underlying permutation group
     pub fn group(&self) -> &PermutationGroup {
-        &self.group
+        &self.perm_group
     }
 
     /// Get the underlying permutation group as an owned Rc
     pub fn group_arc(&self) -> Arc<PermutationGroup> {
-        Arc::clone(&self.group)
+        Arc::clone(&self.perm_group)
     }
 
     /// Get all of the registers of the architecture
     pub fn registers(&self) -> &[CycleGenerator] {
-        &self.cycle_generators
+        &self.registers
     }
 
     /// Get all of the facelets that are shared in the architecture
@@ -735,7 +746,7 @@ mod tests {
 
     #[test]
     fn three_by_three() {
-        let cube = PuzzleDefinition::parse(include_str!("../puzzles/3x3.txt")).unwrap();
+        let cube_def = PuzzleDefinition::parse(include_str!("../puzzles/3x3.txt")).unwrap();
 
         for (arch, expected) in [
             (&["U", "D"][..], &[4, 4][..]),
@@ -759,14 +770,14 @@ mod tests {
         .iter()
         {
             let arch = Architecture::new(
-                Arc::clone(&cube.group),
+                Arc::clone(&cube_def.perm_group),
                 arch.iter()
-                    .map(|v| v.split(" ").map(ArcIntern::from).collect_vec())
+                    .map(|alg| alg.split(" ").map(ArcIntern::from).collect_vec())
                     .collect_vec(),
             )
             .unwrap();
 
-            for (register, expected) in arch.cycle_generators.iter().zip(expected.iter()) {
+            for (register, expected) in arch.registers.iter().zip(expected.iter()) {
                 assert_eq!(register.order(), Int::<U>::from(*expected));
             }
         }
@@ -774,11 +785,12 @@ mod tests {
 
     #[test]
     fn exponentiation() {
-        let cube = PuzzleDefinition::parse(include_str!("../puzzles/3x3.txt")).unwrap();
+        let cube_def = PuzzleDefinition::parse(include_str!("../puzzles/3x3.txt")).unwrap();
 
-        let mut perm = cube.group.identity();
+        let mut perm = cube_def.perm_group.identity();
 
-        cube.group
+        cube_def
+            .perm_group
             .compose_generators_into(
                 &mut perm,
                 [ArcIntern::from("U"), ArcIntern::from("L")].iter(),
@@ -788,7 +800,7 @@ mod tests {
         let mut exp_perm = perm.clone();
         exp_perm.exponentiate(Int::<I>::from(7_u64));
 
-        let mut repeat_compose_perm = cube.group.identity();
+        let mut repeat_compose_perm = cube_def.perm_group.identity();
 
         repeat_compose_perm.compose(&perm);
         repeat_compose_perm.compose(&perm);

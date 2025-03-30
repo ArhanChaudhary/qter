@@ -29,26 +29,28 @@ pub fn compile(
 #[derive(Clone, Debug)]
 struct Label {
     name: ArcIntern<str>,
-    block: Option<BlockID>,
+    maybe_block_id: Option<BlockID>,
     available_in_blocks: Option<Vec<BlockID>>,
 }
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug)]
 struct LabelReference {
     name: ArcIntern<str>,
-    block: BlockID,
+    block_id: BlockID,
 }
+
+type TaggedInstruction = (Instruction, Option<BlockID>);
 
 #[derive(Clone, Debug)]
 struct Block {
-    code: Vec<WithSpan<(Instruction, Option<BlockID>)>>,
-    block: Option<BlockID>,
+    code: Vec<WithSpan<TaggedInstruction>>,
+    maybe_id: Option<BlockID>,
 }
 
 #[derive(Clone, Debug)]
 struct RegisterReference {
-    block: BlockID,
-    name: WithSpan<ArcIntern<str>>,
+    block_id: BlockID,
+    reg_name: WithSpan<ArcIntern<str>>,
 }
 
 #[derive(Clone, Debug)]
@@ -61,8 +63,8 @@ enum Primitive {
         label: WithSpan<LabelReference>,
     },
     SolvedGoto {
-        register: RegisterReference,
         label: WithSpan<LabelReference>,
+        register: RegisterReference,
     },
     Input {
         message: WithSpan<String>,
@@ -82,7 +84,7 @@ enum Primitive {
 enum Value {
     Int(Int<U>),
     Constant(ArcIntern<str>),
-    Word(ArcIntern<str>),
+    Ident(ArcIntern<str>),
     Block(Block),
 }
 
@@ -111,11 +113,11 @@ enum Instruction {
     Constant(ArcIntern<str>),
     LuaCall(LuaCall),
     Define(Define),
-    Registers(RegisterDecl),
+    Registers(RegistersDecl),
 }
 
 #[derive(Clone, Copy, Debug)]
-enum PatternArgTy {
+enum MacroArgTy {
     Int,
     Reg,
     Block,
@@ -123,19 +125,19 @@ enum PatternArgTy {
 }
 
 #[derive(Clone, Debug)]
-enum PatternComponent {
+enum MacroPatternComponent {
     Argument {
         name: WithSpan<ArcIntern<str>>,
-        ty: WithSpan<PatternArgTy>,
+        ty: WithSpan<MacroArgTy>,
     },
     Word(ArcIntern<str>),
 }
 
-impl PatternComponent {
+impl MacroPatternComponent {
     /// Returns `None` if the patterns do not conflict, otherwise returns a counterexample that would match both patterns.
-    fn conflicts_with(&self, other: &PatternComponent) -> Option<ArcIntern<str>> {
-        use PatternArgTy as A;
-        use PatternComponent as P;
+    fn conflicts_with(&self, other: &MacroPatternComponent) -> Option<ArcIntern<str>> {
+        use MacroArgTy as A;
+        use MacroPatternComponent as P;
 
         match (self, other) {
             (P::Argument { name: _, ty: a }, P::Argument { name: _, ty: b }) => match (**a, **b) {
@@ -158,11 +160,11 @@ impl PatternComponent {
 }
 
 #[derive(Clone, Debug)]
-struct Pattern(Vec<WithSpan<PatternComponent>>);
+struct MacroPattern(Vec<WithSpan<MacroPatternComponent>>);
 
-impl Pattern {
+impl MacroPattern {
     /// Returns `None` if the patterns do not conflict, otherwise returns a counterexample that would match both patterns.
-    pub fn conflicts_with(&self, macro_name: &str, other: &Pattern) -> Option<String> {
+    pub fn conflicts_with(&self, macro_name: &str, other: &MacroPattern) -> Option<String> {
         if self.0.len() != other.0.len() {
             return None;
         }
@@ -170,33 +172,27 @@ impl Pattern {
         self.0
             .iter()
             .zip(other.0.iter())
-            .map(|(a, b)| a.conflicts_with(b))
-            .try_fold(String::new(), |mut a, v| {
-                let v = v?;
+            .map(|(a_component, b_component)| a_component.conflicts_with(b_component))
+            .try_fold(String::new(), |mut acc, maybe_counterexample| {
+                let counterexample = maybe_counterexample?;
 
-                a.push(' ');
-                a.push_str(&v);
-                Some(a)
+                acc.push(' ');
+                acc.push_str(&counterexample);
+                Some(acc)
             })
             .map(|e| format!("{macro_name}{e}"))
     }
 }
 
 #[derive(Clone, Debug)]
-enum ValueOrReg {
-    Value(Value),
-    Register(RegisterReference),
-}
-
-#[derive(Clone, Debug)]
 struct MacroBranch {
-    pattern: WithSpan<Pattern>,
-    code: Vec<WithSpan<(Instruction, Option<BlockID>)>>,
+    pattern: WithSpan<MacroPattern>,
+    code: Vec<WithSpan<TaggedInstruction>>,
 }
 
 #[derive(Clone, Debug)]
 enum Macro {
-    Splice {
+    UserDefined {
         branches: Vec<WithSpan<MacroBranch>>,
         after: Option<WithSpan<ArcIntern<str>>>,
     },
@@ -210,7 +206,13 @@ enum Macro {
 }
 
 #[derive(Clone, Debug)]
-enum DefinedValue {
+enum ValueOrReg {
+    Value(Value),
+    Register(RegisterReference),
+}
+
+#[derive(Clone, Debug)]
+enum DefineValue {
     Value(WithSpan<Value>),
     LuaCall(WithSpan<LuaCall>),
 }
@@ -218,7 +220,7 @@ enum DefinedValue {
 #[derive(Clone, Debug)]
 struct Define {
     name: WithSpan<ArcIntern<str>>,
-    value: DefinedValue,
+    value: DefineValue,
 }
 
 #[derive(Clone, Debug)]
@@ -236,16 +238,16 @@ enum Puzzle {
 struct BlockID(pub usize);
 
 #[derive(Clone, Debug)]
-struct RegisterDecl {
+struct RegistersDecl {
     puzzles: Vec<Puzzle>,
-    block: Option<BlockID>,
+    maybe_block_id: Option<BlockID>,
 }
 
 #[derive(Debug, Clone)]
 struct BlockInfo {
-    parent: Option<BlockID>,
-    children: Vec<BlockID>,
-    registers: Option<RegisterDecl>,
+    parent_block: Option<BlockID>,
+    child_blocks: Vec<BlockID>,
+    registers: Option<RegistersDecl>,
     defines: Vec<Define>,
     labels: Vec<Label>,
 }
@@ -255,28 +257,40 @@ struct BlockInfoTracker(HashMap<BlockID, BlockInfo>);
 
 impl BlockInfoTracker {
     fn get_register(&self, reference: &RegisterReference) -> Option<(RegisterReference, &Puzzle)> {
-        let mut from = reference.block;
-        let name = reference.name.to_owned();
+        let mut from = reference.block_id;
+        let reg_name = reference.reg_name.to_owned();
 
         loop {
-            let info = self.0.get(&from)?;
-            let decl = info.registers.as_ref()?;
+            let block_info = self.0.get(&from)?;
+            let registers = block_info.registers.as_ref()?;
 
-            for puzzle in &decl.puzzles {
+            for puzzle in &registers.puzzles {
                 match puzzle {
                     Puzzle::Theoretical {
                         name: found_name,
                         order: _,
                     } => {
-                        if *name == **found_name {
-                            return Some((RegisterReference { block: from, name }, puzzle));
+                        if *reg_name == **found_name {
+                            return Some((
+                                RegisterReference {
+                                    block_id: from,
+                                    reg_name,
+                                },
+                                puzzle,
+                            ));
                         }
                     }
                     Puzzle::Real { architectures } => {
                         for (names, _) in architectures {
                             for found_name in names {
-                                if *name == **found_name {
-                                    return Some((RegisterReference { block: from, name }, puzzle));
+                                if *reg_name == **found_name {
+                                    return Some((
+                                        RegisterReference {
+                                            block_id: from,
+                                            reg_name,
+                                        },
+                                        puzzle,
+                                    ));
                                 }
                             }
                         }
@@ -284,35 +298,37 @@ impl BlockInfoTracker {
                 }
             }
 
-            from = info.parent?;
+            from = block_info.parent_block?;
         }
     }
 
     fn label_scope(&self, reference: &LabelReference) -> Option<LabelReference> {
-        let mut current = reference.block;
+        let mut current = reference.block_id;
 
         loop {
             let info = self.0.get(&current)?;
 
-            for label in &info.labels {
-                if label.name == reference.name {
-                    if let Some(available_in) = &label.available_in_blocks {
-                        if available_in.contains(&reference.block) {
-                            return Some(LabelReference {
-                                name: ArcIntern::clone(&reference.name),
-                                block: current,
-                            });
-                        }
-                    } else {
+            for label in info
+                .labels
+                .iter()
+                .filter(|label| label.name == reference.name)
+            {
+                if let Some(available_in) = &label.available_in_blocks {
+                    if available_in.contains(&reference.block_id) {
                         return Some(LabelReference {
                             name: ArcIntern::clone(&reference.name),
-                            block: current,
+                            block_id: current,
                         });
-                    };
-                }
+                    }
+                } else {
+                    return Some(LabelReference {
+                        name: ArcIntern::clone(&reference.name),
+                        block_id: current,
+                    });
+                };
             }
 
-            current = info.parent?;
+            current = info.parent_block?;
         }
     }
 }
@@ -334,17 +350,17 @@ struct ExpansionInfo {
 #[derive(Clone, Debug)]
 struct ParsedSyntax {
     expansion_info: ExpansionInfo,
-    code: Vec<WithSpan<(Instruction, Option<BlockID>)>>,
+    code: Vec<WithSpan<TaggedInstruction>>,
 }
 
 #[derive(Clone, Debug)]
-enum ExpandedCode {
+enum ExpandedCodeComponent {
     Instruction(Primitive, BlockID),
     Label(Label),
 }
 
 #[derive(Clone, Debug)]
-struct Expanded {
+struct ExpandedCode {
     block_info: BlockInfoTracker,
-    code: Vec<WithSpan<ExpandedCode>>,
+    expanded_code_components: Vec<WithSpan<ExpandedCodeComponent>>,
 }

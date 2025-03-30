@@ -10,45 +10,45 @@ use crate::{
 use std::collections::HashMap;
 
 fn expect_reg(
-    reg: WithSpan<Value>,
+    reg_value: WithSpan<Value>,
     syntax: &ExpansionInfo,
-    block: BlockID,
+    block_id: BlockID,
 ) -> Result<RegisterReference, Box<Error<Rule>>> {
-    match &*reg {
-        Value::Word(name) => match syntax.block_info.get_register(&RegisterReference {
-            block,
-            name: WithSpan::new(ArcIntern::clone(name), reg.span().to_owned()),
+    match &*reg_value {
+        Value::Ident(reg_name) => match syntax.block_info.get_register(&RegisterReference {
+            block_id,
+            reg_name: WithSpan::new(ArcIntern::clone(reg_name), reg_value.span().to_owned()),
         }) {
-            Some(v) => Ok(v.0),
+            Some((reg, _)) => Ok(reg),
             None => Err(mk_error(
-                format!("The register {name} does not exist"),
-                reg.span(),
+                format!("The register {reg_name} does not exist"),
+                reg_value.span(),
             )),
         },
-        _ => Err(mk_error("Expected a register", reg.span())),
+        _ => Err(mk_error("Expected a register", reg_value.span())),
     }
 }
 
 fn expect_label(
-    label: WithSpan<Value>,
-    block: BlockID,
+    label_value: WithSpan<Value>,
+    block_id: BlockID,
 ) -> Result<WithSpan<LabelReference>, Box<Error<Rule>>> {
-    match &*label {
-        Value::Word(word) => Ok(WithSpan::new(
+    match &*label_value {
+        Value::Ident(label_name) => Ok(WithSpan::new(
             LabelReference {
-                name: ArcIntern::clone(word),
-                block,
+                name: ArcIntern::clone(label_name),
+                block_id,
             },
-            label.span().to_owned(),
+            label_value.span().to_owned(),
         )),
-        _ => Err(mk_error("Expected a label", label.span())),
+        _ => Err(mk_error("Expected a label", label_value.span())),
     }
 }
 
 fn print_like(
     syntax: &ExpansionInfo,
     mut args: WithSpan<Vec<WithSpan<Value>>>,
-    block: BlockID,
+    block_id: BlockID,
 ) -> Result<(Option<RegisterReference>, WithSpan<String>), Box<Error<Rule>>> {
     if args.len() > 2 {
         return Err(mk_error(
@@ -57,31 +57,31 @@ fn print_like(
         ));
     }
 
-    let register = if args.len() == 2 {
-        Some(expect_reg(args.pop().unwrap(), syntax, block)?)
+    let maybe_reg = if args.len() == 2 {
+        Some(expect_reg(args.pop().unwrap(), syntax, block_id)?)
     } else {
         None
     };
 
     let message = args.pop().unwrap();
-    let message_span = message.span().to_owned();
+    let span = message.span().to_owned();
     let message = match message.into_inner() {
-        Value::Word(v) => {
-            if !v.starts_with('"') || !v.ends_with('"') {
-                return Err(mk_error("The message must be quoted", message_span));
+        Value::Ident(raw_message) => {
+            if !raw_message.starts_with('"') || !raw_message.ends_with('"') {
+                return Err(mk_error("The message must be quoted", span));
             }
 
-            let v = v.strip_prefix('"').unwrap_or(&v);
-            let v = v.strip_suffix('"').unwrap_or(v);
+            let raw_message = raw_message.strip_prefix('"').unwrap_or(&raw_message);
+            let raw_message = raw_message.strip_suffix('"').unwrap_or(raw_message);
 
-            WithSpan::new(v.to_owned(), message_span)
+            WithSpan::new(raw_message.to_owned(), span)
         }
         _ => {
-            return Err(mk_error("Expected a message", message_span));
+            return Err(mk_error("Expected a message", span));
         }
     };
 
-    Ok((register, message))
+    Ok((maybe_reg, message))
 }
 
 pub fn builtin_macros(
@@ -89,12 +89,12 @@ pub fn builtin_macros(
 ) -> HashMap<(ArcIntern<str>, ArcIntern<str>), WithSpan<Macro>> {
     let mut macros = HashMap::new();
 
-    let s = Span::new(ArcIntern::from(" "), 0, 0);
+    let dummy_span = Span::new(ArcIntern::from(" "), 0, 0);
 
     macros.insert(
         (prelude.to_owned(), ArcIntern::from("add")),
         WithSpan::new(
-            Macro::Builtin(|syntax, mut args, block| {
+            Macro::Builtin(|syntax, mut args, block_id| {
                 if args.len() != 2 {
                     return Err(mk_error(
                         format!("Expected two arguments, found {}", args.len()),
@@ -102,29 +102,29 @@ pub fn builtin_macros(
                     ));
                 }
 
-                let num = args.pop().unwrap();
-                let num = match &*num {
-                    Value::Int(int) => WithSpan::new(*int, num.span().to_owned()),
+                let second_arg = args.pop().unwrap();
+                let amt = match *second_arg {
+                    Value::Int(int) => WithSpan::new(int, second_arg.span().to_owned()),
                     _ => {
-                        return Err(mk_error("Expected a number", num.span()));
+                        return Err(mk_error("Expected a number", second_arg.span()));
                     }
                 };
 
-                let reg = expect_reg(args.pop().unwrap(), syntax, block)?;
+                let register = expect_reg(args.pop().unwrap(), syntax, block_id)?;
 
                 Ok(vec![Instruction::Code(Code::Primitive(Primitive::Add {
-                    amt: num,
-                    register: reg,
+                    amt,
+                    register,
                 }))])
             }),
-            s.to_owned(),
+            dummy_span.to_owned(),
         ),
     );
 
     macros.insert(
         (prelude.to_owned(), ArcIntern::from("goto")),
         WithSpan::new(
-            Macro::Builtin(|_syntax, mut args, block| {
+            Macro::Builtin(|_syntax, mut args, block_id| {
                 if args.len() != 1 {
                     return Err(mk_error(
                         format!("Expected one argument, found {}", args.len()),
@@ -132,20 +132,20 @@ pub fn builtin_macros(
                     ));
                 }
 
-                let label = expect_label(args.pop().unwrap(), block)?;
+                let label = expect_label(args.pop().unwrap(), block_id)?;
 
                 Ok(vec![Instruction::Code(Code::Primitive(Primitive::Goto {
                     label,
                 }))])
             }),
-            s.to_owned(),
+            dummy_span.to_owned(),
         ),
     );
 
     macros.insert(
         (prelude.to_owned(), ArcIntern::from("solved-goto")),
         WithSpan::new(
-            Macro::Builtin(|syntax, mut args, block| {
+            Macro::Builtin(|syntax, mut args, block_id| {
                 if args.len() != 2 {
                     return Err(mk_error(
                         format!("Expected two arguments, found {}", args.len()),
@@ -153,21 +153,21 @@ pub fn builtin_macros(
                     ));
                 }
 
-                let label = expect_label(args.pop().unwrap(), block)?;
-                let register = expect_reg(args.pop().unwrap(), syntax, block)?;
+                let label = expect_label(args.pop().unwrap(), block_id)?;
+                let register = expect_reg(args.pop().unwrap(), syntax, block_id)?;
 
                 Ok(vec![Instruction::Code(Code::Primitive(
                     Primitive::SolvedGoto { register, label },
                 ))])
             }),
-            s.to_owned(),
+            dummy_span.to_owned(),
         ),
     );
 
     macros.insert(
         (prelude.to_owned(), ArcIntern::from("input")),
         WithSpan::new(
-            Macro::Builtin(|syntax, mut args, block| {
+            Macro::Builtin(|syntax, mut args, block_id| {
                 if args.len() != 2 {
                     return Err(mk_error(
                         format!("Expected two arguments, found {}", args.len()),
@@ -175,14 +175,16 @@ pub fn builtin_macros(
                     ));
                 }
 
-                let register = expect_reg(args.pop().unwrap(), syntax, block)?;
+                let register = expect_reg(args.pop().unwrap(), syntax, block_id)?;
 
-                let message = args.pop().unwrap();
-                let message_span = message.span().to_owned();
-                let message = match message.into_inner() {
-                    Value::Word(v) => WithSpan::new(v.trim_matches('"').to_owned(), message_span),
+                let second_arg = args.pop().unwrap();
+                let span = second_arg.span().to_owned();
+                let message = match second_arg.into_inner() {
+                    Value::Ident(raw_message) => {
+                        WithSpan::new(raw_message.trim_matches('"').to_owned(), span)
+                    }
                     _ => {
-                        return Err(mk_error("Expected a message", message_span));
+                        return Err(mk_error("Expected a message", span));
                     }
                 };
 
@@ -191,37 +193,37 @@ pub fn builtin_macros(
                     message,
                 }))])
             }),
-            s.to_owned(),
+            dummy_span.to_owned(),
         ),
     );
 
     macros.insert(
         (prelude.to_owned(), ArcIntern::from("halt")),
         WithSpan::new(
-            Macro::Builtin(|syntax, args, block| {
-                let (register, message) = print_like(syntax, args, block)?;
+            Macro::Builtin(|syntax, args, block_id| {
+                let (register, message) = print_like(syntax, args, block_id)?;
 
                 Ok(vec![Instruction::Code(Code::Primitive(Primitive::Halt {
                     register,
                     message,
                 }))])
             }),
-            s.to_owned(),
+            dummy_span.to_owned(),
         ),
     );
 
     macros.insert(
         (prelude.to_owned(), ArcIntern::from("print")),
         WithSpan::new(
-            Macro::Builtin(|syntax, args, block| {
-                let (register, message) = print_like(syntax, args, block)?;
+            Macro::Builtin(|syntax, args, block_id| {
+                let (register, message) = print_like(syntax, args, block_id)?;
 
                 Ok(vec![Instruction::Code(Code::Primitive(Primitive::Print {
                     register,
                     message,
                 }))])
             }),
-            s.to_owned(),
+            dummy_span.to_owned(),
         ),
     );
 
