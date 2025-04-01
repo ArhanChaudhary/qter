@@ -32,7 +32,11 @@ pub trait PuzzleState: Hash + Clone + PartialEq + Debug {
     ) -> bool;
     /// Get the bytes of the specified orbit index in the form (permutation
     /// vector, orientation vector).
-    fn orbit_bytes_by_index(&self, index: usize, sorted_orbit_defs: &[OrbitDef]) -> (&[u8], &[u8]);
+    fn orbit_bytes_by_index(
+        &self,
+        orbit_index: usize,
+        sorted_orbit_defs: &[OrbitDef],
+    ) -> (&[u8], &[u8]);
 }
 
 pub trait MultiBvInterface {
@@ -344,8 +348,12 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
         induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
     }
 
-    fn orbit_bytes_by_index(&self, index: usize, sorted_orbit_defs: &[OrbitDef]) -> (&[u8], &[u8]) {
-        orbit_bytes_by_index_slice(&self.0, index, sorted_orbit_defs)
+    fn orbit_bytes_by_index(
+        &self,
+        orbit_index: usize,
+        sorted_orbit_defs: &[OrbitDef],
+    ) -> (&[u8], &[u8]) {
+        orbit_bytes_by_index_slice(&self.0, orbit_index, sorted_orbit_defs)
     }
 }
 
@@ -637,7 +645,7 @@ fn induces_sorted_cycle_type_slice(
 
 fn orbit_bytes_by_index_slice<'a>(
     orbit_states: &'a [u8],
-    index: usize,
+    orbit_index: usize,
     sorted_orbit_defs: &[OrbitDef],
 ) -> (&'a [u8], &'a [u8]) {
     todo!();

@@ -1,11 +1,11 @@
 use super::{
     canonical_fsm::{CanonicalFSM, CanonicalFSMState},
-    pruning::PruningTable,
+    pruning::PruningTables,
     puzzle::{Move, MultiBvInterface, OrientedPartition, PuzzleDef, PuzzleState},
     puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryInterface},
 };
 
-pub struct CycleTypeSolver<'a, P: PuzzleState, T: PruningTable<'a, P>> {
+pub struct CycleTypeSolver<'a, P: PuzzleState, T: PruningTables<'a, P>> {
     puzzle_def: &'a PuzzleDef<P>,
     canonical_fsm: CanonicalFSM<P>,
     sorted_cycle_type: Vec<OrientedPartition>,
@@ -20,7 +20,7 @@ struct CycleTypeSolverMutable<P: PuzzleState, H: PuzzleStateHistoryInterface<P>>
     first_move_class_index: usize,
 }
 
-impl<'a, P: PuzzleState, T: PruningTable<'a, P>> CycleTypeSolver<'a, P, T> {
+impl<'a, P: PuzzleState, T: PruningTables<'a, P>> CycleTypeSolver<'a, P, T> {
     pub fn new(
         puzzle_def: &'a PuzzleDef<P>,
         canonical_fsm: CanonicalFSM<P>,

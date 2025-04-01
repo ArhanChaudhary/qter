@@ -60,7 +60,7 @@ enum Commands {
         file: PathBuf,
         /// The level of execution trace to send to stderr. Can be set zero to three times.
         #[arg(short, action = ArgAction::Count)]
-        trace: u8,
+        trace_level: u8,
     },
     /// Step through a QAT or a Q program
     Debug {
@@ -118,10 +118,7 @@ fn main() -> color_eyre::Result<()> {
 
     match args {
         Commands::Compile { file: _ } => todo!(),
-        Commands::Interpret {
-            file,
-            trace: trace_level,
-        } => {
+        Commands::Interpret { file, trace_level } => {
             let program = match file.extension().and_then(|v| v.to_str()) {
                 Some("q") => todo!(),
                 Some("qat") => {
@@ -151,7 +148,7 @@ fn main() -> color_eyre::Result<()> {
             let interpreter: Interpreter<Permutation> = Interpreter::new(program);
 
             if trace_level == 0 {
-                interpret_normal(interpreter)?;
+                interpret(interpreter)?;
             } else {
                 interpret_traced(interpreter, trace_level)?;
             }
@@ -205,7 +202,7 @@ fn main() -> color_eyre::Result<()> {
     Ok(())
 }
 
-fn interpret_normal<P: PuzzleState>(mut interpreter: Interpreter<P>) -> color_eyre::Result<()> {
+fn interpret<P: PuzzleState>(mut interpreter: Interpreter<P>) -> color_eyre::Result<()> {
     loop {
         let paused_state = interpreter.step_until_halt();
 
