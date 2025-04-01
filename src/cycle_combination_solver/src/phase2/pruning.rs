@@ -99,7 +99,7 @@ pub struct ZeroTable<P: PuzzleState>(std::marker::PhantomData<P>);
 
 use private::OrbitPruneHeuristic;
 mod private {
-    #[derive(Clone, PartialOrd, Ord, PartialEq, Eq)]
+    #[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
     #[repr(transparent)]
     pub struct OrbitPruneHeuristic(u8);
 
@@ -195,7 +195,7 @@ impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend<EXA
         if EXACT {
             self.data[hash as usize] = orbit_prune_heuristic;
         } else {
-            self.data[hash as usize] = self.data[hash as usize].clone().min(orbit_prune_heuristic);
+            self.data[hash as usize] = self.data[hash as usize].min(orbit_prune_heuristic);
         }
     }
 
