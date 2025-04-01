@@ -23,6 +23,7 @@ pub trait PruningTables<'a, P: PuzzleState + 'a> {
 pub trait StorageBackend<const EXACT: bool> {
     fn permissible_heuristic_hash(&self, hash: u64) -> u8;
     fn set_heuristic_hash(&mut self, hash: u64, orbit_prune_heuristic: OrbitPruneHeuristic);
+    fn commit_depth_traversed(&mut self, depth_traversed: u8);
 }
 
 /// A trait for a pruning table acting on a single orbit.
@@ -58,7 +59,7 @@ pub struct OrbitPruningTablesGenerateMeta<'a, P: PuzzleState> {
     // field to force specific tables (for tests)?
 }
 
-pub struct UncompressedStorageBackend {
+pub struct UncompressedStorageBackend<const EXACT: bool> {
     data: Box<[OrbitPruneHeuristic]>,
     depth_traversed: u8,
 }
@@ -67,7 +68,7 @@ struct TANSStorageEncodingTable {
     // silly things here
 }
 
-pub struct TANSStorageBackend {
+pub struct TANSStorageBackend<const EXACT: bool> {
     data: Box<[OrbitPruneHeuristic]>,
     counts_by_depth: Box<[u64]>,
     encoding_tables: Box<[TANSStorageEncodingTable]>,
@@ -183,7 +184,7 @@ fn choose_pruning_table<P: PuzzleState>(
     todo!()
 }
 
-impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend {
+impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend<EXACT> {
     fn permissible_heuristic_hash(&self, hash: u64) -> u8 {
         self.data[hash as usize]
             .get_occupied()
@@ -197,9 +198,13 @@ impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend {
             self.data[hash as usize] = self.data[hash as usize].clone().min(orbit_prune_heuristic);
         }
     }
+
+    fn commit_depth_traversed(&mut self, depth_traversed: u8) {
+        self.depth_traversed = depth_traversed;
+    }
 }
 
-impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend {
+impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend<EXACT> {
     fn permissible_heuristic_hash(&self, hash: u64) -> u8 {
         todo!();
     }
@@ -211,6 +216,10 @@ impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend {
             todo!();
         }
     }
+
+    fn commit_depth_traversed(&mut self, depth_traversed: u8) {
+        todo!();
+    }
 }
 
 impl StorageBackend<true> for ZeroStorageBackend {
@@ -219,6 +228,8 @@ impl StorageBackend<true> for ZeroStorageBackend {
     }
 
     fn set_heuristic_hash(&mut self, hash: u64, orbit_prune_heuristic: OrbitPruneHeuristic) {}
+
+    fn commit_depth_traversed(&mut self, depth_traversed: u8) {}
 }
 
 impl<P: PuzzleState, S: StorageBackend<false>> OrbitPruningTable<P> for ApproximatePruningTable<S> {
@@ -290,4 +301,69 @@ impl<'a, P: PuzzleState + 'a> PruningTables<'a, P> for ZeroTable<P> {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+    use crate::phase2::puzzle::{cube3::Cube3, random_3x3_state};
+    use puzzle_geometry::ksolve::KPUZZLE_3X3;
+
+    #[test]
+    fn test_orbit_prune_heuristic_invariants() {
+        let vacant = OrbitPruneHeuristic::vacant();
+        assert!(vacant.is_vacant());
+        assert_eq!(vacant.get_occupied(), None);
+
+        let occupied = OrbitPruneHeuristic::occupied(5).unwrap();
+        assert!(!occupied.is_vacant());
+        assert_eq!(occupied.get_occupied(), Some(5));
+
+        let occupied = OrbitPruneHeuristic::occupied(255);
+        assert!(occupied.is_none());
+    }
+
+    #[test]
+    fn test_exact_uncompressed_storage_backend() {
+        let mut storage: UncompressedStorageBackend<true> = UncompressedStorageBackend {
+            data: vec![OrbitPruneHeuristic::vacant(); 100].into_boxed_slice(),
+            depth_traversed: 0,
+        };
+
+        storage.set_heuristic_hash(5, OrbitPruneHeuristic::occupied(3).unwrap());
+        assert_eq!(storage.permissible_heuristic_hash(5), 3);
+
+        assert_eq!(storage.permissible_heuristic_hash(6), 0);
+        storage.commit_depth_traversed(4);
+        assert_eq!(storage.permissible_heuristic_hash(6), 4);
+        assert_eq!(storage.permissible_heuristic_hash(5), 3);
+    }
+
+    #[test]
+    fn test_approximate_uncompressed_storage_backend() {
+        let mut storage: UncompressedStorageBackend<false> = UncompressedStorageBackend {
+            data: vec![OrbitPruneHeuristic::vacant(); 100].into_boxed_slice(),
+            depth_traversed: 0,
+        };
+
+        storage.set_heuristic_hash(6, OrbitPruneHeuristic::occupied(3).unwrap());
+        assert_eq!(storage.permissible_heuristic_hash(6), 3);
+
+        storage.set_heuristic_hash(6, OrbitPruneHeuristic::occupied(2).unwrap());
+        assert_eq!(storage.permissible_heuristic_hash(6), 2);
+    }
+
+    #[test]
+    fn test_zero_storage_backend_gives_zero() {
+        let storage = ZeroStorageBackend;
+        assert_eq!(storage.permissible_heuristic_hash(0), 0);
+        assert_eq!(storage.permissible_heuristic_hash(1), 0);
+        assert_eq!(storage.permissible_heuristic_hash(2), 0);
+    }
+
+    #[test]
+    fn test_zero_table() {
+        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let zero_table = ZeroTable::generate(());
+
+        let random_state = random_3x3_state(&cube3_def, &cube3_def.new_solved_state());
+        assert_eq!(zero_table.permissible_heuristic(&random_state), 0);
+    }
+}
