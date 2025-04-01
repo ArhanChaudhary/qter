@@ -19,21 +19,22 @@ pub trait PruningTables<'a, P: PuzzleState + 'a> {
     fn permissible_heuristic(&self, puzzle_state: &P) -> u8;
 }
 
-/// A trait for a storage backend that can be used to store the pruning tables.
-/// We only define a getter (despite looking strange) because there is always
-/// only one way to get a value from the storage backend, while there are
-/// multiple ways to set a value. The setter is defined in
-/// `InnterOrbitPruningTable` and this technique minimizes code duplication
-/// while ensuring fast runtime.
+/// A trait for a pruning table storage backend
 pub trait StorageBackend<const EXACT: bool> {
     fn permissible_heuristic_hash(&self, hash: u64) -> u8;
     fn set_heuristic_hash(&mut self, hash: u64, orbit_prune_heuristic: OrbitPruneHeuristic);
 }
 
-/// An "outer" pruning table trait that is supposed to be implemented on a generic
-/// storage backend newtype. Defines shared behavior for all specialized
-/// type state implementations of the orbit pruning table.
-trait OuterOrbitPruningTable<P: PuzzleState> {
+/// A trait for a pruning table acting on a single orbit.
+trait OrbitPruningTable<P: PuzzleState> {
+    fn generate(
+        puzzle_def: &PuzzleDef<P>,
+        orbit_index: usize,
+        max_size: u64,
+    ) -> (Box<dyn OrbitPruningTable<P>>, u64)
+    where
+        Self: Sized;
+
     fn hash_puzzle_state(&self, puzzle_state: &P, puzzle_def: &PuzzleDef<P>) -> u64;
 
     /// Implementors are expected to forward the call to their storage backend.
@@ -48,22 +49,11 @@ trait OuterOrbitPruningTable<P: PuzzleState> {
     }
 }
 
-/// An "inner" pruning table trait that is supposed to be implemented on
-/// specialized type state implementations of the orbit pruning table.
-trait InnerOrbitPruningTable<P: PuzzleState>: OuterOrbitPruningTable<P> {
-    /// Generates a new pruning table for the given orbit index and maximum size.
-    /// Returns the pruning table and the size used in bytes.
-    fn generate(puzzle_def: &PuzzleDef<P>, orbit_index: usize, max_size: u64) -> (Self, u64)
-    where
-        Self: Sized;
-}
-
 // Data structure declarations
 
 struct OrbitPruningTables<'a, P: PuzzleState> {
     puzzle_def: &'a PuzzleDef<P>,
-    // Inner implies outer
-    orbit_pruning_tables: Box<[Box<dyn InnerOrbitPruningTable<P>>]>,
+    orbit_pruning_tables: Box<[Box<dyn OrbitPruningTable<P>>]>,
 }
 
 pub struct OrbitPruningTablesGenerateMeta<'a, P: PuzzleState> {
@@ -185,16 +175,19 @@ fn choose_pruning_table<P: PuzzleState>(
     puzzle_def: &PuzzleDef<P>,
     orbit_index: usize,
     max_size: u64,
-) -> (Box<dyn InnerOrbitPruningTable<P>>, u64) {
+) -> (Box<dyn OrbitPruningTable<P>>, u64) {
     // I tried using a generic function but rust just geeked out
-    macro_rules! generate_pruning_table {
-        ($table:ty) => {{
-            let (table, used_size) = <$table>::generate(puzzle_def, orbit_index, max_size);
-            (Box::new(table), used_size)
-        }};
+    macro_rules! table {
+        ($a:ident, $b:ident) => {
+            $a::<$b>::generate(puzzle_def, orbit_index, max_size)
+        };
     }
 
-    todo!();
+    // table!(
+    //     ExactPruningTable,
+    //     ZeroStorageBackend
+    // )
+    todo!()
 }
 
 impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend {
@@ -235,9 +228,18 @@ impl StorageBackend<true> for ZeroStorageBackend {
     fn set_heuristic_hash(&mut self, hash: u64, orbit_prune_heuristic: OrbitPruneHeuristic) {}
 }
 
-impl<P: PuzzleState, S: StorageBackend<false>> OuterOrbitPruningTable<P>
-    for ApproximatePruningTable<S>
-{
+impl<P: PuzzleState, S: StorageBackend<false>> OrbitPruningTable<P> for ApproximatePruningTable<S> {
+    fn generate(
+        puzzle_def: &PuzzleDef<P>,
+        orbit_index: usize,
+        max_size: u64,
+    ) -> (Box<dyn OrbitPruningTable<P>>, u64)
+    where
+        Self: Sized,
+    {
+        todo!();
+    }
+
     fn hash_puzzle_state(&self, puzzle_state: &P, puzzle_def: &PuzzleDef<P>) -> u64 {
         fxhash::hash64(
             &puzzle_state.orbit_bytes_by_index(self.orbit_index, &puzzle_def.sorted_orbit_defs),
@@ -249,7 +251,18 @@ impl<P: PuzzleState, S: StorageBackend<false>> OuterOrbitPruningTable<P>
     }
 }
 
-impl<P: PuzzleState, S: StorageBackend<true>> OuterOrbitPruningTable<P> for ExactPruningTable<S> {
+impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactPruningTable<S> {
+    fn generate(
+        puzzle_def: &PuzzleDef<P>,
+        orbit_index: usize,
+        max_size: u64,
+    ) -> (Box<dyn OrbitPruningTable<P>>, u64)
+    where
+        Self: Sized,
+    {
+        todo!();
+    }
+
     fn hash_puzzle_state(&self, puzzle_state: &P, puzzle_def: &PuzzleDef<P>) -> u64 {
         todo!();
     }
@@ -259,95 +272,24 @@ impl<P: PuzzleState, S: StorageBackend<true>> OuterOrbitPruningTable<P> for Exac
     }
 }
 
-impl<P: PuzzleState, S: StorageBackend<true>> OuterOrbitPruningTable<P>
-    for CycleTypePruningTable<S>
-{
+impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for CycleTypePruningTable<S> {
+    fn generate(
+        puzzle_def: &PuzzleDef<P>,
+        orbit_index: usize,
+        max_size: u64,
+    ) -> (Box<dyn OrbitPruningTable<P>>, u64)
+    where
+        Self: Sized,
+    {
+        todo!();
+    }
+
     fn hash_puzzle_state(&self, puzzle_state: &P, puzzle_def: &PuzzleDef<P>) -> u64 {
         todo!();
     }
 
     fn permissible_heuristic_hash_outer(&self, hash: u64) -> u8 {
         self.storage_backend.permissible_heuristic_hash(hash)
-    }
-}
-
-impl<P: PuzzleState> InnerOrbitPruningTable<P>
-    for ApproximatePruningTable<UncompressedStorageBackend>
-{
-    fn generate(
-        puzzle_def: &PuzzleDef<P>,
-        orbit_index: usize,
-        max_size: u64,
-    ) -> (ApproximatePruningTable<UncompressedStorageBackend>, u64) {
-        todo!();
-    }
-}
-
-impl<P: PuzzleState> InnerOrbitPruningTable<P> for ApproximatePruningTable<TANSStorageBackend> {
-    fn generate(
-        puzzle_def: &PuzzleDef<P>,
-        orbit_index: usize,
-        max_size: u64,
-    ) -> (ApproximatePruningTable<TANSStorageBackend>, u64) {
-        todo!();
-    }
-}
-
-impl<P: PuzzleState> InnerOrbitPruningTable<P> for ExactPruningTable<UncompressedStorageBackend> {
-    fn generate(
-        puzzle_def: &PuzzleDef<P>,
-        orbit_index: usize,
-        max_size: u64,
-    ) -> (ExactPruningTable<UncompressedStorageBackend>, u64) {
-        todo!();
-    }
-}
-
-impl<P: PuzzleState> InnerOrbitPruningTable<P> for ExactPruningTable<TANSStorageBackend> {
-    fn generate(
-        puzzle_def: &PuzzleDef<P>,
-        orbit_index: usize,
-        max_size: u64,
-    ) -> (ExactPruningTable<TANSStorageBackend>, u64) {
-        todo!();
-    }
-}
-
-impl<P: PuzzleState> InnerOrbitPruningTable<P> for ExactPruningTable<ZeroStorageBackend> {
-    fn generate(
-        puzzle_def: &PuzzleDef<P>,
-        orbit_index: usize,
-        max_size: u64,
-    ) -> (ExactPruningTable<ZeroStorageBackend>, u64) {
-        (
-            ExactPruningTable {
-                storage_backend: ZeroStorageBackend,
-                orbit_index,
-            },
-            0,
-        )
-    }
-}
-
-impl<P: PuzzleState> InnerOrbitPruningTable<P>
-    for CycleTypePruningTable<UncompressedStorageBackend>
-{
-    fn generate(
-        puzzle_def: &PuzzleDef<P>,
-        orbit_index: usize,
-        max_size: u64,
-    ) -> (CycleTypePruningTable<UncompressedStorageBackend>, u64) {
-        todo!();
-    }
-}
-
-impl<P: PuzzleState> InnerOrbitPruningTable<P> for CycleTypePruningTable<TANSStorageBackend> {
-    fn generate(
-        puzzle_def: &PuzzleDef<P>,
-        orbit_index: usize,
-        max_size: u64,
-    ) -> (CycleTypePruningTable<TANSStorageBackend>, u64) {
-        todo!();
     }
 }
 
