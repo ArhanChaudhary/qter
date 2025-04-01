@@ -27,11 +27,7 @@ pub trait StorageBackend<const EXACT: bool> {
 
 /// A trait for a pruning table acting on a single orbit.
 trait OrbitPruningTable<P: PuzzleState> {
-    fn generate(
-        puzzle_def: &PuzzleDef<P>,
-        orbit_index: usize,
-        max_size: u64,
-    ) -> (Box<dyn OrbitPruningTable<P>>, u64)
+    fn generate(puzzle_def: &PuzzleDef<P>, orbit_index: usize, max_size: u64) -> (Self, u64)
     where
         Self: Sized;
 
@@ -176,17 +172,14 @@ fn choose_pruning_table<P: PuzzleState>(
     orbit_index: usize,
     max_size: u64,
 ) -> (Box<dyn OrbitPruningTable<P>>, u64) {
-    // I tried using a generic function but rust just geeked out
     macro_rules! table {
-        ($a:ident, $b:ident) => {
-            $a::<$b>::generate(puzzle_def, orbit_index, max_size)
-        };
+        ($a:ident, $b:ident) => {{
+            let (table, used_size) = $a::<$b>::generate(puzzle_def, orbit_index, max_size);
+            (Box::new(table), used_size)
+        }};
     }
 
-    // table!(
-    //     ExactPruningTable,
-    //     ZeroStorageBackend
-    // )
+    // table!(ExactPruningTable, ZeroStorageBackend)
     todo!()
 }
 
@@ -233,10 +226,7 @@ impl<P: PuzzleState, S: StorageBackend<false>> OrbitPruningTable<P> for Approxim
         puzzle_def: &PuzzleDef<P>,
         orbit_index: usize,
         max_size: u64,
-    ) -> (Box<dyn OrbitPruningTable<P>>, u64)
-    where
-        Self: Sized,
-    {
+    ) -> (ApproximatePruningTable<S>, u64) {
         todo!();
     }
 
@@ -256,10 +246,7 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactPrun
         puzzle_def: &PuzzleDef<P>,
         orbit_index: usize,
         max_size: u64,
-    ) -> (Box<dyn OrbitPruningTable<P>>, u64)
-    where
-        Self: Sized,
-    {
+    ) -> (ExactPruningTable<S>, u64) {
         todo!();
     }
 
@@ -277,10 +264,7 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for CycleType
         puzzle_def: &PuzzleDef<P>,
         orbit_index: usize,
         max_size: u64,
-    ) -> (Box<dyn OrbitPruningTable<P>>, u64)
-    where
-        Self: Sized,
-    {
+    ) -> (CycleTypePruningTable<S>, u64) {
         todo!();
     }
 
