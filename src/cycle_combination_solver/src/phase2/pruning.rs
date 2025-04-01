@@ -197,7 +197,7 @@ fn choose_pruning_table<P: PuzzleState>(
         }};
     }
 
-    generate_pruning_table!(ApproximatePruningTable<UncompressedStorageBackend>)
+    todo!();
 }
 
 impl StorageBackend for UncompressedStorageBackend {
@@ -384,4 +384,9 @@ impl<'a, P: PuzzleState + 'a> PruningTables<'a, P> for ZeroTable<P> {
     fn permissible_heuristic(&self, _puzzle_state: &P) -> u8 {
         0
     }
+}
+
+#[cfg(test)]
+mod tests {
+
 }
