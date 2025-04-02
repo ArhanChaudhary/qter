@@ -21,6 +21,7 @@ pub trait PruningTables<'a, P: PuzzleState + 'a> {
 
 /// A trait for a pruning table storage backend
 pub trait StorageBackend<const EXACT: bool> {
+    fn new_with_entries(max_entries: u64) -> Self;
     fn permissible_heuristic_hash(&self, hash: u64) -> u8;
     fn set_heuristic_hash(&mut self, hash: u64, orbit_prune_heuristic: OrbitPruneHeuristic);
     fn commit_depth_traversed(&mut self, depth_traversed: u8);
@@ -187,6 +188,14 @@ fn choose_pruning_table<P: PuzzleState>(
 }
 
 impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend<EXACT> {
+    fn new_with_entries(max_entries: u64) -> Self {
+        let data = vec![OrbitPruneHeuristic::vacant(); max_entries as usize].into_boxed_slice();
+        UncompressedStorageBackend {
+            data,
+            depth_traversed: 0,
+        }
+    }
+
     fn permissible_heuristic_hash(&self, hash: u64) -> u8 {
         self.data[hash as usize]
             .get_occupied()
@@ -207,6 +216,10 @@ impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend<EXA
 }
 
 impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend<EXACT> {
+    fn new_with_entries(max_entries: u64) -> Self {
+        todo!();
+    }
+
     fn permissible_heuristic_hash(&self, hash: u64) -> u8 {
         todo!();
     }
@@ -225,6 +238,10 @@ impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend<EXACT> {
 }
 
 impl StorageBackend<true> for ZeroStorageBackend {
+    fn new_with_entries(max_entries: u64) -> Self {
+        ZeroStorageBackend
+    }
+
     fn permissible_heuristic_hash(&self, _hash: u64) -> u8 {
         0
     }
@@ -331,10 +348,7 @@ mod tests {
 
     #[test]
     fn test_exact_uncompressed_storage_backend() {
-        let mut storage: UncompressedStorageBackend<true> = UncompressedStorageBackend {
-            data: vec![OrbitPruneHeuristic::vacant(); 100].into_boxed_slice(),
-            depth_traversed: 0,
-        };
+        let mut storage = UncompressedStorageBackend::<true>::new_with_entries(100);
 
         storage.set_heuristic_hash(5, OrbitPruneHeuristic::occupied(3).unwrap());
         assert_eq!(storage.permissible_heuristic_hash(5), 3);
@@ -347,10 +361,7 @@ mod tests {
 
     #[test]
     fn test_approximate_uncompressed_storage_backend() {
-        let mut storage: UncompressedStorageBackend<false> = UncompressedStorageBackend {
-            data: vec![OrbitPruneHeuristic::vacant(); 100].into_boxed_slice(),
-            depth_traversed: 0,
-        };
+        let mut storage = UncompressedStorageBackend::<false>::new_with_entries(100);
 
         storage.set_heuristic_hash(6, OrbitPruneHeuristic::occupied(3).unwrap());
         assert_eq!(storage.permissible_heuristic_hash(6), 3);
