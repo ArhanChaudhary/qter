@@ -21,7 +21,9 @@ pub trait PruningTables<'a, P: PuzzleState + 'a> {
 
 /// A trait for a pruning table storage backend
 pub trait StorageBackend<const EXACT: bool> {
-    fn new_with_max_entries(max_entries: u64) -> Self;
+    type InitializationMeta;
+
+    fn initialize_from_meta(intialization_meta: Self::InitializationMeta) -> Self;
     fn permissible_heuristic_hash(&self, hash: u64) -> u8;
     fn set_heuristic_hash(&mut self, hash: u64, orbit_prune_heuristic: OrbitPruneHeuristic);
     fn commit_depth_traversed(&mut self, depth_traversed: u8);
@@ -49,8 +51,7 @@ trait OrbitPruningTable<P: PuzzleState> {
 
 // Data structure declarations
 
-struct OrbitPruningTables<'a, P: PuzzleState> {
-    puzzle_def: &'a PuzzleDef<P>,
+struct OrbitPruningTables<P: PuzzleState> {
     orbit_pruning_tables: Box<[Box<dyn OrbitPruningTable<P>>]>,
 }
 
@@ -101,10 +102,9 @@ pub struct ZeroTable<P: PuzzleState>(std::marker::PhantomData<P>);
 
 // Implementations
 
-use private::OrbitPruneHeuristic;
+use private::*;
 mod private {
     #[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
-    #[repr(transparent)]
     pub struct OrbitPruneHeuristic(u8);
 
     impl OrbitPruneHeuristic {
@@ -130,9 +130,12 @@ mod private {
             if self.is_vacant() { None } else { Some(self.0) }
         }
     }
+
+    pub struct MaxSizeBytes(pub u64);
+    pub struct MaxEntires(pub usize);
 }
 
-impl<'a, P: PuzzleState> PruningTables<'a, P> for OrbitPruningTables<'a, P> {
+impl<'a, P: PuzzleState + 'a> PruningTables<'a, P> for OrbitPruningTables<P> {
     type GenerateMeta = OrbitPruningTablesGenerateMeta<'a, P>;
 
     fn generate(generate_meta: OrbitPruningTablesGenerateMeta<P>) -> OrbitPruningTables<P> {
@@ -155,7 +158,6 @@ impl<'a, P: PuzzleState> PruningTables<'a, P> for OrbitPruningTables<'a, P> {
         }
 
         OrbitPruningTables {
-            puzzle_def: generate_meta.puzzle_def,
             orbit_pruning_tables: orbit_pruning_tables.into_boxed_slice(),
         }
     }
@@ -188,8 +190,11 @@ fn choose_pruning_table<P: PuzzleState>(
 }
 
 impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend<EXACT> {
-    fn new_with_max_entries(max_entries: u64) -> Self {
-        let data = vec![OrbitPruneHeuristic::vacant(); max_entries as usize].into_boxed_slice();
+    type InitializationMeta = MaxEntires;
+
+    fn initialize_from_meta(max_entries: MaxEntires) -> UncompressedStorageBackend<EXACT> {
+        let max_entries = max_entries.0;
+        let data = vec![OrbitPruneHeuristic::vacant(); max_entries].into_boxed_slice();
         UncompressedStorageBackend {
             data,
             depth_traversed: 0,
@@ -216,7 +221,10 @@ impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend<EXA
 }
 
 impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend<EXACT> {
-    fn new_with_max_entries(max_entries: u64) -> Self {
+    type InitializationMeta = MaxSizeBytes;
+
+    fn initialize_from_meta(max_size_bytes: MaxSizeBytes) -> TANSStorageBackend<EXACT> {
+        let max_size_bytes = max_size_bytes.0;
         todo!();
     }
 
@@ -238,7 +246,9 @@ impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend<EXACT> {
 }
 
 impl StorageBackend<true> for ZeroStorageBackend {
-    fn new_with_max_entries(max_entries: u64) -> Self {
+    type InitializationMeta = ();
+
+    fn initialize_from_meta(_initialization_meta: ()) -> ZeroStorageBackend {
         ZeroStorageBackend
     }
 
@@ -246,9 +256,9 @@ impl StorageBackend<true> for ZeroStorageBackend {
         0
     }
 
-    fn set_heuristic_hash(&mut self, hash: u64, orbit_prune_heuristic: OrbitPruneHeuristic) {}
+    fn set_heuristic_hash(&mut self, _hash: u64, _orbit_prune_heuristic: OrbitPruneHeuristic) {}
 
-    fn commit_depth_traversed(&mut self, depth_traversed: u8) {}
+    fn commit_depth_traversed(&mut self, _depth_traversed: u8) {}
 }
 
 impl<'a, P: PuzzleState, S: StorageBackend<false>> OrbitPruningTable<P>
@@ -317,7 +327,7 @@ impl<'a, P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P>
 impl<'a, P: PuzzleState + 'a> PruningTables<'a, P> for ZeroTable<P> {
     type GenerateMeta = ();
 
-    fn generate(_generate_meta: ()) -> Self {
+    fn generate(_generate_meta: ()) -> ZeroTable<P> {
         ZeroTable(std::marker::PhantomData)
     }
 
@@ -348,7 +358,7 @@ mod tests {
 
     #[test]
     fn test_exact_uncompressed_storage_backend() {
-        let mut storage = UncompressedStorageBackend::<true>::new_with_max_entries(100);
+        let mut storage = UncompressedStorageBackend::<true>::initialize_from_meta(MaxEntires(100));
 
         storage.set_heuristic_hash(5, OrbitPruneHeuristic::occupied(3).unwrap());
         assert_eq!(storage.permissible_heuristic_hash(5), 3);
@@ -361,7 +371,8 @@ mod tests {
 
     #[test]
     fn test_approximate_uncompressed_storage_backend() {
-        let mut storage = UncompressedStorageBackend::<false>::new_with_max_entries(100);
+        let mut storage =
+            UncompressedStorageBackend::<false>::initialize_from_meta(MaxEntires(100));
 
         storage.set_heuristic_hash(6, OrbitPruneHeuristic::occupied(3).unwrap());
         assert_eq!(storage.permissible_heuristic_hash(6), 3);
@@ -372,7 +383,7 @@ mod tests {
 
     #[test]
     fn test_zero_storage_backend_gives_zero() {
-        let storage = ZeroStorageBackend::new_with_max_entries(0);
+        let storage = ZeroStorageBackend::initialize_from_meta(());
         assert_eq!(storage.permissible_heuristic_hash(0), 0);
         assert_eq!(storage.permissible_heuristic_hash(1), 0);
         assert_eq!(storage.permissible_heuristic_hash(2), 0);

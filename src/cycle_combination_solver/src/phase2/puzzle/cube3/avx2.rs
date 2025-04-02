@@ -19,7 +19,6 @@ use std::{
 };
 
 #[derive(Clone)]
-#[repr(transparent)]
 pub struct Cube3(u8x32);
 
 impl PartialEq for Cube3 {
