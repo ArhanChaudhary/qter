@@ -187,14 +187,17 @@ mod tests {
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             &puzzle_def,
             vec![vec![], vec![]],
-            OrbitPruningTables::generate(OrbitPruningTablesGenerateMeta::new_with_table_types(
-                &puzzle_def,
-                0,
-                vec![
-                    (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
-                    (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
-                ],
-            )),
+            OrbitPruningTables::generate(
+                OrbitPruningTablesGenerateMeta::new_with_table_types(
+                    &puzzle_def,
+                    0,
+                    vec![
+                        (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
+                        (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
+                    ],
+                )
+                .unwrap(),
+            ),
         );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 1);

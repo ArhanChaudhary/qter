@@ -9,6 +9,7 @@
 //! of the appropriate size.
 
 use super::puzzle::{PuzzleDef, PuzzleState};
+use std::fmt;
 
 // Trait declarations
 
@@ -177,6 +178,15 @@ impl From<u64> for NullMeta {
     }
 }
 
+#[derive(Debug)]
+pub struct TableTypeError(String);
+
+impl fmt::Display for TableTypeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Table type error: {}", self.0)
+    }
+}
+
 impl<'a, P: PuzzleState> OrbitPruningTablesGenerateMeta<'a, P> {
     pub fn new(puzzle_def: &'a PuzzleDef<P>, max_size_bytes: u64) -> Self {
         OrbitPruningTablesGenerateMeta {
@@ -186,24 +196,23 @@ impl<'a, P: PuzzleState> OrbitPruningTablesGenerateMeta<'a, P> {
         }
     }
 
-    /// Exactly the same as `from` but with a list of forced table types. Panics
-    /// if the table types are a different length than the number of orbits. I
-    /// expect to always .unwrap() this function in tests, so it might as well
-    /// be unrecoverable.
     pub fn new_with_table_types(
         puzzle_def: &'a PuzzleDef<P>,
         max_size_bytes: u64,
         table_types: Vec<(OrbitPruningTableTy, StorageBackendTy)>,
-    ) -> Self {
-        assert_eq!(
-            table_types.len(),
-            puzzle_def.sorted_orbit_defs.len(),
-            "Table types length must match the number of orbits."
-        );
-        OrbitPruningTablesGenerateMeta {
-            puzzle_def,
-            max_size_bytes,
-            table_types: Some(table_types),
+    ) -> Result<Self, TableTypeError> {
+        if table_types.len() == puzzle_def.sorted_orbit_defs.len() {
+            Ok(OrbitPruningTablesGenerateMeta {
+                puzzle_def,
+                max_size_bytes,
+                table_types: Some(table_types),
+            })
+        } else {
+            Err(TableTypeError(format!(
+                "Table types length {} does not match orbit definitions length {}",
+                table_types.len(),
+                puzzle_def.sorted_orbit_defs.len()
+            )))
         }
     }
 }
@@ -287,27 +296,19 @@ fn choose_pruning_table<P: PuzzleState>(
             (OrbitPruningTableTy::Exact, StorageBackendTy::Tans) => {
                 table!(ExactOrbitPruningTable, TANSStorageBackend, true)
             }
-            (OrbitPruningTableTy::Exact, StorageBackendTy::Zero)
-            | (OrbitPruningTableTy::Approximate, StorageBackendTy::Zero) => {
-                table!(ExactOrbitPruningTable, ZeroStorageBackend)
-            }
             (OrbitPruningTableTy::CycleType, StorageBackendTy::Uncompressed) => {
                 table!(CycleTypeOrbitPruningTable, UncompressedStorageBackend, true)
             }
             (OrbitPruningTableTy::CycleType, StorageBackendTy::Tans) => {
                 table!(CycleTypeOrbitPruningTable, TANSStorageBackend, true)
             }
-            (OrbitPruningTableTy::CycleType, StorageBackendTy::Zero) => {
-                table!(CycleTypeOrbitPruningTable, ZeroStorageBackend)
+            // Will help reduce monomorphization bloat
+            (OrbitPruningTableTy::Exact, StorageBackendTy::Zero)
+            | (OrbitPruningTableTy::Approximate, StorageBackendTy::Zero)
+            | (OrbitPruningTableTy::CycleType, StorageBackendTy::Zero) => {
+                table!(ExactOrbitPruningTable, ZeroStorageBackend)
             }
-            (OrbitPruningTableTy::Dynamic, StorageBackendTy::Dynamic) => (),
-            // might remove this
-            (OrbitPruningTableTy::Dynamic, _) => {
-                panic!("Dynamic table type must be paired with a dynamic storage backend type.")
-            }
-            (_, StorageBackendTy::Dynamic) => {
-                panic!("Dynamic storage backend type must be paired with a dynamic table type.")
-            }
+            (OrbitPruningTableTy::Dynamic, _) | (_, StorageBackendTy::Dynamic) => (),
         }
     }
 
@@ -559,7 +560,8 @@ mod tests {
             &cube3_def,
             1000,
             vec![(OrbitPruningTableTy::Exact, StorageBackendTy::Uncompressed); 2],
-        );
+        )
+        .unwrap();
     }
 
     #[test]
@@ -572,7 +574,8 @@ mod tests {
                 (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
                 (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
             ],
-        );
+        )
+        .unwrap();
         let orbit_tables = OrbitPruningTables::generate(generate_meta);
 
         assert_eq!(
