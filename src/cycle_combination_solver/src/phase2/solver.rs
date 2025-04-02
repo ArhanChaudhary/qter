@@ -5,11 +5,11 @@ use super::{
     puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryInterface},
 };
 
-pub struct CycleTypeSolver<'a, P: PuzzleState, T: PruningTables<'a, P>> {
+pub struct CycleTypeSolver<'a, P: PuzzleState, T: PruningTables<P>> {
     puzzle_def: &'a PuzzleDef<P>,
     canonical_fsm: CanonicalFSM<P>,
     sorted_cycle_type: Vec<OrientedPartition>,
-    pruning_table: T,
+    pruning_tables: T,
 }
 
 struct CycleTypeSolverMutable<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> {
@@ -20,18 +20,18 @@ struct CycleTypeSolverMutable<P: PuzzleState, H: PuzzleStateHistoryInterface<P>>
     first_move_class_index: usize,
 }
 
-impl<'a, P: PuzzleState, T: PruningTables<'a, P>> CycleTypeSolver<'a, P, T> {
+impl<'a, P: PuzzleState, T: PruningTables<P>> CycleTypeSolver<'a, P, T> {
     pub fn new(
         puzzle_def: &'a PuzzleDef<P>,
-        canonical_fsm: CanonicalFSM<P>,
         sorted_cycle_type: Vec<OrientedPartition>,
-        pruning_table: T,
+        pruning_tables: T,
     ) -> Self {
+        let canonical_fsm = puzzle_def.into();
         Self {
             puzzle_def,
             canonical_fsm,
             sorted_cycle_type,
-            pruning_table,
+            pruning_tables,
         }
     }
 
@@ -50,7 +50,7 @@ impl<'a, P: PuzzleState, T: PruningTables<'a, P>> CycleTypeSolver<'a, P, T> {
         // SAFETY: This function calls `pop_stack` for every `push_stack` call.
         // Therefore, the `pop_stack` cannot be called more than `push_stack`.
         let last_puzzle_state = unsafe { mutable.puzzle_state_history.last_state_unchecked() };
-        let est_remaining_cost = self.pruning_table.permissible_heuristic(last_puzzle_state);
+        let est_remaining_cost = self.pruning_tables.permissible_heuristic(last_puzzle_state);
 
         if est_remaining_cost > togo {
             // TODO: what the heck does this do
@@ -139,7 +139,7 @@ impl<'a, P: PuzzleState, T: PruningTables<'a, P>> CycleTypeSolver<'a, P, T> {
             solutions: vec![],
             first_move_class_index: usize::default(),
         };
-        let mut depth = self.pruning_table.permissible_heuristic(
+        let mut depth = self.pruning_tables.permissible_heuristic(
             // SAFETY: `H::initialize` when puzzle_state_history is created
             // guarantees that the first entry is bound
             unsafe { mutable.puzzle_state_history.last_state_unchecked() },
@@ -164,7 +164,10 @@ impl<'a, P: PuzzleState, T: PruningTables<'a, P>> CycleTypeSolver<'a, P, T> {
 mod tests {
     use super::*;
     use crate::phase2::{
-        pruning::ZeroTable,
+        pruning::{
+            NullMeta, OrbitPruningTableTy, OrbitPruningTables, OrbitPruningTablesGenerateMeta,
+            StorageBackendTy, ZeroTable,
+        },
         puzzle::{HeapPuzzle, cube3::Cube3},
     };
     use puzzle_geometry::ksolve::{KPUZZLE_3X3, KPUZZLE_4X4};
@@ -172,12 +175,26 @@ mod tests {
     #[test]
     fn test_identity_cycle_type() {
         let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let canonical_fsm = (&puzzle_def).into();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             &puzzle_def,
-            canonical_fsm,
             vec![vec![], vec![]],
-            ZeroTable::generate(()),
+            ZeroTable::generate(NullMeta),
+        );
+        let solutions = solver.solve::<[Cube3; 21]>();
+        assert_eq!(solutions.len(), 1);
+        assert_eq!(solutions[0].len(), 0);
+
+        let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
+            &puzzle_def,
+            vec![vec![], vec![]],
+            OrbitPruningTables::generate(OrbitPruningTablesGenerateMeta::new_with_table_types(
+                &puzzle_def,
+                0,
+                vec![
+                    (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
+                    (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
+                ],
+            )),
         );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 1);
@@ -187,15 +204,13 @@ mod tests {
     #[test]
     fn test_single_quarter_turn() {
         let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let canonical_fsm = (&puzzle_def).into();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             &puzzle_def,
-            canonical_fsm,
             vec![
                 vec![(4.try_into().unwrap(), false)],
                 vec![(4.try_into().unwrap(), false)],
             ],
-            ZeroTable::generate(()),
+            ZeroTable::generate(NullMeta),
         );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 12);
@@ -205,10 +220,8 @@ mod tests {
     #[test]
     fn test_single_half_turn() {
         let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let canonical_fsm = (&puzzle_def).into();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             &puzzle_def,
-            canonical_fsm,
             vec![
                 vec![
                     (2.try_into().unwrap(), false),
@@ -219,7 +232,7 @@ mod tests {
                     (2.try_into().unwrap(), false),
                 ],
             ],
-            ZeroTable::generate(()),
+            ZeroTable::generate(NullMeta),
         );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 6);
@@ -231,10 +244,8 @@ mod tests {
         let puzzle_def: PuzzleDef<Cube3> = (&KPUZZLE_3X3.clone().with_moves(&["F", "R", "U"]))
             .try_into()
             .unwrap();
-        let canonical_fsm = (&puzzle_def).into();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             &puzzle_def,
-            canonical_fsm,
             vec![
                 vec![
                     (3.try_into().unwrap(), false),
@@ -242,7 +253,7 @@ mod tests {
                 ],
                 vec![(1.try_into().unwrap(), true), (8.try_into().unwrap(), true)],
             ],
-            ZeroTable::generate(()),
+            ZeroTable::generate(NullMeta),
         );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 22); // TODO: should be 24
@@ -254,15 +265,13 @@ mod tests {
         use std::time::Instant;
 
         let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let canonical_fsm = (&puzzle_def).into();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             &puzzle_def,
-            canonical_fsm,
             vec![
                 vec![(1.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
                 vec![(1.try_into().unwrap(), true), (7.try_into().unwrap(), true)],
             ],
-            ZeroTable::generate(()),
+            ZeroTable::generate(NullMeta),
         );
 
         let start = Instant::now();
@@ -289,14 +298,9 @@ mod tests {
     #[test]
     fn test_many_optimal_cycles() {
         let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let canonical_fsm = (&cube3_def).into();
 
-        let mut solver: CycleTypeSolver<HeapPuzzle, _> = CycleTypeSolver::new(
-            &cube3_def,
-            canonical_fsm,
-            Vec::default(),
-            ZeroTable::generate(()),
-        );
+        let mut solver: CycleTypeSolver<HeapPuzzle, _> =
+            CycleTypeSolver::new(&cube3_def, Vec::default(), ZeroTable::generate(NullMeta));
 
         // Test cases taken from Michael Gottlieb's order table
         // https://mzrg.com/rubik/orders.shtml
@@ -578,14 +582,9 @@ mod tests {
     #[test]
     fn test_big_cube_optimal_cycle() {
         let cube4_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_4X4).try_into().unwrap();
-        let canonical_fsm = (&cube4_def).into();
 
-        let mut solver: CycleTypeSolver<HeapPuzzle, _> = CycleTypeSolver::new(
-            &cube4_def,
-            canonical_fsm,
-            Vec::default(),
-            ZeroTable::generate(()),
-        );
+        let mut solver: CycleTypeSolver<HeapPuzzle, _> =
+            CycleTypeSolver::new(&cube4_def, Vec::default(), ZeroTable::generate(NullMeta));
 
         // Test cases taken from Michael Gottlieb's order table
         // https://mzrg.com/rubik/orders.shtml

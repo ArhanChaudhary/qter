@@ -12,7 +12,7 @@ use super::puzzle::{PuzzleDef, PuzzleState};
 
 // Trait declarations
 
-pub trait PruningTables<'a, P: PuzzleState + 'a> {
+pub trait PruningTables<P: PuzzleState> {
     type GenerateMeta;
 
     fn generate(generate_meta: Self::GenerateMeta) -> Self;
@@ -21,7 +21,7 @@ pub trait PruningTables<'a, P: PuzzleState + 'a> {
 
 /// A trait for a pruning table storage backend
 pub trait StorageBackend<const EXACT: bool> {
-    type InitializationMeta;
+    type InitializationMeta: From<u64>;
 
     fn initialize_from_meta(intialization_meta: Self::InitializationMeta) -> Self;
     fn permissible_heuristic_hash(&self, hash: u64) -> u8;
@@ -30,8 +30,12 @@ pub trait StorageBackend<const EXACT: bool> {
 }
 
 /// A trait for a pruning table acting on a single orbit.
-trait OrbitPruningTable<P: PuzzleState> {
-    fn generate(puzzle_def: &PuzzleDef<P>, orbit_index: usize, max_size_bytes: u64) -> (Self, u64)
+trait OrbitPruningTable<'a, P: PuzzleState> {
+    fn generate(
+        puzzle_def: &'a PuzzleDef<P>,
+        orbit_index: usize,
+        max_size_bytes: u64,
+    ) -> (Self, u64)
     where
         Self: Sized;
 
@@ -51,14 +55,14 @@ trait OrbitPruningTable<P: PuzzleState> {
 
 // Data structure declarations
 
-struct OrbitPruningTables<P: PuzzleState> {
-    orbit_pruning_tables: Box<[Box<dyn OrbitPruningTable<P>>]>,
+pub struct OrbitPruningTables<'a, P: PuzzleState> {
+    orbit_pruning_tables: Box<[Box<dyn OrbitPruningTable<'a, P> + 'a>]>,
 }
 
 pub struct OrbitPruningTablesGenerateMeta<'a, P: PuzzleState> {
     puzzle_def: &'a PuzzleDef<P>,
     max_size_bytes: u64,
-    // field to force specific tables (for tests)?
+    table_types: Option<Vec<(OrbitPruningTableTy, StorageBackendTy)>>,
 }
 
 pub struct UncompressedStorageBackend<const EXACT: bool> {
@@ -80,22 +84,40 @@ pub struct TANSStorageBackend<const EXACT: bool> {
 /// have no remaining allocable space (by the max_size_bytes option).
 pub struct ZeroStorageBackend;
 
-pub struct ApproximatePruningTable<'a, P: PuzzleState, S: StorageBackend<false>> {
+pub struct ApproximateOrbitPruningTable<'a, P: PuzzleState, S: StorageBackend<false>> {
     storage_backend: S,
     puzzle_def: &'a PuzzleDef<P>,
     orbit_index: usize,
 }
 
-pub struct ExactPruningTable<'a, P: PuzzleState, S: StorageBackend<true>> {
+pub struct ExactOrbitPruningTable<'a, P: PuzzleState, S: StorageBackend<true>> {
     storage_backend: S,
     puzzle_def: &'a PuzzleDef<P>,
     orbit_index: usize,
 }
 
-pub struct CycleTypePruningTable<'a, P: PuzzleState, S: StorageBackend<true>> {
+pub struct CycleTypeOrbitPruningTable<'a, P: PuzzleState, S: StorageBackend<true>> {
     storage_backend: S,
     puzzle_def: &'a PuzzleDef<P>,
     orbit_index: usize,
+}
+
+#[derive(Default, PartialEq, Debug, Clone, Copy)]
+pub enum OrbitPruningTableTy {
+    Approximate,
+    Exact,
+    CycleType,
+    #[default]
+    Dynamic,
+}
+
+#[derive(Default, PartialEq, Debug, Clone, Copy)]
+pub enum StorageBackendTy {
+    Uncompressed,
+    Tans,
+    Zero,
+    #[default]
+    Dynamic,
 }
 
 pub struct ZeroTable<P: PuzzleState>(std::marker::PhantomData<P>);
@@ -133,12 +155,63 @@ mod private {
 
     pub struct MaxSizeBytes(pub u64);
     pub struct MaxEntires(pub usize);
+
+    impl From<u64> for MaxSizeBytes {
+        fn from(value: u64) -> Self {
+            MaxSizeBytes(value)
+        }
+    }
+
+    impl From<u64> for MaxEntires {
+        fn from(value: u64) -> Self {
+            MaxEntires(value as usize)
+        }
+    }
 }
 
-impl<'a, P: PuzzleState + 'a> PruningTables<'a, P> for OrbitPruningTables<P> {
+pub struct NullMeta;
+
+impl From<u64> for NullMeta {
+    fn from(_: u64) -> Self {
+        NullMeta
+    }
+}
+
+impl<'a, P: PuzzleState> OrbitPruningTablesGenerateMeta<'a, P> {
+    pub fn new(puzzle_def: &'a PuzzleDef<P>, max_size_bytes: u64) -> Self {
+        OrbitPruningTablesGenerateMeta {
+            puzzle_def,
+            max_size_bytes,
+            table_types: None,
+        }
+    }
+
+    /// Exactly the same as `from` but with a list of forced table types. Panics
+    /// if the table types are a different length than the number of orbits. I
+    /// expect to always .unwrap() this function in tests, so it might as well
+    /// be unrecoverable.
+    pub fn new_with_table_types(
+        puzzle_def: &'a PuzzleDef<P>,
+        max_size_bytes: u64,
+        table_types: Vec<(OrbitPruningTableTy, StorageBackendTy)>,
+    ) -> Self {
+        assert_eq!(
+            table_types.len(),
+            puzzle_def.sorted_orbit_defs.len(),
+            "Table types length must match the number of orbits."
+        );
+        OrbitPruningTablesGenerateMeta {
+            puzzle_def,
+            max_size_bytes,
+            table_types: Some(table_types),
+        }
+    }
+}
+
+impl<'a, P: PuzzleState + 'a> PruningTables<P> for OrbitPruningTables<'a, P> {
     type GenerateMeta = OrbitPruningTablesGenerateMeta<'a, P>;
 
-    fn generate(generate_meta: OrbitPruningTablesGenerateMeta<P>) -> OrbitPruningTables<P> {
+    fn generate(generate_meta: OrbitPruningTablesGenerateMeta<'a, P>) -> OrbitPruningTables<'a, P> {
         let mut orbit_pruning_tables = vec![];
         let mut remaining_size = generate_meta.max_size_bytes;
         // Already sorted by (piece count, orientation) which is (usually) from
@@ -150,6 +223,10 @@ impl<'a, P: PuzzleState + 'a> PruningTables<'a, P> for OrbitPruningTables<P> {
                 generate_meta.puzzle_def.sorted_orbit_defs.len() - orbit_index;
             let (orbit_pruning_table, used_size) = choose_pruning_table(
                 generate_meta.puzzle_def,
+                generate_meta
+                    .table_types
+                    .as_ref()
+                    .map(|table_types| table_types[orbit_index]),
                 orbit_index,
                 remaining_size / unprocessed_orbits_count as u64,
             );
@@ -175,18 +252,66 @@ impl<'a, P: PuzzleState + 'a> PruningTables<'a, P> for OrbitPruningTables<P> {
 /// Returns a pruning table trait object along with its size in bytes.
 fn choose_pruning_table<P: PuzzleState>(
     puzzle_def: &PuzzleDef<P>,
+    table_type: Option<(OrbitPruningTableTy, StorageBackendTy)>,
     orbit_index: usize,
     max_size_bytes: u64,
-) -> (Box<dyn OrbitPruningTable<P>>, u64) {
+) -> (Box<dyn OrbitPruningTable<P> + '_>, u64) {
     macro_rules! table {
+        ($a:ident, $b:ident, $c:ident) => {{
+            let (table, used_size) =
+                $a::<P, $b<{ $c }>>::generate(puzzle_def, orbit_index, max_size_bytes);
+            return (Box::new(table), used_size);
+        }};
+
         ($a:ident, $b:ident) => {{
-            let (table, used_size) = $a::<$b>::generate(puzzle_def, orbit_index, max_size_bytes);
-            (Box::new(table), used_size)
+            let (table, used_size) = $a::<P, $b>::generate(puzzle_def, orbit_index, max_size_bytes);
+            return (Box::new(table), used_size);
         }};
     }
 
-    // table!(ExactPruningTable, ZeroStorageBackend)
-    todo!()
+    if let Some((table_type, storage_backend_type)) = table_type {
+        match (table_type, storage_backend_type) {
+            (OrbitPruningTableTy::Approximate, StorageBackendTy::Uncompressed) => {
+                table!(
+                    ApproximateOrbitPruningTable,
+                    UncompressedStorageBackend,
+                    false
+                )
+            }
+            (OrbitPruningTableTy::Approximate, StorageBackendTy::Tans) => {
+                table!(ApproximateOrbitPruningTable, TANSStorageBackend, false)
+            }
+            (OrbitPruningTableTy::Exact, StorageBackendTy::Uncompressed) => {
+                table!(ExactOrbitPruningTable, UncompressedStorageBackend, true)
+            }
+            (OrbitPruningTableTy::Exact, StorageBackendTy::Tans) => {
+                table!(ExactOrbitPruningTable, TANSStorageBackend, true)
+            }
+            (OrbitPruningTableTy::Exact, StorageBackendTy::Zero)
+            | (OrbitPruningTableTy::Approximate, StorageBackendTy::Zero) => {
+                table!(ExactOrbitPruningTable, ZeroStorageBackend)
+            }
+            (OrbitPruningTableTy::CycleType, StorageBackendTy::Uncompressed) => {
+                table!(CycleTypeOrbitPruningTable, UncompressedStorageBackend, true)
+            }
+            (OrbitPruningTableTy::CycleType, StorageBackendTy::Tans) => {
+                table!(CycleTypeOrbitPruningTable, TANSStorageBackend, true)
+            }
+            (OrbitPruningTableTy::CycleType, StorageBackendTy::Zero) => {
+                table!(CycleTypeOrbitPruningTable, ZeroStorageBackend)
+            }
+            (OrbitPruningTableTy::Dynamic, StorageBackendTy::Dynamic) => (),
+            // might remove this
+            (OrbitPruningTableTy::Dynamic, _) => {
+                panic!("Dynamic table type must be paired with a dynamic storage backend type.")
+            }
+            (_, StorageBackendTy::Dynamic) => {
+                panic!("Dynamic storage backend type must be paired with a dynamic table type.")
+            }
+        }
+    }
+
+    todo!();
 }
 
 impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend<EXACT> {
@@ -246,9 +371,9 @@ impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend<EXACT> {
 }
 
 impl StorageBackend<true> for ZeroStorageBackend {
-    type InitializationMeta = ();
+    type InitializationMeta = NullMeta;
 
-    fn initialize_from_meta(_initialization_meta: ()) -> ZeroStorageBackend {
+    fn initialize_from_meta(_: NullMeta) -> ZeroStorageBackend {
         ZeroStorageBackend
     }
 
@@ -261,14 +386,14 @@ impl StorageBackend<true> for ZeroStorageBackend {
     fn commit_depth_traversed(&mut self, _depth_traversed: u8) {}
 }
 
-impl<'a, P: PuzzleState, S: StorageBackend<false>> OrbitPruningTable<P>
-    for ApproximatePruningTable<'a, P, S>
+impl<'a, P: PuzzleState, S: StorageBackend<false>> OrbitPruningTable<'a, P>
+    for ApproximateOrbitPruningTable<'a, P, S>
 {
     fn generate(
         puzzle_def: &PuzzleDef<P>,
         orbit_index: usize,
         max_size_bytes: u64,
-    ) -> (ApproximatePruningTable<'a, P, S>, u64) {
+    ) -> (ApproximateOrbitPruningTable<P, S>, u64) {
         todo!();
     }
 
@@ -284,14 +409,44 @@ impl<'a, P: PuzzleState, S: StorageBackend<false>> OrbitPruningTable<P>
     }
 }
 
-impl<'a, P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P>
-    for ExactPruningTable<'a, P, S>
+impl<'a, P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<'a, P>
+    for ExactOrbitPruningTable<'a, P, S>
 {
     fn generate(
         puzzle_def: &PuzzleDef<P>,
         orbit_index: usize,
         max_size_bytes: u64,
-    ) -> (ExactPruningTable<'a, P, S>, u64) {
+    ) -> (ExactOrbitPruningTable<P, S>, u64) {
+        // TODO: temporary just to get poc working
+        (
+            ExactOrbitPruningTable {
+                storage_backend: S::initialize_from_meta(max_size_bytes.into()),
+                puzzle_def,
+                orbit_index,
+            },
+            0,
+        )
+        // todo!()
+    }
+
+    fn hash_puzzle_state(&self, puzzle_state: &P) -> u64 {
+        // todo!()
+        0
+    }
+
+    fn permissible_heuristic_hash_outer(&self, hash: u64) -> u8 {
+        self.storage_backend.permissible_heuristic_hash(hash)
+    }
+}
+
+impl<'a, P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<'a, P>
+    for CycleTypeOrbitPruningTable<'a, P, S>
+{
+    fn generate(
+        puzzle_def: &PuzzleDef<P>,
+        orbit_index: usize,
+        max_size_bytes: u64,
+    ) -> (CycleTypeOrbitPruningTable<P, S>, u64) {
         todo!();
     }
 
@@ -304,30 +459,10 @@ impl<'a, P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P>
     }
 }
 
-impl<'a, P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P>
-    for CycleTypePruningTable<'a, P, S>
-{
-    fn generate(
-        puzzle_def: &PuzzleDef<P>,
-        orbit_index: usize,
-        max_size_bytes: u64,
-    ) -> (CycleTypePruningTable<'a, P, S>, u64) {
-        todo!();
-    }
+impl<P: PuzzleState> PruningTables<P> for ZeroTable<P> {
+    type GenerateMeta = NullMeta;
 
-    fn hash_puzzle_state(&self, puzzle_state: &P) -> u64 {
-        todo!();
-    }
-
-    fn permissible_heuristic_hash_outer(&self, hash: u64) -> u8 {
-        self.storage_backend.permissible_heuristic_hash(hash)
-    }
-}
-
-impl<'a, P: PuzzleState + 'a> PruningTables<'a, P> for ZeroTable<P> {
-    type GenerateMeta = ();
-
-    fn generate(_generate_meta: ()) -> ZeroTable<P> {
+    fn generate(_: NullMeta) -> ZeroTable<P> {
         ZeroTable(std::marker::PhantomData)
     }
 
@@ -383,7 +518,7 @@ mod tests {
 
     #[test]
     fn test_zero_storage_backend_gives_zero() {
-        let storage = ZeroStorageBackend::initialize_from_meta(());
+        let storage = ZeroStorageBackend::initialize_from_meta(NullMeta);
         assert_eq!(storage.permissible_heuristic_hash(0), 0);
         assert_eq!(storage.permissible_heuristic_hash(1), 0);
         assert_eq!(storage.permissible_heuristic_hash(2), 0);
@@ -392,9 +527,57 @@ mod tests {
     #[test]
     fn test_zero_table() {
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let zero_table = ZeroTable::generate(());
+        let zero_table = ZeroTable::generate(NullMeta);
 
         let random_state = random_3x3_state(&cube3_def, &cube3_def.new_solved_state());
         assert_eq!(zero_table.permissible_heuristic(&random_state), 0);
+    }
+
+    #[test]
+    fn test_table_type_defaults() {
+        assert_eq!(OrbitPruningTableTy::Dynamic, OrbitPruningTableTy::default());
+        assert_eq!(StorageBackendTy::Dynamic, StorageBackendTy::default());
+    }
+
+    #[test]
+    fn test_new_orbit_generation_meta() {
+        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let generate_meta = OrbitPruningTablesGenerateMeta::new(&cube3_def, 1000);
+        assert_eq!(generate_meta.max_size_bytes, 1000);
+        assert!(generate_meta.table_types.is_none());
+
+        assert!(
+            std::panic::catch_unwind(|| OrbitPruningTablesGenerateMeta::new_with_table_types(
+                &cube3_def,
+                1000,
+                vec![(OrbitPruningTableTy::Exact, StorageBackendTy::Uncompressed)],
+            ))
+            .is_err()
+        );
+
+        OrbitPruningTablesGenerateMeta::new_with_table_types(
+            &cube3_def,
+            1000,
+            vec![(OrbitPruningTableTy::Exact, StorageBackendTy::Uncompressed); 2],
+        );
+    }
+
+    #[test]
+    fn test_zero_orbit_tables() {
+        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
+            &cube3_def,
+            0,
+            vec![
+                (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
+                (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
+            ],
+        );
+        let orbit_tables = OrbitPruningTables::generate(generate_meta);
+
+        assert_eq!(
+            orbit_tables.permissible_heuristic(&cube3_def.new_solved_state()),
+            0
+        );
     }
 }
