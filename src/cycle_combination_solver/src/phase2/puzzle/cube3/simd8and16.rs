@@ -1,7 +1,7 @@
 #![cfg_attr(any(avx2, not(simd8and16)), allow(dead_code, unused_variables))]
 
 use super::common::Cube3Interface;
-use crate::phase2::puzzle::OrientedPartition;
+use crate::phase2::puzzle::{OrbitDef, OrientedPartition};
 use std::{
     fmt,
     num::NonZeroU8,
@@ -24,7 +24,6 @@ const CO_INV_SWIZZLE: u8x8 = u8x8::from_array([0, 2, 1, 0, 2, 1, 0, 0]);
 const EP_IDENTITY: u8x16 =
     u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
 const CP_IDENTITY: u8x8 = u8x8::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
-
 const EDGE_ORI_MASK: u8x16 = u8x16::splat(0b0001_0000);
 const EDGE_PERM_MASK: u8x16 = u8x16::splat(0b0000_1111);
 const CORNER_ORI_MASK: u8x8 = u8x8::splat(0b0011_0000);
@@ -242,12 +241,17 @@ impl Cube3Interface for Cube3 {
         cycle_type_pointer == sorted_cycle_type[1].len()
     }
 
-    fn orbit_bytes_by_index(&self, index: usize) -> (&[u8], &[u8]) {
-        todo!();
+    fn orbit_bytes(&self, orbit_def: OrbitDef) -> (&[u8], &[u8]) {
+        todo!()
+    }
+
+    fn exact_orbit_hash(&self, orbit_def: OrbitDef) -> u64 {
+        todo!()
     }
 }
 
 #[derive(PartialEq, Clone, Hash)]
+// TODO
 pub struct CompressedCube3 {
     edges: u8x16,
     corners: u8x8,
@@ -313,16 +317,20 @@ impl Cube3Interface for CompressedCube3 {
         self.corners = corners_composed;
     }
 
-    fn replace_inverse(&mut self, _a: &Self) {
-        unimplemented!();
+    fn replace_inverse(&mut self, a: &Self) {
+        todo!()
     }
 
-    fn induces_sorted_cycle_type(&self, _sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
-        unimplemented!();
+    fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
+        todo!()
     }
 
-    fn orbit_bytes_by_index(&self, _index: usize) -> (&[u8], &[u8]) {
-        unimplemented!();
+    fn orbit_bytes(&self, orbit_def: OrbitDef) -> (&[u8], &[u8]) {
+        todo!()
+    }
+
+    fn exact_orbit_hash(&self, orbit_def: OrbitDef) -> u64 {
+        todo!()
     }
 }
 

@@ -307,7 +307,11 @@ impl Cube3Interface for Cube3 {
             && edge_cycle_type_pointer == sorted_cycle_type[1].len()
     }
 
-    fn orbit_bytes_by_index(&self, index: usize) -> (&[u8], &[u8]) {
+    fn orbit_bytes(&self, orbit_def: crate::phase2::puzzle::OrbitDef) -> (&[u8], &[u8]) {
+        todo!()
+    }
+
+    fn exact_orbit_hash(&self, orbit_def: crate::phase2::puzzle::OrbitDef) -> u64 {
         todo!()
     }
 }

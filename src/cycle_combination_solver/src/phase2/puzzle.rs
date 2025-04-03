@@ -32,11 +32,8 @@ pub trait PuzzleState: Hash + Clone + PartialEq + Debug {
     ) -> bool;
     /// Get the bytes of the specified orbit index in the form (permutation
     /// vector, orientation vector).
-    fn orbit_bytes_by_index(
-        &self,
-        orbit_index: usize,
-        sorted_orbit_defs: &[OrbitDef],
-    ) -> (&[u8], &[u8]);
+    fn orbit_bytes(&self, orbit_def: OrbitDef) -> (&[u8], &[u8]);
+    fn exact_orbit_hash(&self, orbit_def: OrbitDef) -> u64;
 }
 
 pub trait MultiBvInterface {
@@ -111,10 +108,11 @@ pub struct Move<P: PuzzleState> {
     pub name: String,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct OrbitDef {
     pub piece_count: NonZeroU8,
     pub orientation_count: NonZeroU8,
+    // TODO: add a "trailing offset" field for HeapPuzzle structs
 }
 
 pub type OrientedPartition = Vec<(NonZeroU8, bool)>;
@@ -348,12 +346,12 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
         induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
     }
 
-    fn orbit_bytes_by_index(
-        &self,
-        orbit_index: usize,
-        sorted_orbit_defs: &[OrbitDef],
-    ) -> (&[u8], &[u8]) {
-        orbit_bytes_by_index_slice(&self.0, orbit_index, sorted_orbit_defs)
+    fn orbit_bytes(&self, orbit_def: OrbitDef) -> (&[u8], &[u8]) {
+        orbit_bytes_slice(&self.0, orbit_def)
+    }
+
+    fn exact_orbit_hash(&self, orbit_def: OrbitDef) -> u64 {
+        exact_orbit_hash_slice(&self.0, orbit_def)
     }
 }
 
@@ -404,8 +402,12 @@ impl PuzzleState for HeapPuzzle {
         induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
     }
 
-    fn orbit_bytes_by_index(&self, index: usize, sorted_orbit_defs: &[OrbitDef]) -> (&[u8], &[u8]) {
-        orbit_bytes_by_index_slice(&self.0, index, sorted_orbit_defs)
+    fn orbit_bytes(&self, orbit_def: OrbitDef) -> (&[u8], &[u8]) {
+        orbit_bytes_slice(&self.0, orbit_def)
+    }
+
+    fn exact_orbit_hash(&self, orbit_def: OrbitDef) -> u64 {
+        exact_orbit_hash_slice(&self.0, orbit_def)
     }
 }
 
@@ -643,11 +645,11 @@ fn induces_sorted_cycle_type_slice(
     true
 }
 
-fn orbit_bytes_by_index_slice<'a>(
-    orbit_states: &'a [u8],
-    orbit_index: usize,
-    sorted_orbit_defs: &[OrbitDef],
-) -> (&'a [u8], &'a [u8]) {
+fn orbit_bytes_slice(orbit_states: &[u8], orbit_def: OrbitDef) -> (&[u8], &[u8]) {
+    todo!();
+}
+
+fn exact_orbit_hash_slice(orbit_states: &[u8], orbit_def: OrbitDef) -> u64 {
     todo!();
 }
 
