@@ -241,11 +241,11 @@ impl Cube3Interface for Cube3 {
         cycle_type_pointer == sorted_cycle_type[1].len()
     }
 
-    fn orbit_bytes(&self, orbit_def: OrbitDef) -> (&[u8], &[u8]) {
+    fn orbit_bytes(&self, orbit_index: usize) -> (&[u8], &[u8]) {
         todo!()
     }
 
-    fn exact_orbit_hash(&self, orbit_def: OrbitDef) -> u64 {
+    fn exact_orbit_hash(&self, orbit_index: usize) -> u64 {
         todo!()
     }
 }
@@ -325,11 +325,11 @@ impl Cube3Interface for CompressedCube3 {
         todo!()
     }
 
-    fn orbit_bytes(&self, orbit_def: OrbitDef) -> (&[u8], &[u8]) {
+    fn orbit_bytes(&self, orbit_index: usize) -> (&[u8], &[u8]) {
         todo!()
     }
 
-    fn exact_orbit_hash(&self, orbit_def: OrbitDef) -> u64 {
+    fn exact_orbit_hash(&self, orbit_index: usize) -> u64 {
         todo!()
     }
 }

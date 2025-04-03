@@ -30,10 +30,15 @@ pub trait PuzzleState: Hash + Clone + PartialEq + Debug {
         sorted_orbit_defs: &[OrbitDef],
         multi_bv: <Self::MultiBv as MultiBvInterface>::MultiBvReusableRef<'_>,
     ) -> bool;
+    /// Get a usize that "identifies" an orbit. This is implementor-specific.
+    /// For slice puzzles, the identifier is the starting index of the orbit data
+    /// in the puzzle state buffer. For specific puzzles the identifier is the
+    /// index of the orbit in the orbit definition.
+    fn next_orbit_identifer(orbit_def: OrbitDef, orbit_identifier: usize) -> usize;
     /// Get the bytes of the specified orbit index in the form (permutation
     /// vector, orientation vector).
-    fn orbit_bytes(&self, orbit_def: OrbitDef) -> (&[u8], &[u8]);
-    fn exact_orbit_hash(&self, orbit_def: OrbitDef) -> u64;
+    fn orbit_bytes(&self, orbit_def: OrbitDef, orbit_identifier: usize) -> (&[u8], &[u8]);
+    fn exact_orbit_hash(&self, orbit_def: OrbitDef, orbit_identifier: usize) -> u64;
 }
 
 pub trait MultiBvInterface {
@@ -112,7 +117,6 @@ pub struct Move<P: PuzzleState> {
 pub struct OrbitDef {
     pub piece_count: NonZeroU8,
     pub orientation_count: NonZeroU8,
-    // TODO: add a "trailing offset" field for HeapPuzzle structs
 }
 
 pub type OrientedPartition = Vec<(NonZeroU8, bool)>;
@@ -186,7 +190,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
 
         sorted_orbit_defs = arg_indicies
             .iter()
-            .map(|&i| sorted_orbit_defs[i].clone())
+            .map(|&i| sorted_orbit_defs[i])
             .collect();
 
         let mut moves = Vec::with_capacity(ksolve.moves().len());
@@ -346,12 +350,16 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
         induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
     }
 
-    fn orbit_bytes(&self, orbit_def: OrbitDef) -> (&[u8], &[u8]) {
-        orbit_bytes_slice(&self.0, orbit_def)
+    fn next_orbit_identifer(orbit_def: OrbitDef, orbit_identifier: usize) -> usize {
+        next_orbit_identifier_slice(orbit_def, orbit_identifier)
     }
 
-    fn exact_orbit_hash(&self, orbit_def: OrbitDef) -> u64 {
-        exact_orbit_hash_slice(&self.0, orbit_def)
+    fn orbit_bytes(&self, orbit_def: OrbitDef, orbit_identifier: usize) -> (&[u8], &[u8]) {
+        orbit_bytes_slice(&self.0, orbit_def, orbit_identifier)
+    }
+
+    fn exact_orbit_hash(&self, orbit_def: OrbitDef, orbit_identifier: usize) -> u64 {
+        exact_orbit_hash_slice(&self.0, orbit_def, orbit_identifier)
     }
 }
 
@@ -402,12 +410,16 @@ impl PuzzleState for HeapPuzzle {
         induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
     }
 
-    fn orbit_bytes(&self, orbit_def: OrbitDef) -> (&[u8], &[u8]) {
-        orbit_bytes_slice(&self.0, orbit_def)
+    fn next_orbit_identifer(orbit_def: OrbitDef, orbit_identifier: usize) -> usize {
+        next_orbit_identifier_slice(orbit_def, orbit_identifier)
     }
 
-    fn exact_orbit_hash(&self, orbit_def: OrbitDef) -> u64 {
-        exact_orbit_hash_slice(&self.0, orbit_def)
+    fn orbit_bytes(&self, orbit_def: OrbitDef, orbit_identifier: usize) -> (&[u8], &[u8]) {
+        orbit_bytes_slice(&self.0, orbit_def, orbit_identifier)
+    }
+
+    fn exact_orbit_hash(&self, orbit_def: OrbitDef, orbit_identifier: usize) -> u64 {
+        exact_orbit_hash_slice(&self.0, orbit_def, orbit_identifier)
     }
 }
 
@@ -433,7 +445,7 @@ fn ksolve_move_to_slice_unchecked(
     for (transformation, orbit_def) in sorted_transformations.iter().zip(sorted_orbit_defs.iter()) {
         let piece_count = orbit_def.piece_count.get() as usize;
         // TODO: make this more efficient:
-        // - zero orientation mod optimization
+        // - zero orientation mod optimization (change next_orbit_identifier_slice too)
         // - avoid the transformation for identities entirely
         if transformation.is_empty() {
             for j in 0..piece_count {
@@ -645,11 +657,26 @@ fn induces_sorted_cycle_type_slice(
     true
 }
 
-fn orbit_bytes_slice(orbit_states: &[u8], orbit_def: OrbitDef) -> (&[u8], &[u8]) {
+fn next_orbit_identifier_slice(
+    orbit_def: OrbitDef,
+    orbit_identifier: usize,
+) -> usize {
+    orbit_identifier + orbit_def.piece_count.get() as usize * 2
+}
+
+fn orbit_bytes_slice(
+    orbit_states: &[u8],
+    orbit_def: OrbitDef,
+    orbit_identifier: usize,
+) -> (&[u8], &[u8]) {
     todo!();
 }
 
-fn exact_orbit_hash_slice(orbit_states: &[u8], orbit_def: OrbitDef) -> u64 {
+fn exact_orbit_hash_slice(
+    orbit_states: &[u8],
+    orbit_def: OrbitDef,
+    orbit_identifier: usize,
+) -> u64 {
     todo!();
 }
 

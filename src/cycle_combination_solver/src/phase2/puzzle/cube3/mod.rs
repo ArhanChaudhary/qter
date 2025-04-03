@@ -10,8 +10,8 @@ mod common {
         fn replace_compose(&mut self, a: &Self, b: &Self);
         fn replace_inverse(&mut self, a: &Self);
         fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool;
-        fn orbit_bytes(&self, orbit_def: OrbitDef) -> (&[u8], &[u8]);
-        fn exact_orbit_hash(&self, orbit_def: OrbitDef) -> u64;
+        fn orbit_bytes(&self, orbit_index: usize) -> (&[u8], &[u8]);
+        fn exact_orbit_hash(&self, orbit_index: usize) -> u64;
     }
 
     const CUBE_3_SORTED_ORBIT_DEFS: [OrbitDef; 2] = [
@@ -65,12 +65,16 @@ mod common {
             })
         }
 
-        fn orbit_bytes(&self, orbit_def: OrbitDef) -> (&[u8], &[u8]) {
-            self.orbit_bytes(orbit_def)
+        fn next_orbit_identifer(_orbit_def: OrbitDef, orbit_identifier: usize) -> usize {
+            orbit_identifier + 1
         }
 
-        fn exact_orbit_hash(&self, orbit_def: OrbitDef) -> u64 {
-            self.exact_orbit_hash(orbit_def)
+        fn orbit_bytes(&self, _orbit_def: OrbitDef, orbit_identifier: usize) -> (&[u8], &[u8]) {
+            self.orbit_bytes(orbit_identifier)
+        }
+
+        fn exact_orbit_hash(&self, _orbit_def: OrbitDef, orbit_identifier: usize) -> u64 {
+            self.exact_orbit_hash(orbit_identifier)
         }
     }
 }
