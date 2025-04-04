@@ -79,10 +79,6 @@ pub struct TANSStorageBackend<const EXACT: bool> {
     encoding_tables: Box<[TANSStorageEncodingTable]>,
 }
 
-/// This type isn't actually entirely useless; I will use it for tables that
-/// have no remaining allocable space (by the max_size_bytes option).
-pub struct ZeroStorageBackend;
-
 pub struct ApproximateOrbitPruningTable<S: StorageBackend<false>> {
     storage_backend: S,
     orbit_def: OrbitDef,
@@ -101,11 +97,16 @@ pub struct CycleTypeOrbitPruningTable<S: StorageBackend<true>> {
     orbit_identifier: usize,
 }
 
+/// This type isn't actually entirely useless; I will use it for tables that
+/// have no remaining allocable space (by the max_size_bytes option).
+pub struct ZeroOrbitTable;
+
 #[derive(Default, PartialEq, Debug, Clone, Copy)]
 pub enum OrbitPruningTableTy {
     Approximate,
     Exact,
     CycleType,
+    Zero,
     #[default]
     Dynamic,
 }
@@ -119,7 +120,7 @@ pub enum StorageBackendTy {
     Dynamic,
 }
 
-pub struct ZeroTable<P: PuzzleState>(std::marker::PhantomData<P>);
+pub struct ZeroTables<P: PuzzleState>(std::marker::PhantomData<P>);
 
 // Implementations
 
@@ -277,8 +278,8 @@ fn choose_pruning_table<P: PuzzleState>(
             return (Box::new(table), used_size);
         }};
 
-        ($a:ident, $b:ident) => {{
-            let (table, used_size) = $a::<$b>::generate(puzzle_def, orbit_def, max_size_bytes);
+        ($a:ident) => {{
+            let (table, used_size) = $a::generate(puzzle_def, orbit_def, max_size_bytes);
             return (Box::new(table), used_size);
         }};
     }
@@ -307,13 +308,8 @@ fn choose_pruning_table<P: PuzzleState>(
             (OrbitPruningTableTy::CycleType, StorageBackendTy::Tans) => {
                 table!(CycleTypeOrbitPruningTable, TANSStorageBackend, true)
             }
-            // Combining these together help reduce monomorphization bloat. The
-            // hashing function for ApproximatePruningTable is fastest, so we (FIXME, double check)
-            // use that for all of them.
-            (OrbitPruningTableTy::Exact, StorageBackendTy::Zero)
-            | (OrbitPruningTableTy::Approximate, StorageBackendTy::Zero)
-            | (OrbitPruningTableTy::CycleType, StorageBackendTy::Zero) => {
-                table!(ExactOrbitPruningTable, ZeroStorageBackend)
+            (OrbitPruningTableTy::Zero, _) | (_, StorageBackendTy::Zero) => {
+                table!(ZeroOrbitTable)
             }
             (OrbitPruningTableTy::Dynamic, _) | (_, StorageBackendTy::Dynamic) => (),
         }
@@ -376,22 +372,6 @@ impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend<EXACT> {
     fn commit_depth_traversed(&mut self, depth_traversed: u8) {
         todo!();
     }
-}
-
-impl StorageBackend<true> for ZeroStorageBackend {
-    type InitializationMeta = NullMeta;
-
-    fn initialize_from_meta(_: NullMeta) -> ZeroStorageBackend {
-        ZeroStorageBackend
-    }
-
-    fn permissible_heuristic_hash(&self, _hash: u64) -> u8 {
-        0
-    }
-
-    fn set_heuristic_hash(&mut self, _hash: u64, _orbit_prune_heuristic: OrbitPruneHeuristic) {}
-
-    fn commit_depth_traversed(&mut self, _depth_traversed: u8) {}
 }
 
 impl<P: PuzzleState, S: StorageBackend<false>> OrbitPruningTable<P>
@@ -513,14 +493,32 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P>
     }
 }
 
-impl<P: PuzzleState> PruningTables<P> for ZeroTable<P> {
+impl<P: PuzzleState> OrbitPruningTable<P> for ZeroOrbitTable {
+    fn generate(
+        _puzzle_def: &PuzzleDef<P>,
+        _orbit_def: OrbitDef,
+        _max_size_bytes: u64,
+    ) -> (ZeroOrbitTable, u64) {
+        (ZeroOrbitTable, 0)
+    }
+
+    fn hash_orbit_state(&self, _puzzle_state: &P) -> u64 {
+        0
+    }
+
+    fn permissible_heuristic_hash_outer(&self, _hash: u64) -> u8 {
+        0
+    }
+}
+
+impl<P: PuzzleState> PruningTables<P> for ZeroTables<P> {
     type GenerateMeta<'a>
         = NullMeta
     where
         P: 'a;
 
-    fn generate(_: NullMeta) -> ZeroTable<P> {
-        ZeroTable(std::marker::PhantomData)
+    fn generate(_: NullMeta) -> ZeroTables<P> {
+        ZeroTables(std::marker::PhantomData)
     }
 
     fn permissible_heuristic(&self, _puzzle_state: &P) -> u8 {
@@ -531,7 +529,7 @@ impl<P: PuzzleState> PruningTables<P> for ZeroTable<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::phase2::puzzle::{apply_moves, cube3::Cube3, random_3x3_state, HeapPuzzle};
+    use crate::phase2::puzzle::{HeapPuzzle, apply_moves, cube3::Cube3, random_3x3_state};
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
     #[test]
@@ -574,17 +572,20 @@ mod tests {
     }
 
     #[test]
-    fn test_zero_storage_backend_gives_zero() {
-        let storage = ZeroStorageBackend::initialize_from_meta(NullMeta);
-        assert_eq!(storage.permissible_heuristic_hash(0), 0);
-        assert_eq!(storage.permissible_heuristic_hash(1), 0);
-        assert_eq!(storage.permissible_heuristic_hash(2), 0);
+    fn test_zero_orbit_table_gives_zero() {
+        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let solved = cube3_def.new_solved_state();
+        let u_move = cube3_def.find_move("U").unwrap();
+
+        let (storage, _) = ZeroOrbitTable::generate(&cube3_def, cube3_def.sorted_orbit_defs[0], 0);
+        assert_eq!(storage.permissible_heuristic(&solved), 0);
+        assert_eq!(storage.permissible_heuristic(&u_move.puzzle_state), 0);
     }
 
     #[test]
     fn test_zero_table() {
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let zero_table = ZeroTable::generate(NullMeta);
+        let zero_table = ZeroTables::generate(NullMeta);
 
         let random_state = random_3x3_state(&cube3_def, &cube3_def.new_solved_state());
         assert_eq!(zero_table.permissible_heuristic(&random_state), 0);
@@ -657,21 +658,39 @@ mod tests {
 
         assert_eq!(exact_corners_pruning_table.hash_orbit_state(&solved), 0);
         result_1.replace_compose(&solved, &u_move.puzzle_state, &cube3_def.sorted_orbit_defs);
-        assert_eq!(exact_corners_pruning_table.hash_orbit_state(&result_1), 24476904);
-        result_2.replace_compose(&result_1, &u_move.puzzle_state, &cube3_def.sorted_orbit_defs);
-        assert_eq!(exact_corners_pruning_table.hash_orbit_state(&result_2), 57868020);
-        result_1.replace_compose(&result_2, &u_move.puzzle_state, &cube3_def.sorted_orbit_defs);
-        assert_eq!(exact_corners_pruning_table.hash_orbit_state(&result_1), 67775130);
-        result_2.replace_compose(&result_1, &u_move.puzzle_state, &cube3_def.sorted_orbit_defs);
+        assert_eq!(
+            exact_corners_pruning_table.hash_orbit_state(&result_1),
+            24476904
+        );
+        result_2.replace_compose(
+            &result_1,
+            &u_move.puzzle_state,
+            &cube3_def.sorted_orbit_defs,
+        );
+        assert_eq!(
+            exact_corners_pruning_table.hash_orbit_state(&result_2),
+            57868020
+        );
+        result_1.replace_compose(
+            &result_2,
+            &u_move.puzzle_state,
+            &cube3_def.sorted_orbit_defs,
+        );
+        assert_eq!(
+            exact_corners_pruning_table.hash_orbit_state(&result_1),
+            67775130
+        );
+        result_2.replace_compose(
+            &result_1,
+            &u_move.puzzle_state,
+            &cube3_def.sorted_orbit_defs,
+        );
         assert_eq!(exact_corners_pruning_table.hash_orbit_state(&result_2), 0);
 
         // shortest 11 cycle alg
         result_1 = apply_moves(&cube3_def, &solved, "U R U F L R' U' R' F' D'", 1);
 
-        assert_eq!(
-            exact_corners_pruning_table.hash_orbit_state(&result_1),
-            0
-        );
+        assert_eq!(exact_corners_pruning_table.hash_orbit_state(&result_1), 0);
         result_2.replace_compose(
             &result_1,
             &u_move.puzzle_state,
@@ -704,16 +723,11 @@ mod tests {
             &u_move.puzzle_state,
             &cube3_def.sorted_orbit_defs,
         );
-        assert_eq!(
-            exact_corners_pruning_table.hash_orbit_state(&result_1),
-            0
-        );
+        assert_eq!(exact_corners_pruning_table.hash_orbit_state(&result_1), 0);
 
         assert_ne!(solved, result_1);
     }
 
     #[test]
-    fn test_exact_orbit_hasher_is_exact() {
-
-    }
+    fn test_exact_orbit_hasher_is_exact() {}
 }
