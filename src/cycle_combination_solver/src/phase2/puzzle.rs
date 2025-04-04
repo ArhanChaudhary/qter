@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use num_traits::PrimInt;
 use puzzle_geometry::ksolve::KSolve;
 use std::hash::Hash;
@@ -154,9 +155,9 @@ fn solved_state_from_sorted_orbit_defs<P: PuzzleState>(sorted_orbit_defs: &[Orbi
         .map(|orbit_def| {
             (0..orbit_def.piece_count.get())
                 .map(|i| (i, 0))
-                .collect::<Vec<_>>()
+                .collect_vec()
         })
-        .collect::<Vec<_>>();
+        .collect_vec();
     // We can unwrap because try_from guarantees that the orbit defs are valid
     P::try_from_transformation_meta(&sorted_transformations, sorted_orbit_defs).unwrap()
 }
@@ -179,7 +180,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
             })
             .collect::<Result<_, KSolveConversionError>>()?;
 
-        let mut arg_indicies = (0..sorted_orbit_defs.len()).collect::<Vec<_>>();
+        let mut arg_indicies = (0..sorted_orbit_defs.len()).collect_vec();
         arg_indicies.sort_by_key(|&i| {
             (
                 sorted_orbit_defs[i].piece_count.get(),
@@ -209,9 +210,9 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                             // we can unwrap because sorted_orbit_defs exists
                             ((perm.get() - 1).try_into().unwrap(), orientation)
                         })
-                        .collect::<Vec<_>>()
+                        .collect_vec()
                 })
-                .collect::<Vec<_>>();
+                .collect_vec();
             sorted_transformations = arg_indicies
                 .iter()
                 .map(|&i| sorted_transformations[i].clone())

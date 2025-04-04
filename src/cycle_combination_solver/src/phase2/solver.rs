@@ -166,7 +166,7 @@ mod tests {
     use crate::phase2::{
         pruning::{
             NullMeta, OrbitPruningTableTy, OrbitPruningTables, OrbitPruningTablesGenerateMeta,
-            StorageBackendTy, ZeroTables,
+            StorageBackendTy, ZeroTable,
         },
         puzzle::{HeapPuzzle, cube3::Cube3},
     };
@@ -178,27 +178,27 @@ mod tests {
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             &puzzle_def,
             vec![vec![], vec![]],
-            ZeroTables::generate(NullMeta),
+            ZeroTable::generate(NullMeta),
         );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 1);
         assert_eq!(solutions[0].len(), 0);
 
-        let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            &puzzle_def,
-            vec![vec![], vec![]],
-            OrbitPruningTables::generate(
-                OrbitPruningTablesGenerateMeta::new_with_table_types(
-                    &puzzle_def,
-                    0,
-                    vec![
-                        (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
-                        (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
-                    ],
-                )
-                .unwrap(),
-            ),
+        let identity_cycle_type = vec![vec![], vec![]];
+        let pruning_tables = OrbitPruningTables::generate(
+            OrbitPruningTablesGenerateMeta::new_with_table_types(
+                &puzzle_def,
+                &identity_cycle_type,
+                0,
+                vec![
+                    (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
+                    (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
+                ],
+            )
+            .unwrap(),
         );
+        let solver: CycleTypeSolver<Cube3, _> =
+            CycleTypeSolver::new(&puzzle_def, identity_cycle_type, pruning_tables);
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 1);
         assert_eq!(solutions[0].len(), 0);
@@ -213,7 +213,7 @@ mod tests {
                 vec![(4.try_into().unwrap(), false)],
                 vec![(4.try_into().unwrap(), false)],
             ],
-            ZeroTables::generate(NullMeta),
+            ZeroTable::generate(NullMeta),
         );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 12);
@@ -235,7 +235,7 @@ mod tests {
                     (2.try_into().unwrap(), false),
                 ],
             ],
-            ZeroTables::generate(NullMeta),
+            ZeroTable::generate(NullMeta),
         );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 6);
@@ -256,7 +256,7 @@ mod tests {
                 ],
                 vec![(1.try_into().unwrap(), true), (8.try_into().unwrap(), true)],
             ],
-            ZeroTables::generate(NullMeta),
+            ZeroTable::generate(NullMeta),
         );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 22); // TODO: should be 24
@@ -274,7 +274,7 @@ mod tests {
                 vec![(1.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
                 vec![(1.try_into().unwrap(), true), (7.try_into().unwrap(), true)],
             ],
-            ZeroTables::generate(NullMeta),
+            ZeroTable::generate(NullMeta),
         );
 
         let start = Instant::now();
@@ -303,7 +303,7 @@ mod tests {
         let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
 
         let mut solver: CycleTypeSolver<HeapPuzzle, _> =
-            CycleTypeSolver::new(&cube3_def, Vec::default(), ZeroTables::generate(NullMeta));
+            CycleTypeSolver::new(&cube3_def, Vec::default(), ZeroTable::generate(NullMeta));
 
         // Test cases taken from Michael Gottlieb's order table
         // https://mzrg.com/rubik/orders.shtml
@@ -587,7 +587,7 @@ mod tests {
         let cube4_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_4X4).try_into().unwrap();
 
         let mut solver: CycleTypeSolver<HeapPuzzle, _> =
-            CycleTypeSolver::new(&cube4_def, Vec::default(), ZeroTables::generate(NullMeta));
+            CycleTypeSolver::new(&cube4_def, Vec::default(), ZeroTable::generate(NullMeta));
 
         // Test cases taken from Michael Gottlieb's order table
         // https://mzrg.com/rubik/orders.shtml

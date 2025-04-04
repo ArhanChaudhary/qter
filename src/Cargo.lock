@@ -239,7 +239,7 @@ dependencies = [
  "compiler",
  "internment",
  "interpreter",
- "itertools",
+ "itertools 0.13.0",
  "owo-colors 4.2.0",
  "puzzle_geometry",
  "qter_core",
@@ -283,7 +283,7 @@ name = "compiler"
 version = "0.1.0"
 dependencies = [
  "internment",
- "itertools",
+ "itertools 0.13.0",
  "mlua",
  "pest",
  "pest_derive",
@@ -317,6 +317,7 @@ dependencies = [
  "fastrand",
  "fxhash",
  "integer-partitions",
+ "itertools 0.14.0",
  "memoize",
  "num-traits",
  "pareto_front",
@@ -525,6 +526,15 @@ name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
 dependencies = [
  "either",
 ]
@@ -923,7 +933,7 @@ name = "puzzle_geometry"
 version = "0.1.0"
 dependencies = [
  "internment",
- "itertools",
+ "itertools 0.13.0",
  "nalgebra",
  "phf",
  "qter_core",
@@ -936,7 +946,7 @@ version = "0.1.0"
 dependencies = [
  "bnum",
  "internment",
- "itertools",
+ "itertools 0.13.0",
  "pest",
  "pest_derive",
 ]
@@ -1015,7 +1025,7 @@ name = "robot"
 version = "0.1.0"
 dependencies = [
  "internment",
- "itertools",
+ "itertools 0.13.0",
  "qter_core",
  "rand 0.9.0",
 ]
