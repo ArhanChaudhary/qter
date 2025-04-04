@@ -38,7 +38,7 @@ trait OrbitPruningTable<P: PuzzleState> {
     where
         Self: Sized;
 
-    fn hash_puzzle_state(&self, puzzle_state: &P) -> u64;
+    fn hash_orbit_state(&self, puzzle_state: &P) -> u64;
 
     /// Implementors are expected to forward the call to their storage backend.
     /// Interestingly, the alternative way of requiring a storage backend getter
@@ -48,7 +48,7 @@ trait OrbitPruningTable<P: PuzzleState> {
     /// This convenience function is a performance optimization that avoids two
     /// otherwise dynamic dispatches.
     fn permissible_heuristic(&self, puzzle_state: &P) -> u8 {
-        self.permissible_heuristic_hash_outer(self.hash_puzzle_state(puzzle_state))
+        self.permissible_heuristic_hash_outer(self.hash_orbit_state(puzzle_state))
     }
 }
 
@@ -405,8 +405,8 @@ impl<P: PuzzleState, S: StorageBackend<false>> OrbitPruningTable<P>
         todo!();
     }
 
-    fn hash_puzzle_state(&self, puzzle_state: &P) -> u64 {
-        fxhash::hash64(&puzzle_state.orbit_bytes(self.orbit_def, self.orbit_identifier))
+    fn hash_orbit_state(&self, puzzle_state: &P) -> u64 {
+        fxhash::hash64(&puzzle_state.orbit_bytes(self.orbit_identifier, self.orbit_def))
     }
 
     fn permissible_heuristic_hash_outer(&self, hash: u64) -> u8 {
@@ -420,15 +420,15 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
         orbit_def: OrbitDef,
         max_size_bytes: u64,
     ) -> (ExactOrbitPruningTable<S>, u64) {
-        // (
-        //     ExactOrbitPruningTable {
-        //         storage_backend: S::initialize_from_meta(max_size_bytes.into()),
-        //         orbit_def,
-        //         orbit_identifier: 0,
-        //     },
-        //     0,
-        // )
-        todo!()
+        (
+            ExactOrbitPruningTable {
+                storage_backend: S::initialize_from_meta(max_size_bytes.into()),
+                orbit_def,
+                orbit_identifier: 0,
+            },
+            0,
+        )
+        // todo!()
         /*
         set all values of the pruning table to infinity
         set the value associated with the solved cube to 0
@@ -441,8 +441,51 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
          */
     }
 
-    fn hash_puzzle_state(&self, puzzle_state: &P) -> u64 {
-        puzzle_state.exact_orbit_hash(self.orbit_def, self.orbit_identifier)
+    fn hash_orbit_state(&self, puzzle_state: &P) -> u64 {
+        // puzzle_state.exact_permutation_hash(self.orbit_identifier, self.orbit_def.piece_count)
+        let (perm, ori) = puzzle_state.orbit_bytes(self.orbit_identifier, self.orbit_def);
+
+        // taken from https://stackoverflow.com/a/64424328/12230735
+        const fn factorial(n: u64) -> Option<u64> {
+            match n {
+                0 | 1 => Some(1),
+                2..=20 => match factorial(n - 1) {
+                    Some(x) => Some(n * x),
+                    None => None,
+                },
+                _ => None,
+            }
+        }
+
+        let mut exact_perm_hash = 0;
+        for i in 0..self.orbit_def.piece_count.get() {
+            let mut res = 0;
+            for j in (i + 1)..self.orbit_def.piece_count.get() {
+                if perm[j as usize] < perm[i as usize] {
+                    res += 1;
+                }
+            }
+            exact_perm_hash +=
+                res * factorial((self.orbit_def.piece_count.get() - i - 1) as u64).unwrap();
+        }
+
+        let mut exact_ori_hash = 0;
+        for i in 0..self.orbit_def.piece_count.get() {
+            if i == self.orbit_def.piece_count.get() - 1 {
+                break;
+            }
+            exact_ori_hash += ori[i as usize] as u64;
+            if i != self.orbit_def.piece_count.get() - 2 {
+                exact_ori_hash *= self.orbit_def.orientation_count.get() as u64;
+            }
+        }
+
+        exact_perm_hash
+            * u64::pow(
+                self.orbit_def.orientation_count.get() as u64,
+                self.orbit_def.piece_count.get() as u32 - 1,
+            )
+            + exact_ori_hash
     }
 
     fn permissible_heuristic_hash_outer(&self, hash: u64) -> u8 {
@@ -461,7 +504,7 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P>
         todo!();
     }
 
-    fn hash_puzzle_state(&self, puzzle_state: &P) -> u64 {
+    fn hash_orbit_state(&self, puzzle_state: &P) -> u64 {
         todo!();
     }
 
@@ -488,7 +531,7 @@ impl<P: PuzzleState> PruningTables<P> for ZeroTable<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::phase2::puzzle::{cube3::Cube3, random_3x3_state};
+    use crate::phase2::puzzle::{apply_moves, cube3::Cube3, random_3x3_state, HeapPuzzle};
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
     #[test]
@@ -595,5 +638,82 @@ mod tests {
             orbit_tables.permissible_heuristic(&cube3_def.new_solved_state()),
             0
         );
+    }
+
+    #[test]
+    fn test_exact_orbit_hasher_only_hashes_orbit() {
+        let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let solved = cube3_def.new_solved_state();
+        let mut result_1 = solved.clone();
+        let mut result_2 = solved.clone();
+        let u_move = cube3_def.find_move("U").unwrap();
+
+        let exact_corners_pruning_table =
+            ExactOrbitPruningTable::<UncompressedStorageBackend<true>> {
+                storage_backend: UncompressedStorageBackend::initialize_from_meta(MaxEntires(100)),
+                orbit_def: cube3_def.sorted_orbit_defs[0],
+                orbit_identifier: 0,
+            };
+
+        assert_eq!(exact_corners_pruning_table.hash_orbit_state(&solved), 0);
+        result_1.replace_compose(&solved, &u_move.puzzle_state, &cube3_def.sorted_orbit_defs);
+        assert_eq!(exact_corners_pruning_table.hash_orbit_state(&result_1), 24476904);
+        result_2.replace_compose(&result_1, &u_move.puzzle_state, &cube3_def.sorted_orbit_defs);
+        assert_eq!(exact_corners_pruning_table.hash_orbit_state(&result_2), 57868020);
+        result_1.replace_compose(&result_2, &u_move.puzzle_state, &cube3_def.sorted_orbit_defs);
+        assert_eq!(exact_corners_pruning_table.hash_orbit_state(&result_1), 67775130);
+        result_2.replace_compose(&result_1, &u_move.puzzle_state, &cube3_def.sorted_orbit_defs);
+        assert_eq!(exact_corners_pruning_table.hash_orbit_state(&result_2), 0);
+
+        // shortest 11 cycle alg
+        result_1 = apply_moves(&cube3_def, &solved, "U R U F L R' U' R' F' D'", 1);
+
+        assert_eq!(
+            exact_corners_pruning_table.hash_orbit_state(&result_1),
+            0
+        );
+        result_2.replace_compose(
+            &result_1,
+            &u_move.puzzle_state,
+            &cube3_def.sorted_orbit_defs,
+        );
+        assert_eq!(
+            exact_corners_pruning_table.hash_orbit_state(&result_2),
+            24476904
+        );
+        result_1.replace_compose(
+            &result_2,
+            &u_move.puzzle_state,
+            &cube3_def.sorted_orbit_defs,
+        );
+        assert_eq!(
+            exact_corners_pruning_table.hash_orbit_state(&result_1),
+            57868020
+        );
+        result_2.replace_compose(
+            &result_1,
+            &u_move.puzzle_state,
+            &cube3_def.sorted_orbit_defs,
+        );
+        assert_eq!(
+            exact_corners_pruning_table.hash_orbit_state(&result_2),
+            67775130
+        );
+        result_1.replace_compose(
+            &result_2,
+            &u_move.puzzle_state,
+            &cube3_def.sorted_orbit_defs,
+        );
+        assert_eq!(
+            exact_corners_pruning_table.hash_orbit_state(&result_1),
+            0
+        );
+
+        assert_ne!(solved, result_1);
+    }
+
+    #[test]
+    fn test_exact_orbit_hasher_is_exact() {
+
     }
 }

@@ -34,11 +34,10 @@ pub trait PuzzleState: Hash + Clone + PartialEq + Debug {
     /// For slice puzzles, the identifier is the starting index of the orbit data
     /// in the puzzle state buffer. For specific puzzles the identifier is the
     /// index of the orbit in the orbit definition.
-    fn next_orbit_identifer(orbit_def: OrbitDef, orbit_identifier: usize) -> usize;
+    fn next_orbit_identifer(orbit_identifier: usize, orbit_def: OrbitDef) -> usize;
     /// Get the bytes of the specified orbit index in the form (permutation
     /// vector, orientation vector).
-    fn orbit_bytes(&self, orbit_def: OrbitDef, orbit_identifier: usize) -> (&[u8], &[u8]);
-    fn exact_orbit_hash(&self, orbit_def: OrbitDef, orbit_identifier: usize) -> u64;
+    fn orbit_bytes(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> (&[u8], &[u8]);
 }
 
 pub trait MultiBvInterface {
@@ -188,10 +187,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
             )
         });
 
-        sorted_orbit_defs = arg_indicies
-            .iter()
-            .map(|&i| sorted_orbit_defs[i])
-            .collect();
+        sorted_orbit_defs = arg_indicies.iter().map(|&i| sorted_orbit_defs[i]).collect();
 
         let mut moves = Vec::with_capacity(ksolve.moves().len());
         let mut move_classes = vec![];
@@ -350,16 +346,12 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
         induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
     }
 
-    fn next_orbit_identifer(orbit_def: OrbitDef, orbit_identifier: usize) -> usize {
-        next_orbit_identifier_slice(orbit_def, orbit_identifier)
+    fn next_orbit_identifer(orbit_identifier: usize, orbit_def: OrbitDef) -> usize {
+        next_orbit_identifier_slice(orbit_identifier, orbit_def)
     }
 
-    fn orbit_bytes(&self, orbit_def: OrbitDef, orbit_identifier: usize) -> (&[u8], &[u8]) {
-        orbit_bytes_slice(&self.0, orbit_def, orbit_identifier)
-    }
-
-    fn exact_orbit_hash(&self, orbit_def: OrbitDef, orbit_identifier: usize) -> u64 {
-        exact_orbit_hash_slice(&self.0, orbit_def, orbit_identifier)
+    fn orbit_bytes(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> (&[u8], &[u8]) {
+        orbit_bytes_slice(&self.0, orbit_identifier, orbit_def)
     }
 }
 
@@ -410,16 +402,12 @@ impl PuzzleState for HeapPuzzle {
         induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
     }
 
-    fn next_orbit_identifer(orbit_def: OrbitDef, orbit_identifier: usize) -> usize {
-        next_orbit_identifier_slice(orbit_def, orbit_identifier)
+    fn next_orbit_identifer(orbit_identifier: usize, orbit_def: OrbitDef) -> usize {
+        next_orbit_identifier_slice(orbit_identifier, orbit_def)
     }
 
-    fn orbit_bytes(&self, orbit_def: OrbitDef, orbit_identifier: usize) -> (&[u8], &[u8]) {
-        orbit_bytes_slice(&self.0, orbit_def, orbit_identifier)
-    }
-
-    fn exact_orbit_hash(&self, orbit_def: OrbitDef, orbit_identifier: usize) -> u64 {
-        exact_orbit_hash_slice(&self.0, orbit_def, orbit_identifier)
+    fn orbit_bytes(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> (&[u8], &[u8]) {
+        orbit_bytes_slice(&self.0, orbit_identifier, orbit_def)
     }
 }
 
@@ -657,27 +645,22 @@ fn induces_sorted_cycle_type_slice(
     true
 }
 
-fn next_orbit_identifier_slice(
-    orbit_def: OrbitDef,
-    orbit_identifier: usize,
-) -> usize {
-    orbit_identifier + orbit_def.piece_count.get() as usize * 2
+fn next_orbit_identifier_slice(orbit_base_slice: usize, orbit_def: OrbitDef) -> usize {
+    orbit_base_slice + orbit_def.piece_count.get() as usize * 2
 }
 
 fn orbit_bytes_slice(
     orbit_states: &[u8],
+    orbit_base_slice: usize,
     orbit_def: OrbitDef,
-    orbit_identifier: usize,
 ) -> (&[u8], &[u8]) {
-    todo!();
-}
-
-fn exact_orbit_hash_slice(
-    orbit_states: &[u8],
-    orbit_def: OrbitDef,
-    orbit_identifier: usize,
-) -> u64 {
-    todo!();
+    let piece_count = orbit_def.piece_count.get() as usize;
+    let base = orbit_base_slice * piece_count * 2;
+    let (permutation, orientation) = orbit_states.split_at(base + piece_count);
+    (
+        &permutation[base..base + piece_count],
+        &orientation[base..base + piece_count],
+    )
 }
 
 impl HeapPuzzle {
@@ -744,6 +727,30 @@ pub fn random_3x3_state<P: PuzzleState>(cube3_def: &PuzzleDef<P>, solved: &P) ->
     result_2
 }
 
+/// A utility function for testing. Not optimized.
+pub fn apply_moves<P: PuzzleState + Clone>(
+    puzzle_def: &PuzzleDef<P>,
+    puzzle_state: &P,
+    moves: &str,
+    repeat: u32,
+) -> P {
+    let mut result_1 = puzzle_state.clone();
+    let mut result_2 = puzzle_state.clone();
+
+    for _ in 0..repeat {
+        for name in moves.split_whitespace() {
+            let move_ = puzzle_def.find_move(name).unwrap();
+            result_2.replace_compose(
+                &result_1,
+                &move_.puzzle_state,
+                &puzzle_def.sorted_orbit_defs,
+            );
+            std::mem::swap(&mut result_1, &mut result_2);
+        }
+    }
+    result_1
+}
+
 #[cfg(test)]
 mod tests {
     extern crate test;
@@ -759,29 +766,6 @@ mod tests {
             .iter()
             .map(|&(length, oriented)| (length.try_into().unwrap(), oriented))
             .collect()
-    }
-
-    pub fn apply_moves<P: PuzzleState + Clone>(
-        puzzle_def: &PuzzleDef<P>,
-        puzzle_state: &P,
-        moves: &str,
-        repeat: u32,
-    ) -> P {
-        let mut result_1 = puzzle_state.clone();
-        let mut result_2 = puzzle_state.clone();
-
-        for _ in 0..repeat {
-            for name in moves.split_whitespace() {
-                let move_ = puzzle_def.find_move(name).unwrap();
-                result_2.replace_compose(
-                    &result_1,
-                    &move_.puzzle_state,
-                    &puzzle_def.sorted_orbit_defs,
-                );
-                std::mem::swap(&mut result_1, &mut result_2);
-            }
-        }
-        result_1
     }
 
     fn commutes_with<P: PuzzleState>() {

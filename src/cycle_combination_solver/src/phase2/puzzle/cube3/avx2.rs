@@ -374,7 +374,7 @@ impl Cube3 {
 mod tests {
     extern crate test;
     use super::*;
-    use crate::phase2::puzzle::{PuzzleDef, tests::apply_moves};
+    use crate::phase2::puzzle::{PuzzleDef, apply_moves};
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
     #[test]

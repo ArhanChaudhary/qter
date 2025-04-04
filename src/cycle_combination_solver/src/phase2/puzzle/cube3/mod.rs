@@ -65,16 +65,12 @@ mod common {
             })
         }
 
-        fn next_orbit_identifer(_orbit_def: OrbitDef, orbit_identifier: usize) -> usize {
+        fn next_orbit_identifer(orbit_identifier: usize, _orbit_def: OrbitDef) -> usize {
             orbit_identifier + 1
         }
 
-        fn orbit_bytes(&self, _orbit_def: OrbitDef, orbit_identifier: usize) -> (&[u8], &[u8]) {
+        fn orbit_bytes(&self, orbit_identifier: usize, _orbit_def: OrbitDef) -> (&[u8], &[u8]) {
             self.orbit_bytes(orbit_identifier)
-        }
-
-        fn exact_orbit_hash(&self, _orbit_def: OrbitDef, orbit_identifier: usize) -> u64 {
-            self.exact_orbit_hash(orbit_identifier)
         }
     }
 }
