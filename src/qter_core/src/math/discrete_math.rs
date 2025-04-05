@@ -1,4 +1,7 @@
-use crate::{Algorithm, I, Int, U, architectures::Permutation};
+use crate::{
+    I, Int, U,
+    architectures::{Algorithm, Permutation},
+};
 
 /// Calculate the GCD of two numbers
 pub fn gcd(mut a: Int<U>, mut b: Int<U>) -> Int<U> {
@@ -172,8 +175,8 @@ mod tests {
     use internment::ArcIntern;
 
     use crate::{
-        Algorithm, Int, U,
-        architectures::PuzzleDefinition,
+        Int, U,
+        architectures::{Algorithm, PuzzleDefinition},
         discrete_math::{
             decode, extended_euclid, gcd, lcm,
             length_of_substring_that_this_string_is_n_repeated_copies_of,

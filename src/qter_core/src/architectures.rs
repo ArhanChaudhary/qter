@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    cell::OnceCell,
     collections::{BTreeMap, HashMap, HashSet},
     sync::{Arc, OnceLock},
 };
@@ -8,8 +9,10 @@ use internment::ArcIntern;
 use itertools::Itertools;
 
 use crate::{
-    Algorithm, I, Int, U,
-    discrete_math::{decode, lcm_iter},
+    I, Int, U,
+    discrete_math::{
+        decode, lcm_iter, length_of_substring_that_this_string_is_n_repeated_copies_of,
+    },
     puzzle_parser,
     shared_facelet_detection::algorithms_to_cycle_generators,
     table_encoding,
@@ -397,25 +400,150 @@ impl CycleGeneratorSubcycle {
     }
 }
 
+/// Represents a sequence of moves to apply to a puzzle in the `Program`
+#[derive(Clone)]
+pub struct Algorithm {
+    perm_group: Arc<PermutationGroup>,
+    permutation: Permutation,
+    move_seq: Vec<ArcIntern<str>>,
+    chromatic_orders: OnceLock<Vec<Int<U>>>,
+    repeat: Int<U>,
+}
+
+impl Algorithm {
+    /// Create an `Algorithm` from what values it should add to which registers.
+    ///
+    /// `effect` is a list of tuples of register indices and how much to add to add to them.
+    pub fn new_from_effect(arch: &Architecture, effect: Vec<(usize, Int<U>)>) -> Algorithm {
+        let mut move_seq = Vec::new();
+
+        let mut expanded_effect = vec![Int::<U>::zero(); arch.registers().len()];
+
+        for (register, amt) in effect {
+            expanded_effect[register] = amt;
+        }
+
+        let table = arch.decoding_table();
+        let orders = table.orders();
+
+        while expanded_effect.iter().any(|v| !v.is_zero()) {
+            let (true_effect, alg) = table.closest_alg(&expanded_effect);
+
+            expanded_effect
+                .iter_mut()
+                .zip(true_effect.iter().copied())
+                .zip(orders.iter().copied())
+                .for_each(|((expanded_effect, true_effect), order)| {
+                    *expanded_effect = if *expanded_effect < true_effect {
+                        *expanded_effect + order - true_effect
+                    } else {
+                        *expanded_effect - true_effect
+                    }
+                });
+
+            move_seq.extend_from_slice(alg);
+        }
+
+        Self::new_from_move_seq(arch.group_arc(), move_seq).unwrap()
+    }
+
+    /// Create an `Algorithm` instance from a move sequence
+    pub fn new_from_move_seq(
+        perm_group: Arc<PermutationGroup>,
+        move_seq: Vec<ArcIntern<str>>,
+    ) -> Result<Algorithm, ArcIntern<str>> {
+        let mut permutation = perm_group.identity();
+
+        perm_group.compose_generators_into(&mut permutation, move_seq.iter())?;
+
+        Ok(Algorithm {
+            perm_group,
+            permutation,
+            move_seq,
+            chromatic_orders: OnceLock::new(),
+            repeat: Int::<U>::one(),
+        })
+    }
+
+    /// Get the underlying permutation of the `Algorithm` instance
+    pub fn permutation(&self) -> &Permutation {
+        &self.permutation
+    }
+
+    /// Find the result of applying the algorithm to the identity `exponent` times.
+    ///
+    /// This calculates the value in O(1) time with respect to `exponent`.
+    pub fn exponentiate(&mut self, exponent: Int<I>) {
+        if exponent.signum() == -1 {
+            self.perm_group.invert_generator_moves(&mut self.move_seq);
+        }
+
+        self.repeat *= exponent.abs();
+        self.permutation.exponentiate(exponent);
+    }
+
+    /// Returns a move sequence that when composed, give the same result as applying `.permutation()`
+    pub fn move_seq(&self) -> impl Iterator<Item = &ArcIntern<str>> {
+        self.move_seq
+            .iter()
+            .cycle()
+            .take(self.move_seq.len() * self.repeat.try_into().unwrap_or(usize::MAX))
+    }
+
+    /// Return the permutation group that this alg operates on
+    pub fn group(&self) -> &PermutationGroup {
+        &self.perm_group
+    }
+
+    /// Return the permutation group that this alg operates on in an Arc
+    pub fn group_arc(&self) -> Arc<PermutationGroup> {
+        Arc::clone(&self.perm_group)
+    }
+
+    /// Calculate the order of every cycle of facelets created by seeing this `Algorithm` instance as a register generator.
+    ///
+    /// Returns a list of chromatic orders where the index is the facelet.
+    pub fn chromatic_orders_by_facelets(&self) -> &[Int<U>] {
+        self.chromatic_orders.get_or_init(|| {
+            let mut out = vec![Int::one(); self.perm_group.facelet_count()];
+
+            self.permutation().cycles().iter().for_each(|cycle| {
+                let chromatic_order = length_of_substring_that_this_string_is_n_repeated_copies_of(
+                    cycle
+                        .iter()
+                        .map(|&idx| &*self.perm_group.facelet_colors()[idx]),
+                );
+
+                for &facelet in cycle {
+                    out[facelet] = Int::from(chromatic_order);
+                }
+            });
+
+            out
+        })
+    }
+}
+
+impl core::fmt::Debug for Algorithm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Algorithm")
+            .field("permutation", &self.permutation)
+            .field("move_seq", &self.move_seq.iter().map(|v| &**v).join(" "))
+            .finish_non_exhaustive()
+    }
+}
+
 /// A generator for a register in an architecture
 #[derive(Debug, Clone)]
 pub struct CycleGenerator {
-    pub(crate) generator_sequence: Vec<ArcIntern<str>>,
-    pub(crate) permutation: Permutation,
+    pub(crate) algorithm: Algorithm,
     pub(crate) unshared_cycles: Vec<CycleGeneratorSubcycle>,
     pub(crate) order: Int<U>,
-    pub(crate) group: Arc<PermutationGroup>,
 }
 
 impl CycleGenerator {
-    /// Get the sequence of group generators that compose the cycle generator
-    pub fn generator_sequence(&self) -> &[ArcIntern<str>] {
-        &self.generator_sequence
-    }
-
-    /// Get the underlying permutation of the cycle generator
-    pub fn permutation(&self) -> &Permutation {
-        &self.permutation
+    pub fn algorithm(&self) -> &Algorithm {
+        &self.algorithm
     }
 
     /// Get the cycles of the permutation that are unshared by other cycles in the architecture
@@ -477,9 +605,9 @@ impl CycleGenerator {
                 let mut still_uncovered = HashSet::new();
 
                 for i in 1..chromatic_order {
-                    if self.group.facelet_colors()
+                    if self.algorithm.group().facelet_colors()
                         [cycle.facelet_cycle()[(i + facelet_idx) % chromatic_order]]
-                        == self.group.facelet_colors()[facelet]
+                        == self.algorithm.group().facelet_colors()[facelet]
                     {
                         still_uncovered.insert(i);
                     }
@@ -642,16 +770,7 @@ impl Architecture {
             let registers_decoding_info = self
                 .registers()
                 .iter()
-                .map(|register| {
-                    (
-                        register.signature_facelets(),
-                        Algorithm::new_from_move_seq(
-                            Arc::clone(&self.perm_group),
-                            register.generator_sequence().to_owned(),
-                        )
-                        .unwrap(),
-                    )
-                })
+                .map(|register| (register.signature_facelets(), &register.algorithm))
                 .collect_vec();
 
             let mut data = BTreeMap::new();
@@ -673,9 +792,12 @@ impl Architecture {
             };
 
             for item in self.registers().iter().flat_map(|register| {
-                let mut inverse = register.generator_sequence.to_owned();
-                self.perm_group.invert_generator_moves(&mut inverse);
-                [register.generator_sequence.to_owned(), inverse]
+                let mut inverse = register.algorithm.to_owned();
+                inverse.exponentiate(-Int::<I>::one());
+                [
+                    register.algorithm.move_seq().cloned().collect_vec(),
+                    inverse.move_seq().cloned().collect_vec(),
+                ]
             }) {
                 add_permutation(item);
             }

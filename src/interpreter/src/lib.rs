@@ -1,8 +1,8 @@
 use std::{collections::VecDeque, mem, sync::Arc};
 
 use qter_core::{
-    Algorithm, Facelets, I, Instruction, Int, Program, RegisterGenerator, U,
-    architectures::{Permutation, PermutationGroup},
+    Facelets, I, Instruction, Int, Program, RegisterGenerator, U,
+    architectures::{Algorithm, Permutation, PermutationGroup},
     discrete_math::{decode, lcm},
 };
 
@@ -502,7 +502,7 @@ mod tests {
     use crate::{Interpreter, PausedState, Puzzle};
     use compiler::compile;
     use internment::ArcIntern;
-    use qter_core::{Algorithm, Int, RegisterGenerator, U, architectures::PuzzleDefinition};
+    use qter_core::{Int, RegisterGenerator, U, architectures::PuzzleDefinition};
     use std::sync::Arc;
 
     #[test]

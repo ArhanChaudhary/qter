@@ -14,8 +14,8 @@ use internment::ArcIntern;
 use interpreter::{ActionPerformed, ExecutionState, Interpreter, PausedState, PuzzleState};
 use itertools::Itertools;
 use qter_core::{
-    Algorithm, I, Int,
-    architectures::Permutation,
+    I, Int,
+    architectures::{Algorithm, Permutation},
     table_encoding::{decode_table, encode_table},
 };
 

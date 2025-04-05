@@ -4,8 +4,8 @@ use internment::ArcIntern;
 use itertools::Itertools;
 use pest::error::Error;
 use qter_core::{
-    Algorithm, Facelets, Instruction, Int, Program, RegisterGenerator, U, WithSpan,
-    architectures::{Architecture, PermutationGroup},
+    Facelets, Instruction, Int, Program, RegisterGenerator, U, WithSpan,
+    architectures::{Algorithm, Architecture, PermutationGroup},
     mk_error,
 };
 

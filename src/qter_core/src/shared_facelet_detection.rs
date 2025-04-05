@@ -5,7 +5,9 @@ use itertools::Itertools;
 
 use crate::{
     Int,
-    architectures::{CycleGenerator, CycleGeneratorSubcycle, Permutation, PermutationGroup},
+    architectures::{
+        Algorithm, CycleGenerator, CycleGeneratorSubcycle, Permutation, PermutationGroup,
+    },
     discrete_math::{lcm, length_of_substring_that_this_string_is_n_repeated_copies_of},
     union_find::{SetInfo, UnionFind},
 };
@@ -102,13 +104,15 @@ pub fn algorithms_to_cycle_generators(
                 }
 
                 CycleGenerator {
-                    generator_sequence: algorithm.to_owned(),
-                    permutation,
+                    algorithm: Algorithm::new_from_move_seq(
+                        Arc::clone(&group),
+                        algorithm.to_owned(),
+                    )
+                    .unwrap(),
                     order: unshared_cycles.iter().fold(Int::one(), |acc, subcycle| {
                         lcm(acc, subcycle.chromatic_order)
                     }),
                     unshared_cycles,
-                    group: Arc::clone(&group),
                 }
             })
             .collect(),
