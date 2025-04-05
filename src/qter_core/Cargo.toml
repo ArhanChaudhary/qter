@@ -9,6 +9,7 @@ itertools = "0.13"
 pest = "2.7"
 pest_derive = "2.7"
 internment = { version = "0.8", features = [ "arc" ] }
+pog_ans = { path = "../pog_ans" }
 
 [lints]
 workspace = true

@@ -911,6 +911,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "953ec861398dccce10c670dfeaf3ec4911ca479e9c02154b3a215178c5f566f2"
 
 [[package]]
+name = "pog_ans"
+version = "0.1.0"
+
+[[package]]
 name = "ppv-lite86"
 version = "0.2.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -949,6 +953,7 @@ dependencies = [
  "itertools 0.13.0",
  "pest",
  "pest_derive",
+ "pog_ans",
 ]
 
 [[package]]
