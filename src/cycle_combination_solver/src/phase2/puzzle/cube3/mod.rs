@@ -1,5 +1,5 @@
 #[cfg(not(any(avx2, simd8and16)))]
-pub type Cube3 = super::StackPuzzle<40>;
+pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
     use crate::phase2::puzzle::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
