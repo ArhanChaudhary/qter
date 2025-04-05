@@ -5,8 +5,8 @@ type StateNextDown = u8;
 
 pub const N: u32 = StateNextDown::BITS;
 
-fn coding_function(state: State, symbol: u16, ranges: &[u16]) -> Option<State> {
-    let p = ranges[symbol as usize];
+fn coding_function(state: State, symbol: usize, ranges: &[u16]) -> Option<State> {
+    let p = ranges[symbol];
 
     if p == 0 {
         panic!("Got a symbol with range zero: {symbol}; {ranges:?}");
@@ -19,14 +19,14 @@ fn coding_function(state: State, symbol: u16, ranges: &[u16]) -> Option<State> {
         return None;
     }
 
-    Some((divided << N) + (state % p) + ranges.iter().take(symbol as usize).copied().sum::<State>())
+    Some((divided << N) + (state % p) + ranges.iter().take(symbol).copied().sum::<State>())
 }
 
 pub fn ans_encode(
     stream: &mut Vec<u8>,
-    mut symbols: &[u16],
+    mut symbols: &[usize],
     symbol_count: usize,
-    mut next_ranges: impl FnMut(Option<u16>, &mut [u16]),
+    mut next_ranges: impl FnMut(Option<usize>, &mut [State]),
 ) {
     let mut ranges = vec![0; symbol_count * symbols.len()];
 
@@ -83,8 +83,8 @@ pub fn ans_decode(
     data: &[u8],
     max_symbols: Option<usize>,
     symbol_count: usize,
-    mut next_ranges: impl FnMut(Option<u16>, &mut [u16]),
-) -> Option<(Vec<u16>, usize)> {
+    mut next_ranges: impl FnMut(Option<usize>, &mut [State]),
+) -> Option<(Vec<usize>, usize)> {
     if let Some(max) = max_symbols {
         if max == 0 {
             return Some((vec![], 0));
@@ -120,7 +120,7 @@ pub fn ans_decode(
 
                 true
             })
-            .count() as State;
+            .count();
 
         output.push(symbol);
 
