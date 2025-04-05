@@ -358,24 +358,10 @@ fn interpret_traced<P: PuzzleState>(
                 continue;
             };
 
-            let mut move_seq = exponentiated_puzzle_alg.move_seq().to_owned();
-            let mut repeat = exponentiated_puzzle_alg.repeat();
-
-            if repeat < Int::<I>::zero() {
-                exponentiated_puzzle_alg
-                    .group()
-                    .invert_generator_moves(&mut move_seq);
-                repeat = -repeat;
-            }
-
             eprint!("Puzzle {puzzle_idx}:");
 
-            while repeat > Int::<I>::zero() {
-                for move_ in &move_seq {
-                    eprint!(" {move_}");
-                }
-
-                repeat -= Int::<I>::one();
+            for move_ in exponentiated_puzzle_alg.move_seq() {
+                eprint!(" {move_}");
             }
 
             eprintln!();

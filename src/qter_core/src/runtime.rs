@@ -12,7 +12,7 @@ pub struct Algorithm {
     permutation: Permutation,
     move_seq: Vec<ArcIntern<str>>,
     chromatic_orders: OnceCell<Vec<Int<U>>>,
-    repeat: Int<I>,
+    repeat: Int<U>,
 }
 
 impl Algorithm {
@@ -66,7 +66,7 @@ impl Algorithm {
             permutation,
             move_seq,
             chromatic_orders: OnceCell::new(),
-            repeat: Int::<I>::one(),
+            repeat: Int::<U>::one(),
         })
     }
 
@@ -79,22 +79,25 @@ impl Algorithm {
     ///
     /// This calculates the value in O(1) time with respect to `exponent`.
     pub fn exponentiate(&mut self, exponent: Int<I>) {
-        self.repeat = exponent;
+        if exponent.signum() == -1 {
+            self.perm_group.invert_generator_moves(&mut self.move_seq);
+        }
+
+        self.repeat *= exponent.abs();
         self.permutation.exponentiate(exponent);
     }
 
     /// Returns a move sequence that when composed, give the same result as applying `.permutation()`
-    pub fn move_seq(&self) -> &[ArcIntern<str>] {
-        &self.move_seq
+    pub fn move_seq(&self) -> impl Iterator<Item = &ArcIntern<str>> {
+        self.move_seq
+            .iter()
+            .cycle()
+            .take(self.move_seq.len() * self.repeat.try_into().unwrap_or(usize::MAX))
     }
 
     /// Return the permutation group that this alg operates on
     pub fn group(&self) -> &PermutationGroup {
         &self.perm_group
-    }
-
-    pub fn repeat(&self) -> Int<I> {
-        self.repeat
     }
 
     /// Return the permutation group that this alg operates on in an Arc

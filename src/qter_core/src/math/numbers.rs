@@ -8,7 +8,10 @@ use std::{
     str::FromStr,
 };
 
-use bnum::types::{I512, U512};
+use bnum::{
+    cast::As,
+    types::{I512, U512},
+};
 
 /// Signed
 pub struct I;
@@ -71,6 +74,19 @@ impl<Signed> Int<Signed> {
         use bnum::cast::As;
 
         self.value.as_()
+    }
+}
+
+impl Int<I> {
+    pub fn signum(&self) -> i8 {
+        self.value.signum().as_()
+    }
+
+    pub fn abs(self) -> Int<U> {
+        Int {
+            value: self.value.abs(),
+            phantom: PhantomData,
+        }
     }
 }
 
