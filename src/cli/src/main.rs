@@ -191,7 +191,8 @@ fn main() -> color_eyre::Result<()> {
         Commands::Dump { input } => {
             let data = fs::read(input)?;
 
-            let decoded = decode_table(&data).ok_or_eyre("Could not decode the table")?;
+            let decoded =
+                decode_table(&mut data.iter().copied()).ok_or_eyre("Could not decode the table")?;
 
             for moves in decoded {
                 println!("{}", moves.iter().join(" "));

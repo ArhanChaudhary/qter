@@ -788,7 +788,9 @@ impl Architecture {
     pub fn decoding_table(&self) -> &DecodingTable {
         self.decoded_table.get_or_init(|| {
             let table = match &self.optimized_table {
-                Some(encoded) => table_encoding::decode_table(encoded).unwrap(),
+                Some(encoded) => {
+                    table_encoding::decode_table(&mut encoded.iter().copied()).unwrap()
+                }
                 None => Vec::new(),
             };
 

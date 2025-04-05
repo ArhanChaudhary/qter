@@ -1,54 +1,114 @@
-use std::iter;
+use std::iter::{self, Sum};
 
-type State = u16;
-type StateNextDown = u8;
+use num_traits::{NumAssign, NumCast, PrimInt, ToBytes};
 
-pub const N: u32 = StateNextDown::BITS;
+trait Seal {}
 
-fn coding_function(state: State, symbol: usize, ranges: &[u16]) -> Option<State> {
+pub trait State: TakeFrom + core::fmt::Display + core::fmt::Debug + Sum + NumAssign {
+    type NextDown: TakeFrom;
+    const RANGE_SIZE: Self;
+    const RANGE_BITS: usize;
+
+    fn ilog2(self) -> u32;
+}
+
+#[allow(private_bounds)]
+pub trait TakeFrom: Seal + PrimInt + ToBytes {
+    fn take_from(iter: &mut impl Iterator<Item = u8>) -> Option<Self>;
+}
+
+macro_rules! take_from {
+    ($ty:ty) => {
+        impl Seal for $ty {}
+
+        impl TakeFrom for $ty {
+            fn take_from(iter: &mut impl Iterator<Item = u8>) -> Option<Self> {
+                let mut data = [0; { Self::BITS as usize / 8 }];
+                for spot in data.iter_mut() {
+                    let value = iter.next()?;
+                    *spot = value;
+                }
+                Some(Self::from_le_bytes(data))
+            }
+        }
+    };
+}
+
+macro_rules! state {
+    ($ty:ty, $next_down:ty) => {
+        take_from!($ty);
+
+        impl State for $ty {
+            type NextDown = $next_down;
+            const RANGE_SIZE: $ty = (<$next_down>::MAX as $ty) + 1;
+            const RANGE_BITS: usize = <$next_down>::BITS as usize;
+
+            fn ilog2(self) -> u32 {
+                self.ilog2()
+            }
+        }
+    };
+}
+
+take_from!(u8);
+state!(u16, u8);
+state!(u32, u16);
+state!(u64, u32);
+state!(u128, u64);
+
+fn coding_function<S: State>(state: S, symbol: usize, ranges: &[S]) -> Option<S> {
     let p = ranges[symbol];
 
-    if p == 0 {
+    if p == S::zero() {
         panic!("Got a symbol with range zero: {symbol}; {ranges:?}");
     }
 
     let divided = state / p;
 
     // Doing the bitshift will make the number fall out of range
-    if divided.leading_zeros() < N {
+    if divided.leading_zeros() < (S::RANGE_BITS as u32) {
         return None;
     }
 
-    Some((divided << N) + (state % p) + ranges.iter().take(symbol).copied().sum::<State>())
+    Some((divided << S::RANGE_BITS) + (state % p) + ranges.iter().take(symbol).copied().sum::<S>())
 }
 
-pub fn ans_encode(
+pub fn ans_encode<S: State>(
     stream: &mut Vec<u8>,
     mut symbols: &[usize],
     symbol_count: usize,
-    mut next_ranges: impl FnMut(Option<usize>, &mut [State]),
+    mut next_ranges: impl FnMut(Option<usize>, &mut [S]),
 ) {
-    let mut ranges = vec![0; symbol_count * symbols.len()];
+    let mut ranges = vec![S::zero(); symbol_count * symbols.len()];
 
     (iter::once(None).chain(symbols.iter().copied().map(Some)))
         .zip(ranges.chunks_mut(symbol_count))
         .for_each(|(symbol, ranges)| {
             next_ranges(symbol, ranges);
             assert!(
-                ranges.iter().copied().sum::<u16>() == 1 << N,
+                ranges.iter().copied().sum::<S>() == S::RANGE_SIZE,
                 "Ranges must sum to {}, got {ranges:?}",
-                1 << N
+                S::RANGE_SIZE
             )
         });
 
     let mut state = match symbols.last() {
-        Some(last) => (0..State::MAX)
-            .find(|i| {
-                coding_function(*i, *last, &ranges[ranges.len() - symbol_count..])
-                    .is_some_and(|v| v > StateNextDown::MAX as State)
-            })
-            .unwrap(),
-        None => 0,
+        Some(last) => {
+            let mut i = S::zero();
+            loop {
+                if coding_function(i, *last, &ranges[ranges.len() - symbol_count..])
+                    .is_some_and(|v| v > S::RANGE_SIZE - S::one())
+                {
+                    break i;
+                }
+                i += S::one();
+
+                if i > S::RANGE_SIZE {
+                    panic!();
+                }
+            }
+        }
+        None => S::zero(),
     };
 
     let starts_at = stream.len();
@@ -64,9 +124,12 @@ pub fn ans_encode(
                 }
                 None => {
                     stream.extend_from_slice(
-                        &((state & StateNextDown::MAX as State) as StateNextDown).to_be_bytes(),
+                        (<S::NextDown as NumCast>::from(state & (S::RANGE_SIZE - S::one())))
+                            .unwrap()
+                            .to_be_bytes()
+                            .as_ref(),
                     );
-                    state >>= StateNextDown::BITS;
+                    state = state >> S::RANGE_BITS;
                 }
             };
         }
@@ -74,49 +137,46 @@ pub fn ans_encode(
         symbols = prev;
     }
 
-    stream.extend_from_slice(&state.to_be_bytes());
+    stream.extend_from_slice(state.to_be_bytes().as_ref());
 
     stream[starts_at..].reverse();
 }
 
-pub fn ans_decode(
-    data: &[u8],
+pub fn ans_decode<S: State>(
+    data: &mut impl Iterator<Item = u8>,
     max_symbols: Option<usize>,
     symbol_count: usize,
-    mut next_ranges: impl FnMut(Option<usize>, &mut [State]),
-) -> Option<(Vec<usize>, usize)> {
+    mut next_ranges: impl FnMut(Option<usize>, &mut [S]),
+) -> Option<Vec<usize>> {
     if let Some(max) = max_symbols {
         if max == 0 {
-            return Some((vec![], 0));
+            return Some(vec![]);
         }
     }
 
-    let len_before = data.len();
-
-    let mut ranges = vec![0; symbol_count];
+    let mut ranges = vec![S::zero(); symbol_count];
 
     next_ranges(None, &mut ranges);
 
-    let (state, mut data) = data.split_first_chunk::<{ (State::BITS / 8) as usize }>()?;
+    let mut state = S::take_from(data)?;
 
-    let mut state = State::from_le_bytes(*state);
     let mut output = Vec::new();
 
-    let mask = (1 << N) - 1;
+    let mask = S::RANGE_SIZE - S::one();
 
     'decoding: loop {
         let range_spot = state & mask;
 
-        let mut cdf_val = 0;
+        let mut cdf_val = S::zero();
         let symbol = ranges
             .iter()
             .copied()
             .take_while(|v| {
-                if cdf_val + v > range_spot {
+                if cdf_val + *v > range_spot {
                     return false;
                 }
 
-                cdf_val += v;
+                cdf_val += *v;
 
                 true
             })
@@ -130,16 +190,11 @@ pub fn ans_decode(
             }
         }
 
-        state = ranges[symbol as usize] * (state >> N) + (state & mask) - cdf_val;
+        state = ranges[symbol] * (state >> S::RANGE_BITS) + (state & mask) - cdf_val;
 
-        while state == 0 || state.ilog2() < StateNextDown::BITS {
-            if let Some((v, new_data)) =
-                data.split_first_chunk::<{ (StateNextDown::BITS / 8) as usize }>()
-            {
-                data = new_data;
-
-                state <<= StateNextDown::BITS;
-                state |= StateNextDown::from_le_bytes(*v) as State;
+        while state == S::zero() || state.ilog2() < (S::RANGE_BITS as u32) {
+            if let Some(v) = S::NextDown::take_from(data) {
+                state = (state << S::RANGE_BITS) | S::from(v).unwrap();
             } else {
                 break 'decoding;
             }
@@ -148,12 +203,12 @@ pub fn ans_decode(
         next_ranges(Some(symbol), &mut ranges);
     }
 
-    Some((output, len_before - data.len()))
+    Some(output)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{N, ans_decode, ans_encode};
+    use crate::{ans_decode, ans_encode};
 
     #[test]
     fn test_encoding() {
@@ -179,18 +234,16 @@ mod tests {
 
             out.copy_from_slice(&dist);
 
-            out.iter_mut().for_each(|v| *v *= (1 << N) / 4);
+            out.iter_mut().for_each(|v| *v *= (1 << 8) / 4);
         };
 
         let mut encoded = Vec::new();
         ans_encode(&mut encoded, &v, 3, dist);
         println!("{encoded:?}");
-        let (decoded, taken) = ans_decode(&encoded, None, 3, dist).unwrap();
-        assert_eq!(taken, 4);
+        let decoded = ans_decode(&mut encoded.iter().copied(), None, 3, dist).unwrap();
         assert_eq!(decoded, v);
         encoded.extend_from_slice(&[1, 2, 3, 4, 5]);
-        let (decoded, taken) = ans_decode(&encoded, Some(v.len()), 3, dist).unwrap();
-        assert_eq!(taken, 4);
+        let decoded = ans_decode(&mut encoded.iter().copied(), Some(v.len()), 3, dist).unwrap();
         assert_eq!(decoded, v);
     }
 }

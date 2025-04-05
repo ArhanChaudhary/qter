@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use internment::ArcIntern;
 use itertools::Itertools;
-use pog_ans::{N, ans_decode, ans_encode};
+use pog_ans::{TakeFrom, ans_decode, ans_encode};
 
 #[derive(Debug)]
 struct TableStats {
@@ -66,7 +66,7 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
         },
     );
 
-    if stats.frequencies.len() > (1 << N) - 1 {
+    if stats.frequencies.len() > (1 << u8::BITS) - 1 {
         return None;
     }
 
@@ -227,55 +227,38 @@ fn rest_weighted(ranges: &mut [u16], mut range_left: usize, distribution: &[u32]
 }
 
 /// Decodes a table and returns None if it can't be decoded
-pub fn decode_table(mut data: &[u8]) -> Option<Vec<Vec<ArcIntern<str>>>> {
-    let (symbol_count, new_data) = data.split_first_chunk::<4>()?;
-    data = new_data;
+pub fn decode_table(data: &mut impl Iterator<Item = u8>) -> Option<Vec<Vec<ArcIntern<str>>>> {
+    let symbol_count = u32::take_from(data)?;
 
     let mut symbols = Vec::new();
     let mut frequencies = Vec::new();
 
-    for _ in 0..u32::from_le_bytes(*symbol_count) {
-        let (symbol_len, new_data) = data.split_first_chunk::<4>()?;
-        data = new_data;
-        let (generator, new_data) = data.split_at(u32::from_le_bytes(*symbol_len) as usize);
-        data = new_data;
+    for _ in 0..symbol_count {
+        let symbol_len = u32::take_from(data)?;
+        let generator = data.take(symbol_len as usize).collect_vec();
 
-        let generator = ArcIntern::<str>::from(String::from_utf8(generator.to_owned()).ok()?);
+        let generator = ArcIntern::<str>::from(String::from_utf8(generator).ok()?);
         symbols.push(ArcIntern::clone(&generator));
 
-        let (freq, new_data) = data.split_first_chunk::<4>()?;
-        data = new_data;
-        frequencies.push(u32::from_le_bytes(*freq));
+        frequencies.push(u32::take_from(data)?);
     }
 
     let mut length_frequencies = HashMap::new();
 
-    let (length_count, new_data) = data.split_first_chunk::<4>()?;
-    data = new_data;
+    let length_count = u32::take_from(data)?;
 
-    for _ in 0..u32::from_le_bytes(*length_count) {
-        let (length, new_data) = data.split_first_chunk::<4>()?;
-        data = new_data;
-        let (freq, new_data) = data.split_first_chunk::<4>()?;
-        data = new_data;
-
-        length_frequencies.insert(
-            u32::from_le_bytes(*length) as usize,
-            u32::from_le_bytes(*freq),
-        );
+    for _ in 0..length_count {
+        length_frequencies.insert(u32::take_from(data)? as usize, u32::take_from(data)?);
     }
 
-    let (disallowed_pair_count, new_data) = data.split_first_chunk::<4>()?;
-    data = new_data;
-    let disallowed_pair_count = u32::from_le_bytes(*disallowed_pair_count) as usize;
+    let disallowed_pair_count = u32::take_from(data)? as usize;
 
-    let (disallowed_pairs_symbols, taken) = ans_decode(
+    let disallowed_pairs_symbols = ans_decode(
         data,
         Some(disallowed_pair_count),
         frequencies.len() + 1,
         disallowed_pair_symbols_distribution_closure(),
     )?;
-    data = data.split_at(taken).1;
 
     let end_of_alg_symbol = frequencies.len();
 
@@ -313,7 +296,6 @@ pub fn decode_table(mut data: &[u8]) -> Option<Vec<Vec<ArcIntern<str>>>> {
         stats.frequencies.len() + 1,
         mk_distribution_closure(stats),
     )?
-    .0
     .split(|s| *s == end_of_alg_symbol)
     .map(|alg| {
         alg.iter()
@@ -363,7 +345,9 @@ fn disallowed_pair_symbols_distribution_closure() -> impl FnMut(Option<usize>, &
 
         rest_unweighted(
             out,
-            (1 << N) - (end_of_alg_symbol - min_num_seeable) - out[end_of_alg_symbol] as usize,
+            (1 << u8::BITS)
+                - (end_of_alg_symbol - min_num_seeable)
+                - out[end_of_alg_symbol] as usize,
         );
     }
 }
@@ -395,7 +379,7 @@ fn mk_distribution_closure(stats: TableStats) -> impl FnMut(Option<usize>, &mut 
 
         out.fill(0);
 
-        let mut range_left = 1 << N;
+        let mut range_left = 1 << u8::BITS;
 
         if let Some((len_chance, lens_cdf)) = lens_cdf.get(&len) {
             if *lens_cdf == 0 {
@@ -469,7 +453,7 @@ mod tests {
 
         let encoded = encode_table(&algs).unwrap().0;
         println!("{encoded:?}");
-        let decoded = decode_table(&encoded).unwrap();
+        let decoded = decode_table(&mut encoded.iter().copied()).unwrap();
         assert_eq!(algs, decoded);
         // panic!()
     }
@@ -556,7 +540,7 @@ R U R' U R U' R' U' R' F R F'";
 
         let (encoded, data_without_header) = encode_table(&algs).unwrap();
         println!("{encoded:?}");
-        let decoded = decode_table(&encoded).unwrap();
+        let decoded = decode_table(&mut encoded.iter().copied()).unwrap();
         assert_eq!(algs, decoded);
 
         // panic!(
