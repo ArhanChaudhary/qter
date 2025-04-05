@@ -1,10 +1,11 @@
-use std::iter::{self, Sum};
+use core::{fmt::Debug, hash::Hash};
+use std::{cell::RefCell, collections::HashMap, iter::Sum, marker::PhantomData, rc::Rc};
 
 use num_traits::{NumAssign, NumCast, PrimInt, ToBytes};
 
 trait Seal {}
 
-pub trait State: TakeFrom + core::fmt::Display + core::fmt::Debug + Sum + NumAssign {
+pub trait State: TakeFrom + core::fmt::Display + Debug + Sum + NumAssign {
     type NextDown: TakeFrom;
     const RANGE_SIZE: Self;
     const RANGE_BITS: usize;
@@ -56,11 +57,134 @@ state!(u32, u16);
 state!(u64, u32);
 state!(u128, u64);
 
-fn coding_function<S: State>(state: S, symbol: usize, ranges: &[S]) -> Option<S> {
+pub trait CodingFSM<S: State>: Debug {
+    fn symbol_count(&self) -> usize;
+
+    fn found_symbol(&mut self, symbol: usize);
+
+    fn predict_next_symbol(&self, out: &mut [S]);
+}
+
+pub trait ReversibleFSM<S: State>: CodingFSM<S> {
+    fn uncall_found_symbol(&mut self, symbol: usize);
+    // if only we were coding in janus xD
+}
+
+#[derive(Clone)]
+pub struct Cache<S: State, FSM: CodingFSM<S> + Eq + Hash + Clone> {
+    fsm: FSM,
+    // Allow being cloned over and over again inside a `MakeReversible`
+    cache: Rc<RefCell<HashMap<FSM, Vec<S>>>>,
+}
+
+impl<S: State, FSM: CodingFSM<S> + Eq + Hash + Clone> Debug for Cache<S, FSM> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.fsm.fmt(f)
+    }
+}
+
+impl<S: State, FSM: CodingFSM<S> + Eq + Hash + Clone> Cache<S, FSM> {
+    pub fn new(fsm: FSM) -> Self {
+        let mut cache = Cache {
+            fsm,
+            cache: Rc::new(RefCell::new(HashMap::new())),
+        };
+        cache.cache_current_prediction();
+        cache
+    }
+
+    fn cache_current_prediction(&mut self) {
+        let mut data = vec![S::zero(); self.fsm.symbol_count()];
+        self.fsm.predict_next_symbol(&mut data);
+        self.cache.borrow_mut().insert(self.fsm.to_owned(), data);
+    }
+}
+
+impl<S: State, FSM: CodingFSM<S> + Eq + Hash + Clone> CodingFSM<S> for Cache<S, FSM> {
+    fn symbol_count(&self) -> usize {
+        self.fsm.symbol_count()
+    }
+
+    fn found_symbol(&mut self, symbol: usize) {
+        self.fsm.found_symbol(symbol);
+
+        if !self.cache.borrow().contains_key(&self.fsm) {
+            self.cache_current_prediction();
+        }
+    }
+
+    fn predict_next_symbol(&self, out: &mut [S]) {
+        let cache = self.cache.borrow();
+        let prediction = cache
+            .get(&self.fsm)
+            .expect("The predictions to be cached after calling `found_symbol`");
+        out.copy_from_slice(prediction);
+    }
+}
+
+impl<S: State, FSM: ReversibleFSM<S> + Eq + Hash + Clone> ReversibleFSM<S> for Cache<S, FSM> {
+    fn uncall_found_symbol(&mut self, symbol: usize) {
+        self.fsm.uncall_found_symbol(symbol);
+    }
+}
+
+struct MakeReversible<S: State, FSM: CodingFSM<S> + Clone> {
+    current_fsm: FSM,
+    stack: Vec<FSM>,
+    phantom: PhantomData<S>,
+}
+
+impl<S: State, FSM: CodingFSM<S> + Clone> Debug for MakeReversible<S, FSM> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.current_fsm.fmt(f)
+    }
+}
+
+impl<S: State, FSM: CodingFSM<S> + Clone> MakeReversible<S, FSM> {
+    fn new(fsm: FSM) -> Self {
+        MakeReversible {
+            current_fsm: fsm,
+            stack: Vec::new(),
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<S: State, FSM: CodingFSM<S> + Clone> CodingFSM<S> for MakeReversible<S, FSM> {
+    fn symbol_count(&self) -> usize {
+        self.current_fsm.symbol_count()
+    }
+
+    fn found_symbol(&mut self, symbol: usize) {
+        let prev_fsm = self.current_fsm.to_owned();
+        self.current_fsm.found_symbol(symbol);
+        self.stack.push(prev_fsm);
+    }
+
+    fn predict_next_symbol(&self, out: &mut [S]) {
+        self.current_fsm.predict_next_symbol(out);
+    }
+}
+
+impl<S: State, FSM: CodingFSM<S> + Clone> ReversibleFSM<S> for MakeReversible<S, FSM> {
+    fn uncall_found_symbol(&mut self, _: usize) {
+        self.current_fsm = match self.stack.pop() {
+            Some(v) => v,
+            None => unreachable!(),
+        };
+    }
+}
+
+fn coding_function<S: State, T: Debug>(
+    state: S,
+    symbol: usize,
+    ranges: &[S],
+    fsm: &T,
+) -> Option<S> {
     let p = ranges[symbol];
 
     if p == S::zero() {
-        panic!("Got a symbol with range zero: {symbol}; {ranges:?}");
+        panic!("Got a symbol with range zero: {symbol}; {ranges:?}; {fsm:?}");
     }
 
     let divided = state / p;
@@ -73,33 +197,39 @@ fn coding_function<S: State>(state: S, symbol: usize, ranges: &[S]) -> Option<S>
     Some((divided << S::RANGE_BITS) + (state % p) + ranges.iter().take(symbol).copied().sum::<S>())
 }
 
-pub fn ans_encode<S: State>(
+pub fn ans_encode<S: State, FSM: CodingFSM<S> + Clone>(
     stream: &mut Vec<u8>,
-    mut symbols: &[usize],
-    symbol_count: usize,
-    mut next_ranges: impl FnMut(Option<usize>, &mut [S]),
+    symbols: &[usize],
+    initial_state: FSM,
 ) {
-    let mut ranges = vec![S::zero(); symbol_count * symbols.len()];
+    let mut reversible = MakeReversible::new(initial_state);
 
-    (iter::once(None).chain(symbols.iter().copied().map(Some)))
-        .zip(ranges.chunks_mut(symbol_count))
-        .for_each(|(symbol, ranges)| {
-            next_ranges(symbol, ranges);
-            assert!(
-                ranges.iter().copied().sum::<S>() == S::RANGE_SIZE,
-                "Ranges must sum to {}, got {ranges:?}",
-                S::RANGE_SIZE
-            )
-        });
+    // We don't want to do the last symbol
+    for symbol in &symbols[0..symbols.len() - 1] {
+        reversible.found_symbol(*symbol);
+    }
 
-    let mut state = match symbols.last() {
-        Some(last) => {
+    ans_encode_inplace(stream, symbols, reversible);
+}
+
+pub fn ans_encode_inplace<S: State, FSM: ReversibleFSM<S>>(
+    stream: &mut Vec<u8>,
+    symbols: &[usize],
+    mut final_state: FSM,
+) {
+    let symbol_count = final_state.symbol_count();
+
+    let mut last_ranges = vec![S::zero(); symbol_count];
+    final_state.predict_next_symbol(&mut last_ranges);
+
+    let (mut state, mut symbols) = match symbols.split_last() {
+        Some((last, symbols)) => {
             let mut i = S::zero();
             loop {
-                if coding_function(i, *last, &ranges[ranges.len() - symbol_count..])
-                    .is_some_and(|v| v > S::RANGE_SIZE - S::one())
-                {
-                    break i;
+                if let Some(code) = coding_function(i, *last, &last_ranges, &final_state) {
+                    if code > S::RANGE_SIZE - S::one() {
+                        break (code, symbols);
+                    }
                 }
                 i += S::one();
 
@@ -108,16 +238,18 @@ pub fn ans_encode<S: State>(
                 }
             }
         }
-        None => S::zero(),
+        None => (S::zero(), symbols),
     };
 
     let starts_at = stream.len();
 
     while let Some((symbol, prev)) = symbols.split_last() {
-        let range = &ranges[prev.len() * symbol_count..(prev.len() + 1) * symbol_count];
+        final_state.uncall_found_symbol(*symbol);
+        let mut ranges = vec![S::zero(); symbol_count];
+        final_state.predict_next_symbol(&mut ranges);
 
         loop {
-            match coding_function(state, *symbol, range) {
+            match coding_function(state, *symbol, &ranges, &final_state) {
                 Some(new_state) => {
                     state = new_state;
                     break;
@@ -142,11 +274,10 @@ pub fn ans_encode<S: State>(
     stream[starts_at..].reverse();
 }
 
-pub fn ans_decode<S: State>(
+pub fn ans_decode<S: State, FSM: CodingFSM<S>>(
     data: &mut impl Iterator<Item = u8>,
     max_symbols: Option<usize>,
-    symbol_count: usize,
-    mut next_ranges: impl FnMut(Option<usize>, &mut [S]),
+    mut fsm: FSM,
 ) -> Option<Vec<usize>> {
     if let Some(max) = max_symbols {
         if max == 0 {
@@ -154,9 +285,10 @@ pub fn ans_decode<S: State>(
         }
     }
 
-    let mut ranges = vec![S::zero(); symbol_count];
+    let symbol_count = fsm.symbol_count();
 
-    next_ranges(None, &mut ranges);
+    let mut ranges = vec![S::zero(); symbol_count];
+    fsm.predict_next_symbol(&mut ranges);
 
     let mut state = S::take_from(data)?;
 
@@ -200,7 +332,8 @@ pub fn ans_decode<S: State>(
             }
         }
 
-        next_ranges(Some(symbol), &mut ranges);
+        fsm.found_symbol(symbol);
+        fsm.predict_next_symbol(&mut ranges);
     }
 
     Some(output)
@@ -208,16 +341,24 @@ pub fn ans_decode<S: State>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{ans_decode, ans_encode};
+    use crate::{Cache, CodingFSM, ans_decode, ans_encode};
 
-    #[test]
-    fn test_encoding() {
-        let v = [
-            0, 1, 0, 2, 0, 2, 1, 0, 1, 0, 2, 0, 2, 0, 1, 2, 0, 2, 0, 1, 0, 1, 2, 0,
-        ];
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    struct Fsm {
+        prev: Option<usize>,
+    }
 
-        let dist = |prev, out: &mut [u16]| {
-            let dist = match prev {
+    impl CodingFSM<u16> for Fsm {
+        fn symbol_count(&self) -> usize {
+            3
+        }
+
+        fn found_symbol(&mut self, symbol: usize) {
+            self.prev = Some(symbol);
+        }
+
+        fn predict_next_symbol(&self, out: &mut [u16]) {
+            let dist = match self.prev {
                 Some(prev) => {
                     if prev == 0 {
                         [0, 2, 2]
@@ -235,15 +376,45 @@ mod tests {
             out.copy_from_slice(&dist);
 
             out.iter_mut().for_each(|v| *v *= (1 << 8) / 4);
-        };
+        }
+    }
+
+    #[test]
+    fn test_encoding() {
+        let v = [
+            0, 1, 0, 2, 0, 2, 1, 0, 1, 0, 2, 0, 2, 0, 1, 2, 0, 2, 0, 1, 0, 1, 2, 0,
+        ];
 
         let mut encoded = Vec::new();
-        ans_encode(&mut encoded, &v, 3, dist);
+        ans_encode(&mut encoded, &v, Fsm { prev: None });
         println!("{encoded:?}");
-        let decoded = ans_decode(&mut encoded.iter().copied(), None, 3, dist).unwrap();
+        let decoded = ans_decode(&mut encoded.iter().copied(), None, Fsm { prev: None }).unwrap();
         assert_eq!(decoded, v);
         encoded.extend_from_slice(&[1, 2, 3, 4, 5]);
-        let decoded = ans_decode(&mut encoded.iter().copied(), Some(v.len()), 3, dist).unwrap();
+        let decoded = ans_decode(
+            &mut encoded.iter().copied(),
+            Some(v.len()),
+            Fsm { prev: None },
+        )
+        .unwrap();
+        assert_eq!(decoded, v);
+    }
+
+    #[test]
+    fn test_caching() {
+        let v = [
+            0, 1, 0, 2, 0, 2, 1, 0, 1, 0, 2, 0, 2, 0, 1, 2, 0, 2, 0, 1, 0, 1, 2, 0,
+        ];
+
+        let mut encoded = Vec::new();
+        ans_encode(&mut encoded, &v, Cache::new(Fsm { prev: None }));
+        println!("{encoded:?}");
+        let decoded = ans_decode(
+            &mut encoded.iter().copied(),
+            None,
+            Cache::new(Fsm { prev: None }),
+        )
+        .unwrap();
         assert_eq!(decoded, v);
     }
 }

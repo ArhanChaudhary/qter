@@ -1,8 +1,11 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 use internment::ArcIntern;
 use itertools::Itertools;
-use pog_ans::{TakeFrom, ans_decode, ans_encode};
+use pog_ans::{CodingFSM, TakeFrom, ans_decode, ans_encode};
 
 #[derive(Debug)]
 struct TableStats {
@@ -142,8 +145,7 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
     ans_encode(
         &mut stream,
         &disallowed_pair_symbols,
-        stats.frequencies.len() + 1,
-        disallowed_pair_symbols_distribution_closure(),
+        mk_disallowed_pair_symbols_fsm(stats.frequencies.len() + 1),
     );
 
     let mut symbols = Vec::new();
@@ -160,12 +162,7 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
 
     let before = stream.len();
 
-    ans_encode(
-        &mut stream,
-        &symbols,
-        stats.frequencies.len() + 1,
-        mk_distribution_closure(stats),
-    );
+    ans_encode(&mut stream, &symbols, mk_distribution_fsm(stats));
 
     let after = stream.len();
 
@@ -256,8 +253,7 @@ pub fn decode_table(data: &mut impl Iterator<Item = u8>) -> Option<Vec<Vec<ArcIn
     let disallowed_pairs_symbols = ans_decode(
         data,
         Some(disallowed_pair_count),
-        frequencies.len() + 1,
-        disallowed_pair_symbols_distribution_closure(),
+        mk_disallowed_pair_symbols_fsm(frequencies.len() + 1),
     )?;
 
     let end_of_alg_symbol = frequencies.len();
@@ -290,98 +286,151 @@ pub fn decode_table(data: &mut impl Iterator<Item = u8>) -> Option<Vec<Vec<ArcIn
         disallowed_pairs,
     };
 
-    let algs = ans_decode(
-        data,
-        None,
-        stats.frequencies.len() + 1,
-        mk_distribution_closure(stats),
-    )?
-    .split(|s| *s == end_of_alg_symbol)
-    .map(|alg| {
-        alg.iter()
-            .map(|s| ArcIntern::clone(&symbols[*s]))
-            .collect_vec()
-    })
-    .collect_vec();
+    let algs = ans_decode(data, None, mk_distribution_fsm(stats))?
+        .split(|s| *s == end_of_alg_symbol)
+        .map(|alg| {
+            alg.iter()
+                .map(|s| ArcIntern::clone(&symbols[*s]))
+                .collect_vec()
+        })
+        .collect_vec();
 
     Some(algs)
 }
 
-fn disallowed_pair_symbols_distribution_closure() -> impl FnMut(Option<usize>, &mut [u16]) {
-    let mut min_key_seeable = 0;
-    let mut prev_end_of_alg = false;
+fn mk_disallowed_pair_symbols_fsm(symbol_count: usize) -> impl CodingFSM<u16> + Clone {
+    DisallowedPairSymbolsFSM {
+        symbol_count,
+        min_key_seeable: 0,
+        prev_end_of_alg: true,
+        end_of_alg_seeable: false,
+        min_num_seeable: 0,
+    }
+}
 
-    move |found, out| {
-        let end_of_alg_symbol = out.len() - 1;
+#[derive(Clone, Copy, Debug)]
+struct DisallowedPairSymbolsFSM {
+    symbol_count: usize,
+    min_key_seeable: usize,
+    prev_end_of_alg: bool,
+    end_of_alg_seeable: bool,
+    min_num_seeable: usize,
+}
 
-        if prev_end_of_alg {
-            min_key_seeable = found.unwrap();
-            out[end_of_alg_symbol] = 0;
+impl CodingFSM<u16> for DisallowedPairSymbolsFSM {
+    fn symbol_count(&self) -> usize {
+        self.symbol_count
+    }
+
+    fn found_symbol(&mut self, found: usize) {
+        let end_of_alg_symbol = self.symbol_count - 1;
+
+        if self.prev_end_of_alg {
+            self.min_key_seeable = found;
+            self.end_of_alg_seeable = false;
         } else {
+            self.end_of_alg_seeable = true;
+        }
+
+        if found == end_of_alg_symbol {
+            self.min_key_seeable += 1;
+        }
+
+        self.min_num_seeable = self.min_key_seeable;
+
+        if found != end_of_alg_symbol {
+            self.min_num_seeable = found + (!self.prev_end_of_alg) as usize;
+        }
+
+        if found == end_of_alg_symbol {
+            self.prev_end_of_alg = true;
+            self.end_of_alg_seeable = false;
+        } else {
+            self.prev_end_of_alg = false;
+        }
+    }
+
+    fn predict_next_symbol(&self, out: &mut [u16]) {
+        let end_of_alg_symbol = self.symbol_count - 1;
+
+        if self.end_of_alg_seeable {
             out[end_of_alg_symbol] = 1;
-        }
-
-        if found == Some(end_of_alg_symbol) {
-            min_key_seeable += 1;
-        }
-
-        let mut min_num_seeable = min_key_seeable;
-
-        if let Some(found) = found {
-            if found != end_of_alg_symbol {
-                min_num_seeable = found + (!prev_end_of_alg) as usize;
-            }
-        }
-
-        if found == Some(end_of_alg_symbol) || found.is_none() {
-            prev_end_of_alg = true;
-            out[end_of_alg_symbol] = 0;
         } else {
-            prev_end_of_alg = false;
+            out[end_of_alg_symbol] = 0;
         }
 
-        out[0..min_num_seeable].fill(0);
-        out[min_num_seeable..end_of_alg_symbol].fill(1);
+        out[0..self.min_num_seeable].fill(0);
+        out[self.min_num_seeable..end_of_alg_symbol].fill(1);
 
         rest_unweighted(
             out,
             (1 << u8::BITS)
-                - (end_of_alg_symbol - min_num_seeable)
+                - (end_of_alg_symbol - self.min_num_seeable)
                 - out[end_of_alg_symbol] as usize,
         );
     }
 }
 
-fn mk_distribution_closure(stats: TableStats) -> impl FnMut(Option<usize>, &mut [u16]) {
-    let generator_count = stats.frequencies.len();
+#[derive(Debug)]
+struct Data {
+    stats: TableStats,
+    lens_cdf: HashMap<usize, (u32, u32)>,
+}
 
+#[derive(Clone, Debug)]
+struct DistributionFSM {
+    data: Rc<Data>,
+    len: usize,
+    prev: Option<usize>,
+}
+
+fn mk_distribution_fsm(stats: TableStats) -> impl CodingFSM<u16> + Clone {
     let mut total_lens = 0;
+
     let lens_cdf = stats
         .length_frequencies
-        .into_iter()
+        .iter()
         .sorted_unstable_by(|a, b| b.0.cmp(&a.0))
         .map(|v| {
-            let out = (v.0, (v.1, total_lens));
+            let out = (*v.0, (*v.1, total_lens));
             total_lens += v.1;
             out
         })
         .collect::<HashMap<_, _>>();
 
-    let end_of_alg_symbol = generator_count;
-    let mut len = 0;
+    DistributionFSM {
+        data: Rc::new(Data { stats, lens_cdf }),
+        len: 0,
+        prev: None,
+    }
+}
 
-    move |prev, out| {
-        if prev.is_some_and(|v| v != end_of_alg_symbol) {
-            len += 1;
+impl CodingFSM<u16> for DistributionFSM {
+    fn symbol_count(&self) -> usize {
+        self.data.stats.frequencies.len() + 1
+    }
+
+    fn found_symbol(&mut self, prev: usize) {
+        let end_of_alg_symbol = self.data.stats.frequencies.len();
+
+        if prev != end_of_alg_symbol {
+            self.len += 1;
         } else {
-            len = 0;
+            self.len = 0;
         }
+
+        self.prev = Some(prev);
+    }
+
+    fn predict_next_symbol(&self, out: &mut [u16]) {
+        let end_of_alg_symbol = self.data.stats.frequencies.len();
+        let generator_count = end_of_alg_symbol;
 
         out.fill(0);
 
         let mut range_left = 1 << u8::BITS;
 
-        if let Some((len_chance, lens_cdf)) = lens_cdf.get(&len) {
+        if let Some((len_chance, lens_cdf)) = self.data.lens_cdf.get(&self.len) {
             if *lens_cdf == 0 {
                 out[end_of_alg_symbol] = range_left;
                 return;
@@ -397,8 +446,8 @@ fn mk_distribution_closure(stats: TableStats) -> impl FnMut(Option<usize>, &mut 
         }
 
         for (sym, spot) in out.iter_mut().enumerate().take(generator_count) {
-            if let Some(prev) = prev {
-                if stats.disallowed_pairs.contains(&if prev < sym {
+            if let Some(prev) = self.prev {
+                if self.data.stats.disallowed_pairs.contains(&if prev < sym {
                     (prev, sym)
                 } else {
                     (sym, prev)
@@ -414,7 +463,7 @@ fn mk_distribution_closure(stats: TableStats) -> impl FnMut(Option<usize>, &mut 
         rest_weighted(
             &mut out[..end_of_alg_symbol],
             range_left as usize,
-            &stats.frequencies,
+            &self.data.stats.frequencies,
         )
     }
 }
