@@ -1,6 +1,5 @@
 use std::{
     borrow::Cow,
-    cell::OnceCell,
     collections::{BTreeMap, HashMap, HashSet},
     sync::{Arc, OnceLock},
 };
@@ -11,7 +10,7 @@ use itertools::Itertools;
 use crate::{
     I, Int, U,
     discrete_math::{
-        decode, lcm_iter, length_of_substring_that_this_string_is_n_repeated_copies_of,
+        decode, lcm, lcm_iter, length_of_substring_that_this_string_is_n_repeated_copies_of,
     },
     puzzle_parser,
     shared_facelet_detection::algorithms_to_cycle_generators,
@@ -536,12 +535,25 @@ impl core::fmt::Debug for Algorithm {
 /// A generator for a register in an architecture
 #[derive(Debug, Clone)]
 pub struct CycleGenerator {
-    pub(crate) algorithm: Algorithm,
-    pub(crate) unshared_cycles: Vec<CycleGeneratorSubcycle>,
-    pub(crate) order: Int<U>,
+    algorithm: Algorithm,
+    unshared_cycles: Vec<CycleGeneratorSubcycle>,
+    order: Int<U>,
 }
 
 impl CycleGenerator {
+    pub(crate) fn new(
+        algorithm: Algorithm,
+        unshared_cycles: Vec<CycleGeneratorSubcycle>,
+    ) -> CycleGenerator {
+        CycleGenerator {
+            algorithm,
+            order: unshared_cycles.iter().fold(Int::one(), |acc, subcycle| {
+                lcm(acc, subcycle.chromatic_order)
+            }),
+            unshared_cycles,
+        }
+    }
+
     pub fn algorithm(&self) -> &Algorithm {
         &self.algorithm
     }
@@ -558,13 +570,28 @@ impl CycleGenerator {
 
     /// Find a collection of facelets that allow decoding the register and that allow determining whether the register is solved
     pub fn signature_facelets(&self) -> Vec<usize> {
+        // This will never fail when `remainder_mod` is the order.
+        self.signature_facelets_mod(self.order()).unwrap()
+    }
+
+    /// Find a collection of facelets that allow decoding the register modulo a particular number.
+    ///
+    /// With some registers, you can decode cycles individually and pick out information about the register modulo some number. This will attempt to do so for a given remainder to target. It will return `None` if it's impossible to decode the given modulus from the register.
+    pub fn signature_facelets_mod(&self, remainder_mod: Int<U>) -> Option<Vec<usize>> {
         let mut cycles_with_extras = vec![];
 
         // Create a list of all cycles
         for (i, cycle) in self.unshared_cycles().iter().enumerate() {
-            if cycle.chromatic_order() != Int::<U>::one() {
+            if cycle.chromatic_order() != Int::<U>::one()
+                && (remainder_mod % cycle.chromatic_order()).is_zero()
+            {
                 cycles_with_extras.push((cycle.chromatic_order(), i));
             }
+        }
+
+        if lcm_iter(cycles_with_extras.iter().map(|v| v.0)) != remainder_mod {
+            // We couldn't pick out the modulus from the register
+            return None;
         }
 
         // Remove all of the cycles that don't contribute to the order of the register, removing the smallest ones first
@@ -573,16 +600,14 @@ impl CycleGenerator {
         let mut cycles = Vec::<(Int<U>, usize)>::new();
 
         for (i, &(cycle_order, cycle_idx)) in cycles_with_extras.iter().enumerate() {
-            if self.order()
-                != lcm_iter(
-                    cycles
-                        .iter()
-                        .map(|&(chromatic_order, _)| chromatic_order)
-                        .chain(
-                            (i + 1..cycles_with_extras.len()).map(|idx| cycles_with_extras[idx].0),
-                        ),
-                )
-            {
+            let lcm_without = lcm_iter(
+                cycles
+                    .iter()
+                    .map(|&(chromatic_order, _)| chromatic_order)
+                    .chain((i + 1..cycles_with_extras.len()).map(|idx| cycles_with_extras[idx].0)),
+            );
+
+            if (self.order() % remainder_mod) != lcm_without {
                 cycles.push((cycle_order, cycle_idx));
             }
         }
@@ -622,7 +647,7 @@ impl CycleGenerator {
             }
         }
 
-        facelets
+        Some(facelets)
     }
 }
 

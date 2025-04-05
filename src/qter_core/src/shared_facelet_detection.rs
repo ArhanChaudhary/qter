@@ -8,7 +8,7 @@ use crate::{
     architectures::{
         Algorithm, CycleGenerator, CycleGeneratorSubcycle, Permutation, PermutationGroup,
     },
-    discrete_math::{lcm, length_of_substring_that_this_string_is_n_repeated_copies_of},
+    discrete_math::length_of_substring_that_this_string_is_n_repeated_copies_of,
     union_find::{SetInfo, UnionFind},
 };
 
@@ -103,17 +103,10 @@ pub fn algorithms_to_cycle_generators(
                     });
                 }
 
-                CycleGenerator {
-                    algorithm: Algorithm::new_from_move_seq(
-                        Arc::clone(&group),
-                        algorithm.to_owned(),
-                    )
-                    .unwrap(),
-                    order: unshared_cycles.iter().fold(Int::one(), |acc, subcycle| {
-                        lcm(acc, subcycle.chromatic_order)
-                    }),
+                CycleGenerator::new(
+                    Algorithm::new_from_move_seq(Arc::clone(&group), algorithm.to_owned()).unwrap(),
                     unshared_cycles,
-                }
+                )
             })
             .collect(),
         shared_facelets.into_iter().unique().collect_vec(),
@@ -176,17 +169,17 @@ mod tests {
             assert!(preset.shared_facelets().contains(&i));
         }
 
-        assert_eq!(preset.registers()[0].order, Int::from(3));
+        assert_eq!(preset.registers()[0].order(), Int::from(3));
         assert_eq!(
-            preset.registers()[0].unshared_cycles,
+            preset.registers()[0].unshared_cycles(),
             vec![CycleGeneratorSubcycle {
                 facelet_cycle: vec![0, 1, 2],
                 chromatic_order: Int::from(3_usize),
             }]
         );
-        assert_eq!(preset.registers()[1].order, Int::from(2));
+        assert_eq!(preset.registers()[1].order(), Int::from(2));
         assert_eq!(
-            preset.registers()[1].unshared_cycles,
+            preset.registers()[1].unshared_cycles(),
             vec![
                 CycleGeneratorSubcycle {
                     facelet_cycle: vec![8, 9],
