@@ -17,23 +17,50 @@ use crate::{
 #[derive(Clone, Debug)]
 enum RegisterIdx {
     Theoretical,
-    Real { idx: usize, arch: Arc<Architecture> },
+    Real {
+        idx: usize,
+        arch: Arc<Architecture>,
+        modulus: Option<Int<U>>,
+    },
 }
 
 impl RegisterIdx {
-    fn facelets(&self) -> Facelets {
+    // If it cannot find facelets to pick out the right modulus, return the cycles lengths that are available
+    fn facelets(&self) -> Result<Facelets, Vec<Int<U>>> {
         match self {
-            RegisterIdx::Theoretical => Facelets::Theoretical,
-            &RegisterIdx::Real { idx, ref arch } => Facelets::Puzzle {
-                facelets: arch.registers()[idx].signature_facelets(),
-            },
+            RegisterIdx::Theoretical => Ok(Facelets::Theoretical),
+            &RegisterIdx::Real {
+                idx,
+                ref arch,
+                modulus,
+            } => Ok(Facelets::Puzzle {
+                facelets: match modulus {
+                    Some(modulus) => match arch.registers()[idx].signature_facelets_mod(modulus) {
+                        Some(v) => v,
+                        None => {
+                            return Err(arch.registers()[idx]
+                                .unshared_cycles()
+                                .iter()
+                                .map(|v| v.chromatic_order())
+                                .sorted()
+                                .dedup()
+                                .collect_vec());
+                        }
+                    },
+                    None => arch.registers()[idx].signature_facelets(),
+                },
+            }),
         }
     }
 
     fn generator(&self) -> RegisterGenerator {
         match self {
             RegisterIdx::Theoretical => RegisterGenerator::Theoretical,
-            &RegisterIdx::Real { idx, ref arch } => RegisterGenerator::Puzzle {
+            &RegisterIdx::Real {
+                idx,
+                ref arch,
+                modulus: _,
+            } => RegisterGenerator::Puzzle {
                 generator: Algorithm::new_from_effect(arch, vec![(idx, Int::<U>::one())]),
                 solved_goto_facelets: arch.registers()[idx].signature_facelets(),
             },
@@ -79,7 +106,11 @@ fn coalesce_adds<V: Iterator<Item = WithSpan<ExpandedCodeComponent>>>(
                             puzzle_idx,
                             adds.iter().map(|(_, amt)| *amt.deref()).sum::<Int<U>>(),
                         ),
-                        RegisterIdx::Real { idx: _, arch } => CoalescedAdds::AddPuzzle(
+                        RegisterIdx::Real {
+                            idx: _,
+                            arch,
+                            modulus: _,
+                        } => CoalescedAdds::AddPuzzle(
                             puzzle_idx,
                             Algorithm::new_from_effect(
                                 arch,
@@ -88,7 +119,11 @@ fn coalesce_adds<V: Iterator<Item = WithSpan<ExpandedCodeComponent>>>(
                                         (
                                             match reg_idx {
                                                 RegisterIdx::Theoretical => unreachable!(),
-                                                RegisterIdx::Real { idx, arch: _ } => *idx,
+                                                RegisterIdx::Real {
+                                                    idx,
+                                                    arch: _,
+                                                    modulus: _,
+                                                } => *idx,
                                             },
                                             *add.deref(),
                                         )
@@ -127,11 +162,26 @@ struct GlobalRegs {
 impl GlobalRegs {
     fn get_reg(&self, reference: &RegisterReference) -> (RegisterIdx, usize) {
         match reference.block_id == BlockID(0) {
-            true => self
-                .register_table
-                .get(&reference.reg_name)
-                .unwrap()
-                .to_owned(),
+            true => {
+                let mut reg = self
+                    .register_table
+                    .get(&reference.reg_name)
+                    .unwrap()
+                    .to_owned();
+
+                if let Some(mod_) = reference.modulus {
+                    match &mut reg.0 {
+                        RegisterIdx::Theoretical => todo!(),
+                        RegisterIdx::Real {
+                            idx: _,
+                            arch: _,
+                            modulus,
+                        } => *modulus = Some(mod_),
+                    }
+                }
+
+                reg
+            }
             false => todo!(),
         }
     }
@@ -168,6 +218,7 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>
                                 RegisterIdx::Real {
                                     idx: i,
                                     arch: Arc::clone(architecture),
+                                    modulus: None,
                                 },
                                 global_regs.puzzles.len(),
                             ),
@@ -283,7 +334,10 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>
                     Instruction::SolvedGoto {
                         instruction_idx: *label_locations.get(&label).unwrap(),
                         puzzle_idx,
-                        facelets: reg_idx.facelets(),
+                        facelets: match reg_idx.facelets() {
+                            Ok(v) => v,
+                            Err(e) => return Err(mk_error(format!("Could not find a set of pieces for solved-goto that encode the given modulus. The available moduli are the LCM of any combination of the following piece subcycles: {}", e.into_iter().join(", ")), register.reg_name.span())),
+                        },
                     }
                 }
                 Primitive::Input { message, register } => {

@@ -668,6 +668,80 @@ mod tests {
     }
 
     #[test]
+    fn modulus_2() {
+        let code = "
+            .registers {
+                A, B ← 3x3 builtin (90, 90)
+            }
+
+                input \"Number to modulus:\" A
+            loop:
+                print \"A is now\" A
+                solved-goto A%9 finalize
+                add B 1
+                add A 89
+                goto loop
+            finalize:
+                halt \"The modulus is\" B
+        ";
+
+        let program = match compile(code, |_| unreachable!()) {
+            Ok(v) => v,
+            Err(e) => panic!("{e}"),
+        };
+
+        let mut interpreter: Interpreter<Permutation> = Interpreter::new(program);
+
+        assert!(match interpreter.step_until_halt() {
+            PausedState::Input {
+                max_input,
+                register:
+                    RegisterGenerator::Puzzle {
+                        generator: _,
+                        solved_goto_facelets: _,
+                    },
+                puzzle_idx: 0,
+            } => *max_input == Int::from(89),
+            _ => false,
+        });
+
+        assert!(interpreter.give_input(Int::from(77_u64)).is_ok());
+
+        assert!(matches!(
+            interpreter.step_until_halt(),
+            PausedState::Halt {
+                maybe_register: Some(RegisterGenerator::Puzzle {
+                    generator: _,
+                    solved_goto_facelets: _,
+                }),
+                maybe_puzzle_idx: Some(0),
+            }
+        ));
+
+        let expected_output = [
+            "Number to modulus: (max input 89)",
+            "A is now 77",
+            "A is now 76",
+            "A is now 75",
+            "A is now 74",
+            "A is now 73",
+            "A is now 72",
+            "The modulus is 5",
+        ];
+
+        assert_eq!(
+            expected_output.len(),
+            interpreter.messages().len(),
+            "{:?}",
+            interpreter.messages()
+        );
+
+        for (message, expected) in interpreter.messages.iter().zip(expected_output.iter()) {
+            assert_eq!(message, expected);
+        }
+    }
+
+    #[test]
     fn fib() {
         // TODO: a test directory of qat files?
         let code = "

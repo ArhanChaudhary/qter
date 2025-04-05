@@ -133,20 +133,44 @@ impl<Signed> Display for NumberOutOfRange<Signed> {
     }
 }
 
+pub struct ParseIntError<Signed> {
+    err: bnum::errors::ParseIntError,
+    phantom: PhantomData<Signed>,
+}
+
+fn map_err<Signed>(err: bnum::errors::ParseIntError) -> ParseIntError<Signed> {
+    ParseIntError {
+        err,
+        phantom: PhantomData,
+    }
+}
+
+impl<Signed> Debug for ParseIntError<Signed> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.err, f)
+    }
+}
+
+impl<Signed> Display for ParseIntError<Signed> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.err, f)
+    }
+}
+
 impl FromStr for Int<I> {
-    type Err = bnum::errors::ParseIntError;
+    type Err = ParseIntError<I>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::from_inner(s.trim().parse()?))
+        Ok(Self::from_inner(s.trim().parse().map_err(map_err)?))
     }
 }
 
 impl FromStr for Int<U> {
-    type Err = bnum::errors::ParseIntError;
+    type Err = ParseIntError<U>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let num: U512 = s.trim().parse()?;
-        let num: I512 = num.to_string().parse()?;
+        let num: U512 = s.trim().parse().map_err(map_err)?;
+        let num: I512 = num.to_string().parse().map_err(map_err)?;
 
         Ok(Self::from_inner(num))
     }
@@ -336,6 +360,12 @@ impl<SignedA, SignedB> PartialEq<Int<SignedA>> for Int<SignedB> {
 }
 
 impl<Signed> Eq for Int<Signed> {}
+
+impl<Signed> core::hash::Hash for Int<Signed> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value.hash(state)
+    }
+}
 
 impl<SignedA, SignedB> PartialOrd<Int<SignedA>> for Int<SignedB> {
     fn partial_cmp(&self, other: &Int<SignedA>) -> Option<Ordering> {

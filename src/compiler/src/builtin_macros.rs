@@ -15,10 +15,18 @@ fn expect_reg(
     block_id: BlockID,
 ) -> Result<RegisterReference, Box<Error<Rule>>> {
     match &*reg_value {
-        Value::Ident(reg_name) => match syntax.block_info.get_register(&RegisterReference {
-            block_id,
-            reg_name: WithSpan::new(ArcIntern::clone(reg_name), reg_value.span().to_owned()),
-        }) {
+        Value::Ident(reg_name) => match syntax.block_info.get_register(
+            &RegisterReference::parse(
+                block_id,
+                WithSpan::new(ArcIntern::clone(reg_name), reg_value.span().to_owned()),
+            )
+            .map_err(|e| {
+                mk_error(
+                    format!("Could not parse the modulus as a string: {e}"),
+                    reg_value.span(),
+                )
+            })?,
+        ) {
             Some((reg, _)) => Ok(reg),
             None => Err(mk_error(
                 format!("The register {reg_name} does not exist"),

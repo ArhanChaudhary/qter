@@ -4,7 +4,7 @@ use internment::ArcIntern;
 use lua::LuaMacros;
 use parsing::{Rule, parse};
 use pest::error::Error;
-use qter_core::{Int, Program, U, WithSpan, architectures::Architecture};
+use qter_core::{Int, ParseIntError, Program, U, WithSpan, architectures::Architecture};
 use strip_expanded::strip_expanded;
 
 use crate::macro_expansion::expand;
@@ -51,6 +51,37 @@ struct Block {
 struct RegisterReference {
     block_id: BlockID,
     reg_name: WithSpan<ArcIntern<str>>,
+    modulus: Option<Int<U>>,
+}
+
+impl RegisterReference {
+    fn parse(
+        block_id: BlockID,
+        name: WithSpan<ArcIntern<str>>,
+    ) -> Result<RegisterReference, ParseIntError<U>> {
+        match Self::try_parse_mod(&name) {
+            Some(Ok((s, mod_))) => Ok(RegisterReference {
+                block_id,
+                reg_name: WithSpan::new(ArcIntern::from(s), name.span().to_owned()),
+                modulus: Some(mod_),
+            }),
+            Some(Err(e)) => Err(e),
+            None => Ok(RegisterReference {
+                block_id,
+                reg_name: name,
+                modulus: None,
+            }),
+        }
+    }
+
+    fn try_parse_mod(name: &str) -> Option<Result<(&str, Int<U>), ParseIntError<U>>> {
+        let idx = name.rfind("%")?;
+        let num = match name[idx + 1..].parse::<Int<U>>() {
+            Ok(v) => v,
+            Err(e) => return Some(Err(e)),
+        };
+        Some(Ok((&name[0..idx], num)))
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -275,6 +306,7 @@ impl BlockInfoTracker {
                                 RegisterReference {
                                     block_id: from,
                                     reg_name,
+                                    modulus: reference.modulus,
                                 },
                                 puzzle,
                             ));
@@ -288,6 +320,7 @@ impl BlockInfoTracker {
                                         RegisterReference {
                                             block_id: from,
                                             reg_name,
+                                            modulus: reference.modulus,
                                         },
                                         puzzle,
                                     ));
