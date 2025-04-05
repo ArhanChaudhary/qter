@@ -1,3 +1,4 @@
+use core::hash::Hash;
 use std::{
     collections::{HashMap, HashSet},
     rc::Rc,
@@ -5,7 +6,7 @@ use std::{
 
 use internment::ArcIntern;
 use itertools::Itertools;
-use pog_ans::{CodingFSM, TakeFrom, ans_decode, ans_encode};
+use pog_ans::{Cache, CodingFSM, TakeFrom, ans_decode, ans_encode};
 
 #[derive(Debug)]
 struct TableStats {
@@ -299,13 +300,13 @@ pub fn decode_table(data: &mut impl Iterator<Item = u8>) -> Option<Vec<Vec<ArcIn
 }
 
 fn mk_disallowed_pair_symbols_fsm(symbol_count: usize) -> impl CodingFSM<u16> + Clone {
-    DisallowedPairSymbolsFSM {
+    Cache::new(DisallowedPairSymbolsFSM {
         symbol_count,
         min_key_seeable: 0,
         prev_end_of_alg: true,
         end_of_alg_seeable: false,
         min_num_seeable: 0,
-    }
+    })
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -315,6 +316,23 @@ struct DisallowedPairSymbolsFSM {
     prev_end_of_alg: bool,
     end_of_alg_seeable: bool,
     min_num_seeable: usize,
+}
+
+// Only cache based off of the values used by the range generator
+impl PartialEq for DisallowedPairSymbolsFSM {
+    fn eq(&self, other: &Self) -> bool {
+        self.end_of_alg_seeable == other.end_of_alg_seeable
+            && self.min_num_seeable == other.min_num_seeable
+    }
+}
+
+impl Eq for DisallowedPairSymbolsFSM {}
+
+impl Hash for DisallowedPairSymbolsFSM {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.end_of_alg_seeable.hash(state);
+        self.min_num_seeable.hash(state);
+    }
 }
 
 impl CodingFSM<u16> for DisallowedPairSymbolsFSM {
@@ -384,13 +402,28 @@ struct DistributionFSM {
     prev: Option<usize>,
 }
 
+impl PartialEq for DistributionFSM {
+    fn eq(&self, other: &Self) -> bool {
+        self.len == other.len && self.prev == other.prev
+    }
+}
+
+impl Eq for DistributionFSM {}
+
+impl Hash for DistributionFSM {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.len.hash(state);
+        self.prev.hash(state);
+    }
+}
+
 fn mk_distribution_fsm(stats: TableStats) -> impl CodingFSM<u16> + Clone {
     let mut total_lens = 0;
 
     let lens_cdf = stats
         .length_frequencies
         .iter()
-        .sorted_unstable_by(|a, b| b.0.cmp(&a.0))
+        .sorted_unstable_by(|a, b| b.0.cmp(a.0))
         .map(|v| {
             let out = (*v.0, (*v.1, total_lens));
             total_lens += v.1;
@@ -398,11 +431,11 @@ fn mk_distribution_fsm(stats: TableStats) -> impl CodingFSM<u16> + Clone {
         })
         .collect::<HashMap<_, _>>();
 
-    DistributionFSM {
+    Cache::new(DistributionFSM {
         data: Rc::new(Data { stats, lens_cdf }),
         len: 0,
         prev: None,
-    }
+    })
 }
 
 impl CodingFSM<u16> for DistributionFSM {
