@@ -9,7 +9,9 @@
 //! of the appropriate size.
 
 use super::puzzle::{OrbitDef, OrientedPartition, PuzzleDef, PuzzleState};
-use std::{fmt, iter::repeat_n, num::NonZeroU8};
+use itertools::Itertools;
+use std::{iter::repeat_n, num::NonZeroU8};
+use thiserror::Error;
 
 // Trait declarations
 
@@ -132,7 +134,6 @@ pub struct ZeroTable<P: PuzzleState>(std::marker::PhantomData<P>);
 
 // Implementations
 
-use itertools::Itertools;
 use private::*;
 mod private {
     #[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
@@ -185,13 +186,12 @@ impl From<u64> for NullMeta {
     }
 }
 
-#[derive(Debug)]
-pub struct TableTypeError(String);
-
-impl fmt::Display for TableTypeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Table type error: {}", self.0)
-    }
+#[derive(Error, Debug)]
+pub enum TableTypeError {
+    #[error("Invalid sorted cycle type length: expected {expected}, actual {actual}")]
+    InvalidSortedCycleTypeLength { expected: usize, actual: usize },
+    #[error("Invalid table types length: expected {expected}, actual {actual}")]
+    InvalidTableTypesLength { expected: usize, actual: usize },
 }
 
 impl<'a, P: PuzzleState> OrbitPruningTablesGenerateMeta<'a, P> {
@@ -199,34 +199,45 @@ impl<'a, P: PuzzleState> OrbitPruningTablesGenerateMeta<'a, P> {
         puzzle_def: &'a PuzzleDef<P>,
         sorted_cycle_type: &'a [OrientedPartition],
         max_size_bytes: u64,
-    ) -> Self {
-        OrbitPruningTablesGenerateMeta {
-            puzzle_def,
-            sorted_cycle_type,
-            max_size_bytes,
-            table_types: None,
+    ) -> Result<Self, TableTypeError> {
+        if sorted_cycle_type.len() != puzzle_def.sorted_orbit_defs.len() {
+            Err(TableTypeError::InvalidSortedCycleTypeLength {
+                expected: puzzle_def.sorted_orbit_defs.len(),
+                actual: sorted_cycle_type.len(),
+            })
+        } else {
+            Ok(OrbitPruningTablesGenerateMeta {
+                puzzle_def,
+                sorted_cycle_type,
+                max_size_bytes,
+                table_types: None,
+            })
         }
     }
 
     pub fn new_with_table_types(
         puzzle_def: &'a PuzzleDef<P>,
         sorted_cycle_type: &'a [OrientedPartition],
-        max_size_bytes: u64,
         table_types: Vec<(OrbitPruningTableTy, StorageBackendTy)>,
+        max_size_bytes: u64,
     ) -> Result<Self, TableTypeError> {
-        if table_types.len() == puzzle_def.sorted_orbit_defs.len() {
+        if table_types.len() != puzzle_def.sorted_orbit_defs.len() {
+            Err(TableTypeError::InvalidTableTypesLength {
+                expected: puzzle_def.sorted_orbit_defs.len(),
+                actual: table_types.len(),
+            })
+        } else if sorted_cycle_type.len() != puzzle_def.sorted_orbit_defs.len() {
+            Err(TableTypeError::InvalidSortedCycleTypeLength {
+                expected: puzzle_def.sorted_orbit_defs.len(),
+                actual: sorted_cycle_type.len(),
+            })
+        } else {
             Ok(OrbitPruningTablesGenerateMeta {
                 puzzle_def,
                 sorted_cycle_type,
                 max_size_bytes,
                 table_types: Some(table_types),
             })
-        } else {
-            Err(TableTypeError(format!(
-                "Table types length {} does not match orbit definitions length {}",
-                table_types.len(),
-                puzzle_def.sorted_orbit_defs.len()
-            )))
         }
     }
 }
@@ -456,7 +467,7 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
     ) -> (ExactOrbitPruningTable<S>, u64) {
         let piece_count = orbit_def.piece_count.get();
         assert!(piece_count > 0);
-        // TODO: pass as arg
+        // TODO: revert f3001af8918b56394f15a671c205f6111783836c
         let mut result = puzzle_def.new_solved_state();
         let entry_count = factorial(piece_count as u64).unwrap()
             * u64::pow(
@@ -508,9 +519,9 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
                     == Some(depth - 1)
                 {
                     // TODO: special puzzles for representing a single orbit
-                    let curr_state: P =
-                        // P::from_orbit_transformation_unchecked(&perm, &ori, orbit_def);
-                        todo!();
+                    // let curr_state: P =
+                    //     P::from_orbit_transformation_unchecked(&perm, &ori, orbit_def);
+                    let curr_state = todo!();
                     for move_ in &puzzle_def.moves {
                         result.replace_compose(
                             &curr_state,
@@ -632,7 +643,9 @@ impl<P: PuzzleState> PruningTables<P> for ZeroTable<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::phase2::puzzle::{HeapPuzzle, apply_moves, cube3::Cube3, random_3x3_state};
+    use crate::phase2::puzzle::{
+        apply_moves, cube3::Cube3, random_3x3_state, slice_puzzle::HeapPuzzle,
+    };
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
     #[test]
@@ -675,15 +688,31 @@ mod tests {
     }
 
     #[test]
-    fn test_zero_orbit_table_gives_zero() {
+    fn test_zero_orbit_tables() {
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.new_solved_state();
         let u_move = cube3_def.find_move("U").unwrap();
+        let identity_cycle_type = [vec![], vec![]];
 
         let (storage, _) =
             ZeroOrbitTable::generate(&cube3_def, &[], cube3_def.sorted_orbit_defs[0], 0, 0);
         assert_eq!(storage.permissible_heuristic(&solved), 0);
         assert_eq!(storage.permissible_heuristic(&u_move.puzzle_state), 0);
+
+        let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
+            &cube3_def,
+            &identity_cycle_type,
+            vec![
+                (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
+                (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
+            ],
+            0,
+        )
+        .unwrap();
+        let orbit_tables = OrbitPruningTables::generate(generate_meta);
+
+        assert_eq!(orbit_tables.permissible_heuristic(&solved), 0);
+        assert_eq!(orbit_tables.permissible_heuristic(&u_move.puzzle_state), 0);
     }
 
     #[test]
@@ -704,48 +733,29 @@ mod tests {
     #[test]
     fn test_new_orbit_generation_meta() {
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let generate_meta = OrbitPruningTablesGenerateMeta::new(&cube3_def, &[], 1000);
+        let identity_cycle_type = [vec![], vec![]];
+        let generate_meta =
+            OrbitPruningTablesGenerateMeta::new(&cube3_def, &identity_cycle_type, 1000).unwrap();
         assert_eq!(generate_meta.max_size_bytes, 1000);
         assert!(generate_meta.table_types.is_none());
 
         assert!(
             OrbitPruningTablesGenerateMeta::new_with_table_types(
                 &cube3_def,
-                &[],
-                1000,
+                &identity_cycle_type,
                 vec![(OrbitPruningTableTy::Exact, StorageBackendTy::Uncompressed)],
+                1000,
             )
             .is_err()
         );
 
         OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
-            &[],
-            1000,
+            &identity_cycle_type,
             vec![(OrbitPruningTableTy::Exact, StorageBackendTy::Uncompressed); 2],
+            1000,
         )
         .unwrap();
-    }
-
-    // #[test]
-    fn test_zero_orbit_tables() {
-        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
-            &cube3_def,
-            &[],
-            0,
-            vec![
-                (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
-                (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
-            ],
-        )
-        .unwrap();
-        let orbit_tables = OrbitPruningTables::generate(generate_meta);
-
-        assert_eq!(
-            orbit_tables.permissible_heuristic(&cube3_def.new_solved_state()),
-            0
-        );
     }
 
     #[test]

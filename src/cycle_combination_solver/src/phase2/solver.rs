@@ -168,7 +168,7 @@ mod tests {
             NullMeta, OrbitPruningTableTy, OrbitPruningTables, OrbitPruningTablesGenerateMeta,
             StorageBackendTy, ZeroTable,
         },
-        puzzle::{HeapPuzzle, cube3::Cube3},
+        puzzle::{cube3::Cube3, slice_puzzle::HeapPuzzle},
     };
     use puzzle_geometry::ksolve::{KPUZZLE_3X3, KPUZZLE_4X4};
 
@@ -189,11 +189,11 @@ mod tests {
             OrbitPruningTablesGenerateMeta::new_with_table_types(
                 &puzzle_def,
                 &identity_cycle_type,
-                0,
                 vec![
                     (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
                     (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
                 ],
+                0,
             )
             .unwrap(),
         );

@@ -1,7 +1,7 @@
 #![cfg_attr(any(avx2, not(simd8and16)), allow(dead_code, unused_variables))]
 
 use super::common::Cube3Interface;
-use crate::phase2::puzzle::{OrbitDef, OrientedPartition};
+use crate::phase2::puzzle::OrientedPartition;
 use std::{
     fmt,
     num::NonZeroU8,
