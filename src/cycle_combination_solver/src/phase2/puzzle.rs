@@ -1,4 +1,3 @@
-use dyn_clone::DynClone;
 use itertools::Itertools;
 use num_traits::PrimInt;
 use puzzle_geometry::ksolve::KSolve;
@@ -6,7 +5,7 @@ use std::{fmt::Debug, num::NonZeroU8};
 use thiserror::Error;
 
 pub mod cube3;
-pub mod slice_orbit_puzzle;
+pub mod orbit_puzzle;
 pub mod slice_puzzle;
 
 /// The puzzle state interface at the heart of the cycle combination solver.
@@ -28,8 +27,6 @@ pub trait PuzzleState: Clone + PartialEq + Debug {
         sorted_transformations: &[Vec<(u8, u8)>],
         sorted_orbit_defs: &[OrbitDef],
     ) -> Result<Self, KSolveConversionError>;
-
-    fn solved_orbit_puzzles(sorted_orbit_defs: &[OrbitDef]) -> Box<[Box<dyn OrbitPuzzleState>]>;
 
     /// Compose two puzzle states in place
     fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: &[OrbitDef]);
@@ -54,12 +51,6 @@ pub trait PuzzleState: Clone + PartialEq + Debug {
     /// Get the bytes of the specified orbit index in the form (permutation
     /// vector, orientation vector).
     fn orbit_bytes(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> (&[u8], &[u8]);
-}
-
-pub trait OrbitPuzzleState: DynClone {
-    fn new_solved_state() -> Self
-    where
-        Self: Sized;
 }
 
 pub trait MultiBvInterface {

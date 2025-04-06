@@ -3,7 +3,7 @@ pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
     use crate::phase2::puzzle::{
-        KSolveConversionError, OrbitDef, OrbitPuzzleState, OrientedPartition, PuzzleState,
+        KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState,
     };
     use std::{fmt::Debug, num::NonZeroU8};
 
@@ -44,12 +44,6 @@ mod common {
                     actual: sorted_orbit_defs.to_vec(),
                 })
             }
-        }
-
-        fn solved_orbit_puzzles(
-            _sorted_orbit_defs: &[OrbitDef],
-        ) -> Box<[Box<dyn OrbitPuzzleState>]> {
-            todo!();
         }
 
         fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: &[OrbitDef]) {

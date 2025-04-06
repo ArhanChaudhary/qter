@@ -1,9 +1,4 @@
-use itertools::Itertools;
-
-use super::{
-    KSolveConversionError, OrbitDef, OrbitPuzzleState, OrientedPartition, PuzzleState,
-    slice_orbit_puzzle::SliceOrbitPuzzleState,
-};
+use super::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
 use std::num::NonZeroU8;
 
 #[derive(Clone, PartialEq, Debug)]
@@ -38,10 +33,6 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
             sorted_transformations,
         );
         Ok(StackPuzzle(orbit_states))
-    }
-
-    fn solved_orbit_puzzles(sorted_orbit_defs: &[OrbitDef]) -> Box<[Box<dyn OrbitPuzzleState>]> {
-        solved_orbit_puzzles_slice(sorted_orbit_defs)
     }
 
     fn replace_compose(
@@ -103,10 +94,6 @@ impl PuzzleState for HeapPuzzle {
             sorted_transformations,
         );
         Ok(HeapPuzzle(orbit_states))
-    }
-
-    fn solved_orbit_puzzles(sorted_orbit_defs: &[OrbitDef]) -> Box<[Box<dyn OrbitPuzzleState>]> {
-        solved_orbit_puzzles_slice(sorted_orbit_defs)
     }
 
     fn replace_compose(&mut self, a: &HeapPuzzle, b: &HeapPuzzle, sorted_orbit_defs: &[OrbitDef]) {
@@ -173,16 +160,6 @@ fn ksolve_move_to_slice_unchecked(
         }
         i += piece_count * 2;
     }
-}
-
-fn solved_orbit_puzzles_slice(sorted_orbit_defs: &[OrbitDef]) -> Box<[Box<dyn OrbitPuzzleState>]> {
-    let solved_slice_orbit_puzzle =
-        Box::new(SliceOrbitPuzzleState::new_solved_state()) as Box<dyn OrbitPuzzleState>;
-    sorted_orbit_defs
-        .iter()
-        .map(|_| dyn_clone::clone_box(&*solved_slice_orbit_puzzle))
-        .collect_vec()
-        .into_boxed_slice()
 }
 
 fn replace_compose_slice(
