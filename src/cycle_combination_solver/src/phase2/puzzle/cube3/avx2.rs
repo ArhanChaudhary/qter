@@ -9,7 +9,6 @@ use core::arch::x86::_mm256_shuffle_epi8;
 use core::arch::x86_64::_mm256_shuffle_epi8;
 use std::{
     fmt,
-    hash::{Hash, Hasher},
     num::NonZeroU8,
     simd::{
         cmp::{SimdOrd, SimdPartialEq, SimdPartialOrd},
@@ -33,21 +32,6 @@ impl PartialEq for Cube3 {
             unimplemented!()
         }
         eq_vectorcall(self, other)
-    }
-}
-
-impl Hash for Cube3 {
-    #[inline(always)]
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        #[cfg(avx2)]
-        extern "vectorcall" fn hash_vectorcall<H: Hasher>(a: &Cube3, state: &mut H) {
-            a.0.hash(state)
-        }
-        #[cfg(not(avx2))]
-        fn hash_vectorcall<H: Hasher>(a: &Cube3, state: &mut H) {
-            unimplemented!()
-        }
-        hash_vectorcall(self, state)
     }
 }
 

@@ -2,10 +2,12 @@
 pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
-    use crate::phase2::puzzle::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
-    use std::{fmt::Debug, hash::Hash, num::NonZeroU8};
+    use crate::phase2::puzzle::{
+        KSolveConversionError, OrbitDef, OrbitPuzzleState, OrientedPartition, PuzzleState,
+    };
+    use std::{fmt::Debug, num::NonZeroU8};
 
-    pub trait Cube3Interface: Hash + Clone + PartialEq + Debug {
+    pub trait Cube3Interface: Clone + PartialEq + Debug {
         fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self;
         fn replace_compose(&mut self, a: &Self, b: &Self);
         fn replace_inverse(&mut self, a: &Self);
@@ -37,11 +39,17 @@ mod common {
             if sorted_orbit_defs == CUBE_3_SORTED_ORBIT_DEFS {
                 Ok(Self::from_sorted_transformations(sorted_transformations))
             } else {
-                Err(KSolveConversionError::InvalidOrbitDefs(
-                    CUBE_3_SORTED_ORBIT_DEFS.to_vec(),
-                    sorted_orbit_defs.to_vec(),
-                ))
+                Err(KSolveConversionError::InvalidOrbitDefs {
+                    expected: CUBE_3_SORTED_ORBIT_DEFS.to_vec(),
+                    actual: sorted_orbit_defs.to_vec(),
+                })
             }
+        }
+
+        fn solved_orbit_puzzles(
+            _sorted_orbit_defs: &[OrbitDef],
+        ) -> Box<[Box<dyn OrbitPuzzleState>]> {
+            todo!();
         }
 
         fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: &[OrbitDef]) {

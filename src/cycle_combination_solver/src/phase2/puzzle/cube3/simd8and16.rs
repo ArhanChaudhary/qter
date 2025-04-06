@@ -12,7 +12,7 @@ use std::{
     },
 };
 
-#[derive(Clone, Debug, PartialEq, Hash)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Cube3 {
     pub ep: u8x16,
     pub eo: u8x16,
@@ -250,7 +250,7 @@ impl Cube3Interface for Cube3 {
     }
 }
 
-#[derive(PartialEq, Clone, Hash)]
+#[derive(PartialEq, Clone)]
 // TODO
 pub struct CompressedCube3 {
     edges: u8x16,

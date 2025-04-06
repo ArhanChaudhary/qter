@@ -140,7 +140,7 @@ impl<P: PuzzleState> CanonicalFSM<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::phase2::puzzle::{cube3::Cube3, slice_puzzle::HeapPuzzle, PuzzleDef};
+    use crate::phase2::puzzle::{PuzzleDef, cube3::Cube3, slice_puzzle::HeapPuzzle};
     use puzzle_geometry::ksolve::{KPUZZLE_3X3, KPUZZLE_4X4};
 
     #[test]

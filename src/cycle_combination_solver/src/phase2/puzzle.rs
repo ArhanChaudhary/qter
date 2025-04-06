@@ -1,18 +1,25 @@
+use dyn_clone::DynClone;
 use itertools::Itertools;
 use num_traits::PrimInt;
 use puzzle_geometry::ksolve::KSolve;
-use std::hash::Hash;
 use std::{fmt::Debug, num::NonZeroU8};
 use thiserror::Error;
 
 pub mod cube3;
+pub mod slice_orbit_puzzle;
 pub mod slice_puzzle;
 
-pub trait PuzzleState: Hash + Clone + PartialEq + Debug {
+/// The puzzle state interface at the heart of the cycle combination solver.
+/// Users may either use the generic `HeapPuzzle` implementor for any KSolve
+/// definition or define fast puzzle-specific implementations, like Cube3.
+pub trait PuzzleState: Clone + PartialEq + Debug {
+    /// A reusable multi bit vector type to hold temporary storage in
+    /// `induces_sorted_cycle_type`.
     type MultiBv: MultiBvInterface;
 
     /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
     fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv;
+
     /// Try to create a puzzle state from a sorted transformation and sorted
     /// orbit defs, checking if a puzzle state can be created from the orbit
     /// defs. `sorted_transformations` is guaranteed to correspond to
@@ -21,10 +28,15 @@ pub trait PuzzleState: Hash + Clone + PartialEq + Debug {
         sorted_transformations: &[Vec<(u8, u8)>],
         sorted_orbit_defs: &[OrbitDef],
     ) -> Result<Self, KSolveConversionError>;
+
+    fn solved_orbit_puzzles(sorted_orbit_defs: &[OrbitDef]) -> Box<[Box<dyn OrbitPuzzleState>]>;
+
     /// Compose two puzzle states in place
     fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: &[OrbitDef]);
+
     /// Inverse of a puzzle state
     fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]);
+
     /// The goal state for IDA* search
     fn induces_sorted_cycle_type(
         &self,
@@ -32,14 +44,22 @@ pub trait PuzzleState: Hash + Clone + PartialEq + Debug {
         sorted_orbit_defs: &[OrbitDef],
         multi_bv: <Self::MultiBv as MultiBvInterface>::MultiBvReusableRef<'_>,
     ) -> bool;
+
     /// Get a usize that "identifies" an orbit. This is implementor-specific.
     /// For slice puzzles, the identifier is the starting index of the orbit data
     /// in the puzzle state buffer. For specific puzzles the identifier is the
     /// index of the orbit in the orbit definition.
     fn next_orbit_identifer(orbit_identifier: usize, orbit_def: OrbitDef) -> usize;
+
     /// Get the bytes of the specified orbit index in the form (permutation
     /// vector, orientation vector).
     fn orbit_bytes(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> (&[u8], &[u8]);
+}
+
+pub trait OrbitPuzzleState: DynClone {
+    fn new_solved_state() -> Self
+    where
+        Self: Sized;
 }
 
 pub trait MultiBvInterface {
@@ -72,8 +92,11 @@ pub enum KSolveConversionError {
     MoveOrderTooHigh,
     #[error("Too many move classes")]
     TooManyMoveClasses,
-    #[error("Invalid KSolve orbit definitions. Expected: {0:?}\nActual: {1:?}")]
-    InvalidOrbitDefs(Vec<OrbitDef>, Vec<OrbitDef>),
+    #[error("Invalid KSolve orbit definitions. Expected: {expected:?}\nActual: {actual:?}")]
+    InvalidOrbitDefs {
+        expected: Vec<OrbitDef>,
+        actual: Vec<OrbitDef>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -549,27 +572,6 @@ mod tests {
         random_inversion::<cube3::simd8and16::Cube3>();
         #[cfg(avx2)]
         random_inversion::<cube3::avx2::Cube3>();
-    }
-
-    pub fn hash<P: PuzzleState>() {
-        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let solved = cube3_def.new_solved_state();
-
-        let in_r_f_cycle_1 = apply_moves(&cube3_def, &solved, "R F", 40);
-        let in_r_f_cycle_2 = apply_moves(&cube3_def, &solved, "F' R'", 65);
-
-        assert_eq!(in_r_f_cycle_1, in_r_f_cycle_2);
-        assert_eq!(fxhash::hash(&in_r_f_cycle_1), fxhash::hash(&in_r_f_cycle_2));
-    }
-
-    #[test]
-    fn test_hash() {
-        hash::<StackCube3>();
-        hash::<HeapPuzzle>();
-        #[cfg(simd8and16)]
-        hash::<cube3::simd8and16::Cube3>();
-        #[cfg(avx2)]
-        hash::<cube3::avx2::Cube3>();
     }
 
     pub fn induces_sorted_cycle_type_within_cycle<P: PuzzleState>() {
