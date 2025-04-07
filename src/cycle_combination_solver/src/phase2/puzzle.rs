@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use num_traits::PrimInt;
 use puzzle_geometry::ksolve::KSolve;
-use std::{fmt::Debug, num::NonZeroU8};
+use std::{fmt::Debug, hash::Hash, num::NonZeroU8};
 use thiserror::Error;
 
 pub mod cube3;
@@ -51,6 +51,21 @@ pub trait PuzzleState: Clone + PartialEq + Debug {
     /// Get the bytes of the specified orbit index in the form (permutation
     /// vector, orientation vector).
     fn orbit_bytes(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> (&[u8], &[u8]);
+
+    /// Return an integer that corresponds to a bijective mapping of the orbit
+    /// identifier's states.
+    fn exact_hash_orbit(
+        &self,
+        orbit_identifier: usize,
+        orbit_def: OrbitDef,
+    ) -> u64;
+
+    /// Return a representation of the puzzle state that can be soundly hashed.
+    fn approximate_hash_orbit(
+        &self,
+        orbit_identifier: usize,
+        orbit_def: OrbitDef,
+    ) -> impl Hash;
 }
 
 pub trait MultiBvInterface {

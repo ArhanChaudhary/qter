@@ -4,6 +4,8 @@
 
 - Phase 2
   - pruning table
+    - hash simd stuff
+    - fix storage backend initialization meta
     - tANS table compression
     - cycle type pruning table
       - with fewer state spaces, go back to an exact pruning table

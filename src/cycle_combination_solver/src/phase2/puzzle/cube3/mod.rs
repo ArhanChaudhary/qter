@@ -2,10 +2,9 @@
 pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
-    use crate::phase2::puzzle::{
-        KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState,
-    };
+    use crate::phase2::puzzle::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
     use std::{fmt::Debug, num::NonZeroU8};
+    use std::hash::Hash;
 
     pub trait Cube3Interface: Clone + PartialEq + Debug {
         fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self;
@@ -13,7 +12,8 @@ mod common {
         fn replace_inverse(&mut self, a: &Self);
         fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool;
         fn orbit_bytes(&self, orbit_index: usize) -> (&[u8], &[u8]);
-        fn exact_orbit_hash(&self, orbit_index: usize) -> u64;
+        fn exact_hash_orbit(&self, orbit_index: usize) -> u64;
+        fn approximate_hash_orbit(&self, orbit_index: usize) -> impl Hash;
     }
 
     const CUBE_3_SORTED_ORBIT_DEFS: [OrbitDef; 2] = [
@@ -73,6 +73,14 @@ mod common {
 
         fn orbit_bytes(&self, orbit_identifier: usize, _orbit_def: OrbitDef) -> (&[u8], &[u8]) {
             self.orbit_bytes(orbit_identifier)
+        }
+
+        fn exact_hash_orbit(&self, orbit_identifier: usize, _orbit_def: OrbitDef) -> u64 {
+            self.exact_hash_orbit(orbit_identifier)
+        }
+
+        fn approximate_hash_orbit(&self, orbit_identifier: usize, _orbit_def: OrbitDef) -> impl Hash {
+            self.approximate_hash_orbit(orbit_identifier)
         }
     }
 }

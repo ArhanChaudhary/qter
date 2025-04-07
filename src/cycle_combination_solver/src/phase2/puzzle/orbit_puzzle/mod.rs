@@ -57,6 +57,22 @@ impl PuzzleState for SliceOrbitPuzzle {
     fn orbit_bytes(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> (&[u8], &[u8]) {
         todo!()
     }
+
+    fn exact_hash_orbit(
+        &self,
+        orbit_identifier: usize,
+        orbit_def: OrbitDef,
+    ) -> u64 {
+        todo!()
+    }
+
+    fn approximate_hash_orbit(
+        &self,
+        orbit_identifier: usize,
+        orbit_def: OrbitDef,
+    ) -> impl std::hash::Hash {
+        todo!()
+    }
 }
 
 impl OrbitPuzzleState for SliceOrbitPuzzle {

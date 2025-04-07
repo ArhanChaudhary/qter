@@ -4,6 +4,7 @@ use super::common::Cube3Interface;
 use crate::phase2::puzzle::OrientedPartition;
 use std::{
     fmt,
+    hash::Hash,
     num::NonZeroU8,
     simd::{
         cmp::{SimdOrd, SimdPartialEq, SimdPartialOrd},
@@ -245,7 +246,11 @@ impl Cube3Interface for Cube3 {
         todo!()
     }
 
-    fn exact_orbit_hash(&self, orbit_index: usize) -> u64 {
+    fn exact_hash_orbit(&self, orbit_index: usize) -> u64 {
+        todo!()
+    }
+
+    fn approximate_hash_orbit(&self, orbit_index: usize) -> impl Hash {
         todo!()
     }
 }
@@ -329,7 +334,11 @@ impl Cube3Interface for CompressedCube3 {
         todo!()
     }
 
-    fn exact_orbit_hash(&self, orbit_index: usize) -> u64 {
+    fn exact_hash_orbit(&self, orbit_index: usize) -> u64 {
+        todo!()
+    }
+
+    fn approximate_hash_orbit(&self, orbit_index: usize) -> impl Hash {
         todo!()
     }
 }

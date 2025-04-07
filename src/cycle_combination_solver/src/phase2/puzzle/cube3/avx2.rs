@@ -1,14 +1,10 @@
 #![cfg_attr(not(avx2), allow(dead_code, unused_variables))]
 
-use crate::phase2::puzzle::OrientedPartition;
-
 use super::common::Cube3Interface;
-#[cfg(all(avx2, target_arch = "x86"))]
-use core::arch::x86::_mm256_shuffle_epi8;
-#[cfg(all(avx2, target_arch = "x86_64"))]
-use core::arch::x86_64::_mm256_shuffle_epi8;
+use crate::phase2::puzzle::OrientedPartition;
 use std::{
     fmt,
+    hash::Hash,
     num::NonZeroU8,
     simd::{
         cmp::{SimdOrd, SimdPartialEq, SimdPartialOrd},
@@ -16,6 +12,11 @@ use std::{
         u8x16, u8x32,
     },
 };
+
+#[cfg(all(avx2, target_arch = "x86"))]
+use core::arch::x86::_mm256_shuffle_epi8;
+#[cfg(all(avx2, target_arch = "x86_64"))]
+use core::arch::x86_64::_mm256_shuffle_epi8;
 
 #[derive(Clone)]
 pub struct Cube3(u8x32);
@@ -295,7 +296,11 @@ impl Cube3Interface for Cube3 {
         todo!()
     }
 
-    fn exact_orbit_hash(&self, orbit_index: usize) -> u64 {
+    fn exact_hash_orbit(&self, orbit_index: usize) -> u64 {
+        todo!()
+    }
+
+    fn approximate_hash_orbit(&self, orbit_index: usize) -> impl Hash {
         todo!()
     }
 }

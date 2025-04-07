@@ -65,20 +65,10 @@ trait OrbitPruningTable<P: PuzzleState> {
     where
         Self: Sized;
 
-    /// Hash a puzzle's orbit state. Implementors are expected to have a
-    /// mechanism to identify the target orbit.
-    fn hash_orbit_state(&self, puzzle_state: &P) -> u64;
-
-    /// Implementors are expected to forward the call to their storage backend.
-    /// Interestingly, the alternative way of requiring a storage backend getter
-    /// needs a trait object which is slow so this seems to be the best way.
-    fn permissible_heuristic_hash_outer(&self, hash: u64) -> u8;
-
-    /// This convenience function is a performance optimization that avoids two
-    /// otherwise dynamic dispatches.
-    fn permissible_heuristic(&self, puzzle_state: &P) -> u8 {
-        self.permissible_heuristic_hash_outer(self.hash_orbit_state(puzzle_state))
-    }
+    /// Get a **permissible** heuristic for a puzzle state. It is a soundness
+    /// error if this is not the case. Implementors are expected to have a
+    /// mechanism to identify the table's target orbit.
+    fn permissible_heuristic(&self, puzzle_state: &P) -> u8;
 }
 
 pub struct OrbitPruningTables<P: PuzzleState> {
@@ -475,12 +465,11 @@ impl<P: PuzzleState, S: StorageBackend<false>> OrbitPruningTable<P>
         todo!();
     }
 
-    fn hash_orbit_state(&self, puzzle_state: &P) -> u64 {
-        fxhash::hash64(&puzzle_state.orbit_bytes(self.orbit_identifier, self.orbit_def))
-    }
-
-    fn permissible_heuristic_hash_outer(&self, hash: u64) -> u8 {
-        self.storage_backend.permissible_heuristic_hash(hash)
+    fn permissible_heuristic(&self, puzzle_state: &P) -> u8 {
+        self.storage_backend
+            .permissible_heuristic_hash(fxhash::hash64(
+                &puzzle_state.approximate_hash_orbit(self.orbit_identifier, self.orbit_def),
+            ))
     }
 }
 
@@ -654,13 +643,18 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
         table!(SliceOrbitPuzzle)
     }
 
-    fn hash_orbit_state(&self, puzzle_state: &P) -> u64 {
-        let (perm, ori) = puzzle_state.orbit_bytes(self.orbit_identifier, self.orbit_def);
-        exact_hash_orbit_bytes(perm, ori, self.orbit_def)
-    }
+    // fn hash_orbit_state(&self, puzzle_state: &P) -> u64 {
+    //     let (perm, ori) = puzzle_state.orbit_bytes(self.orbit_identifier, self.orbit_def);
+    //     exact_hash_orbit_bytes(perm, ori, self.orbit_def)
+    // }
 
-    fn permissible_heuristic_hash_outer(&self, hash: u64) -> u8 {
-        self.storage_backend.permissible_heuristic_hash(hash)
+    // fn permissible_heuristic_hash_outer(&self, hash: u64) -> u8 {
+    //     self.storage_backend.permissible_heuristic_hash(hash)
+    // }
+    fn permissible_heuristic(&self, puzzle_state: &P) -> u8 {
+        self.storage_backend.permissible_heuristic_hash(
+            puzzle_state.exact_hash_orbit(self.orbit_identifier, self.orbit_def),
+        )
     }
 }
 
@@ -677,11 +671,8 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P>
         todo!();
     }
 
-    fn hash_orbit_state(&self, puzzle_state: &P) -> u64 {
-        todo!();
-    }
-
-    fn permissible_heuristic_hash_outer(&self, hash: u64) -> u8 {
+    fn permissible_heuristic(&self, puzzle_state: &P) -> u8 {
+        let hash = todo!();
         self.storage_backend.permissible_heuristic_hash(hash)
     }
 }
@@ -697,11 +688,7 @@ impl<P: PuzzleState> OrbitPruningTable<P> for ZeroOrbitTable {
         (ZeroOrbitTable, 0)
     }
 
-    fn hash_orbit_state(&self, _puzzle_state: &P) -> u64 {
-        0
-    }
-
-    fn permissible_heuristic_hash_outer(&self, _hash: u64) -> u8 {
+    fn permissible_heuristic(&self, puzzle_state: &P) -> u8 {
         0
     }
 }
@@ -842,93 +829,90 @@ mod tests {
         .unwrap();
     }
 
-    #[test]
-    fn test_exact_orbit_hasher_only_hashes_orbit() {
-        let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let solved = cube3_def.new_solved_state();
-        let mut result_1 = solved.clone();
-        let mut result_2 = solved.clone();
-        let u_move = cube3_def.find_move("U").unwrap();
+    // #[test]
+    // fn test_exact_orbit_hasher_only_hashes_orbit() {
+    //     let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
+    //     let solved = cube3_def.new_solved_state();
+    //     let mut result_1 = solved.clone();
+    //     let mut result_2 = solved.clone();
+    //     let u_move = cube3_def.find_move("U").unwrap();
 
-        let exact_corners_pruning_table =
-            ExactOrbitPruningTable::<UncompressedStorageBackend<true>> {
-                storage_backend: UncompressedStorageBackend::initialize_from_meta(MaxEntires(100)),
-                orbit_def: cube3_def.sorted_orbit_defs[0],
-                orbit_identifier: 0,
-            };
+    //     let exact_corners_pruning_table =
+    //         ExactOrbitPruningTable::<UncompressedStorageBackend<true>> {
+    //             storage_backend: UncompressedStorageBackend::initialize_from_meta(MaxEntires(100)),
+    //             orbit_def: cube3_def.sorted_orbit_defs[0],
+    //             orbit_identifier: 0,
+    //         };
 
-        assert_eq!(exact_corners_pruning_table.hash_orbit_state(&solved), 0);
-        result_1.replace_compose(&solved, &u_move.puzzle_state, &cube3_def.sorted_orbit_defs);
-        assert_eq!(
-            exact_corners_pruning_table.hash_orbit_state(&result_1),
-            24476904
-        );
-        result_2.replace_compose(
-            &result_1,
-            &u_move.puzzle_state,
-            &cube3_def.sorted_orbit_defs,
-        );
-        assert_eq!(
-            exact_corners_pruning_table.hash_orbit_state(&result_2),
-            57868020
-        );
-        result_1.replace_compose(
-            &result_2,
-            &u_move.puzzle_state,
-            &cube3_def.sorted_orbit_defs,
-        );
-        assert_eq!(
-            exact_corners_pruning_table.hash_orbit_state(&result_1),
-            67775130
-        );
-        result_2.replace_compose(
-            &result_1,
-            &u_move.puzzle_state,
-            &cube3_def.sorted_orbit_defs,
-        );
-        assert_eq!(exact_corners_pruning_table.hash_orbit_state(&result_2), 0);
+    //     assert_eq!(exact_corners_pruning_table.hash_orbit_state(&solved), 0);
+    //     result_1.replace_compose(&solved, &u_move.puzzle_state, &cube3_def.sorted_orbit_defs);
+    //     assert_eq!(
+    //         exact_corners_pruning_table.hash_orbit_state(&result_1),
+    //         24476904
+    //     );
+    //     result_2.replace_compose(
+    //         &result_1,
+    //         &u_move.puzzle_state,
+    //         &cube3_def.sorted_orbit_defs,
+    //     );
+    //     assert_eq!(
+    //         exact_corners_pruning_table.hash_orbit_state(&result_2),
+    //         57868020
+    //     );
+    //     result_1.replace_compose(
+    //         &result_2,
+    //         &u_move.puzzle_state,
+    //         &cube3_def.sorted_orbit_defs,
+    //     );
+    //     assert_eq!(
+    //         exact_corners_pruning_table.hash_orbit_state(&result_1),
+    //         67775130
+    //     );
+    //     result_2.replace_compose(
+    //         &result_1,
+    //         &u_move.puzzle_state,
+    //         &cube3_def.sorted_orbit_defs,
+    //     );
+    //     assert_eq!(exact_corners_pruning_table.hash_orbit_state(&result_2), 0);
 
-        // shortest 11 cycle alg
-        result_1 = apply_moves(&cube3_def, &solved, "U R U F L R' U' R' F' D'", 1);
+    //     // shortest 11 cycle alg
+    //     result_1 = apply_moves(&cube3_def, &solved, "U R U F L R' U' R' F' D'", 1);
 
-        assert_eq!(exact_corners_pruning_table.hash_orbit_state(&result_1), 0);
-        result_2.replace_compose(
-            &result_1,
-            &u_move.puzzle_state,
-            &cube3_def.sorted_orbit_defs,
-        );
-        assert_eq!(
-            exact_corners_pruning_table.hash_orbit_state(&result_2),
-            24476904
-        );
-        result_1.replace_compose(
-            &result_2,
-            &u_move.puzzle_state,
-            &cube3_def.sorted_orbit_defs,
-        );
-        assert_eq!(
-            exact_corners_pruning_table.hash_orbit_state(&result_1),
-            57868020
-        );
-        result_2.replace_compose(
-            &result_1,
-            &u_move.puzzle_state,
-            &cube3_def.sorted_orbit_defs,
-        );
-        assert_eq!(
-            exact_corners_pruning_table.hash_orbit_state(&result_2),
-            67775130
-        );
-        result_1.replace_compose(
-            &result_2,
-            &u_move.puzzle_state,
-            &cube3_def.sorted_orbit_defs,
-        );
-        assert_eq!(exact_corners_pruning_table.hash_orbit_state(&result_1), 0);
+    //     assert_eq!(exact_corners_pruning_table.hash_orbit_state(&result_1), 0);
+    //     result_2.replace_compose(
+    //         &result_1,
+    //         &u_move.puzzle_state,
+    //         &cube3_def.sorted_orbit_defs,
+    //     );
+    //     assert_eq!(
+    //         exact_corners_pruning_table.hash_orbit_state(&result_2),
+    //         24476904
+    //     );
+    //     result_1.replace_compose(
+    //         &result_2,
+    //         &u_move.puzzle_state,
+    //         &cube3_def.sorted_orbit_defs,
+    //     );
+    //     assert_eq!(
+    //         exact_corners_pruning_table.hash_orbit_state(&result_1),
+    //         57868020
+    //     );
+    //     result_2.replace_compose(
+    //         &result_1,
+    //         &u_move.puzzle_state,
+    //         &cube3_def.sorted_orbit_defs,
+    //     );
+    //     assert_eq!(
+    //         exact_corners_pruning_table.hash_orbit_state(&result_2),
+    //         67775130
+    //     );
+    //     result_1.replace_compose(
+    //         &result_2,
+    //         &u_move.puzzle_state,
+    //         &cube3_def.sorted_orbit_defs,
+    //     );
+    //     assert_eq!(exact_corners_pruning_table.hash_orbit_state(&result_1), 0);
 
-        assert_ne!(solved, result_1);
-    }
-
-    #[test]
-    fn test_exact_orbit_hasher_is_exact() {}
+    //     assert_ne!(solved, result_1);
+    // }
 }

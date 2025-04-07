@@ -1,5 +1,5 @@
 use super::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
-use std::num::NonZeroU8;
+use std::{hash::Hash, num::NonZeroU8};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct StackPuzzle<const N: usize>([u8; N]);
@@ -64,6 +64,14 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
     fn orbit_bytes(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> (&[u8], &[u8]) {
         orbit_bytes_slice(&self.0, orbit_identifier, orbit_def)
     }
+
+    fn approximate_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64 {
+        todo!()
+    }
+
+    fn exact_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64 {
+        todo!()
+    }
 }
 
 impl PuzzleState for HeapPuzzle {
@@ -119,6 +127,14 @@ impl PuzzleState for HeapPuzzle {
 
     fn orbit_bytes(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> (&[u8], &[u8]) {
         orbit_bytes_slice(&self.0, orbit_identifier, orbit_def)
+    }
+
+    fn approximate_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> impl Hash {
+        todo!()
+    }
+
+    fn exact_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64 {
+        todo!()
     }
 }
 
