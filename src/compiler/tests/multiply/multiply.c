@@ -7,306 +7,202 @@
 int branch = 0;
 float count = 0;
 
-#define solved_goto(b, label) \
-    if (*b == 0)              \
-    {                         \
-        goto label;           \
+void move_const(int n, int *to)
+{
+move_const_loop:
+    branch++;
+    if (*to == 0)
+    {
+        goto after_move_const_loop;
     }
+    *to -= 1;
+    count++;
+    goto move_const_loop;
+after_move_const_loop:
+    *to += n;
+    if (n != 0)
+        count++;
+}
 
-#define add(a, n) \
-    {                         \
-        *a += n;              \
-        *a = (*a % 30 + 30) % 30; \
+void move(int *from, int *to)
+{
+reduce_by_1:
+    branch++;
+    if (*from % 10 == 0)
+    {
+        goto reduce_by_10;
     }
+    *from -= 1;
+    *to += 1;
+    count += 1.5;
+    goto reduce_by_1;
+reduce_by_10:
+    branch++;
+    if (*from == 0)
+    {
+        goto after_move_loop;
+    }
+    *from -= 10;
+    *to += 10;
+    count += 1.5;
+    goto reduce_by_10;
+after_move_loop:
+}
+
+void reduce_problem(int *a, int *b, int *c, const int k)
+{
+reduce_b_loop:
+    branch++;
+    if (*b == 0)
+    {
+        goto before_reduce_a_loop;
+    }
+    *b -= k;
+    *b = (*b % 30 + 30) % 30;
+    *c += 1;
+    count += 1.5;
+    goto reduce_b_loop;
+before_reduce_a_loop:
+    move(c, b);
+reduce_a_loop:
+    branch++;
+    if (*a == 0)
+    {
+        goto after_reduce_a_loop;
+    }
+    *a -= 1;
+    *c = (*c + k) % 30;
+    count += 1.5;
+    goto reduce_a_loop;
+after_reduce_a_loop:
+    move(c, a);
+}
 
 void multiply(int *a, int *b, int *c)
 {
-    solved_goto(a, move_0_b);
-    solved_goto(b, move_0_a);
+    // move_const(0, c);
+    branch++;
+    if (*a == 0)
+    {
+        goto move_0_b;
+    }
+    branch++;
+    if (*b == 0)
+    {
+        goto move_0_a;
+    }
 reduce_by_2:
-    solved_goto(b % 10, do_reduce_by_2);
-    add(b, -1);
-    add(c, 1);
-    solved_goto(b % 10, before_reduce_by_3);
-    add(b, -1);
-    add(c, 1);
+    branch++;
+    if (*b % 10 == 0)
+    {
+        goto do_reduce_by_2;
+    }
+    *b -= 1;
+    *c += 1;
+    count += 1.5;
+    branch++;
+    if (*b % 10 == 0)
+    {
+        goto before_reduce_by_3;
+    }
+    *b -= 1;
+    *c += 1;
+    count += 1.5;
     goto reduce_by_2;
 do_reduce_by_2:
-reduce_by_1__3:
-    solved_goto(c % 10, reduce_by_10__3);
-    add(c, -1);
-    add(b, 1);
-    goto reduce_by_1__3;
-reduce_by_10__3:
-    solved_goto(c, after_move_loop__3);
-    add(c, -10);
-    add(b, 10);
-    goto reduce_by_10__3;
-after_move_loop__3:
-reduce_b_loop__1:
-    solved_goto(b, before_reduce_a_loop__1);
-    add(b, -2);
-    add(c, 1);
-    goto reduce_b_loop__1;
-before_reduce_a_loop__1:
-reduce_by_1__1__1:
-    solved_goto(c % 10, reduce_by_10__1__1);
-    add(c, -1);
-    add(b, 1);
-    goto reduce_by_1__1__1;
-reduce_by_10__1__1:
-    solved_goto(c, after_move_loop__1__1);
-    add(c, -10);
-    add(b, 10);
-    goto reduce_by_10__1__1;
-after_move_loop__1__1:
-reduce_a_loop__1:
-    solved_goto(a, after_reduce_a_loop__1);
-    add(a, -1);
-    add(c, 2);
-    goto reduce_a_loop__1;
-after_reduce_a_loop__1:
-reduce_by_1__2__1:
-    solved_goto(c % 10, reduce_by_10__2__1);
-    add(c, -1);
-    add(a, 1);
-    goto reduce_by_1__2__1;
-reduce_by_10__2__1:
-    solved_goto(c, after_move_loop__2__1);
-    add(c, -10);
-    add(a, 10);
-    goto reduce_by_10__2__1;
-after_move_loop__2__1:
+    move(c, b);
+    reduce_problem(a, b, c, 2);
     goto reduce_by_2;
 do_reduce_by_3:
-reduce_by_1__4:
-    solved_goto(c % 10, reduce_by_10__4);
-    add(c, -1);
-    add(b, 1);
-    goto reduce_by_1__4;
-reduce_by_10__4:
-    solved_goto(c, after_move_loop__4);
-    add(c, -10);
-    add(b, 10);
-    goto reduce_by_10__4;
-after_move_loop__4:
-reduce_b_loop__2:
-    solved_goto(b, before_reduce_a_loop__2);
-    add(b, -3);
-    add(c, 1);
-    goto reduce_b_loop__2;
-before_reduce_a_loop__2:
-reduce_by_1__1__2:
-    solved_goto(c % 10, reduce_by_10__1__2);
-    add(c, -1);
-    add(b, 1);
-    goto reduce_by_1__1__2;
-reduce_by_10__1__2:
-    solved_goto(c, after_move_loop__1__2);
-    add(c, -10);
-    add(b, 10);
-    goto reduce_by_10__1__2;
-after_move_loop__1__2:
-reduce_a_loop__2:
-    solved_goto(a, after_reduce_a_loop__2);
-    add(a, -1);
-    add(c, 3);
-    goto reduce_a_loop__2;
-after_reduce_a_loop__2:
-reduce_by_1__2__2:
-    solved_goto(c % 10, reduce_by_10__2__2);
-    add(c, -1);
-    add(a, 1);
-    goto reduce_by_1__2__2;
-reduce_by_10__2__2:
-    solved_goto(c, after_move_loop__2__2);
-    add(c, -10);
-    add(a, 10);
-    goto reduce_by_10__2__2;
-after_move_loop__2__2:
+    move(c, b);
+    reduce_problem(a, b, c, 3);
     goto reduce_by_3;
 before_reduce_by_3:
-reduce_by_1__5:
-    solved_goto(c % 10, reduce_by_10__5);
-    add(c, -1);
-    add(b, 1);
-    goto reduce_by_1__5;
-reduce_by_10__5:
-    solved_goto(c, after_move_loop__5);
-    add(c, -10);
-    add(b, 10);
-    goto reduce_by_10__5;
-after_move_loop__5:
+    move(c, b);
 reduce_by_3:
-    solved_goto(b % 3, do_reduce_by_3);
+    branch++;
+    if (*b % 3 == 0)
+    {
+        goto do_reduce_by_3;
+    }
 reduce_by_5:
-    solved_goto(b % 10, do_reduce_by_5);
-    add(b, -1);
-    add(c, 1);
-    solved_goto(b % 10, before_reduce_generator_7);
-    add(b, -1);
-    add(c, 1);
-    solved_goto(b % 10, before_reduce_generator_7);
-    add(b, -1);
-    add(c, 1);
-    solved_goto(b % 10, before_reduce_generator_7);
-    add(b, -1);
-    add(c, 1);
-    solved_goto(b % 10, before_reduce_generator_7);
-    add(b, -1);
-    add(c, 1);
+    branch++;
+    if (*b % 10 == 0)
+    {
+        goto do_reduce_by_5;
+    }
+    *b -= 1;
+    *c += 1;
+    count += 1.5;
+    branch++;
+    if (*b % 10 == 0)
+    {
+        goto before_reduce_generator_7;
+    }
+    *b -= 1;
+    *c += 1;
+    count += 1.5;
+    branch++;
+    if (*b % 10 == 0)
+    {
+        goto before_reduce_generator_7;
+    }
+    *b -= 1;
+    *c += 1;
+    count += 1.5;
+    branch++;
+    if (*b % 10 == 0)
+    {
+        goto before_reduce_generator_7;
+    }
+    *b -= 1;
+    *c += 1;
+    count += 1.5;
+    branch++;
+    if (*b % 10 == 0)
+    {
+        goto before_reduce_generator_7;
+    }
+    *b -= 1;
+    *c += 1;
+    count += 1.5;
     goto reduce_by_5;
 do_reduce_by_5:
-reduce_by_1__6:
-    solved_goto(c % 10, reduce_by_10__6);
-    add(c, -1);
-    add(b, 1);
-    goto reduce_by_1__6;
-reduce_by_10__6:
-    solved_goto(c, after_move_loop__6);
-    add(c, -10);
-    add(b, 10);
-    goto reduce_by_10__6;
-after_move_loop__6:
-reduce_b_loop__3:
-    solved_goto(b, before_reduce_a_loop__3);
-    add(b, -5);
-    add(c, 1);
-    goto reduce_b_loop__3;
-before_reduce_a_loop__3:
-reduce_by_1__1__3:
-    solved_goto(c % 10, reduce_by_10__1__3);
-    add(c, -1);
-    add(b, 1);
-    goto reduce_by_1__1__3;
-reduce_by_10__1__3:
-    solved_goto(c, after_move_loop__1__3);
-    add(c, -10);
-    add(b, 10);
-    goto reduce_by_10__1__3;
-after_move_loop__1__3:
-reduce_a_loop__3:
-    solved_goto(a, after_reduce_a_loop__3);
-    add(a, -1);
-    add(c, 5);
-    goto reduce_a_loop__3;
-after_reduce_a_loop__3:
-reduce_by_1__2__3:
-    solved_goto(c % 10, reduce_by_10__2__3);
-    add(c, -1);
-    add(a, 1);
-    goto reduce_by_1__2__3;
-reduce_by_10__2__3:
-    solved_goto(c, after_move_loop__2__3);
-    add(c, -10);
-    add(a, 10);
-    goto reduce_by_10__2__3;
-after_move_loop__2__3:
+    move(c, b);
+    reduce_problem(a, b, c, 5);
     goto reduce_by_5;
 before_reduce_generator_7:
-reduce_by_1__7:
-    solved_goto(c % 10, reduce_by_10__7);
-    add(c, -1);
-    add(b, 1);
-    goto reduce_by_1__7;
-reduce_by_10__7:
-    solved_goto(c, after_move_loop__7);
-    add(c, -10);
-    add(b, 10);
-    goto reduce_by_10__7;
-after_move_loop__7:
+    move(c, b);
 reduce_generator_7:
-    add(b, -1);
-    solved_goto(b % 10, before_reduce_generator_11);
-    add(b, 1);
-reduce_b_loop__4:
-    solved_goto(b, before_reduce_a_loop__4);
-    add(b, -7);
-    add(c, 1);
-    goto reduce_b_loop__4;
-before_reduce_a_loop__4:
-reduce_by_1__1__4:
-    solved_goto(c % 10, reduce_by_10__1__4);
-    add(c, -1);
-    add(b, 1);
-    goto reduce_by_1__1__4;
-reduce_by_10__1__4:
-    solved_goto(c, after_move_loop__1__4);
-    add(c, -10);
-    add(b, 10);
-    goto reduce_by_10__1__4;
-after_move_loop__1__4:
-reduce_a_loop__4:
-    solved_goto(a, after_reduce_a_loop__4);
-    add(a, -1);
-    add(c, 7);
-    goto reduce_a_loop__4;
-after_reduce_a_loop__4:
-reduce_by_1__2__4:
-    solved_goto(c % 10, reduce_by_10__2__4);
-    add(c, -1);
-    add(a, 1);
-    goto reduce_by_1__2__4;
-reduce_by_10__2__4:
-    solved_goto(c, after_move_loop__2__4);
-    add(c, -10);
-    add(a, 10);
-    goto reduce_by_10__2__4;
-after_move_loop__2__4:
+    *b -= 1;
+    count++;
+    branch++;
+    if (*b % 10 == 0)
+    {
+        goto before_reduce_generator_11;
+    }
+    *b += 1;
+    count++;
+    reduce_problem(a, b, c, 7);
     goto reduce_generator_7;
 reduce_generator_11:
-    add(b, -1);
+    *b -= 1;
+    count++;
 before_reduce_generator_11:
-    solved_goto(b, return_);
-    add(b, 1);
-reduce_b_loop__5:
-    solved_goto(b, before_reduce_a_loop__5);
-    add(b, -11);
-    add(c, 1);
-    goto reduce_b_loop__5;
-before_reduce_a_loop__5:
-reduce_by_1__1__5:
-    solved_goto(c % 10, reduce_by_10__1__5);
-    add(c, -1);
-    add(b, 1);
-    goto reduce_by_1__1__5;
-reduce_by_10__1__5:
-    solved_goto(c, after_move_loop__1__5);
-    add(c, -10);
-    add(b, 10);
-    goto reduce_by_10__1__5;
-after_move_loop__1__5:
-reduce_a_loop__5:
-    solved_goto(a, after_reduce_a_loop__5);
-    add(a, -1);
-    add(c, 11);
-    goto reduce_a_loop__5;
-after_reduce_a_loop__5:
-reduce_by_1__2__5:
-    solved_goto(c % 10, reduce_by_10__2__5);
-    add(c, -1);
-    add(a, 1);
-    goto reduce_by_1__2__5;
-reduce_by_10__2__5:
-    solved_goto(c, after_move_loop__2__5);
-    add(c, -10);
-    add(a, 10);
-    goto reduce_by_10__2__5;
-after_move_loop__2__5:
+    branch++;
+    if (*b == 0)
+    {
+        goto return_;
+    }
+    *b += 1;
+    count++;
+    reduce_problem(a, b, c, 11);
     goto reduce_generator_11;
 move_0_b:
-move_const_loop__1:
-    solved_goto(b, after_move_const_loop__1);
-    add(b, -1);
-    goto move_const_loop__1;
-after_move_const_loop__1:
+    move_const(0, b);
     goto return_;
 move_0_a:
-move_const_loop__2:
-    solved_goto(a, after_move_const_loop__2);
-    add(a, -1);
-    goto move_const_loop__2;
-after_move_const_loop__2:
+    move_const(0, a);
 return_:
     return;
 }
