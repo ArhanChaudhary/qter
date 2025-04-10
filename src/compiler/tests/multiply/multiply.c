@@ -7,75 +7,6 @@
 int branch = 0;
 float count = 0;
 
-void reduce_problem(int *a, int *b, int *c, const int k)
-{
-reduce_b_loop:
-    branch++;
-    if (*b == 0)
-    {
-        goto before_reduce_a_loop;
-    }
-    *b -= k;
-    *b = (*b % 30 + 30) % 30;
-    *c += 1;
-    count += 1.5;
-    goto reduce_b_loop;
-before_reduce_a_loop:
-move3__reduce_by_1__1:
-    branch++;
-    if (*c % 3 == 0)
-    {
-        goto move3__reduce_by_3__1;
-    }
-    *c -= 1;
-    *b += 1;
-    count += 1.5;
-    goto move3__reduce_by_1__1;
-move3__reduce_by_3__1:
-    branch++;
-    if (*c == 0)
-    {
-        goto move3__after_move_loop__1;
-    }
-    *c -= 3;
-    *b += 3;
-    count += 1.5;
-    goto move3__reduce_by_3__1;
-move3__after_move_loop__1:
-reduce_a_loop:
-    branch++;
-    if (*a == 0)
-    {
-        goto after_reduce_a_loop;
-    }
-    *a -= 1;
-    *c = (*c + k) % 30;
-    count += 1.5;
-    goto reduce_a_loop;
-after_reduce_a_loop:
-move10__reduce_by_1__1:
-    branch++;
-    if (*c % 10 == 0)
-    {
-        goto move10__reduce_by_10__1;
-    }
-    *c -= 1;
-    *a += 1;
-    count += 1.5;
-    goto move10__reduce_by_1__1;
-move10__reduce_by_10__1:
-    branch++;
-    if (*c == 0)
-    {
-        goto move10__after_move_loop__1;
-    }
-    *c -= 10;
-    *a += 10;
-    count += 1.5;
-    goto move10__reduce_by_10__1;
-move10__after_move_loop__1:
-}
-
 void multiply(int *a, int *b, int *c)
 {
     branch++;
@@ -128,7 +59,71 @@ move3__reduce_by_3__1:
     count += 1.5;
     goto move3__reduce_by_3__1;
 move3__after_move_loop__1:
-    reduce_problem(a, b, c, 2);
+reduce_problem__reduce_b_loop__1:
+    branch++;
+    if (*b == 0)
+    {
+        goto reduce_problem__before_reduce_a_loop__1;
+    }
+    *b -= 2;
+    *b = (*b % 30 + 30) % 30;
+    *c += 1;
+    count += 1.5;
+    goto reduce_problem__reduce_b_loop__1;
+reduce_problem__before_reduce_a_loop__1:
+reduce_problem__move3__reduce_by_1__1__1:
+    branch++;
+    if (*c % 3 == 0)
+    {
+        goto reduce_problem__move3__reduce_by_3__1__1;
+    }
+    *c -= 1;
+    *b += 1;
+    count += 1.5;
+    goto reduce_problem__move3__reduce_by_1__1__1;
+reduce_problem__move3__reduce_by_3__1__1:
+    branch++;
+    if (*c == 0)
+    {
+        goto reduce_problem__move3__after_move_loop__1__1;
+    }
+    *c -= 3;
+    *b += 3;
+    count += 1.5;
+    goto reduce_problem__move3__reduce_by_3__1__1;
+reduce_problem__move3__after_move_loop__1__1:
+reduce_problem__reduce_a_loop__1:
+    branch++;
+    if (*a == 0)
+    {
+        goto reduce_problem__after_reduce_a_loop__1;
+    }
+    *a -= 1;
+    *c = (*c + 2) % 30;
+    count += 1.5;
+    goto reduce_problem__reduce_a_loop__1;
+reduce_problem__after_reduce_a_loop__1:
+reduce_problem__move10__reduce_by_1__1__1:
+    branch++;
+    if (*c % 10 == 0)
+    {
+        goto reduce_problem__move10__reduce_by_10__1__1;
+    }
+    *c -= 1;
+    *a += 1;
+    count += 1.5;
+    goto reduce_problem__move10__reduce_by_1__1__1;
+reduce_problem__move10__reduce_by_10__1__1:
+    branch++;
+    if (*c == 0)
+    {
+        goto reduce_problem__move10__after_move_loop__1__1;
+    }
+    *c -= 10;
+    *a += 10;
+    count += 1.5;
+    goto reduce_problem__move10__reduce_by_10__1__1;
+reduce_problem__move10__after_move_loop__1__1:
     goto reduce_by_2;
 do_reduce_by_3:
 raw_move__raw_move_loop__1:
@@ -142,7 +137,71 @@ raw_move__raw_move_loop__1:
     count += 1.5;
     goto raw_move__raw_move_loop__1;
 raw_move__after_raw_move_loop__1:
-    reduce_problem(a, b, c, 3);
+reduce_problem__reduce_b_loop__2:
+    branch++;
+    if (*b == 0)
+    {
+        goto reduce_problem__before_reduce_a_loop__2;
+    }
+    *b -= 3;
+    *b = (*b % 30 + 30) % 30;
+    *c += 1;
+    count += 1.5;
+    goto reduce_problem__reduce_b_loop__2;
+reduce_problem__before_reduce_a_loop__2:
+reduce_problem__move3__reduce_by_1__1__2:
+    branch++;
+    if (*c % 3 == 0)
+    {
+        goto reduce_problem__move3__reduce_by_3__1__2;
+    }
+    *c -= 1;
+    *b += 1;
+    count += 1.5;
+    goto reduce_problem__move3__reduce_by_1__1__2;
+reduce_problem__move3__reduce_by_3__1__2:
+    branch++;
+    if (*c == 0)
+    {
+        goto reduce_problem__move3__after_move_loop__1__2;
+    }
+    *c -= 3;
+    *b += 3;
+    count += 1.5;
+    goto reduce_problem__move3__reduce_by_3__1__2;
+reduce_problem__move3__after_move_loop__1__2:
+reduce_problem__reduce_a_loop__2:
+    branch++;
+    if (*a == 0)
+    {
+        goto reduce_problem__after_reduce_a_loop__2;
+    }
+    *a -= 1;
+    *c = (*c + 3) % 30;
+    count += 1.5;
+    goto reduce_problem__reduce_a_loop__2;
+reduce_problem__after_reduce_a_loop__2:
+reduce_problem__move10__reduce_by_1__1__2:
+    branch++;
+    if (*c % 10 == 0)
+    {
+        goto reduce_problem__move10__reduce_by_10__1__2;
+    }
+    *c -= 1;
+    *a += 1;
+    count += 1.5;
+    goto reduce_problem__move10__reduce_by_1__1__2;
+reduce_problem__move10__reduce_by_10__1__2:
+    branch++;
+    if (*c == 0)
+    {
+        goto reduce_problem__move10__after_move_loop__1__2;
+    }
+    *c -= 10;
+    *a += 10;
+    count += 1.5;
+    goto reduce_problem__move10__reduce_by_10__1__2;
+reduce_problem__move10__after_move_loop__1__2:
     goto reduce_by_3;
 before_reduce_by_3:
 move3__reduce_by_1__2:
@@ -236,7 +295,71 @@ move3__reduce_by_3__3:
     count += 1.5;
     goto move3__reduce_by_3__3;
 move3__after_move_loop__3:
-    reduce_problem(a, b, c, 5);
+reduce_problem__reduce_b_loop__3:
+    branch++;
+    if (*b == 0)
+    {
+        goto reduce_problem__before_reduce_a_loop__3;
+    }
+    *b -= 5;
+    *b = (*b % 30 + 30) % 30;
+    *c += 1;
+    count += 1.5;
+    goto reduce_problem__reduce_b_loop__3;
+reduce_problem__before_reduce_a_loop__3:
+reduce_problem__move3__reduce_by_1__1__3:
+    branch++;
+    if (*c % 3 == 0)
+    {
+        goto reduce_problem__move3__reduce_by_3__1__3;
+    }
+    *c -= 1;
+    *b += 1;
+    count += 1.5;
+    goto reduce_problem__move3__reduce_by_1__1__3;
+reduce_problem__move3__reduce_by_3__1__3:
+    branch++;
+    if (*c == 0)
+    {
+        goto reduce_problem__move3__after_move_loop__1__3;
+    }
+    *c -= 3;
+    *b += 3;
+    count += 1.5;
+    goto reduce_problem__move3__reduce_by_3__1__3;
+reduce_problem__move3__after_move_loop__1__3:
+reduce_problem__reduce_a_loop__3:
+    branch++;
+    if (*a == 0)
+    {
+        goto reduce_problem__after_reduce_a_loop__3;
+    }
+    *a -= 1;
+    *c = (*c + 5) % 30;
+    count += 1.5;
+    goto reduce_problem__reduce_a_loop__3;
+reduce_problem__after_reduce_a_loop__3:
+reduce_problem__move10__reduce_by_1__1__3:
+    branch++;
+    if (*c % 10 == 0)
+    {
+        goto reduce_problem__move10__reduce_by_10__1__3;
+    }
+    *c -= 1;
+    *a += 1;
+    count += 1.5;
+    goto reduce_problem__move10__reduce_by_1__1__3;
+reduce_problem__move10__reduce_by_10__1__3:
+    branch++;
+    if (*c == 0)
+    {
+        goto reduce_problem__move10__after_move_loop__1__3;
+    }
+    *c -= 10;
+    *a += 10;
+    count += 1.5;
+    goto reduce_problem__move10__reduce_by_10__1__3;
+reduce_problem__move10__after_move_loop__1__3:
     goto reduce_by_5;
 before_reduce_generator_7:
 move3__reduce_by_1__4:
@@ -270,7 +393,71 @@ reduce_generator_7:
     }
     *b += 1;
     count++;
-    reduce_problem(a, b, c, 7);
+reduce_problem__reduce_b_loop__4:
+    branch++;
+    if (*b == 0)
+    {
+        goto reduce_problem__before_reduce_a_loop__4;
+    }
+    *b -= 7;
+    *b = (*b % 30 + 30) % 30;
+    *c += 1;
+    count += 1.5;
+    goto reduce_problem__reduce_b_loop__4;
+reduce_problem__before_reduce_a_loop__4:
+reduce_problem__move3__reduce_by_1__1__4:
+    branch++;
+    if (*c % 3 == 0)
+    {
+        goto reduce_problem__move3__reduce_by_3__1__4;
+    }
+    *c -= 1;
+    *b += 1;
+    count += 1.5;
+    goto reduce_problem__move3__reduce_by_1__1__4;
+reduce_problem__move3__reduce_by_3__1__4:
+    branch++;
+    if (*c == 0)
+    {
+        goto reduce_problem__move3__after_move_loop__1__4;
+    }
+    *c -= 3;
+    *b += 3;
+    count += 1.5;
+    goto reduce_problem__move3__reduce_by_3__1__4;
+reduce_problem__move3__after_move_loop__1__4:
+reduce_problem__reduce_a_loop__4:
+    branch++;
+    if (*a == 0)
+    {
+        goto reduce_problem__after_reduce_a_loop__4;
+    }
+    *a -= 1;
+    *c = (*c + 7) % 30;
+    count += 1.5;
+    goto reduce_problem__reduce_a_loop__4;
+reduce_problem__after_reduce_a_loop__4:
+reduce_problem__move10__reduce_by_1__1__4:
+    branch++;
+    if (*c % 10 == 0)
+    {
+        goto reduce_problem__move10__reduce_by_10__1__4;
+    }
+    *c -= 1;
+    *a += 1;
+    count += 1.5;
+    goto reduce_problem__move10__reduce_by_1__1__4;
+reduce_problem__move10__reduce_by_10__1__4:
+    branch++;
+    if (*c == 0)
+    {
+        goto reduce_problem__move10__after_move_loop__1__4;
+    }
+    *c -= 10;
+    *a += 10;
+    count += 1.5;
+    goto reduce_problem__move10__reduce_by_10__1__4;
+reduce_problem__move10__after_move_loop__1__4:
     goto reduce_generator_7;
 reduce_generator_11:
     *b -= 1;
@@ -283,7 +470,71 @@ before_reduce_generator_11:
     }
     *b += 1;
     count++;
-    reduce_problem(a, b, c, 11);
+reduce_problem__reduce_b_loop__5:
+    branch++;
+    if (*b == 0)
+    {
+        goto reduce_problem__before_reduce_a_loop__5;
+    }
+    *b -= 11;
+    *b = (*b % 30 + 30) % 30;
+    *c += 1;
+    count += 1.5;
+    goto reduce_problem__reduce_b_loop__5;
+reduce_problem__before_reduce_a_loop__5:
+reduce_problem__move3__reduce_by_1__1__5:
+    branch++;
+    if (*c % 3 == 0)
+    {
+        goto reduce_problem__move3__reduce_by_3__1__5;
+    }
+    *c -= 1;
+    *b += 1;
+    count += 1.5;
+    goto reduce_problem__move3__reduce_by_1__1__5;
+reduce_problem__move3__reduce_by_3__1__5:
+    branch++;
+    if (*c == 0)
+    {
+        goto reduce_problem__move3__after_move_loop__1__5;
+    }
+    *c -= 3;
+    *b += 3;
+    count += 1.5;
+    goto reduce_problem__move3__reduce_by_3__1__5;
+reduce_problem__move3__after_move_loop__1__5:
+reduce_problem__reduce_a_loop__5:
+    branch++;
+    if (*a == 0)
+    {
+        goto reduce_problem__after_reduce_a_loop__5;
+    }
+    *a -= 1;
+    *c = (*c + 11) % 30;
+    count += 1.5;
+    goto reduce_problem__reduce_a_loop__5;
+reduce_problem__after_reduce_a_loop__5:
+reduce_problem__move10__reduce_by_1__1__5:
+    branch++;
+    if (*c % 10 == 0)
+    {
+        goto reduce_problem__move10__reduce_by_10__1__5;
+    }
+    *c -= 1;
+    *a += 1;
+    count += 1.5;
+    goto reduce_problem__move10__reduce_by_1__1__5;
+reduce_problem__move10__reduce_by_10__1__5:
+    branch++;
+    if (*c == 0)
+    {
+        goto reduce_problem__move10__after_move_loop__1__5;
+    }
+    *c -= 10;
+    *a += 10;
+    count += 1.5;
+    goto reduce_problem__move10__reduce_by_10__1__5;
+reduce_problem__move10__after_move_loop__1__5:
     goto reduce_generator_11;
 move_0_b:
 move_const__move_const_loop__1:
