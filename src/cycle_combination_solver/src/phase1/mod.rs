@@ -1,45 +1,40 @@
+use puzzle_geometry::ksolve::{self, KSolveSet};
 use qter_core::{Int, U};
+use std::num::NonZero;
 
 struct PrimePower {
-    value: u32,
-    min_pieces: u32,
+    value: u16,
+    min_pieces: u16,
 }
 struct OrderIteration {
     index: usize,
-    piece_count: u32,
+    piece_count: u16,
     product: Int<U>,
-    powers: Vec<u32>,
-    min_pieces: Vec<u32>,
+    powers: Vec<u16>,
+    min_pieces: Vec<u16>,
 }
 
 struct ComboIteration {
     register: usize,
     power: usize,
-    orbit_sums: Vec<u32>,
+    orbit_sums: Vec<u16>,
     assignments: Vec<Assignment>,
-    available_pieces: u32,
+    available_pieces: u16,
 }
 
-type Assignment = Vec<Vec<u32>>;
+type Assignment = Vec<Vec<u16>>;
 
 #[derive(Clone)]
 struct PossibleOrder {
     // this is a candidate order
     order: Int<U>,
-    prime_powers: Vec<u32>,
-    min_piece_counts: Vec<u32>,
-}
-
-struct Orbit {
-    name: String,
-    cubie_count: u32,
-    orient_count: u32,
-    orient_sum: u32,
+    prime_powers: Vec<u16>,
+    min_piece_counts: Vec<u16>,
 }
 
 struct Partition {
     name: String,
-    partition: Vec<u32>,
+    partition: Vec<u16>,
     order: Int<U>,
 }
 
@@ -49,14 +44,14 @@ struct Cycle {
 }
 
 struct CycleCombination {
-    used_cubie_counts: Vec<u32>,
+    used_cubie_counts: Vec<u16>,
     order_product: Int<U>,
     cycles: Vec<Cycle>,
 }
 
 // return a 2D list of prime powers below n. The first index is the prime, the second is the power of that prime
-fn prime_powers_below_n(n: u32, orientable_pieces: &[u32]) -> Vec<Vec<PrimePower>> {
-    let mut primes: Vec<u32> = vec![2];
+fn prime_powers_below_n(n: u16, orientable_pieces: &[u16]) -> Vec<Vec<PrimePower>> {
+    let mut primes: Vec<u16> = vec![2];
 
     // find all primes below n
     for possible_prime in (3..n + 1).step_by(2) {
@@ -83,7 +78,7 @@ fn prime_powers_below_n(n: u32, orientable_pieces: &[u32]) -> Vec<Vec<PrimePower
 
     //for each prime, find all of its powers and the minimum pieces needed
     for (p, prime) in primes.iter().enumerate() {
-        let mut orient_multiplier: u32 = 1;
+        let mut orient_multiplier: u16 = 1;
         let mut piece_check;
         // handle if there is an orbit with an orient_count of the current prime
         if orientable_pieces.len() > *prime as usize && orientable_pieces[*prime as usize] > 0 {
@@ -134,9 +129,9 @@ fn prime_powers_below_n(n: u32, orientable_pieces: &[u32]) -> Vec<Vec<PrimePower
 
 // get a list of all possible orders to fit within a given number of pieces and partitions
 fn possible_order_list(
-    total_pieces: u32,
-    partition_max: u32,
-    orientable_pieces: &[u32],
+    total_pieces: u16,
+    partition_max: u16,
+    orientable_pieces: &[u16],
 ) -> Vec<PossibleOrder> {
     // get list of prime powers that fit within the largest partition
     let prime_powers = prime_powers_below_n(partition_max, orientable_pieces);
@@ -146,7 +141,7 @@ fn possible_order_list(
     let mut stack: Vec<OrderIteration> = vec![OrderIteration {
         index: 0,
         piece_count: 0,
-        product: Int::<U>::from(1_u32),
+        product: Int::<U>::from(1_u16),
         powers: vec![],
         min_pieces: vec![],
     }];
@@ -204,9 +199,9 @@ fn possible_order_list(
 // given some order, test if it will fit on the puzzle
 fn possible_order_test(
     registers: &[PossibleOrder],
-    cycle_cubie_counts: &[u32],
-    puzzle_orbit_definition: &[Orbit],
-    available_pieces: u32,
+    cycle_cubie_counts: &[u16],
+    puzzle: &[KSolveSet],
+    available_pieces: u16,
 ) -> Option<Vec<Assignment>> {
     // create a stack to recursively add cycles for prime powers from each register
     let mut stack: Vec<ComboIteration> = vec![ComboIteration {
@@ -217,7 +212,7 @@ fn possible_order_test(
         available_pieces, // extra pieces beyond the minimum
     }];
 
-    let mut loops: u32 = 0;
+    let mut loops: u16 = 0;
     while let Some(mut s) = stack.pop() {
         loops += 1;
         if loops > 1000 {
@@ -239,10 +234,10 @@ fn possible_order_test(
         }
 
         // try adding the current prime power to each orbit
-        for (o, orbit) in puzzle_orbit_definition.iter().enumerate() {
+        for (o, orbit) in puzzle.iter().enumerate() {
             // orbits with no orientation and the same piece count act the same. we should only check the first one
             // continue if this is a duplicate of an orbit that was already checked.
-            if orbit.orient_count == 1 {
+            if orbit.orientation_count().get() == 1 {
                 if seen.contains(&cycle_cubie_counts[o]) {
                     continue;
                 } else {
@@ -250,11 +245,13 @@ fn possible_order_test(
                 }
             }
 
-            let mut new_cycle: u32;
-            let mut new_available: u32;
+            let mut new_cycle: u16;
+            let mut new_available: u16;
             // if this orbit orients using the same prime as the power, add a cycle
-            if orbit.orient_count > 1
-                && registers[s.register].prime_powers[s.power] % orbit.orient_count == 0
+            if orbit.orientation_count().get() > 1
+                && registers[s.register].prime_powers[s.power]
+                    % orbit.orientation_count().get() as u16
+                    == 0
             {
                 new_cycle = registers[s.register].min_piece_counts[s.power];
                 new_available = s.available_pieces;
@@ -288,7 +285,7 @@ fn possible_order_test(
             }
 
             // assume that every even cycle needs a parity to go with it. TODO make this assumption more efficient.
-            let parity: u32 = if new_cycle % 2 == 0 && new_cycle > 0 {
+            let parity: u16 = if new_cycle % 2 == 0 && new_cycle > 0 {
                 2
             } else {
                 0
@@ -325,29 +322,29 @@ fn possible_order_test(
 
 // once an order is found that fits on the cube, process into an output format
 fn assignments_to_combo(
-    assignments: &mut [Vec<Vec<u32>>],
+    assignments: &mut [Vec<Vec<u16>>],
     registers: &[PossibleOrder],
-    cycle_cubie_counts: &[u32],
-    puzzle_orbit_definition: &[Orbit],
+    cycle_cubie_counts: &[u16],
+    puzzle: &[KSolveSet],
 ) -> CycleCombination {
     let mut cycle_combination: Vec<Cycle> = vec![];
 
     for (r, register) in registers.iter().enumerate() {
         let mut partitions: Vec<Partition> = vec![];
 
-        for (o, orbit) in puzzle_orbit_definition.iter().enumerate() {
-            let mut lcm: Int<U> = Int::<U>::from(1_u32);
+        for (o, orbit) in puzzle.iter().enumerate() {
+            let mut lcm: Int<U> = Int::<U>::from(1_u16);
             for a in &assignments[r][o] {
                 lcm = qter_core::discrete_math::lcm(lcm, Int::<U>::from(*a));
             }
 
-            if orbit.orient_count > 1 {
-                lcm *= Int::<U>::from(orbit.orient_count);
+            if orbit.orientation_count().get() > 1 {
+                lcm *= Int::<U>::from(orbit.orientation_count().get());
                 assignments[r][o].push(1);
             }
 
             partitions.push(Partition {
-                name: orbit.name.clone(),
+                name: orbit.name().to_string(),
                 partition: assignments[r][o].clone(),
                 order: lcm,
             });
@@ -371,23 +368,24 @@ fn assignments_to_combo(
 // this is the main function. it returns a 'near optimal' combination such that all registers have equivalent order
 // it may not be the most optimal, since there are some assumptions made to help efficiency
 fn optimal_equivalent_combination(
-    puzzle_orbit_definition: &[Orbit],
-    num_registers: u32,
+    puzzle: &[KSolveSet],
+    num_registers: u16,
 ) -> Option<CycleCombination> {
-    let mut cycle_cubie_counts: Vec<u32> = vec![0; puzzle_orbit_definition.len()]; //the count of pieces in each orbit
-    let mut orientable_pieces: Vec<u32> = vec![0; 4]; // the kth index stores the number of pieces in an orbit with orient_count k
+    let mut cycle_cubie_counts: Vec<u16> = vec![0; puzzle.len()]; //the count of pieces in each orbit
+    let mut orientable_pieces: Vec<u16> = vec![0; 4]; // the kth index stores the number of pieces in an orbit with orient_count k
 
     // get number of pieces in each orbit. if the orbit pieces can orient, set a shared piece aside to allow free orientation.
-    for (o, orbit) in puzzle_orbit_definition.iter().enumerate() {
-        if orbit.orient_count > 1 {
-            orientable_pieces[orbit.orient_count as usize] = orbit.cubie_count - 1;
-            cycle_cubie_counts[o] = orbit.cubie_count - 1;
+    for (o, orbit) in puzzle.iter().enumerate() {
+        if orbit.orientation_count().get() > 1 {
+            orientable_pieces[orbit.orientation_count().get() as usize] =
+                orbit.piece_count().get() - 1;
+            cycle_cubie_counts[o] = orbit.piece_count().get() - 1;
         } else {
-            cycle_cubie_counts[o] = orbit.cubie_count;
+            cycle_cubie_counts[o] = orbit.piece_count().get();
         }
     }
 
-    let total_cubies: u32 = cycle_cubie_counts.iter().sum();
+    let total_cubies: u16 = cycle_cubie_counts.iter().sum();
     let cubies_per_register = total_cubies / num_registers;
 
     // get a list of all orders that would fit within a cubies_per_register amount of pieces
@@ -407,7 +405,7 @@ fn optimal_equivalent_combination(
 
         // by default, prime_combo.piece_counts assumes all orientation efficiencies can be made
         // here we check if they can actually fit, or if they must be handled by non-orienting pieces
-        let mut unorientable_excess: u32 = 0;
+        let mut unorientable_excess: u16 = 0;
         for (p, prime_power) in possible_order.prime_powers.iter().enumerate() {
             if prime_power % 2 == 0 {
                 // find the amount of registers that can't be oriented
@@ -428,7 +426,7 @@ fn optimal_equivalent_combination(
         }
 
         let available_pieces =
-            total_cubies - num_registers * (possible_order.min_piece_counts.iter().sum::<u32>());
+            total_cubies - num_registers * (possible_order.min_piece_counts.iter().sum::<u16>());
         // if the excess exceeds the total number of cubies, the order won't fit so we skip to the next
         if unorientable_excess > available_pieces {
             continue;
@@ -437,7 +435,7 @@ fn optimal_equivalent_combination(
         let assignments = possible_order_test(
             &vec![possible_order.clone(); num_registers as usize],
             &cycle_cubie_counts,
-            puzzle_orbit_definition,
+            puzzle,
             available_pieces,
         );
 
@@ -446,7 +444,7 @@ fn optimal_equivalent_combination(
                 &mut assignments.unwrap(),
                 &vec![possible_order.clone(); num_registers as usize],
                 &cycle_cubie_counts,
-                puzzle_orbit_definition,
+                puzzle,
             ));
         }
     }
@@ -455,42 +453,8 @@ fn optimal_equivalent_combination(
 }
 
 fn main() {
-    let puzzle_orbit_definition: Vec<Orbit> = vec![
-        Orbit {
-            name: String::from("corners"),
-            cubie_count: 8,
-            orient_count: 3,
-            orient_sum: 0,
-        },
-        Orbit {
-            name: String::from("edges"),
-            cubie_count: 12,
-            orient_count: 2,
-            orient_sum: 0,
-        },
-        /*
-        Orbit {
-            name: String::from("wings"),
-            cubie_count: 24,
-            orient_count: 1,
-            orient_sum: 0,
-        },
-        Orbit {
-            name: String::from("x-centers"),
-            cubie_count: 24,
-            orient_count: 1,
-            orient_sum: 0,
-        },
-        Orbit {
-            name: String::from("+-centers"),
-            cubie_count: 24,
-            orient_count: 1,
-            orient_sum: 0,
-        },
-        */
-    ];
-
-    let cycle_combos = optimal_equivalent_combination(&puzzle_orbit_definition, 3);
+    let puzzle = ksolve::KSolve::sets(&ksolve::KPUZZLE_3X3);
+    let cycle_combos: Option<CycleCombination> = optimal_equivalent_combination(puzzle, 3);
 
     println!(
         "Highest Equivalent Order: {}",
