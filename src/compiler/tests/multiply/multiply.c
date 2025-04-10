@@ -7,88 +7,6 @@
 int branch = 0;
 float count = 0;
 
-void move_const(int n, int *to)
-{
-move_const_loop:
-    branch++;
-    if (*to == 0)
-    {
-        goto after_move_const_loop;
-    }
-    *to -= 1;
-    count++;
-    goto move_const_loop;
-after_move_const_loop:
-    *to += n;
-    if (n != 0)
-        count++;
-}
-
-void move10(int *from, int *to)
-{
-reduce_by_1:
-    branch++;
-    if (*from % 10 == 0)
-    {
-        goto reduce_by_10;
-    }
-    *from -= 1;
-    *to += 1;
-    count += 1.5;
-    goto reduce_by_1;
-reduce_by_10:
-    branch++;
-    if (*from == 0)
-    {
-        goto after_move_loop;
-    }
-    *from -= 10;
-    *to += 10;
-    count += 1.5;
-    goto reduce_by_10;
-after_move_loop:
-}
-
-void move3(int *from, int *to)
-{
-reduce_by_1:
-    branch++;
-    if (*from % 3 == 0)
-    {
-        goto reduce_by_3;
-    }
-    *from -= 1;
-    *to += 1;
-    count += 1.5;
-    goto reduce_by_1;
-reduce_by_3:
-    branch++;
-    if (*from == 0)
-    {
-        goto after_move_loop;
-    }
-    *from -= 3;
-    *to += 3;
-    count += 1.5;
-    goto reduce_by_3;
-after_move_loop:
-}
-
-void raw_move(int *from, int *to)
-{
-raw_move_loop:
-    branch++;
-    if (*from == 0)
-    {
-        goto after_raw_move_loop;
-    }
-    *to += 1;
-    *from -= 1;
-    count += 1.5;
-    goto raw_move_loop;
-after_raw_move_loop:
-}
-
 void reduce_problem(int *a, int *b, int *c, const int k)
 {
 reduce_b_loop:
@@ -103,7 +21,27 @@ reduce_b_loop:
     count += 1.5;
     goto reduce_b_loop;
 before_reduce_a_loop:
-    move3(c, b);
+move3__reduce_by_1__1:
+    branch++;
+    if (*c % 3 == 0)
+    {
+        goto move3__reduce_by_3__1;
+    }
+    *c -= 1;
+    *b += 1;
+    count += 1.5;
+    goto move3__reduce_by_1__1;
+move3__reduce_by_3__1:
+    branch++;
+    if (*c == 0)
+    {
+        goto move3__after_move_loop__1;
+    }
+    *c -= 3;
+    *b += 3;
+    count += 1.5;
+    goto move3__reduce_by_3__1;
+move3__after_move_loop__1:
 reduce_a_loop:
     branch++;
     if (*a == 0)
@@ -115,12 +53,31 @@ reduce_a_loop:
     count += 1.5;
     goto reduce_a_loop;
 after_reduce_a_loop:
-    move10(c, a);
+move10__reduce_by_1__1:
+    branch++;
+    if (*c % 10 == 0)
+    {
+        goto move10__reduce_by_10__1;
+    }
+    *c -= 1;
+    *a += 1;
+    count += 1.5;
+    goto move10__reduce_by_1__1;
+move10__reduce_by_10__1:
+    branch++;
+    if (*c == 0)
+    {
+        goto move10__after_move_loop__1;
+    }
+    *c -= 10;
+    *a += 10;
+    count += 1.5;
+    goto move10__reduce_by_10__1;
+move10__after_move_loop__1:
 }
 
 void multiply(int *a, int *b, int *c)
 {
-    // move_const(0, c);
     branch++;
     if (*a == 0)
     {
@@ -150,15 +107,65 @@ reduce_by_2:
     count += 1.5;
     goto reduce_by_2;
 do_reduce_by_2:
-    move3(c, b);
+move3__reduce_by_1__1:
+    branch++;
+    if (*c % 3 == 0)
+    {
+        goto move3__reduce_by_3__1;
+    }
+    *c -= 1;
+    *b += 1;
+    count += 1.5;
+    goto move3__reduce_by_1__1;
+move3__reduce_by_3__1:
+    branch++;
+    if (*c == 0)
+    {
+        goto move3__after_move_loop__1;
+    }
+    *c -= 3;
+    *b += 3;
+    count += 1.5;
+    goto move3__reduce_by_3__1;
+move3__after_move_loop__1:
     reduce_problem(a, b, c, 2);
     goto reduce_by_2;
 do_reduce_by_3:
-    raw_move(c, b);
+raw_move__raw_move_loop__1:
+    branch++;
+    if (*c == 0)
+    {
+        goto raw_move__after_raw_move_loop__1;
+    }
+    *b += 1;
+    *c -= 1;
+    count += 1.5;
+    goto raw_move__raw_move_loop__1;
+raw_move__after_raw_move_loop__1:
     reduce_problem(a, b, c, 3);
     goto reduce_by_3;
 before_reduce_by_3:
-    move3(c, b);
+move3__reduce_by_1__2:
+    branch++;
+    if (*c % 3 == 0)
+    {
+        goto move3__reduce_by_3__2;
+    }
+    *c -= 1;
+    *b += 1;
+    count += 1.5;
+    goto move3__reduce_by_1__2;
+move3__reduce_by_3__2:
+    branch++;
+    if (*c == 0)
+    {
+        goto move3__after_move_loop__2;
+    }
+    *c -= 3;
+    *b += 3;
+    count += 1.5;
+    goto move3__reduce_by_3__2;
+move3__after_move_loop__2:
 reduce_by_3:
     branch++;
     if (*b % 3 == 0)
@@ -208,11 +215,51 @@ reduce_by_5:
     count += 1.5;
     goto reduce_by_5;
 do_reduce_by_5:
-    move3(c, b);
+move3__reduce_by_1__3:
+    branch++;
+    if (*c % 3 == 0)
+    {
+        goto move3__reduce_by_3__3;
+    }
+    *c -= 1;
+    *b += 1;
+    count += 1.5;
+    goto move3__reduce_by_1__3;
+move3__reduce_by_3__3:
+    branch++;
+    if (*c == 0)
+    {
+        goto move3__after_move_loop__3;
+    }
+    *c -= 3;
+    *b += 3;
+    count += 1.5;
+    goto move3__reduce_by_3__3;
+move3__after_move_loop__3:
     reduce_problem(a, b, c, 5);
     goto reduce_by_5;
 before_reduce_generator_7:
-    move3(c, b);
+move3__reduce_by_1__4:
+    branch++;
+    if (*c % 3 == 0)
+    {
+        goto move3__reduce_by_3__4;
+    }
+    *c -= 1;
+    *b += 1;
+    count += 1.5;
+    goto move3__reduce_by_1__4;
+move3__reduce_by_3__4:
+    branch++;
+    if (*c == 0)
+    {
+        goto move3__after_move_loop__4;
+    }
+    *c -= 3;
+    *b += 3;
+    count += 1.5;
+    goto move3__reduce_by_3__4;
+move3__after_move_loop__4:
 reduce_generator_7:
     *b -= 1;
     count++;
@@ -239,10 +286,28 @@ before_reduce_generator_11:
     reduce_problem(a, b, c, 11);
     goto reduce_generator_11;
 move_0_b:
-    move_const(0, b);
+move_const__move_const_loop__1:
+    branch++;
+    if (*b == 0)
+    {
+        goto move_const__after_move_const_loop__1;
+    }
+    *b -= 1;
+    count++;
+    goto move_const__move_const_loop__1;
+move_const__after_move_const_loop__1:
     goto return_;
 move_0_a:
-    move_const(0, a);
+move_const__move_const_loop__2:
+    branch++;
+    if (*a == 0)
+    {
+        goto move_const__after_move_const_loop__2;
+    }
+    *a -= 1;
+    count++;
+    goto move_const__move_const_loop__2;
+move_const__after_move_const_loop__2:
 return_:
     return;
 }
