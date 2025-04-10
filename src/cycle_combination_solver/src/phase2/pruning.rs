@@ -33,13 +33,13 @@ pub trait StorageBackend<const EXACT: bool> {
     /// Initialize the storage backend from the given meta information
     fn initialize_from_meta(intialization_meta: Self::InitializationMeta) -> Self;
 
-    /// Get a *permissible* heuristic from a hash. This is expected to be
+    /// Get a **permissible** heuristic from a hash. This is expected to be
     /// implemented as a light wrapper around `heuristic_hash`.
     fn permissible_heuristic_hash(&self, hash: u64) -> u8;
 
     /// Get a raw heuristic from a hash. The separation is necessary or else
     /// there would otherwise be no way to check if an entry is vacant before
-    /// setting it to a value during pruning table generation. A ray getter is
+    /// setting it to a value during pruning table generation. A raw getter is
     /// also faster because it avoids the `depth_traversed` overhead with
     /// `permissible_heuristic_hash`.
     fn heuristic_hash(&self, hash: u64) -> OrbitPruneHeuristic;
@@ -496,6 +496,7 @@ fn generate_exact_orbit_pruning_table<
     let orbit_moves = puzzle_def
         .moves
         .iter()
+        // TODO: make this filter map
         .map(|move_| {
             let (perm, ori) = move_.puzzle_state.orbit_bytes(orbit_identifier, orbit_def);
             O::from_orbit_transformation_unchecked(perm, ori, orbit_def)

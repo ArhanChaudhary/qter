@@ -4,6 +4,7 @@
 
 - Phase 2
   - pruning table
+    - cartesian product tables
     - hash simd stuff
     - fix storage backend initialization meta
     - tANS table compression
