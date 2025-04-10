@@ -24,7 +24,7 @@ after_move_const_loop:
         count++;
 }
 
-void move(int *from, int *to)
+void move10(int *from, int *to)
 {
 reduce_by_1:
     branch++;
@@ -49,6 +49,46 @@ reduce_by_10:
 after_move_loop:
 }
 
+void move3(int *from, int *to)
+{
+reduce_by_1:
+    branch++;
+    if (*from % 3 == 0)
+    {
+        goto reduce_by_3;
+    }
+    *from -= 1;
+    *to += 1;
+    count += 1.5;
+    goto reduce_by_1;
+reduce_by_3:
+    branch++;
+    if (*from == 0)
+    {
+        goto after_move_loop;
+    }
+    *from -= 3;
+    *to += 3;
+    count += 1.5;
+    goto reduce_by_3;
+after_move_loop:
+}
+
+void raw_move(int *from, int *to)
+{
+raw_move_loop:
+    branch++;
+    if (*from == 0)
+    {
+        goto after_raw_move_loop;
+    }
+    *to += 1;
+    *from -= 1;
+    count += 1.5;
+    goto raw_move_loop;
+after_raw_move_loop:
+}
+
 void reduce_problem(int *a, int *b, int *c, const int k)
 {
 reduce_b_loop:
@@ -63,7 +103,7 @@ reduce_b_loop:
     count += 1.5;
     goto reduce_b_loop;
 before_reduce_a_loop:
-    move(c, b);
+    move3(c, b);
 reduce_a_loop:
     branch++;
     if (*a == 0)
@@ -75,7 +115,7 @@ reduce_a_loop:
     count += 1.5;
     goto reduce_a_loop;
 after_reduce_a_loop:
-    move(c, a);
+    move10(c, a);
 }
 
 void multiply(int *a, int *b, int *c)
@@ -110,15 +150,15 @@ reduce_by_2:
     count += 1.5;
     goto reduce_by_2;
 do_reduce_by_2:
-    move(c, b);
+    move3(c, b);
     reduce_problem(a, b, c, 2);
     goto reduce_by_2;
 do_reduce_by_3:
-    move(c, b);
+    raw_move(c, b);
     reduce_problem(a, b, c, 3);
     goto reduce_by_3;
 before_reduce_by_3:
-    move(c, b);
+    move3(c, b);
 reduce_by_3:
     branch++;
     if (*b % 3 == 0)
@@ -168,11 +208,11 @@ reduce_by_5:
     count += 1.5;
     goto reduce_by_5;
 do_reduce_by_5:
-    move(c, b);
+    move3(c, b);
     reduce_problem(a, b, c, 5);
     goto reduce_by_5;
 before_reduce_generator_7:
-    move(c, b);
+    move3(c, b);
 reduce_generator_7:
     *b -= 1;
     count++;
