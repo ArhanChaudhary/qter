@@ -1,7 +1,20 @@
+/**
+ * A C stub for a QAT multiplication program. The architecture of the program is
+ * assumed to be 30/30/30, not working otherwise.
+ *
+ * Input:
+ * - Argument 1: First number (0-29)
+ * - Argument 2: Second number (0-29)
+ * - Argument 3: 0
+ *
+ * Output:
+ * - Argument 1: Result of multiplication modulo 30
+ *
+ * Caveats: The program is faster when the first argument is larger than the
+ * second.
+ */
+
 #include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <time.h>
 #include <assert.h>
 
 #define solved_goto(b, label) \
@@ -64,12 +77,10 @@ reduce_problem__after_reduce_a_loop__1:
     add(a, 1);
     goto reduce_problem__after_reduce_a_loop__1;
 reduce_problem__move10__reduce_by_10__1__1:
-    solved_goto(c, reduce_problem__move10__after_move_loop__1__1);
+    solved_goto(c, reduce_by_2);
     add(c, -10);
     add(a, 10);
     goto reduce_problem__move10__reduce_by_10__1__1;
-reduce_problem__move10__after_move_loop__1__1:
-    goto reduce_by_2;
 do_reduce_by_3:
     solved_goto(c, raw_move__after_raw_move_loop__1);
     add(b, 1);
@@ -101,12 +112,10 @@ reduce_problem__after_reduce_a_loop__2:
     add(a, 1);
     goto reduce_problem__after_reduce_a_loop__2;
 reduce_problem__move10__reduce_by_10__1__2:
-    solved_goto(c, reduce_problem__move10__after_move_loop__1__2);
+    solved_goto(c, move3__after_move_loop__2);
     add(c, -10);
     add(a, 10);
     goto reduce_problem__move10__reduce_by_10__1__2;
-reduce_problem__move10__after_move_loop__1__2:
-    goto move3__after_move_loop__2;
 before_reduce_by_3:
     solved_goto(c % 3, move3__reduce_by_3__2);
     add(c, -1);
@@ -172,12 +181,10 @@ reduce_problem__after_reduce_a_loop__3:
     add(a, 1);
     goto reduce_problem__after_reduce_a_loop__3;
 reduce_problem__move10__reduce_by_10__1__3:
-    solved_goto(c, reduce_problem__move10__after_move_loop__1__3);
+    solved_goto(c, reduce_by_5);
     add(c, -10);
     add(a, 10);
     goto reduce_problem__move10__reduce_by_10__1__3;
-reduce_problem__move10__after_move_loop__1__3:
-    goto reduce_by_5;
 before_reduce_generator_7:
     solved_goto(c % 3, move3__reduce_by_3__4);
     add(c, -1);
@@ -218,12 +225,10 @@ reduce_problem__after_reduce_a_loop__4:
     add(a, 1);
     goto reduce_problem__after_reduce_a_loop__4;
 reduce_problem__move10__reduce_by_10__1__4:
-    solved_goto(c, reduce_problem__move10__after_move_loop__1__4);
+    solved_goto(c, move3__after_move_loop__4);
     add(c, -10);
     add(a, 10);
     goto reduce_problem__move10__reduce_by_10__1__4;
-reduce_problem__move10__after_move_loop__1__4:
-    goto move3__after_move_loop__4;
 reduce_generator_11:
     add(b, -1);
 before_reduce_generator_11:
@@ -255,18 +260,14 @@ reduce_problem__after_reduce_a_loop__5:
     add(a, 1);
     goto reduce_problem__after_reduce_a_loop__5;
 reduce_problem__move10__reduce_by_10__1__5:
-    solved_goto(c, reduce_problem__move10__after_move_loop__1__5);
+    solved_goto(c, reduce_generator_11);
     add(c, -10);
     add(a, 10);
     goto reduce_problem__move10__reduce_by_10__1__5;
-reduce_problem__move10__after_move_loop__1__5:
-    goto reduce_generator_11;
 move_0_b:
-    solved_goto(b, move_const__after_move_const_loop__1);
+    solved_goto(b, move_const__after_move_const_loop__2);
     add(b, -1);
     goto move_0_b;
-move_const__after_move_const_loop__1:
-    goto move_const__after_move_const_loop__2;
 move_0_a:
     solved_goto(a, move_const__after_move_const_loop__2);
     add(a, -1);
@@ -285,7 +286,6 @@ int main()
             int a = i;
             int b = j;
             int c = 0;
-            // WORKS BETTER when A is the larger value compared to B
             multiply(&a, &b, &c);
             printf("%d * %d = %d\n", i, j, a);
             assert(((long long)i * (long long)j) % 30 == a);
