@@ -461,9 +461,39 @@ fn main() {
     );
 }
 
-/*
-#[test]
-fn test_table_encoding() {
-    main();
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_prime_powers_below_n() {
+        let result = prime_powers_below_n(10, &[0, 0, 0, 0]);
+        assert_eq!(result.len(), 4);
+        assert_eq!(result[0].len(), 4);
+        assert_eq!(result[1].len(), 3);
+        assert_eq!(result[2].len(), 2);
+        assert_eq!(result[3].len(), 2);
+    }
+
+    // ... tests for each of your complicated math functions
+
+    #[test]
+    fn test_highest_equiv_order_3_registers_3x3() {
+        let puzzle = puzzle_geometry::ksolve::KPUZZLE_3X3.sets();
+        let cycle_combos: Option<CycleCombination> = optimal_equivalent_combination(puzzle, 3);
+        assert_eq!(
+            cycle_combos.unwrap().cycles[0].order,
+            Int::<U>::from(30_u16),
+        );
+    }
+
+    #[test]
+    fn test_highest_equiv_order_2_registers_3x3() {
+        let puzzle = puzzle_geometry::ksolve::KPUZZLE_3X3.sets();
+        let cycle_combos: Option<CycleCombination> = optimal_equivalent_combination(puzzle, 2);
+        assert_eq!(
+            cycle_combos.unwrap().cycles[0].order,
+            Int::<U>::from(90_u16),
+        );
+    }
 }
-*/
