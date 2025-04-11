@@ -9,6 +9,8 @@
  *
  * Output:
  * - Argument 1: Result of multiplication modulo 30
+ * - Argument 2: 0
+ * - Argument 3: 0
  *
  * Caveats: The program is faster when the first argument is larger than the
  * second.
@@ -17,8 +19,8 @@
 #include <stdio.h>
 #include <assert.h>
 
-#define solved_goto(b, label) \
-    if (*b == 0)              \
+#define solved_goto(a, label) \
+    if (*a == 0)              \
     {                         \
         goto label;           \
     }
@@ -278,7 +280,6 @@ l42:
 
 int main()
 {
-    char buf[100];
     for (int i = 0; i < 30; i++)
     {
         for (int j = 0; j < 30; j++)
@@ -288,7 +289,8 @@ int main()
             int c = 0;
             multiply(&a, &b, &c);
             printf("%d * %d = %d\n", i, j, a);
-            assert(((long long)i * (long long)j) % 30 == a);
+            // assert(((long long)i * (long long)j) % 30 == a);
+            assert((i * j) % 30 == a);
             assert(b == 0);
             assert(c == 0);
         }
