@@ -2,9 +2,9 @@
     C, B, A <- 3x3 builtin (30, 30, 30)
 }
 
-    input "Enter number one" A
+    input "Enter number A" A
     solved-goto A l1
-    input "Enter number two" B
+    input "Enter number B" B
     solved-goto B l2
 l3:
     solved-goto B%10 l4
@@ -246,4 +246,4 @@ l2:
     add A 29
     goto l2
 l42:
-    halt "A times B is" A
+    halt "(A * B) mod 30 =" A
