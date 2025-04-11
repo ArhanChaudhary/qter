@@ -31,248 +31,248 @@
 
 void multiply(int *a, int *b, int *c)
 {
-    solved_goto(a, move_0_b);
-    solved_goto(b, move_0_a);
-reduce_by_2:
-    solved_goto(b % 10, do_reduce_by_2);
+    solved_goto(a, l1);
+    solved_goto(b, l2);
+l3:
+    solved_goto(b % 10, l4);
     add(b, -1);
     add(c, 1);
-    solved_goto(b % 10, before_reduce_by_3);
+    solved_goto(b % 10, l5);
     add(b, -1);
     add(c, 1);
-    goto reduce_by_2;
-do_reduce_by_2:
-    solved_goto(c % 3, move3__reduce_by_3__1);
+    goto l3;
+l4:
+    solved_goto(c % 3, l6);
     add(c, -1);
     add(b, 1);
-    goto do_reduce_by_2;
-move3__reduce_by_3__1:
-    solved_goto(c, move3__after_move_loop__1);
+    goto l4;
+l6:
+    solved_goto(c, l7);
     add(c, -3);
     add(b, 3);
-    goto move3__reduce_by_3__1;
-move3__after_move_loop__1:
-    solved_goto(b, reduce_problem__before_reduce_a_loop__1);
+    goto l6;
+l7:
+    solved_goto(b, l8);
     add(b, -2);
     add(c, 1);
-    goto move3__after_move_loop__1;
-reduce_problem__before_reduce_a_loop__1:
-    solved_goto(c % 3, reduce_problem__move3__reduce_by_3__1__1);
+    goto l7;
+l8:
+    solved_goto(c % 3, l9);
     add(c, -1);
     add(b, 1);
-    goto reduce_problem__before_reduce_a_loop__1;
-reduce_problem__move3__reduce_by_3__1__1:
-    solved_goto(c, reduce_problem__move3__after_move_loop__1__1);
+    goto l8;
+l9:
+    solved_goto(c, l10);
     add(c, -3);
     add(b, 3);
-    goto reduce_problem__move3__reduce_by_3__1__1;
-reduce_problem__move3__after_move_loop__1__1:
-    solved_goto(a, reduce_problem__after_reduce_a_loop__1);
+    goto l9;
+l10:
+    solved_goto(a, l11);
     add(a, -1);
     add(c, 2);
-    goto reduce_problem__move3__after_move_loop__1__1;
-reduce_problem__after_reduce_a_loop__1:
-    solved_goto(c % 10, reduce_problem__move10__reduce_by_10__1__1);
+    goto l10;
+l11:
+    solved_goto(c % 10, l12);
     add(c, -1);
     add(a, 1);
-    goto reduce_problem__after_reduce_a_loop__1;
-reduce_problem__move10__reduce_by_10__1__1:
-    solved_goto(c, reduce_by_2);
+    goto l11;
+l12:
+    solved_goto(c, l3);
     add(c, -10);
     add(a, 10);
-    goto reduce_problem__move10__reduce_by_10__1__1;
-do_reduce_by_3:
-    solved_goto(c, raw_move__after_raw_move_loop__1);
+    goto l12;
+l13:
+    solved_goto(c, l14);
     add(b, 1);
     add(c, -1);
-    goto do_reduce_by_3;
-raw_move__after_raw_move_loop__1:
-    solved_goto(b, reduce_problem__before_reduce_a_loop__2);
+    goto l13;
+l14:
+    solved_goto(b, l15);
     add(b, -3);
     add(c, 1);
-    goto raw_move__after_raw_move_loop__1;
-reduce_problem__before_reduce_a_loop__2:
-    solved_goto(c % 3, reduce_problem__move3__reduce_by_3__1__2);
+    goto l14;
+l15:
+    solved_goto(c % 3, l16);
     add(c, -1);
     add(b, 1);
-    goto reduce_problem__before_reduce_a_loop__2;
-reduce_problem__move3__reduce_by_3__1__2:
-    solved_goto(c, reduce_problem__move3__after_move_loop__1__2);
+    goto l15;
+l16:
+    solved_goto(c, l17);
     add(c, -3);
     add(b, 3);
-    goto reduce_problem__move3__reduce_by_3__1__2;
-reduce_problem__move3__after_move_loop__1__2:
-    solved_goto(a, reduce_problem__after_reduce_a_loop__2);
+    goto l16;
+l17:
+    solved_goto(a, l18);
     add(a, -1);
     add(c, 3);
-    goto reduce_problem__move3__after_move_loop__1__2;
-reduce_problem__after_reduce_a_loop__2:
-    solved_goto(c % 10, reduce_problem__move10__reduce_by_10__1__2);
+    goto l17;
+l18:
+    solved_goto(c % 10, l19);
     add(c, -1);
     add(a, 1);
-    goto reduce_problem__after_reduce_a_loop__2;
-reduce_problem__move10__reduce_by_10__1__2:
-    solved_goto(c, move3__after_move_loop__2);
+    goto l18;
+l19:
+    solved_goto(c, l20);
     add(c, -10);
     add(a, 10);
-    goto reduce_problem__move10__reduce_by_10__1__2;
-before_reduce_by_3:
-    solved_goto(c % 3, move3__reduce_by_3__2);
+    goto l19;
+l5:
+    solved_goto(c % 3, l21);
     add(c, -1);
     add(b, 1);
-    goto before_reduce_by_3;
-move3__reduce_by_3__2:
-    solved_goto(c, move3__after_move_loop__2);
+    goto l5;
+l21:
+    solved_goto(c, l20);
     add(c, -3);
     add(b, 3);
-    goto move3__reduce_by_3__2;
-move3__after_move_loop__2:
-    solved_goto(b % 3, do_reduce_by_3);
-reduce_by_5:
-    solved_goto(b % 10, do_reduce_by_5);
+    goto l21;
+l20:
+    solved_goto(b % 3, l13);
+l22:
+    solved_goto(b % 10, l23);
     add(b, -1);
     add(c, 1);
-    solved_goto(b % 10, before_reduce_generator_7);
+    solved_goto(b % 10, l24);
     add(b, -1);
     add(c, 1);
-    solved_goto(b % 10, before_reduce_generator_7);
+    solved_goto(b % 10, l24);
     add(b, -1);
     add(c, 1);
-    solved_goto(b % 10, before_reduce_generator_7);
+    solved_goto(b % 10, l24);
     add(b, -1);
     add(c, 1);
-    solved_goto(b % 10, before_reduce_generator_7);
+    solved_goto(b % 10, l24);
     add(b, -1);
     add(c, 1);
-    goto reduce_by_5;
-do_reduce_by_5:
-    solved_goto(c % 3, move3__reduce_by_3__3);
+    goto l22;
+l23:
+    solved_goto(c % 3, l25);
     add(c, -1);
     add(b, 1);
-    goto do_reduce_by_5;
-move3__reduce_by_3__3:
-    solved_goto(c, move3__after_move_loop__3);
+    goto l23;
+l25:
+    solved_goto(c, l26);
     add(c, -3);
     add(b, 3);
-    goto move3__reduce_by_3__3;
-move3__after_move_loop__3:
-    solved_goto(b, reduce_problem__before_reduce_a_loop__3);
+    goto l25;
+l26:
+    solved_goto(b, l27);
     add(b, -5);
     add(c, 1);
-    goto move3__after_move_loop__3;
-reduce_problem__before_reduce_a_loop__3:
-    solved_goto(c % 3, reduce_problem__move3__reduce_by_3__1__3);
+    goto l26;
+l27:
+    solved_goto(c % 3, l28);
     add(c, -1);
     add(b, 1);
-    goto reduce_problem__before_reduce_a_loop__3;
-reduce_problem__move3__reduce_by_3__1__3:
-    solved_goto(c, reduce_problem__move3__after_move_loop__1__3);
+    goto l27;
+l28:
+    solved_goto(c, l29);
     add(c, -3);
     add(b, 3);
-    goto reduce_problem__move3__reduce_by_3__1__3;
-reduce_problem__move3__after_move_loop__1__3:
-    solved_goto(a, reduce_problem__after_reduce_a_loop__3);
+    goto l28;
+l29:
+    solved_goto(a, l30);
     add(a, -1);
     add(c, 5);
-    goto reduce_problem__move3__after_move_loop__1__3;
-reduce_problem__after_reduce_a_loop__3:
-    solved_goto(c % 10, reduce_problem__move10__reduce_by_10__1__3);
+    goto l29;
+l30:
+    solved_goto(c % 10, l31);
     add(c, -1);
     add(a, 1);
-    goto reduce_problem__after_reduce_a_loop__3;
-reduce_problem__move10__reduce_by_10__1__3:
-    solved_goto(c, reduce_by_5);
+    goto l30;
+l31:
+    solved_goto(c, l22);
     add(c, -10);
     add(a, 10);
-    goto reduce_problem__move10__reduce_by_10__1__3;
-before_reduce_generator_7:
-    solved_goto(c % 3, move3__reduce_by_3__4);
+    goto l31;
+l24:
+    solved_goto(c % 3, l32);
     add(c, -1);
     add(b, 1);
-    goto before_reduce_generator_7;
-move3__reduce_by_3__4:
-    solved_goto(c, move3__after_move_loop__4);
+    goto l24;
+l32:
+    solved_goto(c, l33);
     add(c, -3);
     add(b, 3);
-    goto move3__reduce_by_3__4;
-move3__after_move_loop__4:
+    goto l32;
+l33:
     add(b, -1);
-    solved_goto(b % 10, before_reduce_generator_11);
+    solved_goto(b % 10, l34);
     add(b, 1);
-reduce_problem__reduce_b_loop__4:
-    solved_goto(b, reduce_problem__before_reduce_a_loop__4);
+l35:
+    solved_goto(b, l36);
     add(b, -7);
     add(c, 1);
-    goto reduce_problem__reduce_b_loop__4;
-reduce_problem__before_reduce_a_loop__4:
-    solved_goto(c % 3, reduce_problem__move3__reduce_by_3__1__4);
+    goto l35;
+l36:
+    solved_goto(c % 3, l37);
     add(c, -1);
     add(b, 1);
-    goto reduce_problem__before_reduce_a_loop__4;
-reduce_problem__move3__reduce_by_3__1__4:
-    solved_goto(c, reduce_problem__move3__after_move_loop__1__4);
+    goto l36;
+l37:
+    solved_goto(c, l38);
     add(c, -3);
     add(b, 3);
-    goto reduce_problem__move3__reduce_by_3__1__4;
-reduce_problem__move3__after_move_loop__1__4:
-    solved_goto(a, reduce_problem__after_reduce_a_loop__4);
+    goto l37;
+l38:
+    solved_goto(a, l39);
     add(a, -1);
     add(c, 7);
-    goto reduce_problem__move3__after_move_loop__1__4;
-reduce_problem__after_reduce_a_loop__4:
-    solved_goto(c % 10, reduce_problem__move10__reduce_by_10__1__4);
+    goto l38;
+l39:
+    solved_goto(c % 10, l40);
     add(c, -1);
     add(a, 1);
-    goto reduce_problem__after_reduce_a_loop__4;
-reduce_problem__move10__reduce_by_10__1__4:
-    solved_goto(c, move3__after_move_loop__4);
+    goto l39;
+l40:
+    solved_goto(c, l33);
     add(c, -10);
     add(a, 10);
-    goto reduce_problem__move10__reduce_by_10__1__4;
-reduce_generator_11:
+    goto l40;
+l41:
     add(b, -1);
-before_reduce_generator_11:
-    solved_goto(b, move_const__after_move_const_loop__2);
+l34:
+    solved_goto(b, l42);
     add(b, 1);
-reduce_problem__reduce_b_loop__5:
-    solved_goto(b, reduce_problem__before_reduce_a_loop__5);
+l43:
+    solved_goto(b, l44);
     add(b, -11);
     add(c, 1);
-    goto reduce_problem__reduce_b_loop__5;
-reduce_problem__before_reduce_a_loop__5:
-    solved_goto(c % 3, reduce_problem__move3__reduce_by_3__1__5);
+    goto l43;
+l44:
+    solved_goto(c % 3, l45);
     add(c, -1);
     add(b, 1);
-    goto reduce_problem__before_reduce_a_loop__5;
-reduce_problem__move3__reduce_by_3__1__5:
-    solved_goto(c, reduce_problem__move3__after_move_loop__1__5);
+    goto l44;
+l45:
+    solved_goto(c, l46);
     add(c, -3);
     add(b, 3);
-    goto reduce_problem__move3__reduce_by_3__1__5;
-reduce_problem__move3__after_move_loop__1__5:
-    solved_goto(a, reduce_problem__after_reduce_a_loop__5);
+    goto l45;
+l46:
+    solved_goto(a, l47);
     add(a, -1);
     add(c, 11);
-    goto reduce_problem__move3__after_move_loop__1__5;
-reduce_problem__after_reduce_a_loop__5:
-    solved_goto(c % 10, reduce_problem__move10__reduce_by_10__1__5);
+    goto l46;
+l47:
+    solved_goto(c % 10, l48);
     add(c, -1);
     add(a, 1);
-    goto reduce_problem__after_reduce_a_loop__5;
-reduce_problem__move10__reduce_by_10__1__5:
-    solved_goto(c, reduce_generator_11);
+    goto l47;
+l48:
+    solved_goto(c, l41);
     add(c, -10);
     add(a, 10);
-    goto reduce_problem__move10__reduce_by_10__1__5;
-move_0_b:
-    solved_goto(b, move_const__after_move_const_loop__2);
+    goto l48;
+l1:
+    solved_goto(b, l42);
     add(b, -1);
-    goto move_0_b;
-move_0_a:
-    solved_goto(a, move_const__after_move_const_loop__2);
+    goto l1;
+l2:
+    solved_goto(a, l42);
     add(a, -1);
-    goto move_0_a;
-move_const__after_move_const_loop__2:
+    goto l2;
+l42:
     return;
 }
 
