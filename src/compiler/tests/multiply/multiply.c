@@ -130,9 +130,13 @@ l21:
     goto l21;
 l20:
     solved_goto(b % 3, l13);
+    add(b, -1);
+    solved_goto(b, l42);
+    goto l49;
 l22:
     solved_goto(b % 10, l23);
     add(b, -1);
+l49:
     add(c, 1);
     solved_goto(b % 10, l24);
     add(b, -1);

@@ -81,9 +81,14 @@ l21:
     goto l21
 l20:
     solved-goto DLB l13
+    [0, 29, 0]
+    solved-goto UB DLB l42
+    goto l49
 l22:
     solved-goto UB l23
-    [1, 29, 0]
+    [0, 29, 0]
+l49:
+    [1, 0, 0]
     solved-goto UB l24
     [1, 29, 0]
     solved-goto UB l24
