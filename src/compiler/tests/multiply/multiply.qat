@@ -1,102 +1,102 @@
 .registers {
-    C, B, A <- 3x3 builtin (30, 30, 30)
+    A, B, C <- 3x3 builtin (30, 30, 30)
 }
 
-    input "Enter number A" A
-    solved-goto A l1
-    input "Enter number B" B
+    input "Enter number X" C
+    solved-goto C l1
+    input "Enter number Y" B
     solved-goto B l2
 l3:
     solved-goto B%10 l4
     add B 29
-    add C 1
+    add A 1
     solved-goto B%10 l5
     add B 29
-    add C 1
+    add A 1
     goto l3
 l4:
-    solved-goto C%3 l6
-    add C 29
+    solved-goto A%3 l6
+    add A 29
     add B 1
     goto l4
 l6:
-    solved-goto C l7
-    add C 27
+    solved-goto A l7
+    add A 27
     add B 3
     goto l6
 l7:
     solved-goto B l8
     add B 28
-    add C 1
+    add A 1
     goto l7
 l8:
-    solved-goto C%3 l9
-    add C 29
+    solved-goto A%3 l9
+    add A 29
     add B 1
     goto l8
 l9:
-    solved-goto C l10
-    add C 27
+    solved-goto A l10
+    add A 27
     add B 3
     goto l9
 l10:
-    solved-goto A l11
-    add A 29
-    add C 2
+    solved-goto C l11
+    add C 29
+    add A 2
     goto l10
 l11:
-    solved-goto C%10 l12
-    add C 29
-    add A 1
+    solved-goto A%10 l12
+    add A 29
+    add C 1
     goto l11
 l12:
-    solved-goto C l3
-    add C 20
-    add A 10
+    solved-goto A l3
+    add A 20
+    add C 10
     goto l12
 l13:
-    solved-goto C l14
+    solved-goto A l14
     add B 1
-    add C 29
+    add A 29
     goto l13
 l14:
     solved-goto B l15
     add B 27
-    add C 1
+    add A 1
     goto l14
 l15:
-    solved-goto C%3 l16
-    add C 29
+    solved-goto A%3 l16
+    add A 29
     add B 1
     goto l15
 l16:
-    solved-goto C l17
-    add C 27
+    solved-goto A l17
+    add A 27
     add B 3
     goto l16
 l17:
-    solved-goto A l18
-    add A 29
-    add C 3
+    solved-goto C l18
+    add C 29
+    add A 3
     goto l17
 l18:
-    solved-goto C%10 l19
-    add C 29
-    add A 1
+    solved-goto A%10 l19
+    add A 29
+    add C 1
     goto l18
 l19:
-    solved-goto C l20
-    add C 20
-    add A 10
+    solved-goto A l20
+    add A 20
+    add C 10
     goto l19
 l5:
-    solved-goto C%3 l21
-    add C 29
+    solved-goto A%3 l21
+    add A 29
     add B 1
     goto l5
 l21:
-    solved-goto C l20
-    add C 27
+    solved-goto A l20
+    add A 27
     add B 3
     goto l21
 l20:
@@ -104,68 +104,68 @@ l20:
 l22:
     solved-goto B%10 l23
     add B 29
-    add C 1
+    add A 1
     solved-goto B%10 l24
     add B 29
-    add C 1
+    add A 1
     solved-goto B%10 l24
     add B 29
-    add C 1
+    add A 1
     solved-goto B%10 l24
     add B 29
-    add C 1
+    add A 1
     solved-goto B%10 l24
     add B 29
-    add C 1
+    add A 1
     goto l22
 l23:
-    solved-goto C%3 l25
-    add C 29
+    solved-goto A%3 l25
+    add A 29
     add B 1
     goto l23
 l25:
-    solved-goto C l26
-    add C 27
+    solved-goto A l26
+    add A 27
     add B 3
     goto l25
 l26:
     solved-goto B l27
     add B 25
-    add C 1
+    add A 1
     goto l26
 l27:
-    solved-goto C%3 l28
-    add C 29
+    solved-goto A%3 l28
+    add A 29
     add B 1
     goto l27
 l28:
-    solved-goto C l29
-    add C 27
+    solved-goto A l29
+    add A 27
     add B 3
     goto l28
 l29:
-    solved-goto A l30
-    add A 29
-    add C 5
+    solved-goto C l30
+    add C 29
+    add A 5
     goto l29
 l30:
-    solved-goto C%10 l31
-    add C 29
-    add A 1
+    solved-goto A%10 l31
+    add A 29
+    add C 1
     goto l30
 l31:
-    solved-goto C l22
-    add C 20
-    add A 10
+    solved-goto A l22
+    add A 20
+    add C 10
     goto l31
 l24:
-    solved-goto C%3 l32
-    add C 29
+    solved-goto A%3 l32
+    add A 29
     add B 1
     goto l24
 l32:
-    solved-goto C l33
-    add C 27
+    solved-goto A l33
+    add A 27
     add B 3
     goto l32
 l33:
@@ -175,32 +175,32 @@ l33:
 l35:
     solved-goto B l36
     add B 23
-    add C 1
+    add A 1
     goto l35
 l36:
-    solved-goto C%3 l37
-    add C 29
+    solved-goto A%3 l37
+    add A 29
     add B 1
     goto l36
 l37:
-    solved-goto C l38
-    add C 27
+    solved-goto A l38
+    add A 27
     add B 3
     goto l37
 l38:
-    solved-goto A l39
-    add A 29
-    add C 7
+    solved-goto C l39
+    add C 29
+    add A 7
     goto l38
 l39:
-    solved-goto C%10 l40
-    add C 29
-    add A 1
+    solved-goto A%10 l40
+    add A 29
+    add C 1
     goto l39
 l40:
-    solved-goto C l33
-    add C 20
-    add A 10
+    solved-goto A l33
+    add A 20
+    add C 10
     goto l40
 l41:
     add B 29
@@ -210,40 +210,40 @@ l34:
 l43:
     solved-goto B l44
     add B 19
-    add C 1
+    add A 1
     goto l43
 l44:
-    solved-goto C%3 l45
-    add C 29
+    solved-goto A%3 l45
+    add A 29
     add B 1
     goto l44
 l45:
-    solved-goto C l46
-    add C 27
+    solved-goto A l46
+    add A 27
     add B 3
     goto l45
 l46:
-    solved-goto A l47
-    add A 29
-    add C 11
+    solved-goto C l47
+    add C 29
+    add A 11
     goto l46
 l47:
-    solved-goto C%10 l48
-    add C 29
-    add A 1
+    solved-goto A%10 l48
+    add A 29
+    add C 1
     goto l47
 l48:
-    solved-goto C l41
-    add C 20
-    add A 10
+    solved-goto A l41
+    add A 20
+    add C 10
     goto l48
 l1:
     solved-goto B l42
     add B 29
     goto l1
 l2:
-    solved-goto A l42
-    add A 29
+    solved-goto C l42
+    add C 29
     goto l2
 l42:
-    halt "(A * B) mod 30 =" A
+    halt "(X * Y) mod 30 =" C
