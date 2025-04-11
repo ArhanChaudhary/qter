@@ -1,19 +1,19 @@
 Puzzles
 A: 3x3
 
-1  | input "Which Fibonacci number to calculate:"
+1 | input "Which Fibonacci number to calculate:"
            B2 U2 L F' R B L2 D2 B R' F L
            max-input 8
-2  | solved-goto UFR 4
-3  | goto 5
-4  | halt "The number is: 0"
-5  | D L' F L2 B L' F' L B' D' L'
-6  | L' F' R B' D2 L2 B' R' F L' U2 B2
-7  | solved-goto UFR 9
-8  | goto 10
-9  | halt "The number is"
-          L D B L' F L B' L2 F' L D'
-          counting-until DL DFL
+2 | solved-goto UFR 4
+3 | goto 5
+4 | halt "The number is: 0"
+5 | D L' F L2 B L' F' L B' D' L'
+6 | L' F' R B' D2 L2 B' R' F L' U2 B2
+7 | solved-goto UFR 9
+8 | goto 10
+9 | halt "The number is"
+         L D B L' F L B' L2 F' L D'
+         counting-until DL DFL
 10 | solved-goto DL DFL 13
 11 | L U' B R' L B' L' U' L U R2 B R2 D2 R2 D'
 12 | goto 10
