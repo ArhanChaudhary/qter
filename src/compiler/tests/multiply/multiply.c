@@ -289,7 +289,6 @@ int main()
             int c = 0;
             multiply(&a, &b, &c);
             printf("%d * %d = %d\n", i, j, a);
-            // assert(((long long)i * (long long)j) % 30 == a);
             assert((i * j) % 30 == a);
             assert(b == 0);
             assert(c == 0);
