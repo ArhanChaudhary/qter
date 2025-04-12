@@ -16,3 +16,7 @@ internment = { version = "0.8", features = [ "arc" ] }
 
 [lints]
 workspace = true
+
+[[bin]]
+name = "qterc"
+path = "src/main.rs"
