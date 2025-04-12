@@ -48,13 +48,9 @@ l12:
     F2 L' B' D F2 U' R2 F U2 R' D' B U2 F' L2 U
     goto l12
 l13:
-    solved-goto UR ULF l14
-    D B2 D2 L' D' B2 D' B D2 L2 B' D F2 B2 U' F2 B2
-    goto l13
-l14:
     solved-goto UB DLB l15
     U' R2 L2 U R2 F2 D2 R' F2 L' U2 L U L' B D' B
-    goto l14
+    goto l13
 l15:
     solved-goto ULF l16
     D B2 D2 L' D' B2 D' B D2 L2 B' D F2 B2 U' F2 B2

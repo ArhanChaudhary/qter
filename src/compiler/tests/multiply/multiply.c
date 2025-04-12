@@ -84,15 +84,10 @@ l12:
     add(a, 10);
     goto l12;
 l13:
-    solved_goto(c, l14);
-    add(b, 1);
-    add(c, -1);
-    goto l13;
-l14:
     solved_goto(b, l15);
     add(b, -3);
     add(c, 1);
-    goto l14;
+    goto l13;
 l15:
     solved_goto(c % 3, l16);
     add(c, -1);

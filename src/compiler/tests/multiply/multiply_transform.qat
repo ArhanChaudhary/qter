@@ -55,15 +55,10 @@ l12:
     add C 10
     goto l12
 l13:
-    solved-goto A l14
-    add B 1
-    add A 29
-    goto l13
-l14:
     solved-goto B l15
     add B 27
     add A 1
-    goto l14
+    goto l13
 l15:
     solved-goto A%3 l16
     add A 29
