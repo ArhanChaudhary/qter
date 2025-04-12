@@ -1,1 +1,3 @@
 src/**/*.q linguist-vendored
+src/**/*.qat linguist-language=janet
+src/**/*.qat linguist-vendored
