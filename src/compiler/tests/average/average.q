@@ -18,6 +18,6 @@ A: 3x3
 10 | solved-goto ULF UL 13
 11 | U F R' D' R2 F R' U' D
 12 | goto 7
-13 | halt "The average is"
+13 | halt until DFR FR solved
+          "The average is"
           D' U R F' R2 D R F' U'
-          counting-until DFR FR
