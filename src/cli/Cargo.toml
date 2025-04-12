@@ -18,5 +18,5 @@ internment = { version = "0.8", features = [ "arc" ] }
 workspace = true
 
 [[bin]]
-name = "qterc"
+name = "qter"
 path = "src/main.rs"
