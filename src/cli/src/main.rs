@@ -1,10 +1,6 @@
-use std::{
-    fmt::{Display, Formatter},
-    fs, io,
-    path::PathBuf,
-};
+use std::{fs, io, path::PathBuf};
 
-use clap::{ArgAction, Parser, ValueEnum};
+use clap::{ArgAction, Parser};
 use color_eyre::{
     eyre::{OptionExt, eyre},
     owo_colors::OwoColorize,
@@ -18,32 +14,9 @@ use qter_core::{
     architectures::{Algorithm, Permutation},
     table_encoding::{decode_table, encode_table},
 };
+use robot::Cube3RobotPermutation;
 
-#[derive(Clone, Copy, ValueEnum)]
-enum WrongSolvedGoto {
-    /// Do not try to retrieve cube state from the robot and instead use a simulated cube state.
-    Cheat,
-    /// If the program returns an incorrect cube state, quit the program with an error.
-    Quit,
-    /// Print an error, but continue running with the new cube state
-    PrintAccept,
-    /// Print an error and ignore the cube state, using the simulated one instead
-    PrintIgnore,
-    /// Continue running with the new cube state without printing an error
-    SilentAccept,
-}
-
-impl Display for WrongSolvedGoto {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
-        f.write_str(match self {
-            WrongSolvedGoto::Cheat => "cheat",
-            WrongSolvedGoto::Quit => "quit",
-            WrongSolvedGoto::PrintAccept => "print-accept",
-            WrongSolvedGoto::PrintIgnore => "print-ignore",
-            WrongSolvedGoto::SilentAccept => "silent-accept",
-        })
-    }
-}
+mod robot;
 
 /// Compiles and interprets qter programs
 #[derive(Parser)]
@@ -61,6 +34,8 @@ enum Commands {
         /// The level of execution trace to send to stderr. Can be set zero to three times.
         #[arg(short, action = ArgAction::Count)]
         trace_level: u8,
+        #[arg(long)]
+        robot: bool,
     },
     /// Step through a QAT or a Q program
     Debug {
@@ -71,31 +46,6 @@ enum Commands {
     Test {
         /// Which file to test; must be a .qat file
         file: PathBuf,
-    },
-    /// Interpret a Qter program using a cube-solving robot
-    ///
-    /// The program inputted with `command` should receive signals through stdin and output signals through stdout.
-    ///
-    /// The Qter program may only use a single puzzle, and it may only be a 3x3 unless `--solved-goto` is set to `cheat`. Feel free to PR if you have a different robot.
-    Robot {
-        /// The program to control the robot along with arguments
-        ///
-        /// When the robot is ready to perform a new algorithm, the program must print the value of `--ready` followed by a line break through stdout. Then if it receives the `--perform` signal, the program will receive space separated sequence of cube moves to perform followed by a line break. If it receives the value of `--get-cube-state` followed by a line break, it will run the computer vision and print the cube state to stdout in the format of rob-twophase (https://github.com/efrantar/rob-twophase/blob/d245031257d52b2663c5790c5410ef30aefd775f/src/face.h#L29).
-        ///
-        /// If the robot does not have computer vision, you can use the option `--solved-goto cheat` to make Qter use a simulated cube state.
-        command: String,
-        /// How to handle the cube state returned by the robot not matching the simulated cube state
-        #[arg(long, short, default_value_t = WrongSolvedGoto::PrintAccept)]
-        solved_goto: WrongSolvedGoto,
-        /// The signal to send to the robot command's stdin to perform an algorithm
-        #[arg(long, short, default_value = "p")]
-        perform: String,
-        /// The signal to send to the robot command's stdin to print the cube state through stdout
-        #[arg(long, short, default_value = "s")]
-        get_cube_state: String,
-        /// The signal sent by the robot command's stdout signalling that it is ready to perform an algorithm
-        #[arg(long, short, default_value = "r")]
-        ready: String,
     },
     #[cfg(debug_assertions)]
     /// Compress an algorithm table into the special format (This subcommand will not be visible in release mode)
@@ -118,7 +68,11 @@ fn main() -> color_eyre::Result<()> {
 
     match args {
         Commands::Compile { file: _ } => todo!(),
-        Commands::Interpret { file, trace_level } => {
+        Commands::Interpret {
+            file,
+            trace_level,
+            robot,
+        } => {
             let program = match file.extension().and_then(|v| v.to_str()) {
                 Some("q") => todo!(),
                 Some("qat") => {
@@ -145,23 +99,16 @@ fn main() -> color_eyre::Result<()> {
                 }
             };
 
-            let interpreter: Interpreter<Permutation> = Interpreter::new(program);
-
-            if trace_level == 0 {
-                interpret(interpreter)?;
+            if robot {
+                let interpreter = Interpreter::<Cube3RobotPermutation>::new(program);
+                interpret(interpreter, trace_level)?;
             } else {
-                interpret_traced(interpreter, trace_level)?;
+                let interpreter = Interpreter::<Permutation>::new(program);
+                interpret(interpreter, trace_level)?;
             }
         }
         Commands::Debug { file: _ } => todo!(),
         Commands::Test { file: _ } => todo!(),
-        Commands::Robot {
-            command,
-            solved_goto,
-            perform,
-            get_cube_state,
-            ready,
-        } => {}
         #[cfg(debug_assertions)]
         Commands::Compress { input, output } => {
             let data = fs::read_to_string(input)?;
@@ -203,7 +150,13 @@ fn main() -> color_eyre::Result<()> {
     Ok(())
 }
 
-fn interpret<P: PuzzleState>(mut interpreter: Interpreter<P>) -> color_eyre::Result<()> {
+fn interpret<P: PuzzleState>(
+    mut interpreter: Interpreter<P>,
+    trace_level: u8,
+) -> color_eyre::Result<()> {
+    if trace_level > 0 {
+        return interpret_traced(interpreter, trace_level);
+    }
     loop {
         let paused_state = interpreter.step_until_halt();
 
@@ -250,6 +203,7 @@ fn interpret_traced<P: PuzzleState>(
     mut interpreter: Interpreter<P>,
     trace_level: u8,
 ) -> color_eyre::Result<()> {
+    // FIXME:
     let pad_amount = ((interpreter.program().instructions.len() - 1).ilog10() + 1) as usize;
 
     loop {
@@ -332,7 +286,7 @@ fn interpret_traced<P: PuzzleState>(
             } => {
                 eprint!("Puzzle {puzzle_idx}:");
 
-                for move_ in algorithm.move_seq() {
+                for move_ in algorithm.move_seq_iter() {
                     eprint!(" {move_}");
                 }
 
@@ -361,7 +315,7 @@ fn interpret_traced<P: PuzzleState>(
 
             eprint!("Puzzle {puzzle_idx}:");
 
-            for move_ in exponentiated_puzzle_alg.move_seq() {
+            for move_ in exponentiated_puzzle_alg.move_seq_iter() {
                 eprint!(" {move_}");
             }
 

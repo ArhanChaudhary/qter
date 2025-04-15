@@ -244,6 +244,18 @@ impl core::fmt::Debug for Permutation {
 }
 
 impl Permutation {
+    pub fn from_mapping(mapping: Vec<usize>) -> Permutation {
+        let facelet_count = mapping.len();
+
+        assert!(mapping.iter().all_unique());
+
+        Permutation {
+            facelet_count,
+            mapping: OnceLock::from(mapping),
+            cycles: OnceLock::new(),
+        }
+    }
+
     /// Create a permutation using cycles notation. `cycles` is a list of cycles where each cycle is a list of facelet indices.
     pub fn from_cycles(mut cycles: Vec<Vec<usize>>) -> Permutation {
         cycles.retain(|cycle| cycle.len() > 1);
@@ -482,7 +494,7 @@ impl Algorithm {
     }
 
     /// Returns a move sequence that when composed, give the same result as applying `.permutation()`
-    pub fn move_seq(&self) -> impl Iterator<Item = &ArcIntern<str>> {
+    pub fn move_seq_iter(&self) -> impl Iterator<Item = &ArcIntern<str>> {
         self.move_seq
             .iter()
             .cycle()
@@ -822,8 +834,8 @@ impl Architecture {
                 let mut inverse = register.algorithm.to_owned();
                 inverse.exponentiate(-Int::<I>::one());
                 [
-                    register.algorithm.move_seq().cloned().collect_vec(),
-                    inverse.move_seq().cloned().collect_vec(),
+                    register.algorithm.move_seq_iter().cloned().collect_vec(),
+                    inverse.move_seq_iter().cloned().collect_vec(),
                 ]
             }) {
                 add_permutation(item);

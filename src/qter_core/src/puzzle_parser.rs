@@ -218,7 +218,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
                     pest::error::ErrorVariant::CustomError {
                         message: format!(
                             "The algorithm {} has an incorrect order. Expected order {order} but found order {}.",
-                            register.algorithm().move_seq().join(" "),
+                            register.algorithm().move_seq_iter().join(" "),
                             register.order()
                         ),
                     },
