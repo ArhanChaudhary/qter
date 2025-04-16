@@ -1,9 +1,9 @@
 use std::{
     cell::OnceCell,
     collections::HashMap,
-    io::{self, Read, Write},
+    io::{self, BufRead, BufReader, Read, Write},
     path::PathBuf,
-    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    process::{Child, Command, Stdio},
     sync::{Arc, OnceLock},
 };
 
@@ -68,8 +68,6 @@ static EDGE_MAPPING: OnceLock<HashMap<[char; 2], (usize, [usize; 2])>> = OnceLoc
 
 pub struct Cube3RobotPermutation {
     permutation: OnceCell<Permutation>,
-    // robot_stdin: ChildStdin,
-    // robot_stdout: ChildStdout,
     robot_process: Child,
 }
 
@@ -139,15 +137,15 @@ impl PuzzleState for Cube3RobotPermutation {
             edge_mapping
         });
 
-        const ROBOT_EXECUTABLE_NAME: &str = "computeSystem";
-
         println!("Please enter the path to the robot executable:");
-
         let mut robot_path = String::new();
         io::stdin().read_line(&mut robot_path).unwrap();
-        let robot_path = PathBuf::from(robot_path.trim()).join(ROBOT_EXECUTABLE_NAME);
+        let robot_path = robot_path.trim();
+        let robot_executable_path = PathBuf::from(robot_path).join("computeSystem");
 
-        let mut robot_process = Command::new(robot_path)
+        let mut robot_process = Command::new(robot_executable_path)
+            .current_dir(robot_path)
+            // TODO: some way to specify the arg
             .arg("-noCameras")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -155,44 +153,38 @@ impl PuzzleState for Cube3RobotPermutation {
             .unwrap();
 
         let mut robot_stdin = robot_process.stdin.take().unwrap();
-        let mut robot_stdout = robot_process.stdout.take().unwrap();
-        println!("1");
-        robot_stdin
-            .write_all(b"p")
-            .unwrap();
-        robot_stdin.flush().unwrap();
+        let mut robot_stdout = BufReader::new(robot_process.stdout.take().unwrap());
 
-        println!("2");
-        let mut buffer = String::new();
-        robot_stdout
-            // .bytes()
-            .take(1300)
-            .read_to_string(&mut buffer)
-            .unwrap();
-        println!("{}", buffer);
-        robot_print_string(&buffer);
-        println!("4");
+        for [in_, expected, ending] in [
+            ["p", "Preset 7: Safe for Qter", "[ Enter ] Back to main menu"],
+            ["7", "[ Enter ] Ready to Solve", "[  Esc  ] Exit Program"],
+            ["\n", "[ Enter ] Start the Solve", "[ Enter ] Start the Solve"],
+            ["\n", "Total Time: ", "[   C   ] Print Cube State"],
+        ] {
+            robot_stdin.write_all(in_.as_bytes()).unwrap();
+            robot_stdin.flush().unwrap();
 
-        // search for the string "Preset 7: Safe for Qter" inside the buffer
-        if !buffer.contains("Preset 7: Safe for Qter") {
-            panic!("Robot executable not found or not compatible");
+            let mut stdout_valid = false;
+            for line in robot_stdout.by_ref().lines() {
+                let line = line.unwrap();
+                println!("robot: {}", line);
+                if line.contains(expected) {
+                    stdout_valid = true;
+                }
+                if line.contains(ending) {
+                    break;
+                }
+            }
+
+            if !stdout_valid {
+                panic!("Expected {:?} as output from robot executable", expected);
+            }
         }
 
         Cube3RobotPermutation {
             permutation: OnceCell::new(),
-            // robot_stdin,
-            // robot_stdout,
             robot_process,
         }
-    }
-}
-
-fn robot_print_string(s: &str) {
-    let mut output = io::BufWriter::new(io::stdout());
-    for line in s.lines() {
-        output
-            .write_all(format!("robot: {}\n", line).as_bytes())
-            .unwrap();
     }
 }
 
