@@ -1,10 +1,12 @@
 use std::{
-    cell::OnceCell,
+    cell::{OnceCell, RefCell},
     collections::HashMap,
     fs::{self, File},
     io::{self, BufRead, BufReader, Read, Write},
+    ops::{Deref, DerefMut},
     path::PathBuf,
-    process::{Child, Command, Stdio},
+    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    rc::Rc,
     sync::{Arc, OnceLock},
 };
 
@@ -69,44 +71,41 @@ static EDGE_MAPPING: OnceLock<HashMap<[char; 2], (usize, [usize; 2])>> = OnceLoc
 
 pub struct Cube3Robot {
     permutation: OnceCell<Permutation>,
-    robot_process: Child,
+    robot_stdin: RefCell<ChildStdin>,
+    robot_stdout: RefCell<ChildStdout>,
     robot_path_buf: PathBuf,
 }
 
 impl PuzzleState for Cube3Robot {
     fn compose_into(&mut self, alg: &Algorithm) {
-        let file = self.robot_path_buf.join("resource/testSequences/tmp.txt");
-        let mut file = File::create(file).unwrap();
-        file.write_all(alg.move_seq_iter().format(" ").to_string().as_bytes())
+        let moves_file_path = self.robot_path_buf.join("resource/testSequences/tmp.txt");
+        let mut moves_file = File::create(moves_file_path).unwrap();
+        moves_file
+            .write_all(alg.move_seq_iter().format(" ").to_string().as_bytes())
             .unwrap();
 
         self.robot_tui(
             &["t", "1\n", "0\n"],
-            &[
-                "1. tmp.txt",
-                // TODO: use https://doc.rust-lang.org/std/io/struct.BufReader.html#method.read_until
-                // "Select Test Sequence (0 to exit):",
-                "1. tmp.txt",
-                "[  Esc  ] Exit Program",
-            ],
-            &[
-                // "Select Test Sequence (0 to exit):",
-                // "Select Test Sequence (0 to exit):",
-                "11. reverseSimpleUndo.txt",
-                "11. reverseSimpleUndo.txt",
-                "[  Esc  ] Exit Program",
-            ],
+            &["1. tmp.txt", "1. tmp.txt", "[  Esc  ] Exit Program"],
+            "[  Esc  ] Exit Program",
         );
 
         self.permutation = OnceCell::new();
     }
 
     fn puzzle_state(&self) -> &Permutation {
-        let input = io::stdin();
-        let mut buffer = String::new();
-        input.read_line(&mut buffer).unwrap();
-        let rob_string = buffer.trim();
-        self.puzzle_state_with_rob_string(rob_string)
+        // let input = io::stdin();
+        // let mut buffer = String::new();
+        // input.read_line(&mut buffer).unwrap();
+        // let rob_string = buffer.trim();
+        // let found = self.robot_tui(
+        //     &["c"],
+        //     &["Current Cube State String:"],
+        //     "Current Cube State String:",
+        // );
+        // self.puzzle_state_with_rob_string(rob_string)
+        // println!("found: {:?}", found);
+        todo!();
     }
 
     fn identity(_perm_group: Arc<PermutationGroup>) -> Self {
@@ -161,7 +160,7 @@ impl PuzzleState for Cube3Robot {
             edge_mapping
         });
 
-        println!("Debug? (y/n)");
+        println!("Robot debugging? (y/n)");
         let mut debug = String::new();
         io::stdin().read_line(&mut debug).unwrap();
         let debug = debug.trim() == "y";
@@ -188,9 +187,12 @@ impl PuzzleState for Cube3Robot {
         }
 
         let robot_process = robot_command.spawn().unwrap();
-        let mut ret = Cube3Robot {
+        let robot_stdin = RefCell::new(robot_process.stdin.unwrap());
+        let robot_stdout = RefCell::new(robot_process.stdout.unwrap());
+        let ret = Cube3Robot {
             permutation: OnceCell::new(),
-            robot_process,
+            robot_stdin,
+            robot_stdout,
             robot_path_buf,
         };
 
@@ -202,12 +204,7 @@ impl PuzzleState for Cube3Robot {
                 "[ Enter ] Start the Solve",
                 "Total Time: ",
             ],
-            &[
-                "[ Enter ] Back to main menu",
-                "[  Esc  ] Exit Program",
-                "[ Enter ] Start the Solve",
-                "[   C   ] Print Cube State",
-            ],
+            "[   C   ] Print Cube State",
         );
         ret
     }
@@ -215,20 +212,21 @@ impl PuzzleState for Cube3Robot {
 
 impl Drop for Cube3Robot {
     fn drop(&mut self) {
-        let file = self.robot_path_buf.join("resource/testSequences/tmp.txt");
-        let _ = fs::remove_file(file);
+        // doesnt work??
+        let moves_file_path = self.robot_path_buf.join("resource/testSequences/tmp.txt");
+        let _ = fs::remove_file(moves_file_path);
     }
 }
 
 impl Cube3Robot {
-    fn robot_tui(&mut self, ins: &[&str], expecteds: &[&str], endings: &[&str]) {
-        let robot_stdin = self.robot_process.stdin.as_mut().unwrap();
-        let mut robot_stdout = BufReader::new(self.robot_process.stdout.as_mut().unwrap());
-
+    fn robot_tui(&self, ins: &[&str], expecteds: &[&str], ending: &str) {
         assert_eq!(ins.len(), expecteds.len());
-        assert_eq!(ins.len(), endings.len());
 
-        for ((in_, expected), ending) in ins.iter().zip(expecteds.iter()).zip(endings.iter()) {
+        let mut robot_stdin = self.robot_stdin.borrow_mut();
+        let mut robot_stdout = self.robot_stdout.borrow_mut();
+        let mut robot_stdout = BufReader::new(robot_stdout.deref_mut());
+
+        for (i, (in_, expected)) in ins.iter().zip(expecteds.iter()).enumerate() {
             println!("qter: sending {:?} to robot", in_);
             robot_stdin.write_all(in_.as_bytes()).unwrap();
             robot_stdin.flush().unwrap();
@@ -236,11 +234,14 @@ impl Cube3Robot {
             let mut stdout_valid = false;
             for line in robot_stdout.by_ref().lines() {
                 let line = line.unwrap();
-                println!("robot: {:?}", line);
+                println!("robot: {}", line);
                 if line.contains(expected) {
                     stdout_valid = true;
+                    if i != ins.len() - 1 {
+                        break;
+                    }
                 }
-                if line.contains(ending) {
+                if i == ins.len() - 1 && line.contains(ending) {
                     break;
                 }
             }
@@ -295,10 +296,13 @@ mod tests {
     use internment::ArcIntern;
     use qter_core::architectures::PuzzleDefinition;
 
-    // test caching
+    #[test]
+    fn test_caching() {
+        todo!();
+    }
 
     #[test]
-    fn thing2() {
+    fn test_puzzle_state_with_rob_string() {
         let perm_group = PuzzleDefinition::parse(include_str!("../../qter_core/puzzles/3x3.txt"))
             .unwrap()
             .perm_group;
