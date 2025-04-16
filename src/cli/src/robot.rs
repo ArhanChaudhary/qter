@@ -1,6 +1,7 @@
 use std::{
     cell::OnceCell,
     collections::HashMap,
+    fs::{self, File},
     io::{self, BufRead, BufReader, Read, Write},
     path::PathBuf,
     process::{Child, Command, Stdio},
@@ -66,14 +67,37 @@ const QTER_EDGELETS: [[usize; 2]; 12] = [
 static CORNER_MAPPING: OnceLock<HashMap<[char; 3], (usize, [usize; 3])>> = OnceLock::new();
 static EDGE_MAPPING: OnceLock<HashMap<[char; 2], (usize, [usize; 2])>> = OnceLock::new();
 
-pub struct Cube3RobotPermutation {
+pub struct Cube3Robot {
     permutation: OnceCell<Permutation>,
     robot_process: Child,
+    robot_path_buf: PathBuf,
 }
 
-impl PuzzleState for Cube3RobotPermutation {
+impl PuzzleState for Cube3Robot {
     fn compose_into(&mut self, alg: &Algorithm) {
-        println!("moves {}", alg.move_seq_iter().format(" "));
+        let file = self.robot_path_buf.join("resource/testSequences/tmp.txt");
+        let mut file = File::create(file).unwrap();
+        file.write_all(alg.move_seq_iter().format(" ").to_string().as_bytes())
+            .unwrap();
+
+        self.robot_tui(
+            &["t", "1\n", "0\n"],
+            &[
+                "1. tmp.txt",
+                // TODO: use https://doc.rust-lang.org/std/io/struct.BufReader.html#method.read_until
+                // "Select Test Sequence (0 to exit):",
+                "1. tmp.txt",
+                "[  Esc  ] Exit Program",
+            ],
+            &[
+                // "Select Test Sequence (0 to exit):",
+                // "Select Test Sequence (0 to exit):",
+                "11. reverseSimpleUndo.txt",
+                "11. reverseSimpleUndo.txt",
+                "[  Esc  ] Exit Program",
+            ],
+        );
+
         self.permutation = OnceCell::new();
     }
 
@@ -137,37 +161,82 @@ impl PuzzleState for Cube3RobotPermutation {
             edge_mapping
         });
 
-        println!("Please enter the path to the robot executable:");
+        println!("Debug? (y/n)");
+        let mut debug = String::new();
+        io::stdin().read_line(&mut debug).unwrap();
+        let debug = debug.trim() == "y";
+
         let mut robot_path = String::new();
-        io::stdin().read_line(&mut robot_path).unwrap();
-        let robot_path = robot_path.trim();
-        let robot_executable_path = PathBuf::from(robot_path).join("computeSystem");
+        let robot_path = if debug {
+            "/Users/arhan/Desktop/Compute_System-main"
+        } else {
+            println!("Please enter the path to the robot source:");
+            io::stdin().read_line(&mut robot_path).unwrap();
+            robot_path.trim()
+        };
+        let robot_path_buf = PathBuf::from(robot_path);
+        let robot_executable_path = robot_path_buf.join("computeSystem");
 
-        let mut robot_process = Command::new(robot_executable_path)
+        let mut robot_command = Command::new(robot_executable_path);
+        robot_command
             .current_dir(robot_path)
-            // TODO: some way to specify the arg
-            .arg("-noCameras")
             .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
-            .unwrap();
+            .stdout(Stdio::piped());
 
-        let mut robot_stdin = robot_process.stdin.take().unwrap();
-        let mut robot_stdout = BufReader::new(robot_process.stdout.take().unwrap());
+        if debug {
+            robot_command.arg("-noCameras").arg("-debug");
+        }
 
-        for [in_, expected, ending] in [
-            ["p", "Preset 7: Safe for Qter", "[ Enter ] Back to main menu"],
-            ["7", "[ Enter ] Ready to Solve", "[  Esc  ] Exit Program"],
-            ["\n", "[ Enter ] Start the Solve", "[ Enter ] Start the Solve"],
-            ["\n", "Total Time: ", "[   C   ] Print Cube State"],
-        ] {
+        let robot_process = robot_command.spawn().unwrap();
+        let mut ret = Cube3Robot {
+            permutation: OnceCell::new(),
+            robot_process,
+            robot_path_buf,
+        };
+
+        ret.robot_tui(
+            &["p", "7", "\n", "\n"],
+            &[
+                "Preset 7: Safe for Qter",
+                "[ Enter ] Ready to Solve",
+                "[ Enter ] Start the Solve",
+                "Total Time: ",
+            ],
+            &[
+                "[ Enter ] Back to main menu",
+                "[  Esc  ] Exit Program",
+                "[ Enter ] Start the Solve",
+                "[   C   ] Print Cube State",
+            ],
+        );
+        ret
+    }
+}
+
+impl Drop for Cube3Robot {
+    fn drop(&mut self) {
+        let file = self.robot_path_buf.join("resource/testSequences/tmp.txt");
+        let _ = fs::remove_file(file);
+    }
+}
+
+impl Cube3Robot {
+    fn robot_tui(&mut self, ins: &[&str], expecteds: &[&str], endings: &[&str]) {
+        let robot_stdin = self.robot_process.stdin.as_mut().unwrap();
+        let mut robot_stdout = BufReader::new(self.robot_process.stdout.as_mut().unwrap());
+
+        assert_eq!(ins.len(), expecteds.len());
+        assert_eq!(ins.len(), endings.len());
+
+        for ((in_, expected), ending) in ins.iter().zip(expecteds.iter()).zip(endings.iter()) {
+            println!("qter: sending {:?} to robot", in_);
             robot_stdin.write_all(in_.as_bytes()).unwrap();
             robot_stdin.flush().unwrap();
 
             let mut stdout_valid = false;
             for line in robot_stdout.by_ref().lines() {
                 let line = line.unwrap();
-                println!("robot: {}", line);
+                println!("robot: {:?}", line);
                 if line.contains(expected) {
                     stdout_valid = true;
                 }
@@ -180,15 +249,8 @@ impl PuzzleState for Cube3RobotPermutation {
                 panic!("Expected {:?} as output from robot executable", expected);
             }
         }
-
-        Cube3RobotPermutation {
-            permutation: OnceCell::new(),
-            robot_process,
-        }
     }
-}
 
-impl Cube3RobotPermutation {
     fn puzzle_state_with_rob_string(&self, rob_string: &str) -> &Permutation {
         assert_eq!(rob_string.len(), 54);
 
@@ -242,7 +304,7 @@ mod tests {
             .perm_group;
 
         let solved = Permutation::identity(Arc::clone(&perm_group));
-        let mut actual = Cube3RobotPermutation::identity(Arc::clone(&perm_group));
+        let mut actual = Cube3Robot::identity(Arc::clone(&perm_group));
 
         for [seq, rob_string] in [
             ["", "UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB"],

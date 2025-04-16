@@ -14,7 +14,7 @@ use qter_core::{
     architectures::{Algorithm, Permutation},
     table_encoding::{decode_table, encode_table},
 };
-use robot::Cube3RobotPermutation;
+use robot::Cube3Robot;
 
 mod robot;
 
@@ -100,7 +100,7 @@ fn main() -> color_eyre::Result<()> {
             };
 
             if robot {
-                let interpreter = Interpreter::<Cube3RobotPermutation>::new(program);
+                let interpreter = Interpreter::<Cube3Robot>::new(program);
                 interpret(interpreter, trace_level)?;
             } else {
                 let interpreter = Interpreter::<Permutation>::new(program);
