@@ -73,6 +73,7 @@ pub struct Cube3Robot {
     permutation: OnceCell<Permutation>,
     robot_stdin: RefCell<ChildStdin>,
     robot_stdout: RefCell<ChildStdout>,
+    robot_process: Child,
     robot_path_buf: PathBuf,
 }
 
@@ -186,14 +187,15 @@ impl PuzzleState for Cube3Robot {
             robot_command.arg("-noCameras").arg("-debug");
         }
 
-        let robot_process = robot_command.spawn().unwrap();
-        let robot_stdin = RefCell::new(robot_process.stdin.unwrap());
-        let robot_stdout = RefCell::new(robot_process.stdout.unwrap());
+        let mut robot_process = robot_command.spawn().unwrap();
+        let robot_stdin = RefCell::new(robot_process.stdin.take().unwrap());
+        let robot_stdout = RefCell::new(robot_process.stdout.take().unwrap());
         let ret = Cube3Robot {
             permutation: OnceCell::new(),
             robot_stdin,
             robot_stdout,
             robot_path_buf,
+            robot_process,
         };
 
         ret.robot_tui(
@@ -213,6 +215,7 @@ impl PuzzleState for Cube3Robot {
 impl Drop for Cube3Robot {
     fn drop(&mut self) {
         // doesnt work??
+        self.robot_process.wait().unwrap();
         let moves_file_path = self.robot_path_buf.join("resource/testSequences/tmp.txt");
         let _ = fs::remove_file(moves_file_path);
     }
