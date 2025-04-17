@@ -203,7 +203,7 @@ fn interpret_traced<P: PuzzleState>(
     mut interpreter: Interpreter<P>,
     trace_level: u8,
 ) -> color_eyre::Result<()> {
-    // FIXME:
+    // FIXME: remove padding 
     let pad_amount = ((interpreter.program().instructions.len() - 1).ilog10() + 1) as usize;
 
     loop {
