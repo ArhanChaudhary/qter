@@ -3,10 +3,8 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     io::{self, BufRead, BufReader, Read, Write},
-    ops::{Deref, DerefMut},
     path::PathBuf,
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
-    rc::Rc,
     sync::{Arc, OnceLock},
 };
 
@@ -103,47 +101,48 @@ impl PuzzleState for Cube3Robot {
         let expected1 = "Current Cube State String:";
         let expected2 = "Is legal cube state?:";
         let ending = "[  Esc  ] Exit Program";
-
-        qter_debug(in_);
-        robot_stdin.write_all(in_.as_bytes()).unwrap();
-        robot_stdin.flush().unwrap();
-
-        let mut found_expected1 = false;
-        let mut rob_string = None;
         let mut ret = None;
-        for line in robot_stdout.by_ref().lines() {
-            let line = line.unwrap();
-            robot_debug(&line);
-            if line.contains(expected1) {
-                found_expected1 = true;
-                rob_string = Some(line[expected1.len()..].trim().to_string());
-            }
-            if found_expected1 && line.contains(expected2) {
-                match line[expected2.len()..].trim() {
-                    "Yes" => {
-                        ret = Some(self.puzzle_state_with_rob_string(rob_string.as_ref().unwrap()));
-                    },
-                    "No" => {
-                        todo!();
+
+        while ret.is_none() {
+            qter_debug(in_);
+            robot_stdin.write_all(in_.as_bytes()).unwrap();
+            robot_stdin.flush().unwrap();
+
+            let mut found_expected1 = false;
+            let mut rob_string = None;
+            for line in robot_stdout.by_ref().lines() {
+                let line = line.unwrap();
+                robot_debug(&line);
+                if line.contains(expected1) {
+                    found_expected1 = true;
+                    rob_string = Some(line[expected1.len()..].trim().to_string());
+                }
+                if !found_expected1 {
+                    continue;
+                }
+                if line.contains(expected2) {
+                    match line[expected2.len()..].trim() {
+                        "Yes" => {
+                            ret = Some(
+                                self.puzzle_state_with_rob_string(rob_string.as_ref().unwrap()),
+                            );
+                        }
+                        "No" => (),
+                        _ => {
+                            panic!("Expected 'Yes' or 'No' as output from robot at {:?}", line);
+                        }
                     }
-                    _ => {
-                        panic!("Expected 'Yes' or 'No' as output from robot at {:?}", line);
-                    },
+                }
+                if line.contains(ending) {
+                    break;
                 }
             }
-            if found_expected1 && line.contains(ending) {
-                break;
+            if ret.is_none() {
+                qter_debug("Invalid cube state, retrying photo...");
             }
         }
 
-        if let Some(ret) = ret {
-            ret
-        } else {
-            panic!(
-                "Expected {:?} and {:?} as output from robot",
-                expected1, expected2
-            );
-        }
+        ret.unwrap()
     }
 
     fn identity(_perm_group: Arc<PermutationGroup>) -> Self {
