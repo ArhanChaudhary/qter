@@ -4,7 +4,7 @@ use std::{
     fs::{self, File},
     io::{self, BufRead, BufReader, Read, Write},
     path::PathBuf,
-    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    process::{ChildStdin, ChildStdout, Command, Stdio},
     sync::{Arc, OnceLock},
 };
 
@@ -71,7 +71,6 @@ pub struct Cube3Robot {
     permutation: OnceCell<Permutation>,
     robot_stdin: RefCell<ChildStdin>,
     robot_stdout: RefCell<ChildStdout>,
-    _robot_process: Child,
     robot_path_buf: PathBuf,
 }
 
@@ -108,26 +107,21 @@ impl PuzzleState for Cube3Robot {
             robot_stdin.write_all(in_.as_bytes()).unwrap();
             robot_stdin.flush().unwrap();
 
-            let mut found_expected1 = false;
             let mut rob_string = None;
             for line in robot_stdout.by_ref().lines() {
                 let line = line.unwrap();
                 robot_debug(&line);
-                if !found_expected1 {
-                    if line.contains(expected1) {
-                        found_expected1 = true;
-                        rob_string = Some(line[expected1.len()..].trim().to_string());
-                    }
-                    continue;
+                if line.contains(expected1) {
+                    rob_string = Some(line[expected1.len()..].trim().to_string());
                 }
                 if line.contains(expected2) {
                     match line[expected2.len()..].trim() {
-                        "Yes" => {
+                        "No" => {
                             ret = Some(
                                 self.puzzle_state_with_rob_string(rob_string.as_ref().unwrap()),
                             );
                         }
-                        "No" => (),
+                        "Yes" => (),
                         _ => {
                             panic!("Expected 'Yes' or 'No' as output from robot at {:?}", line);
                         }
@@ -138,7 +132,7 @@ impl PuzzleState for Cube3Robot {
                 }
             }
             if ret.is_none() {
-                qter_debug("Invalid cube state, retrying photo...");
+                println!("Invalid cube state, retrying photo...");
             }
         }
 
@@ -174,7 +168,9 @@ impl PuzzleState for Cube3Robot {
             robot_command.arg("-noCameras").arg("-debug");
         }
 
+        #[allow(clippy::zombie_processes)]
         let mut robot_process = robot_command.spawn().unwrap();
+
         let robot_stdin = RefCell::new(robot_process.stdin.take().unwrap());
         let robot_stdout = RefCell::new(robot_process.stdout.take().unwrap());
         let ret = Cube3Robot {
@@ -182,7 +178,6 @@ impl PuzzleState for Cube3Robot {
             robot_stdin,
             robot_stdout,
             robot_path_buf,
-            _robot_process: robot_process,
         };
 
         ret.robot_tui(
@@ -290,8 +285,6 @@ impl Cube3Robot {
                         break;
                     }
                 }
-                // TODO: get rid of ending and just pring the rest of the stdout
-                // buffer at the end
                 if i == ins.len() - 1 && line.contains(ending) {
                     break;
                 }
@@ -307,7 +300,7 @@ impl Cube3Robot {
         self.permutation.get_or_init(|| {
             assert_eq!(rob_string.len(), 54);
 
-            let mut mapping: [usize; 48] = [0; 48];
+            let mut mapping = vec![0; 48];
             for (i, corner) in ROB_CORNLETS.iter().enumerate() {
                 let mut block: [char; 3] = Default::default();
                 for j in 0..3 {
@@ -337,7 +330,7 @@ impl Cube3Robot {
                     mapping[QTER_EDGELETS[hash][mapping_order[j]]] = QTER_EDGELETS[i][j];
                 }
             }
-            Permutation::from_mapping(mapping.to_vec())
+            Permutation::from_mapping(mapping)
         })
     }
 }
@@ -347,12 +340,6 @@ mod tests {
     use super::*;
     use internment::ArcIntern;
     use qter_core::architectures::PuzzleDefinition;
-
-    #[ignore]
-    #[test]
-    fn test_caching() {
-        todo!();
-    }
 
     #[ignore]
     #[test]
