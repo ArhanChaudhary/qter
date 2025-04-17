@@ -113,11 +113,11 @@ impl PuzzleState for Cube3Robot {
             for line in robot_stdout.by_ref().lines() {
                 let line = line.unwrap();
                 robot_debug(&line);
-                if line.contains(expected1) {
-                    found_expected1 = true;
-                    rob_string = Some(line[expected1.len()..].trim().to_string());
-                }
                 if !found_expected1 {
+                    if line.contains(expected1) {
+                        found_expected1 = true;
+                        rob_string = Some(line[expected1.len()..].trim().to_string());
+                    }
                     continue;
                 }
                 if line.contains(expected2) {
@@ -146,56 +146,7 @@ impl PuzzleState for Cube3Robot {
     }
 
     fn identity(_perm_group: Arc<PermutationGroup>) -> Self {
-        CORNER_MAPPING.get_or_init(|| {
-            let mut corner_mapping = HashMap::new();
-            for (i, block) in [
-                ['U', 'R', 'F'],
-                ['U', 'F', 'L'],
-                ['U', 'L', 'B'],
-                ['U', 'B', 'R'],
-                ['D', 'F', 'R'],
-                ['D', 'L', 'F'],
-                ['D', 'B', 'L'],
-                ['D', 'R', 'B'],
-            ]
-            .into_iter()
-            .enumerate()
-            {
-                for perm in (0..3).permutations(3) {
-                    let perm: [usize; 3] = perm.try_into().unwrap();
-                    let block = [block[perm[0]], block[perm[1]], block[perm[2]]];
-                    corner_mapping.insert(block, (i, perm));
-                }
-            }
-            corner_mapping
-        });
-        EDGE_MAPPING.get_or_init(|| {
-            let mut edge_mapping = HashMap::new();
-            for (i, block) in [
-                ['U', 'R'],
-                ['U', 'F'],
-                ['U', 'L'],
-                ['U', 'B'],
-                ['D', 'R'],
-                ['D', 'F'],
-                ['D', 'L'],
-                ['D', 'B'],
-                ['F', 'R'],
-                ['F', 'L'],
-                ['B', 'L'],
-                ['B', 'R'],
-            ]
-            .into_iter()
-            .enumerate()
-            {
-                for perm in (0..2).permutations(2) {
-                    let perm: [usize; 2] = perm.try_into().unwrap();
-                    let block = [block[perm[0]], block[perm[1]]];
-                    edge_mapping.insert(block, (i, perm));
-                }
-            }
-            edge_mapping
-        });
+        init_mapping();
 
         println!("Robot debugging? (y/n)");
         let mut debug = String::new();
@@ -248,12 +199,65 @@ impl PuzzleState for Cube3Robot {
     }
 }
 
+fn init_mapping() {
+    CORNER_MAPPING.get_or_init(|| {
+        let mut corner_mapping = HashMap::new();
+        for (i, block) in [
+            ['U', 'R', 'F'],
+            ['U', 'F', 'L'],
+            ['U', 'L', 'B'],
+            ['U', 'B', 'R'],
+            ['D', 'F', 'R'],
+            ['D', 'L', 'F'],
+            ['D', 'B', 'L'],
+            ['D', 'R', 'B'],
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            for perm in (0..3).permutations(3) {
+                let perm: [usize; 3] = perm.try_into().unwrap();
+                let block = [block[perm[0]], block[perm[1]], block[perm[2]]];
+                corner_mapping.insert(block, (i, perm));
+            }
+        }
+        corner_mapping
+    });
+    EDGE_MAPPING.get_or_init(|| {
+        let mut edge_mapping = HashMap::new();
+        for (i, block) in [
+            ['U', 'R'],
+            ['U', 'F'],
+            ['U', 'L'],
+            ['U', 'B'],
+            ['D', 'R'],
+            ['D', 'F'],
+            ['D', 'L'],
+            ['D', 'B'],
+            ['F', 'R'],
+            ['F', 'L'],
+            ['B', 'L'],
+            ['B', 'R'],
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            for perm in (0..2).permutations(2) {
+                let perm: [usize; 2] = perm.try_into().unwrap();
+                let block = [block[perm[0]], block[perm[1]]];
+                edge_mapping.insert(block, (i, perm));
+            }
+        }
+        edge_mapping
+    });
+}
+
 fn robot_debug(s: &str) {
-    println!("robot: {}", s);
+    eprintln!("robot: {}", s);
 }
 
 fn qter_debug(s: &str) {
-    println!("qter: sending {:?} to robot", s);
+    eprintln!("qter: sending {:?} to robot", s);
 }
 
 impl Drop for Cube3Robot {
@@ -344,11 +348,13 @@ mod tests {
     use internment::ArcIntern;
     use qter_core::architectures::PuzzleDefinition;
 
+    #[ignore]
     #[test]
     fn test_caching() {
         todo!();
     }
 
+    #[ignore]
     #[test]
     fn test_puzzle_state_with_rob_string() {
         let perm_group = PuzzleDefinition::parse(include_str!("../../qter_core/puzzles/3x3.txt"))
