@@ -125,14 +125,14 @@ impl<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> PuzzleStateHistory<P, H>
     }
 
     /// Create a new move history from the current state of the stack.
-    pub fn create_move_history(&self, puzzle_def: &PuzzleDef<P>) -> Box<[Move<P>]> {
+    pub fn create_move_history(&self, puzzle_def: &PuzzleDef<P>) -> Vec<Move<P>> {
         // TODO: MCC here. Do we have to do anything about the clone overhead?
         // I don't want to Rc it because that's a layer of indirection
         let mut move_sequence = Vec::with_capacity(self.stack_pointer);
         for i in 1..=self.stack_pointer {
             move_sequence.push(puzzle_def.moves[self.stack[i].1].clone())
         }
-        move_sequence.into_boxed_slice()
+        move_sequence
     }
 }
 

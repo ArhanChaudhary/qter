@@ -108,20 +108,19 @@ impl PuzzleState for Cube3Robot {
             robot_stdin.flush().unwrap();
 
             let mut rob_string = None;
-            for line in robot_stdout.by_ref().lines() {
-                let line = line.unwrap();
+            for line in robot_stdout.by_ref().lines().map(|line| line.unwrap()) {
                 robot_debug(&line);
                 if line.contains(expected1) {
                     rob_string = Some(line[expected1.len()..].trim().to_string());
                 }
                 if line.contains(expected2) {
                     match line[expected2.len()..].trim() {
-                        "No" => {
+                        "Yes" => {
                             ret = Some(
                                 self.puzzle_state_with_rob_string(rob_string.as_ref().unwrap()),
                             );
                         }
-                        "Yes" => (),
+                        "No" => (),
                         _ => {
                             panic!("Expected 'Yes' or 'No' as output from robot at {:?}", line);
                         }
@@ -132,7 +131,7 @@ impl PuzzleState for Cube3Robot {
                 }
             }
             if ret.is_none() {
-                println!("Invalid cube state, retrying photo...");
+                eprintln!("qter: Invalid cube state, retrying photo...");
             }
         }
 

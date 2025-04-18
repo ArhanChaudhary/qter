@@ -16,7 +16,7 @@ struct CycleTypeSolverMutable<P: PuzzleState, H: PuzzleStateHistoryInterface<P>>
     puzzle_state_history: PuzzleStateHistory<P, H>,
     multi_bv: P::MultiBv,
     // TODO: list of usize until the very end at fn return
-    solutions: Vec<Box<[Move<P>]>>,
+    solutions: Vec<Vec<Move<P>>>,
     first_move_class_index: usize,
 }
 
@@ -132,7 +132,7 @@ impl<'a, P: PuzzleState, T: PruningTables<P>> CycleTypeSolver<'a, P, T> {
         }
     }
 
-    pub fn solve<H: PuzzleStateHistoryInterface<P>>(&self) -> Vec<Box<[Move<P>]>> {
+    pub fn solve<H: PuzzleStateHistoryInterface<P>>(&self) -> Vec<Vec<Move<P>>> {
         let mut mutable: CycleTypeSolverMutable<P, H> = CycleTypeSolverMutable {
             puzzle_state_history: self.puzzle_def.into(),
             multi_bv: P::new_multi_bv(&self.puzzle_def.sorted_orbit_defs),

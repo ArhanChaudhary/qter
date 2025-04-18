@@ -1,0 +1,7 @@
+.registers {
+    A <- 3x3 (U)
+}
+
+input "First number:" A
+input "Second number:" A
+halt "(A + B) % 4 =" A
