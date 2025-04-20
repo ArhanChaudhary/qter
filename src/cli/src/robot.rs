@@ -92,50 +92,60 @@ impl PuzzleState for Cube3Robot {
     }
 
     fn puzzle_state(&self) -> &Permutation {
-        let mut robot_stdin = self.robot_stdin.borrow_mut();
-        let mut robot_stdout = self.robot_stdout.borrow_mut();
-        let mut robot_stdout = BufReader::new(&mut *robot_stdout);
+        self.permutation.get_or_init(|| {
+            let mut robot_stdin = self.robot_stdin.borrow_mut();
+            let mut robot_stdout = self.robot_stdout.borrow_mut();
+            let mut robot_stdout = BufReader::new(&mut *robot_stdout);
 
-        let in_ = "c";
-        let expected1 = "Current Cube State String:";
-        let expected2 = "Is legal cube state?:";
-        let ending = "[  Esc  ] Exit Program";
-        let mut ret = None;
+            let in_ = "c";
+            let expected1 = "Current Cube State String:";
+            let expected2 = "Is legal cube state?:";
+            let ending = "[  Esc  ] Exit Program";
+            let mut ret = None;
 
-        while ret.is_none() {
-            qter_debug(in_);
-            robot_stdin.write_all(in_.as_bytes()).unwrap();
-            robot_stdin.flush().unwrap();
+            while ret.is_none() {
+                qter_debug(in_);
+                robot_stdin.write_all(in_.as_bytes()).unwrap();
+                robot_stdin.flush().unwrap();
 
-            let mut rob_string = None;
-            for line in robot_stdout.by_ref().lines().map(|line| line.unwrap()) {
-                robot_debug(&line);
-                if line.contains(expected1) {
-                    rob_string = Some(line[expected1.len()..].trim().to_string());
-                }
-                if line.contains(expected2) {
-                    match line[expected2.len()..].trim() {
-                        "Yes" => {
-                            ret = Some(
-                                self.puzzle_state_with_rob_string(rob_string.as_ref().unwrap()),
-                            );
+                let mut rob_string = None;
+                for line in robot_stdout.by_ref().lines().map(|line| line.unwrap()) {
+                    robot_debug(&line);
+                    if rob_string.is_none() && ret.is_none() {
+                        if line.contains(expected1) {
+                            rob_string = Some(line[expected1.len()..].trim().to_string());
+                            // let mut buffer = String::new();
+                            // io::stdin().read_line(&mut buffer).unwrap();
+                            // rob_string = Some(buffer.trim().to_string());
                         }
-                        "No" => (),
-                        _ => {
-                            panic!("Expected 'Yes' or 'No' as output from robot at {:?}", line);
+                    } else if ret.is_none() {
+                        if line.contains(expected2) {
+                            match line[expected2.len()..].trim() {
+                                "Yes" => {
+                                    ret = Some(self.puzzle_state_with_rob_string(
+                                        rob_string.as_ref().unwrap(),
+                                    ));
+                                }
+                                "No" => (),
+                                _ => {
+                                    panic!(
+                                        "Expected 'Yes' or 'No' as output from robot at {:?}",
+                                        line
+                                    );
+                                }
+                            }
                         }
+                    } else if line.contains(ending) {
+                        break;
                     }
                 }
-                if line.contains(ending) {
-                    break;
+                if ret.is_none() {
+                    eprintln!("qter: Invalid cube state, retrying photo...");
                 }
             }
-            if ret.is_none() {
-                eprintln!("qter: Invalid cube state, retrying photo...");
-            }
-        }
 
-        ret.unwrap()
+            ret.unwrap()
+        })
     }
 
     fn identity(_perm_group: Arc<PermutationGroup>) -> Self {
@@ -164,7 +174,7 @@ impl PuzzleState for Cube3Robot {
             .stdout(Stdio::piped());
 
         if debug {
-            robot_command.arg("-noCameras").arg("-debug");
+            robot_command.arg("-noCameras"); //.arg("-debug");
         }
 
         #[allow(clippy::zombie_processes)]
@@ -247,7 +257,7 @@ fn init_mapping() {
 }
 
 fn robot_debug(s: &str) {
-    eprintln!("robot: {}", s);
+    eprintln!("robot: {:?}", s);
 }
 
 fn qter_debug(s: &str) {
@@ -295,42 +305,40 @@ impl Cube3Robot {
         }
     }
 
-    fn puzzle_state_with_rob_string(&self, rob_string: &str) -> &Permutation {
-        self.permutation.get_or_init(|| {
-            assert_eq!(rob_string.len(), 54);
+    fn puzzle_state_with_rob_string(&self, rob_string: &str) -> Permutation {
+        assert_eq!(rob_string.len(), 54);
 
-            let mut mapping = vec![0; 48];
-            for (i, corner) in ROB_CORNLETS.iter().enumerate() {
-                let mut block: [char; 3] = Default::default();
-                for j in 0..3 {
-                    block[j] = rob_string.chars().nth(corner[j]).unwrap();
-                }
-                let (hash, mapping_order) = CORNER_MAPPING
-                    .get_or_init(|| unreachable!())
-                    .get(&block)
-                    .copied()
-                    .unwrap();
-                for j in 0..3 {
-                    mapping[QTER_CORNLETS[hash][mapping_order[j]]] = QTER_CORNLETS[i][j];
-                }
+        let mut mapping = vec![0; 48];
+        for (i, corner) in ROB_CORNLETS.iter().enumerate() {
+            let mut block: [char; 3] = Default::default();
+            for j in 0..3 {
+                block[j] = rob_string.chars().nth(corner[j]).unwrap();
             }
+            let (hash, mapping_order) = CORNER_MAPPING
+                .get_or_init(|| unreachable!())
+                .get(&block)
+                .copied()
+                .unwrap();
+            for j in 0..3 {
+                mapping[QTER_CORNLETS[hash][mapping_order[j]]] = QTER_CORNLETS[i][j];
+            }
+        }
 
-            for (i, edge) in ROB_EDGELETS.iter().enumerate() {
-                let mut block: [char; 2] = Default::default();
-                for j in 0..2 {
-                    block[j] = rob_string.chars().nth(edge[j]).unwrap();
-                }
-                let (hash, mapping_order) = EDGE_MAPPING
-                    .get_or_init(|| unreachable!())
-                    .get(&block)
-                    .copied()
-                    .unwrap();
-                for j in 0..2 {
-                    mapping[QTER_EDGELETS[hash][mapping_order[j]]] = QTER_EDGELETS[i][j];
-                }
+        for (i, edge) in ROB_EDGELETS.iter().enumerate() {
+            let mut block: [char; 2] = Default::default();
+            for j in 0..2 {
+                block[j] = rob_string.chars().nth(edge[j]).unwrap();
             }
-            Permutation::from_mapping(mapping)
-        })
+            let (hash, mapping_order) = EDGE_MAPPING
+                .get_or_init(|| unreachable!())
+                .get(&block)
+                .copied()
+                .unwrap();
+            for j in 0..2 {
+                mapping[QTER_EDGELETS[hash][mapping_order[j]]] = QTER_EDGELETS[i][j];
+            }
+        }
+        Permutation::from_mapping(mapping)
     }
 }
 

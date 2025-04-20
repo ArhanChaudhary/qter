@@ -163,8 +163,6 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
     type Error = KSolveConversionError;
 
     fn try_from(ksolve: &KSolve) -> Result<Self, Self::Error> {
-        const MAX_MOVE_POWER: usize = 1_000_000;
-
         let mut sorted_orbit_defs: Vec<OrbitDef> = ksolve
             .sets()
             .iter()
@@ -199,6 +197,8 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
             .chain(ksolve.symmetries().iter())
             .enumerate()
         {
+            const MAX_MOVE_POWER: usize = 1_000_000;
+
             let mut sorted_transformations = ksolve_move
                 .transformation()
                 .iter()
