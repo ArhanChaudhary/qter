@@ -63,10 +63,11 @@ impl Cube3Interface for Cube3 {
 
     fn replace_compose(&mut self, a: &Self, b: &Self) {
         // Benchmarked on a 2025 Mac M4: 1.67ns
+        const CO_MOD_SWIZZLE: u8x8 = u8x8::from_array([0, 1, 2, 0, 1, 2, 0, 0]);
+
         self.ep = a.ep.swizzle_dyn(b.ep);
         self.eo = (a.eo.swizzle_dyn(b.ep) + b.eo) & u8x16::splat(1);
         self.cp = a.cp.swizzle_dyn(b.cp);
-        const CO_MOD_SWIZZLE: u8x8 = u8x8::from_array([0, 1, 2, 0, 1, 2, 0, 0]);
         self.co = CO_MOD_SWIZZLE.swizzle_dyn(a.co.swizzle_dyn(b.cp) + b.co);
     }
 
@@ -158,7 +159,7 @@ impl Cube3Interface for Cube3 {
                 // Unoriented cycles
                 if i_oriented_corner_cycle_count != i_corner_cycle_count {
                     cycle_type_pointer += ((i_corner_cycle_count - i_oriented_corner_cycle_count)
-                        / i.get() as u32) as usize;
+                        / u32::from(i.get())) as usize;
                     if cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
                         || sorted_cycle_type[0][cycle_type_pointer - 1] != (i, false)
                     {
@@ -168,7 +169,8 @@ impl Cube3Interface for Cube3 {
 
                 // Oriented cycles
                 if i_oriented_corner_cycle_count != 0 {
-                    cycle_type_pointer += (i_oriented_corner_cycle_count / i.get() as u32) as usize;
+                    cycle_type_pointer +=
+                        (i_oriented_corner_cycle_count / u32::from(i.get())) as usize;
                     if cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
                         || sorted_cycle_type[0][cycle_type_pointer - 1] != (i, true)
                     {
@@ -216,7 +218,7 @@ impl Cube3Interface for Cube3 {
                 // Unoriented cycles
                 if i_oriented_edge_cycle_count != i_edge_cycle_count {
                     cycle_type_pointer += ((i_edge_cycle_count - i_oriented_edge_cycle_count)
-                        / i.get() as u32) as usize;
+                        / u32::from(i.get())) as usize;
                     if cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
                         || sorted_cycle_type[1][cycle_type_pointer - 1] != (i, false)
                     {
@@ -226,7 +228,8 @@ impl Cube3Interface for Cube3 {
 
                 // Oriented cycles
                 if i_oriented_edge_cycle_count != 0 {
-                    cycle_type_pointer += (i_oriented_edge_cycle_count / i.get() as u32) as usize;
+                    cycle_type_pointer +=
+                        (i_oriented_edge_cycle_count / u32::from(i.get())) as usize;
                     if cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
                         || sorted_cycle_type[1][cycle_type_pointer - 1] != (i, true)
                     {
@@ -398,12 +401,18 @@ impl Cube3 {
         for i in 0..12 {
             // SAFETY: ep is length 12, so i is always in bounds
             unsafe {
-                *self.ep.as_mut_array().get_unchecked_mut(a.ep[i] as usize) = i as u8;
+                *self
+                    .ep
+                    .as_mut_array()
+                    .get_unchecked_mut(a.ep[i as usize] as usize) = i;
             }
             if i < 8 {
                 // SAFETY: cp is length 8, so i is always in bounds
                 unsafe {
-                    *self.cp.as_mut_array().get_unchecked_mut(a.cp[i] as usize) = i as u8;
+                    *self
+                        .cp
+                        .as_mut_array()
+                        .get_unchecked_mut(a.cp[i as usize] as usize) = i;
                 }
             }
         }

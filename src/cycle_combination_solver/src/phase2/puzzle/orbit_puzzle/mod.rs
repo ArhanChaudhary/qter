@@ -58,11 +58,7 @@ impl PuzzleState for SliceOrbitPuzzle {
         todo!()
     }
 
-    fn exact_hash_orbit(
-        &self,
-        orbit_identifier: usize,
-        orbit_def: OrbitDef,
-    ) -> u64 {
+    fn exact_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64 {
         todo!()
     }
 

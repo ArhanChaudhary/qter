@@ -9,7 +9,7 @@ pub mod orbit_puzzle;
 pub mod slice_puzzle;
 
 /// The puzzle state interface at the heart of the cycle combination solver.
-/// Users may either use the generic `HeapPuzzle` implementor for any KSolve
+/// Users may either use the generic `HeapPuzzle` implementor for any `KSolve`
 /// definition or define fast puzzle-specific implementations, like Cube3.
 pub trait PuzzleState: Clone + PartialEq + Debug {
     /// A reusable multi bit vector type to hold temporary storage in
@@ -19,10 +19,13 @@ pub trait PuzzleState: Clone + PartialEq + Debug {
     /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
     fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv;
 
-    /// Try to create a puzzle state from a sorted transformation and sorted
-    /// orbit defs, checking if a puzzle state can be created from the orbit
-    /// defs. `sorted_transformations` is guaranteed to correspond to
+    /// Create a puzzle state from a sorted transformation and sorted
+    /// orbit defs. `sorted_transformations` most to correspond to
     /// `sorted_orbit_defs`.
+    ///
+    /// # Errors
+    ///
+    /// If a puzzle state cannot be created from the orbit
     fn try_from_transformation_meta(
         sorted_transformations: &[Vec<(u8, u8)>],
         sorted_orbit_defs: &[OrbitDef],
@@ -54,18 +57,10 @@ pub trait PuzzleState: Clone + PartialEq + Debug {
 
     /// Return an integer that corresponds to a bijective mapping of the orbit
     /// identifier's states.
-    fn exact_hash_orbit(
-        &self,
-        orbit_identifier: usize,
-        orbit_def: OrbitDef,
-    ) -> u64;
+    fn exact_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64;
 
     /// Return a representation of the puzzle state that can be soundly hashed.
-    fn approximate_hash_orbit(
-        &self,
-        orbit_identifier: usize,
-        orbit_def: OrbitDef,
-    ) -> impl Hash;
+    fn approximate_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> impl Hash;
 }
 
 pub trait MultiBvInterface {
@@ -135,14 +130,17 @@ impl<P: PuzzleState> Move<P> {
 }
 
 impl<P: PuzzleState> PuzzleDef<P> {
+    #[must_use]
     pub fn find_move(&self, name: &str) -> Option<&Move<P>> {
         self.moves.iter().find(|move_| move_.name == name)
     }
 
+    #[must_use]
     pub fn find_symmetry(&self, name: &str) -> Option<&Move<P>> {
         self.symmetries.iter().find(|move_| move_.name == name)
     }
 
+    #[must_use]
     pub fn new_solved_state(&self) -> P {
         solved_state_from_sorted_orbit_defs(&self.sorted_orbit_defs)
     }
@@ -165,6 +163,8 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
     type Error = KSolveConversionError;
 
     fn try_from(ksolve: &KSolve) -> Result<Self, Self::Error> {
+        const MAX_MOVE_POWER: usize = 1_000_000;
+
         let mut sorted_orbit_defs: Vec<OrbitDef> = ksolve
             .sets()
             .iter()
@@ -249,8 +249,6 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
             move_classes.push(move_class);
 
             let mut move_powers: Vec<P> = vec![];
-            const MAX_MOVE_POWER: usize = 1_000_000;
-
             for _ in 0..MAX_MOVE_POWER {
                 result_1.replace_compose(&result_2, &base_move.puzzle_state, &sorted_orbit_defs);
                 if result_1 == solved {
@@ -265,9 +263,11 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                 return Err(KSolveConversionError::MoveOrderTooHigh);
             }
 
-            let order = move_powers.len() as isize + 2;
+            // MAX_MOVE_POWER is way less than isize::MAX
+            let order = isize::try_from(move_powers.len()).unwrap() + 2;
             for (j, expanded_puzzle_state) in move_powers.into_iter().enumerate() {
-                let mut twist: isize = j as isize + 2;
+                // see above
+                let mut twist = isize::try_from(j).unwrap() + 2;
                 if order - twist < twist {
                     twist -= order;
                 }
@@ -321,6 +321,7 @@ impl MultiBvInterface for () {
     fn reusable_ref(&mut self) -> Self::MultiBvReusableRef<'_> {}
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub fn random_3x3_state<P: PuzzleState>(cube3_def: &PuzzleDef<P>, solved: &P) -> P {
     let mut result_1 = solved.clone();
     let mut result_2 = solved.clone();
@@ -334,6 +335,10 @@ pub fn random_3x3_state<P: PuzzleState>(cube3_def: &PuzzleDef<P>, solved: &P) ->
 }
 
 /// A utility function for testing. Not optimized.
+///
+/// # Panics
+///
+/// Panics if the move sequence is invalid.
 pub fn apply_moves<P: PuzzleState + Clone>(
     puzzle_def: &PuzzleDef<P>,
     puzzle_state: &P,

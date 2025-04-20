@@ -104,7 +104,7 @@ impl<'a, P: PuzzleState, T: PruningTables<P>> CycleTypeSolver<'a, P, T> {
             if next_fsm_state.is_none() {
                 next_entry_index = 0;
                 continue;
-            };
+            }
 
             // SAFETY:
             // 1) `pop_stack` is called for every `push_stack` call, so
@@ -148,7 +148,7 @@ impl<'a, P: PuzzleState, T: PruningTables<P>> CycleTypeSolver<'a, P, T> {
             .puzzle_state_history
             .resize_if_needed(depth as usize + 1);
         while mutable.solutions.is_empty() {
-            eprintln!("Searching depth {}...", depth);
+            eprintln!("Searching depth {depth}...");
             self.search_for_solution(&mut mutable, CanonicalFSMState::default(), 0, true, depth);
             mutable
                 .puzzle_state_history
@@ -280,7 +280,7 @@ mod tests {
         let start = Instant::now();
         let solutions = solver.solve::<[Cube3; 21]>();
         let duration = start.elapsed();
-        eprintln!("Time to find optimal cycle: {:?}", duration);
+        eprintln!("Time to find optimal cycle: {duration:?}");
         // for solution in solutions.iter() {
         //     for move_ in solution.iter() {
         //         print!("{} ", &move_.name);

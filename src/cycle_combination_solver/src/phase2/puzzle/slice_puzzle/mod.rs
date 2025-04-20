@@ -158,20 +158,20 @@ fn ksolve_move_to_slice_unchecked(
 ) {
     let mut i = 0;
     for (transformation, orbit_def) in sorted_transformations.iter().zip(sorted_orbit_defs.iter()) {
-        let piece_count = orbit_def.piece_count.get() as usize;
+        let piece_count = orbit_def.piece_count.get();
         // TODO: make this more efficient:
         // - zero orientation mod optimization (change next_orbit_identifier_slice too)
         // - avoid the transformation for identities entirely
         if transformation.is_empty() {
             for j in 0..piece_count {
-                orbit_states[i + j + piece_count] = 0;
-                orbit_states[i + j] = j as u8;
+                orbit_states[(i + j + piece_count) as usize] = 0;
+                orbit_states[(i + j) as usize] = j;
             }
         } else {
             for j in 0..piece_count {
-                let (perm, orientation_delta) = transformation[j];
-                orbit_states[i + j + piece_count] = orientation_delta;
-                orbit_states[i + j] = perm;
+                let (perm, orientation_delta) = transformation[j as usize];
+                orbit_states[(i + j + piece_count) as usize] = orientation_delta;
+                orbit_states[(i + j) as usize] = perm;
             }
         }
         i += piece_count * 2;
@@ -248,27 +248,29 @@ fn replace_inverse_slice(orbit_states_mut: &mut [u8], a: &[u8], sorted_orbit_def
         orientation_count,
     } in sorted_orbit_defs
     {
-        let piece_count = piece_count.get() as usize;
+        let piece_count = piece_count.get();
         // SAFETY: Permutation vectors and orientation vectors are shuffled
         // around, based on code from twsearch [1]. Testing has shown this is
         // sound.
         // [1] https://github.com/cubing/twsearch
         if orientation_count == 1.try_into().unwrap() {
             for i in 0..piece_count {
-                let base_i = base + i;
+                let base_i = (base + i) as usize;
                 unsafe {
-                    *orbit_states_mut.get_unchecked_mut(base + a[base_i] as usize) = i as u8;
-                    *orbit_states_mut.get_unchecked_mut(base + a[base_i] as usize + piece_count) =
-                        0;
+                    *orbit_states_mut.get_unchecked_mut((base + a[base_i]) as usize) = i;
+                    *orbit_states_mut
+                        .get_unchecked_mut((base + a[base_i] + piece_count) as usize) = 0;
                 }
             }
         } else {
             for i in 0..piece_count {
-                let base_i = base + i;
+                let base_i = (base + i) as usize;
                 unsafe {
-                    *orbit_states_mut.get_unchecked_mut(base + a[base_i] as usize) = i as u8;
-                    *orbit_states_mut.get_unchecked_mut(base + a[base_i] as usize + piece_count) =
-                        (orientation_count.get() - a[base_i + piece_count]) % orientation_count;
+                    *orbit_states_mut.get_unchecked_mut((base + a[base_i]) as usize) = i;
+                    *orbit_states_mut
+                        .get_unchecked_mut((base + a[base_i] + piece_count) as usize) =
+                        (orientation_count.get() - a[base_i + piece_count as usize])
+                            % orientation_count;
                 }
             }
         }
@@ -292,7 +294,7 @@ fn induces_sorted_cycle_type_slice(
     ) in sorted_orbit_defs.iter().zip(sorted_cycle_type.iter())
     {
         multi_bv.fill(0);
-        let mut covered_cycles_count = 0_u8;
+        let mut covered_cycles_count = 0;
         let piece_count = piece_count.get() as usize;
         for i in 0..piece_count {
             let (div, rem) = (i / 4, i % 4);
@@ -360,11 +362,11 @@ fn induces_sorted_cycle_type_slice(
             }
             covered_cycles_count += 1;
             // cannot possibly return true if this runs
-            if covered_cycles_count > partition.len() as u8 {
+            if covered_cycles_count > partition.len() {
                 return false;
             }
         }
-        if covered_cycles_count != partition.len() as u8 {
+        if covered_cycles_count != partition.len() {
             return false;
         }
         base += piece_count * 2;
@@ -392,6 +394,11 @@ fn orbit_bytes_slice(
 
 impl HeapPuzzle {
     /// Utility function for testing. Not optimized.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the generated cycle type is deemed to be invalid because of
+    /// bad implementation of the function.
     pub fn cycle_type(
         &self,
         sorted_orbit_defs: &[OrbitDef],
@@ -429,7 +436,7 @@ impl HeapPuzzle {
                 let actual_orients = orientation_sum % orientation_count != 0;
                 if actual_cycle_length != 1 || actual_orients {
                     cycle_type_piece
-                        .push((NonZeroU8::new(actual_cycle_length).unwrap(), actual_orients))
+                        .push((NonZeroU8::new(actual_cycle_length).unwrap(), actual_orients));
                 }
             }
             base += piece_count * 2;

@@ -116,7 +116,7 @@ pub struct CycleTypeOrbitPruningTable<S: StorageBackend<true>> {
 }
 
 /// This type isn't actually entirely useless; I will use it for tables that
-/// have no remaining allocable space (by the max_size_bytes option).
+/// have no remaining allocable space (by the `max_size_bytes` option).
 pub struct ZeroOrbitTable;
 
 #[derive(Error, Debug)]
@@ -152,7 +152,7 @@ pub enum StorageBackendTy {
 
 pub struct ZeroTable<P: PuzzleState>(std::marker::PhantomData<P>);
 
-use private::*;
+use private::OrbitPruneHeuristic;
 mod private {
     #[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
     pub struct OrbitPruneHeuristic(u8);
@@ -172,11 +172,11 @@ mod private {
             }
         }
 
-        pub fn is_vacant(&self) -> bool {
+        pub fn is_vacant(self) -> bool {
             self.0 == Self::VACANT
         }
 
-        pub fn get_occupied(&self) -> Option<u8> {
+        pub fn get_occupied(self) -> Option<u8> {
             if self.is_vacant() { None } else { Some(self.0) }
         }
     }
@@ -194,6 +194,7 @@ impl From<u64> for MaxSizeBytes {
 
 impl From<u64> for MaxEntires {
     fn from(value: u64) -> Self {
+        // this will be revamped
         MaxEntires(value as usize)
     }
 }
@@ -204,29 +205,23 @@ impl From<u64> for NullMeta {
     }
 }
 
-// taken from https://stackoverflow.com/a/64424328/12230735
-const fn factorial(n: u64) -> Option<u64> {
-    match n {
-        0 | 1 => Some(1),
-        2..=20 => match factorial(n - 1) {
-            Some(x) => Some(n * x),
-            None => None,
-        },
-        _ => None,
-    }
-}
-
 const FACT_UNTIL_20: [u64; 21] = {
     let mut arr = [0; 21];
-    let mut i = 0;
+    arr[0] = 1;
+    let mut i = 1;
     while i <= 20 {
-        arr[i as usize] = factorial(i).unwrap();
+        arr[i] = arr[i - 1] * i as u64;
         i += 1;
     }
     arr
 };
 
 impl<'a, P: PuzzleState> OrbitPruningTablesGenerateMeta<'a, P> {
+    /// Create a new `OrbitPruningTablesGenerateMeta` with the given parameters.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the length of `sorted_cycle_type` does not match
     pub fn new(
         puzzle_def: &'a PuzzleDef<P>,
         sorted_cycle_type: &'a [OrientedPartition],
@@ -246,6 +241,11 @@ impl<'a, P: PuzzleState> OrbitPruningTablesGenerateMeta<'a, P> {
         })
     }
 
+    /// Create a new `OrbitPruningTablesGenerateMeta` with the given parameters
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the length of `sorted_cycle_type` does not match
     pub fn new_with_table_types(
         puzzle_def: &'a PuzzleDef<P>,
         sorted_cycle_type: &'a [OrientedPartition],
@@ -407,14 +407,22 @@ impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend<EXA
     }
 
     fn heuristic_hash(&self, hash: u64) -> OrbitPruneHeuristic {
-        self.data[hash as usize]
+        #[allow(clippy::cast_possible_truncation)]
+        if EXACT {
+            self.data[hash as usize]
+        } else {
+            let hash = (hash % self.data.len() as u64) as usize;
+            self.data[hash]
+        }
     }
 
     fn set_heuristic_hash(&mut self, hash: u64, orbit_prune_heuristic: OrbitPruneHeuristic) {
+        #[allow(clippy::cast_possible_truncation)]
         if EXACT {
             self.data[hash as usize] = orbit_prune_heuristic;
         } else {
-            self.data[hash as usize] = self.heuristic_hash(hash).min(orbit_prune_heuristic);
+            let hash = (hash % self.data.len() as u64) as usize;
+            self.data[hash] = self.data[hash].min(orbit_prune_heuristic);
         }
     }
 
@@ -488,8 +496,8 @@ fn generate_exact_orbit_pruning_table<
 
     let entry_count = FACT_UNTIL_20[piece_count as usize]
         * u64::pow(
-            orbit_def.orientation_count.get() as u64,
-            piece_count as u32 - 1,
+            u64::from(orbit_def.orientation_count.get()),
+            u32::from(piece_count) - 1,
         );
     let used_size_bytes = entry_count;
 
@@ -538,8 +546,8 @@ fn generate_exact_orbit_pruning_table<
                 // TODO: is caching necessary?
                 let exact_orbit_hash = exact_perm_hash as u64
                     * u64::pow(
-                        orbit_def.orientation_count.get() as u64,
-                        piece_count as u32 - 1,
+                        u64::from(orbit_def.orientation_count.get()),
+                        u32::from(piece_count) - 1,
                     )
                     + exact_ori_hash as u64;
 
@@ -590,7 +598,7 @@ fn generate_exact_orbit_pruning_table<
 
 fn exact_hash_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def: OrbitDef) -> u64 {
     let piece_count = orbit_def.piece_count.get();
-    assert!(piece_count <= FACT_UNTIL_20.len() as u8);
+    assert!(piece_count as usize <= FACT_UNTIL_20.len());
 
     let mut exact_perm_hash = 0;
     for i in 0..piece_count {
@@ -605,16 +613,16 @@ fn exact_hash_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def: OrbitDef) -> u64 {
 
     let mut exact_ori_hash = 0;
     for i in 0..piece_count - 1 {
-        exact_ori_hash += ori[i as usize] as u64;
+        exact_ori_hash += u64::from(ori[i as usize]);
         if i != piece_count - 2 {
-            exact_ori_hash *= orbit_def.orientation_count.get() as u64;
+            exact_ori_hash *= u64::from(orbit_def.orientation_count.get());
         }
     }
 
     exact_perm_hash
         * u64::pow(
-            orbit_def.orientation_count.get() as u64,
-            piece_count as u32 - 1,
+            u64::from(orbit_def.orientation_count.get()),
+            u32::from(piece_count) - 1,
         )
         + exact_ori_hash
 }

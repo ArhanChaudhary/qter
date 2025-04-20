@@ -3,8 +3,8 @@ pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
     use crate::phase2::puzzle::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
-    use std::{fmt::Debug, num::NonZeroU8};
     use std::hash::Hash;
+    use std::{fmt::Debug, num::NonZeroU8};
 
     pub trait Cube3Interface: Clone + PartialEq + Debug {
         fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self;
@@ -79,7 +79,11 @@ mod common {
             self.exact_hash_orbit(orbit_identifier)
         }
 
-        fn approximate_hash_orbit(&self, orbit_identifier: usize, _orbit_def: OrbitDef) -> impl Hash {
+        fn approximate_hash_orbit(
+            &self,
+            orbit_identifier: usize,
+            _orbit_def: OrbitDef,
+        ) -> impl Hash {
             self.approximate_hash_orbit(orbit_identifier)
         }
     }

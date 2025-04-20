@@ -1,6 +1,6 @@
-//! Canonical canonical_fsm implementation, derived primarily from Lucas Garron's
-//! implementation in twsearch with permission:
-//! https://github.com/cubing/twsearch/blob/main/src/rs/_internal/canonical_fsm/canonical_fsm.rs
+//! Canonical finite state machine implementation, derived primarily from Lucas
+//! Garron's implementation in twsearch with permission:
+//! <https://github.com/cubing/twsearch/blob/main/src/rs/_internal/canonical_fsm/canonical_fsm.rs>
 
 use super::puzzle::{PuzzleDef, PuzzleState};
 use std::{collections::HashMap, num::NonZeroUsize};
@@ -101,15 +101,15 @@ impl<P: PuzzleState> From<&PuzzleDef<P>> for CanonicalFSM<P> {
                     }
                 }
 
-                next_state[move_class_index] = match mask_to_state.0.get(&next_state_mask) {
-                    Some(&state) => CanonicalFSMState::Some(state.try_into().unwrap()),
-                    None => {
+                next_state[move_class_index] =
+                    if let Some(&state) = mask_to_state.0.get(&next_state_mask) {
+                        CanonicalFSMState::Some(state.try_into().unwrap())
+                    } else {
                         let next_state = state_to_mask.0.len();
                         mask_to_state.0.insert(next_state_mask.clone(), next_state);
                         state_to_mask.0.push(next_state_mask);
                         CanonicalFSMState::Some(next_state.try_into().unwrap())
-                    }
-                };
+                    };
             }
             next_state_lookup.push(next_state);
         }
@@ -122,6 +122,7 @@ impl<P: PuzzleState> From<&PuzzleDef<P>> for CanonicalFSM<P> {
 }
 
 impl<P: PuzzleState> CanonicalFSM<P> {
+    #[must_use]
     pub fn next_state(
         &self,
         current_fsm_state: CanonicalFSMState,
@@ -281,11 +282,11 @@ mod tests {
                     if other_move_class_index <= move_class_index {
                         // a lesser multiple of the move class, not allowed to
                         // move the move class
-                        assert!(current_then_other.is_none())
+                        assert!(current_then_other.is_none());
                     } else {
                         // a greater multiple of the move class, allowed to move
                         // the move class
-                        assert!(current_then_other.is_some())
+                        assert!(current_then_other.is_some());
                     }
                 }
             }

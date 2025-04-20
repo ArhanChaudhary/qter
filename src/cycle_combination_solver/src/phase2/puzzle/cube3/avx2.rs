@@ -84,7 +84,7 @@ fn avx2_swizzle_lo(a: u8x32, b: u8x32) -> u8x32 {
     #[cfg(avx2)]
     // SAFETY: a and b are well defined. Honestly not sure why this is unsafe
     unsafe {
-        _mm256_shuffle_epi8(a.into(), b.into()).into()
+        _mm256_shuffle_epi8(a.into(), b.into()).into();
     }
     #[cfg(not(avx2))]
     unimplemented!()
@@ -164,11 +164,11 @@ impl Cube3Interface for Cube3 {
         }
         #[cfg(avx2)]
         extern "vectorcall" fn replace_inverse_vectorcall(dst: &mut Cube3, a: &Cube3) {
-            inner(dst, a)
+            inner(dst, a);
         }
         #[cfg(not(avx2))]
         fn replace_inverse_vectorcall(dst: &mut Cube3, a: &Cube3) {
-            inner(dst, a)
+            inner(dst, a);
         }
         replace_inverse_vectorcall(self, a);
     }
@@ -232,9 +232,9 @@ impl Cube3Interface for Cube3 {
 
                 // Unoriented cycles
                 if i_oriented_corner_cycle_count != i_corner_cycle_count {
-                    corner_cycle_type_pointer += ((i_corner_cycle_count
-                        - i_oriented_corner_cycle_count)
-                        / i.get() as u32) as usize;
+                    corner_cycle_type_pointer +=
+                        ((i_corner_cycle_count - i_oriented_corner_cycle_count)
+                            / u32::from(i.get())) as usize;
                     if corner_cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
                         || sorted_cycle_type[0][corner_cycle_type_pointer - 1] != (i, false)
                     {
@@ -245,7 +245,7 @@ impl Cube3Interface for Cube3 {
                 // Oriented cycles
                 if i_oriented_corner_cycle_count != 0 {
                     corner_cycle_type_pointer +=
-                        (i_oriented_corner_cycle_count / i.get() as u32) as usize;
+                        (i_oriented_corner_cycle_count / u32::from(i.get())) as usize;
                     if corner_cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
                         || sorted_cycle_type[0][corner_cycle_type_pointer - 1] != (i, true)
                     {
@@ -264,7 +264,8 @@ impl Cube3Interface for Cube3 {
                 // Unoriented cycles
                 if i_oriented_edge_cycle_count != i_edge_cycle_count {
                     edge_cycle_type_pointer += ((i_edge_cycle_count - i_oriented_edge_cycle_count)
-                        / i.get() as u32) as usize;
+                        / u32::from(i.get()))
+                        as usize;
                     if edge_cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
                         || sorted_cycle_type[1][edge_cycle_type_pointer - 1] != (i, false)
                     {
@@ -275,7 +276,7 @@ impl Cube3Interface for Cube3 {
                 // Oriented cycles
                 if i_oriented_edge_cycle_count != 0 {
                     edge_cycle_type_pointer +=
-                        (i_oriented_edge_cycle_count / i.get() as u32) as usize;
+                        (i_oriented_edge_cycle_count / u32::from(i.get())) as usize;
                     if edge_cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
                         || sorted_cycle_type[1][edge_cycle_type_pointer - 1] != (i, true)
                     {
@@ -349,11 +350,11 @@ impl Cube3 {
         }
         #[cfg(avx2)]
         extern "vectorcall" fn replace_inverse_brute_vectorcall(dst: &mut Cube3, a: &Cube3) {
-            inner(dst, a)
+            inner(dst, a);
         }
         #[cfg(not(avx2))]
         fn replace_inverse_brute_vectorcall(dst: &mut Cube3, a: &Cube3) {
-            inner(dst, a)
+            inner(dst, a);
         }
         replace_inverse_brute_vectorcall(self, a);
     }

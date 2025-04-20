@@ -97,7 +97,7 @@ impl<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> PuzzleStateHistory<P, H>
 
     /// Resize the underlying buffer capacity if needed.
     pub fn resize_if_needed(&mut self, max_stack_pointer: usize) {
-        H::resize_if_needed(&mut self.stack, max_stack_pointer)
+        H::resize_if_needed(&mut self.stack, max_stack_pointer);
     }
 
     /// Get the last state in the stack.
@@ -130,7 +130,7 @@ impl<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> PuzzleStateHistory<P, H>
         // I don't want to Rc it because that's a layer of indirection
         let mut move_sequence = Vec::with_capacity(self.stack_pointer);
         for i in 1..=self.stack_pointer {
-            move_sequence.push(puzzle_def.moves[self.stack[i].1].clone())
+            move_sequence.push(puzzle_def.moves[self.stack[i].1].clone());
         }
         move_sequence
     }
