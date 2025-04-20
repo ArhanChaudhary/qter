@@ -178,11 +178,7 @@ impl PuzzleState for Cube3Robot {
         true
     }
 
-    fn print(
-        &mut self,
-        facelets: &[usize],
-        generator: &Algorithm,
-    ) -> Option<Int<U>> {
+    fn print(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<Int<U>> {
         let before = self.puzzle_state().to_owned();
         let c = self.halt(facelets, generator)?;
         let mut exponentiated = generator.to_owned();
@@ -195,11 +191,7 @@ impl PuzzleState for Cube3Robot {
         Some(c)
     }
 
-    fn halt(
-        &mut self,
-        facelets: &[usize],
-        generator: &Algorithm,
-    ) -> Option<Int<U>> {
+    fn halt(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<Int<U>> {
         let mut sum = Int::<U>::zero();
 
         let chromatic_orders = generator.chromatic_orders_by_facelets();
@@ -351,8 +343,8 @@ impl Cube3Robot {
                             // io::stdin().read_line(&mut buffer).unwrap();
                             // rob_string = Some(buffer.trim().to_string());
                         }
-                    } else if ret.is_none() {
-                        if line.contains(expected2) {
+                    } else {
+                        if ret.is_none() && line.contains(expected2) {
                             match line[expected2.len()..].trim() {
                                 "Yes" => {
                                     ret = Some(self.puzzle_state_with_rob_string(
@@ -368,8 +360,9 @@ impl Cube3Robot {
                                 }
                             }
                         }
-                    } else if line.contains(ending) {
-                        break;
+                        if line.contains(ending) {
+                            break;
+                        }
                     }
                 }
                 if ret.is_none() {
