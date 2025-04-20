@@ -85,24 +85,21 @@ impl PuzzleState for Cube3Robot {
     fn compose_into(&mut self, alg: &Algorithm) {
         self.permutation = OnceCell::new();
 
-        // Never give the TUI algs longer than 20
-        for chunk in &alg.move_seq_iter().chunks(20) {
-            let moves_file_path = self.robot_path_buf.join("resource/testSequences/tmp.txt");
-            let mut moves_file = File::create(moves_file_path).unwrap();
-            let chunk = chunk.format(" ").to_string();
-            moves_file.write_all(chunk.as_bytes()).unwrap();
+        let moves_file_path = self.robot_path_buf.join("resource/testSequences/tmp.txt");
+        let mut moves_file = File::create(moves_file_path).unwrap();
+        let chunk = alg.move_seq_iter().format(" ").to_string();
+        moves_file.write_all(chunk.as_bytes()).unwrap();
 
-            self.robot_tui(
-                &["t", "1\n", "0\n"],
-                &["1. tmp.txt", "1. tmp.txt", "[  Esc  ] Exit Program"],
-                "[  Esc  ] Exit Program",
-            );
+        self.robot_tui(
+            &["t", "1\n", "0\n"],
+            &["1. tmp.txt", "1. tmp.txt", "[  Esc  ] Exit Program"],
+            "[  Esc  ] Exit Program",
+        );
 
-            eprintln!(
-                "Performing alg `{chunk}` at time {}",
-                Instant::now().duration_since(self.start).as_micros(),
-            );
-        }
+        eprintln!(
+            "Performing alg `{chunk}` at time {}",
+            Instant::now().duration_since(self.start).as_micros(),
+        );
     }
 
     fn initialize(perm_group: Arc<PermutationGroup>) -> Self {
