@@ -90,15 +90,15 @@ impl PuzzleState for Cube3Robot {
         let chunk = alg.move_seq_iter().format(" ").to_string();
         moves_file.write_all(chunk.as_bytes()).unwrap();
 
+        eprintln!(
+            "Performing alg `{chunk}` at time {}",
+            Instant::now().duration_since(self.start).as_micros(),
+        );
+
         self.robot_tui(
             &["t", "1\n", "0\n"],
             &["1. tmp.txt", "1. tmp.txt", "[  Esc  ] Exit Program"],
             "[  Esc  ] Exit Program",
-        );
-
-        eprintln!(
-            "Performing alg `{chunk}` at time {}",
-            Instant::now().duration_since(self.start).as_micros(),
         );
     }
 
