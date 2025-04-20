@@ -209,17 +209,17 @@ fn interpret_traced<P: PuzzleState>(
     let pad_amount = ((interpreter.program().instructions.len() - 1).ilog10() + 1) as usize;
 
     loop {
-        if trace_level >= 3 {
-            let mut program_counter = interpreter.program_counter().to_string();
+        let mut program_counter = interpreter.program_counter().to_string();
 
+        let action = interpreter.step();
+
+        if trace_level >= 3 {
             while program_counter.len() < pad_amount {
                 program_counter.push(' ');
             }
 
             eprint!("{} | ", program_counter);
         }
-
-        let action = interpreter.step();
 
         let mut should_give_input = false;
         let mut halted = false;
