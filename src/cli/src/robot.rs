@@ -196,6 +196,7 @@ impl PuzzleState for Cube3Robot {
     }
 
     fn halt(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<Int<U>> {
+        eprintln!("Halting!");
         let mut sum = Int::<U>::zero();
 
         let chromatic_orders = generator.chromatic_orders_by_facelets();
@@ -322,6 +323,7 @@ impl Cube3Robot {
 
     fn puzzle_state(&self) -> &Permutation {
         let perm = self.permutation.get_or_init(|| {
+            eprintln!("Taking a new picture");
             let mut robot_stdin = self.robot_stdin.borrow_mut();
             let mut robot_stdout = self.robot_stdout.borrow_mut();
             let mut robot_stdout = BufReader::new(&mut *robot_stdout);
@@ -377,6 +379,7 @@ impl Cube3Robot {
             ret.unwrap()
         });
 
+        eprintln!("Found: {:?}", perm);
         if perm != &self.expected_perm {
             eprintln!(
                 "WARNING: The cube state found by the robot is different than what is expected."
