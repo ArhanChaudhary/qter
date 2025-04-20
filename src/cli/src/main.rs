@@ -7,11 +7,13 @@ use color_eyre::{
 };
 use compiler::compile;
 use internment::ArcIntern;
-use interpreter::{ActionPerformed, ExecutionState, Interpreter, PausedState, PuzzleState};
+use interpreter::{
+    ActionPerformed, ExecutionState, Interpreter, PausedState, PuzzleState, SimulatedPuzzle,
+};
 use itertools::Itertools;
 use qter_core::{
     I, Int,
-    architectures::{Algorithm, Permutation},
+    architectures::Algorithm,
     table_encoding::{decode_table, encode_table},
 };
 use robot::Cube3Robot;
@@ -103,7 +105,7 @@ fn main() -> color_eyre::Result<()> {
                 let interpreter = Interpreter::<Cube3Robot>::new(program);
                 interpret(interpreter, trace_level)?;
             } else {
-                let interpreter = Interpreter::<Permutation>::new(program);
+                let interpreter = Interpreter::<SimulatedPuzzle>::new(program);
                 interpret(interpreter, trace_level)?;
             }
         }
@@ -203,7 +205,7 @@ fn interpret_traced<P: PuzzleState>(
     mut interpreter: Interpreter<P>,
     trace_level: u8,
 ) -> color_eyre::Result<()> {
-    // FIXME: remove padding 
+    // FIXME: remove padding
     let pad_amount = ((interpreter.program().instructions.len() - 1).ilog10() + 1) as usize;
 
     loop {

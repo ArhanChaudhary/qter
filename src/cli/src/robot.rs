@@ -6,11 +6,16 @@ use std::{
     path::PathBuf,
     process::{ChildStdin, ChildStdout, Command, Stdio},
     sync::{Arc, OnceLock},
+    time::Instant,
 };
 
 use interpreter::PuzzleState;
 use itertools::Itertools;
-use qter_core::architectures::{Algorithm, Permutation, PermutationGroup};
+use qter_core::{
+    Int, U,
+    architectures::{Algorithm, Permutation, PermutationGroup},
+    discrete_math::lcm_iter,
+};
 
 const ROB_CORNLETS: [[usize; 3]; 8] = [
     [8, 9, 20],
@@ -72,83 +77,35 @@ pub struct Cube3Robot {
     robot_stdin: RefCell<ChildStdin>,
     robot_stdout: RefCell<ChildStdout>,
     robot_path_buf: PathBuf,
+    perm_group: Arc<PermutationGroup>,
+    start: Instant,
 }
 
 impl PuzzleState for Cube3Robot {
     fn compose_into(&mut self, alg: &Algorithm) {
-        let moves_file_path = self.robot_path_buf.join("resource/testSequences/tmp.txt");
-        let mut moves_file = File::create(moves_file_path).unwrap();
-        moves_file
-            .write_all(alg.move_seq_iter().format(" ").to_string().as_bytes())
-            .unwrap();
-
-        self.robot_tui(
-            &["t", "1\n", "0\n"],
-            &["1. tmp.txt", "1. tmp.txt", "[  Esc  ] Exit Program"],
-            "[  Esc  ] Exit Program",
-        );
-
         self.permutation = OnceCell::new();
+
+        // Never give the TUI algs longer than 20
+        for chunk in &alg.move_seq_iter().chunks(20) {
+            let moves_file_path = self.robot_path_buf.join("resource/testSequences/tmp.txt");
+            let mut moves_file = File::create(moves_file_path).unwrap();
+            let chunk = chunk.format(" ").to_string();
+            moves_file.write_all(chunk.as_bytes()).unwrap();
+
+            self.robot_tui(
+                &["t", "1\n", "0\n"],
+                &["1. tmp.txt", "1. tmp.txt", "[  Esc  ] Exit Program"],
+                "[  Esc  ] Exit Program",
+            );
+
+            eprintln!(
+                "Performing alg `{chunk}` at time {}",
+                Instant::now().duration_since(self.start).as_micros(),
+            );
+        }
     }
 
-    fn puzzle_state(&self) -> &Permutation {
-        self.permutation.get_or_init(|| {
-            let mut robot_stdin = self.robot_stdin.borrow_mut();
-            let mut robot_stdout = self.robot_stdout.borrow_mut();
-            let mut robot_stdout = BufReader::new(&mut *robot_stdout);
-
-            let in_ = "c";
-            let expected1 = "Current Cube State String:";
-            let expected2 = "Is legal cube state?:";
-            let ending = "[  Esc  ] Exit Program";
-            let mut ret = None;
-
-            while ret.is_none() {
-                qter_debug(in_);
-                robot_stdin.write_all(in_.as_bytes()).unwrap();
-                robot_stdin.flush().unwrap();
-
-                let mut rob_string = None;
-                for line in robot_stdout.by_ref().lines().map(|line| line.unwrap()) {
-                    robot_debug(&line);
-                    if rob_string.is_none() && ret.is_none() {
-                        if line.contains(expected1) {
-                            rob_string = Some(line[expected1.len()..].trim().to_string());
-                            // let mut buffer = String::new();
-                            // io::stdin().read_line(&mut buffer).unwrap();
-                            // rob_string = Some(buffer.trim().to_string());
-                        }
-                    } else if ret.is_none() {
-                        if line.contains(expected2) {
-                            match line[expected2.len()..].trim() {
-                                "Yes" => {
-                                    ret = Some(self.puzzle_state_with_rob_string(
-                                        rob_string.as_ref().unwrap(),
-                                    ));
-                                }
-                                "No" => (),
-                                _ => {
-                                    panic!(
-                                        "Expected 'Yes' or 'No' as output from robot at {:?}",
-                                        line
-                                    );
-                                }
-                            }
-                        }
-                    } else if line.contains(ending) {
-                        break;
-                    }
-                }
-                if ret.is_none() {
-                    eprintln!("qter: Invalid cube state, retrying photo...");
-                }
-            }
-
-            ret.unwrap()
-        })
-    }
-
-    fn identity(_perm_group: Arc<PermutationGroup>) -> Self {
+    fn initialize(perm_group: Arc<PermutationGroup>) -> Self {
         init_mapping();
 
         println!("Robot debugging? (y/n)");
@@ -187,6 +144,8 @@ impl PuzzleState for Cube3Robot {
             robot_stdin,
             robot_stdout,
             robot_path_buf,
+            perm_group,
+            start: Instant::now(),
         };
 
         ret.robot_tui(
@@ -200,6 +159,69 @@ impl PuzzleState for Cube3Robot {
             "[   C   ] Print Cube State",
         );
         ret
+    }
+
+    fn facelets_solved(&self, facelets: &[usize]) -> bool {
+        eprintln!(
+            "Solved-goto of `{facelets:?}` at time {}",
+            Instant::now().duration_since(self.start).as_micros(),
+        );
+
+        let state = self.puzzle_state();
+
+        for &facelet in facelets {
+            let maps_to = state.mapping()[facelet];
+            if self.perm_group.facelet_colors()[maps_to]
+                != self.perm_group.facelet_colors()[facelet]
+            {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    fn print(
+        &mut self,
+        facelets: &[usize],
+        generator: &Algorithm,
+    ) -> Option<qter_core::Int<qter_core::U>> {
+        let before = self.puzzle_state().to_owned();
+        let c = self.halt(facelets, generator)?;
+        let mut exponentiated = generator.to_owned();
+        exponentiated.exponentiate(c.into());
+        self.compose_into(&exponentiated);
+        if &before != self.puzzle_state() {
+            eprintln!("Printing did not return the cube to the original state!");
+            return None;
+        }
+        Some(c)
+    }
+
+    fn halt(
+        &mut self,
+        facelets: &[usize],
+        generator: &Algorithm,
+    ) -> Option<qter_core::Int<qter_core::U>> {
+        let mut sum = Int::<U>::zero();
+
+        let chromatic_orders = generator.chromatic_orders_by_facelets();
+        let order = lcm_iter(facelets.iter().map(|i| chromatic_orders[*i]));
+
+        while !self.facelets_solved(facelets) {
+            sum += Int::<U>::one();
+
+            if sum >= order {
+                eprintln!(
+                    "Decoding failure! Performed as many cycles as the size of the register."
+                );
+                return None;
+            }
+
+            self.compose_into(generator);
+        }
+
+        Some(sum)
     }
 }
 
@@ -305,6 +327,63 @@ impl Cube3Robot {
         }
     }
 
+    fn puzzle_state(&self) -> &Permutation {
+        self.permutation.get_or_init(|| {
+            let mut robot_stdin = self.robot_stdin.borrow_mut();
+            let mut robot_stdout = self.robot_stdout.borrow_mut();
+            let mut robot_stdout = BufReader::new(&mut *robot_stdout);
+
+            let in_ = "c";
+            let expected1 = "Current Cube State String:";
+            let expected2 = "Is legal cube state?:";
+            let ending = "[  Esc  ] Exit Program";
+            let mut ret = None;
+
+            while ret.is_none() {
+                qter_debug(in_);
+                robot_stdin.write_all(in_.as_bytes()).unwrap();
+                robot_stdin.flush().unwrap();
+
+                let mut rob_string = None;
+                for line in robot_stdout.by_ref().lines().map(|line| line.unwrap()) {
+                    robot_debug(&line);
+                    if rob_string.is_none() && ret.is_none() {
+                        if line.contains(expected1) {
+                            rob_string = Some(line[expected1.len()..].trim().to_string());
+                            // let mut buffer = String::new();
+                            // io::stdin().read_line(&mut buffer).unwrap();
+                            // rob_string = Some(buffer.trim().to_string());
+                        }
+                    } else if ret.is_none() {
+                        if line.contains(expected2) {
+                            match line[expected2.len()..].trim() {
+                                "Yes" => {
+                                    ret = Some(self.puzzle_state_with_rob_string(
+                                        rob_string.as_ref().unwrap(),
+                                    ));
+                                }
+                                "No" => (),
+                                _ => {
+                                    panic!(
+                                        "Expected 'Yes' or 'No' as output from robot at {:?}",
+                                        line
+                                    );
+                                }
+                            }
+                        }
+                    } else if line.contains(ending) {
+                        break;
+                    }
+                }
+                if ret.is_none() {
+                    eprintln!("qter: Invalid cube state, retrying photo...");
+                }
+            }
+
+            ret.unwrap()
+        })
+    }
+
     fn puzzle_state_with_rob_string(&self, rob_string: &str) -> Permutation {
         assert_eq!(rob_string.len(), 54);
 
@@ -346,6 +425,7 @@ impl Cube3Robot {
 mod tests {
     use super::*;
     use internment::ArcIntern;
+    use interpreter::SimulatedPuzzle;
     use qter_core::architectures::PuzzleDefinition;
 
     #[ignore]
@@ -355,8 +435,8 @@ mod tests {
             .unwrap()
             .perm_group;
 
-        let solved = Permutation::identity(Arc::clone(&perm_group));
-        let mut actual = Cube3Robot::identity(Arc::clone(&perm_group));
+        let solved = SimulatedPuzzle::initialize(Arc::clone(&perm_group));
+        let mut actual = Cube3Robot::initialize(Arc::clone(&perm_group));
 
         for [seq, rob_string] in [
             ["", "UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB"],
