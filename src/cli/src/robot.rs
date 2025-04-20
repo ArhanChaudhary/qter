@@ -196,6 +196,8 @@ impl PuzzleState for Cube3Robot {
     }
 
     fn halt(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<Int<U>> {
+        let mut generator = generator.to_owned();
+        generator.exponentiate(-Int::<U>::one());
         eprintln!("Halting!");
         let mut sum = Int::<U>::zero();
 
@@ -212,7 +214,7 @@ impl PuzzleState for Cube3Robot {
                 return None;
             }
 
-            self.compose_into(generator);
+            self.compose_into(&generator);
         }
 
         Some(sum)
