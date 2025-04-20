@@ -78,12 +78,15 @@ pub struct Cube3Robot {
     robot_stdout: RefCell<ChildStdout>,
     robot_path_buf: PathBuf,
     perm_group: Arc<PermutationGroup>,
+    expected_perm: Permutation,
     start: Instant,
 }
 
 impl PuzzleState for Cube3Robot {
     fn compose_into(&mut self, alg: &Algorithm) {
         self.permutation = OnceCell::new();
+
+        self.expected_perm.compose(alg.permutation());
 
         let moves_file_path = self.robot_path_buf.join("resource/testSequences/tmp.txt");
         let mut moves_file = File::create(moves_file_path).unwrap();
@@ -141,6 +144,7 @@ impl PuzzleState for Cube3Robot {
             robot_stdin,
             robot_stdout,
             robot_path_buf,
+            expected_perm: perm_group.identity(),
             perm_group,
             start: Instant::now(),
         };
@@ -317,7 +321,7 @@ impl Cube3Robot {
     }
 
     fn puzzle_state(&self) -> &Permutation {
-        self.permutation.get_or_init(|| {
+        let perm = self.permutation.get_or_init(|| {
             let mut robot_stdin = self.robot_stdin.borrow_mut();
             let mut robot_stdout = self.robot_stdout.borrow_mut();
             let mut robot_stdout = BufReader::new(&mut *robot_stdout);
@@ -371,7 +375,17 @@ impl Cube3Robot {
             }
 
             ret.unwrap()
-        })
+        });
+
+        if perm != &self.expected_perm {
+            eprintln!(
+                "WARNING: The cube state found by the robot is different than what is expected."
+            );
+            eprintln!("Expected: {:?}", self.expected_perm);
+            eprintln!("Found: {:?}", perm);
+        }
+
+        perm
     }
 
     fn puzzle_state_with_rob_string(&self, rob_string: &str) -> Permutation {
