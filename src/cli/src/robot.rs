@@ -128,7 +128,7 @@ impl PuzzleState for Cube3Robot {
             .stdout(Stdio::piped());
 
         if debug {
-            robot_command.arg("-noCameras"); //.arg("-debug");
+            robot_command.arg("-noCameras").arg("-debug");
         }
 
         #[allow(clippy::zombie_processes)]
@@ -182,7 +182,7 @@ impl PuzzleState for Cube3Robot {
         &mut self,
         facelets: &[usize],
         generator: &Algorithm,
-    ) -> Option<qter_core::Int<qter_core::U>> {
+    ) -> Option<Int<U>> {
         let before = self.puzzle_state().to_owned();
         let c = self.halt(facelets, generator)?;
         let mut exponentiated = generator.to_owned();
@@ -199,11 +199,11 @@ impl PuzzleState for Cube3Robot {
         &mut self,
         facelets: &[usize],
         generator: &Algorithm,
-    ) -> Option<qter_core::Int<qter_core::U>> {
+    ) -> Option<Int<U>> {
         let mut sum = Int::<U>::zero();
 
         let chromatic_orders = generator.chromatic_orders_by_facelets();
-        let order = lcm_iter(facelets.iter().map(|i| chromatic_orders[*i]));
+        let order = lcm_iter(facelets.iter().map(|&i| chromatic_orders[i]));
 
         while !self.facelets_solved(facelets) {
             sum += Int::<U>::one();
@@ -684,7 +684,6 @@ mod tests {
             )
             .unwrap();
             expected.compose_into(&alg);
-            actual.compose_into(&alg);
 
             assert_eq!(
                 expected.puzzle_state().mapping(),
