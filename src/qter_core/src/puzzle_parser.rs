@@ -66,7 +66,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
         }
     }
 
-    for color in colors.iter() {
+    for color in &colors {
         if color.is_empty() {
             return Err(Box::new(Error::new_from_span(
                 pest::error::ErrorVariant::CustomError {
@@ -141,19 +141,16 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
         };
 
         for pair in pairs {
-            let next_permutation = match generators.get(&ArcIntern::from(pair.as_str())) {
-                Some(v) => v,
-                None => {
-                    return Err(Box::new(Error::new_from_span(
-                        pest::error::ErrorVariant::CustomError {
-                            message: format!(
-                                "The permutation {} doesn't exist",
-                                permutation_name.as_str(),
-                            ),
-                        },
-                        permutation_name.as_span(),
-                    )));
-                }
+            let Some(next_permutation) = generators.get(&ArcIntern::from(pair.as_str())) else {
+                return Err(Box::new(Error::new_from_span(
+                    pest::error::ErrorVariant::CustomError {
+                        message: format!(
+                            "The permutation {} doesn't exist",
+                            permutation_name.as_str(),
+                        ),
+                    },
+                    permutation_name.as_span(),
+                )));
             };
 
             permutation.compose(next_permutation);

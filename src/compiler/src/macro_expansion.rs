@@ -28,7 +28,10 @@ pub fn expand(mut parsed: ParsedSyntax) -> Result<ExpandedCode, Box<Error<Rule>>
                 let expanded = match instruction {
                     Instruction::Label(label) => ExpandedCodeComponent::Label(label),
                     Instruction::Code(Code::Primitive(primitive)) => {
-                        ExpandedCodeComponent::Instruction(primitive, maybe_block_id.unwrap())
+                        ExpandedCodeComponent::Instruction(
+                            Box::new(primitive),
+                            maybe_block_id.unwrap(),
+                        )
                     }
                     illegal => unreachable!("{illegal:?}"),
                 };
@@ -74,7 +77,7 @@ fn expand_block(
                         let _ = changed.set(());
                     }
 
-                    block_info.labels.push(label.to_owned());
+                    block_info.labels.push(label.clone());
 
                     vec![Ok(WithSpan::new(
                         (Instruction::Label(label), maybe_block_id),
@@ -96,26 +99,24 @@ fn expand_block(
 
                     vec![]
                 }
-                Instruction::Registers(decl) => match block_info.registers {
-                    Some(_) => {
+                Instruction::Registers(decl) => {
+                    if block_info.registers.is_some() {
                         vec![Err(mk_error(
                             "Cannot have multiple register declarations in the same scope!",
                             span,
                         ))]
-                    }
-
-                    None => {
+                    } else {
                         block_info.registers = Some(decl);
                         let _ = changed.set(());
                         vec![]
                     }
-                },
+                }
                 Instruction::Code(code) => {
                     match expand_code(block_id, expansion_info, code, &changed) {
                         Ok(tagged_instructions) => tagged_instructions
                             .into_iter()
                             .map(|tagged_instruction| {
-                                Ok(WithSpan::new(tagged_instruction, span.to_owned()))
+                                Ok(WithSpan::new(tagged_instruction, span.clone()))
                             })
                             .collect_vec(),
                         Err(e) => vec![Err(e)],
@@ -148,17 +149,14 @@ fn expand_code(
 
     let _ = changed.set(());
 
-    let macro_access = match expansion_info.available_macros.get(&(
+    let Some(macro_access) = expansion_info.available_macros.get(&(
         macro_call.name.span().source(),
         ArcIntern::clone(&*macro_call.name),
-    )) {
-        Some(macro_name) => macro_name,
-        None => {
-            return Err(mk_error(
-                "Macro was not found in this scope",
-                macro_call.name.span(),
-            ));
-        }
+    )) else {
+        return Err(mk_error(
+            "Macro was not found in this scope",
+            macro_call.name.span(),
+        ));
     };
 
     let macro_def = expansion_info

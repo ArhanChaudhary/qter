@@ -1,3 +1,6 @@
+#![warn(clippy::pedantic)]
+#![allow(clippy::too_many_lines)]
+
 use edge_cloud::EdgeCloud;
 use itertools::Itertools;
 use ksolve::KSolve;
@@ -19,7 +22,7 @@ const E: f64 = 1e-9;
 type PuzzleDescriptionString<'a> = &'a str;
 
 #[derive(Error, Debug)]
-pub enum Error {
+pub enum PuzzleGeometryError {
     #[error("The vertices of the face are not coplanar: {0:?}")]
     FaceNotCoplanar(Face),
     #[error("The face forms a line or a point rather than a plane: {0:?}")]
@@ -70,7 +73,7 @@ fn rotation_of_degree(axis: Vector3<f64>, symm: u8) -> Matrix3<f64> {
 
     Rotation3::from_axis_angle(
         &Unit::new_normalize(axis),
-        core::f64::consts::TAU / (symm as f64),
+        core::f64::consts::TAU / f64::from(symm),
     )
     .into()
 }
@@ -80,6 +83,7 @@ pub struct Face(pub Vec<Point>);
 
 impl Face {
     /// Rotate the face around the origin with the given axis and symmetry
+    #[must_use]
     pub fn rotated(mut self, axis: Vector3<f64>, symmetry: u8) -> Face {
         let rotation = rotation_of_degree(axis, symmetry);
 
@@ -90,11 +94,11 @@ impl Face {
         self
     }
 
-    fn is_valid(&self) -> Result<(), Error> {
+    fn is_valid(&self) -> Result<(), PuzzleGeometryError> {
         // TEST DEGENERACY
 
         if self.0.len() <= 2 {
-            return Err(Error::FaceIsDegenerate(self.to_owned()));
+            return Err(PuzzleGeometryError::FaceIsDegenerate(self.to_owned()));
         }
 
         let origin = self.0[0].0;
@@ -106,7 +110,7 @@ impl Face {
         for point in self.0.iter().skip(2) {
             let offsetted = point.0 - origin;
             if (line_proj * offsetted).metric_distance(&offsetted) < E {
-                return Err(Error::FaceIsDegenerate(self.to_owned()));
+                return Err(PuzzleGeometryError::FaceIsDegenerate(self.to_owned()));
             }
         }
 
@@ -126,7 +130,7 @@ impl Face {
         for point in self.0.iter().skip(3) {
             let offsetted = point.0 - origin;
             if (plane_proj * offsetted).metric_distance(&offsetted) >= E {
-                return Err(Error::FaceNotCoplanar(self.to_owned()));
+                return Err(PuzzleGeometryError::FaceNotCoplanar(self.to_owned()));
             }
         }
 
@@ -162,11 +166,13 @@ pub struct PuzzleGeometry {}
 
 impl PuzzleGeometry {
     /// Get the puzzle as a permutation group over facelets
+    #[must_use]
     pub fn permutation_group(&self) -> &PermutationGroup {
         todo!()
     }
 
-    /// Get the puzzle in its KSolve representation
+    /// Get the puzzle in its `KSolve` representation
+    #[must_use]
     pub fn ksolve(&self) -> &KSolve {
         // Note: the KSolve permutation vector is **1-indexed**. See the test
         // cases for examples. It also exposes `zero_indexed_transformation` as
@@ -175,8 +181,14 @@ impl PuzzleGeometry {
     }
 }
 
-impl<'a> PuzzleGeometryDefinition<'a> {
-    pub fn geometry(mut self) -> Result<PuzzleGeometry, Error> {
+impl PuzzleGeometryDefinition<'_> {
+    /// Consume a `PuzzleGeometryDefinition` and return a `PuzzleGeometry`
+    ///
+    /// # Errors
+    ///
+    /// If the validity of the faces is not satisfied, or if the puzzle does
+    /// not have the expected symmetries, this function will return an error.
+    pub fn geometry(mut self) -> Result<PuzzleGeometry, PuzzleGeometryError> {
         for face in &self.polyhedron.0 {
             face.is_valid()?;
         }
@@ -186,42 +198,42 @@ impl<'a> PuzzleGeometryDefinition<'a> {
         Ok(PuzzleGeometry {})
     }
 
-    fn find_symmetries(&mut self) -> Result<(), Error> {
+    fn find_symmetries(&mut self) -> Result<(), PuzzleGeometryError> {
         let cloud = self.edge_cloud();
-        let mut into = cloud.to_owned();
+        let mut into = cloud.clone();
 
         for cut in &mut self.cut_axes {
-            match cut.expected_symmetry {
-                Some(symm) => {
-                    let matrix = rotation_of_degree(*cut.normal, symm);
+            if let Some(symm) = cut.expected_symmetry {
+                let matrix = rotation_of_degree(*cut.normal, symm);
 
-                    if !cloud.try_symmetry(&mut into, matrix) {
-                        return Err(Error::PuzzleLacksExpectedSymmetry(*cut.normal, symm));
+                if !cloud.try_symmetry(&mut into, matrix) {
+                    return Err(PuzzleGeometryError::PuzzleLacksExpectedSymmetry(
+                        *cut.normal,
+                        symm,
+                    ));
+                }
+            } else {
+                let mut min_symm = 1_u8;
+                let mut trying_symm = 1_u8;
+
+                loop {
+                    trying_symm = match trying_symm.checked_add(min_symm) {
+                        Some(new_symm) => new_symm,
+                        None => break,
+                    };
+
+                    let matrix = rotation_of_degree(*cut.normal, trying_symm);
+
+                    if cloud.try_symmetry(&mut into, matrix) {
+                        min_symm = trying_symm;
                     }
                 }
-                None => {
-                    let mut min_symm = 1_u8;
-                    let mut trying_symm = 1_u8;
 
-                    loop {
-                        trying_symm = match trying_symm.checked_add(min_symm) {
-                            Some(new_symm) => new_symm,
-                            None => break,
-                        };
-
-                        let matrix = rotation_of_degree(*cut.normal, trying_symm);
-
-                        if cloud.try_symmetry(&mut into, matrix) {
-                            min_symm = trying_symm;
-                        }
-                    }
-
-                    cut.expected_symmetry = Some(min_symm);
-                }
+                cut.expected_symmetry = Some(min_symm);
             }
 
             if cut.expected_symmetry.unwrap() <= 1 {
-                return Err(Error::PuzzleLacksSymmetry(*cut.normal));
+                return Err(PuzzleGeometryError::PuzzleLacksSymmetry(*cut.normal));
             }
         }
 
@@ -262,7 +274,8 @@ impl<'a> PuzzleGeometryDefinition<'a> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        CutAxis, CutAxisNames, Error, Face, Point, Polyhedron, PuzzleGeometryDefinition,
+        CutAxis, CutAxisNames, Face, Point, Polyhedron, PuzzleGeometryDefinition,
+        PuzzleGeometryError,
         shapes::{CUBE, TETRAHEDRON},
     };
     use nalgebra::{Rotation3, Unit, Vector3};
@@ -270,14 +283,20 @@ mod tests {
     #[test]
     fn degeneracy() {
         let valid = Face(vec![Point(Vector3::new(1., 2., 3.))]).is_valid();
-        assert!(matches!(valid, Err(Error::FaceIsDegenerate(_))));
+        assert!(matches!(
+            valid,
+            Err(PuzzleGeometryError::FaceIsDegenerate(_))
+        ));
 
         let valid = Face(vec![
             Point(Vector3::new(1., 2., 3.)),
             Point(Vector3::new(5., 4., 3.)),
         ])
         .is_valid();
-        assert!(matches!(valid, Err(Error::FaceIsDegenerate(_))));
+        assert!(matches!(
+            valid,
+            Err(PuzzleGeometryError::FaceIsDegenerate(_))
+        ));
 
         let valid = Face(vec![
             Point(Vector3::new(2., 2., 3.)),
@@ -285,7 +304,10 @@ mod tests {
             Point(Vector3::new(4., 6., 9.)),
         ])
         .is_valid();
-        assert!(matches!(valid, Err(Error::FaceIsDegenerate(_))));
+        assert!(matches!(
+            valid,
+            Err(PuzzleGeometryError::FaceIsDegenerate(_))
+        ));
     }
 
     #[test]
@@ -298,7 +320,10 @@ mod tests {
         ])
         .is_valid();
 
-        assert!(matches!(valid, Err(Error::FaceNotCoplanar(_))));
+        assert!(matches!(
+            valid,
+            Err(PuzzleGeometryError::FaceNotCoplanar(_))
+        ));
 
         let valid = Face(vec![
             Point(Vector3::new(1., 1., 1.)),

@@ -63,10 +63,17 @@ pub struct Span {
 }
 
 impl Span {
+    #[must_use]
     pub fn from_span(span: pest::Span) -> Span {
         Span::new(ArcIntern::from(span.get_input()), span.start(), span.end())
     }
 
+    /// Creates a new `Span` from the given source and start/end positions
+    ///
+    /// # Panics
+    ///
+    /// Panics if the start or end positions are out of bounds, or if the start is greater than the end
+    #[must_use]
     pub fn new(source: ArcIntern<str>, start: usize, end: usize) -> Span {
         assert!(start <= end);
         assert!(start < source.len());
@@ -110,6 +117,7 @@ impl Span {
         self.line_and_col().1
     }
 
+    #[must_use]
     pub fn after(mut self) -> Span {
         self.start = self.end;
         self
@@ -119,6 +127,12 @@ impl Span {
         ArcIntern::clone(&self.source)
     }
 
+    /// Merges two spans into one, keeping the earliest start and latest end
+    ///
+    /// # Panics
+    ///
+    /// Panics if the two spans are from different sources
+    #[must_use]
     pub fn merge(self, other: &Span) -> Span {
         assert_eq!(self.source, other.source);
 
@@ -209,6 +223,6 @@ impl<T: Eq> Eq for WithSpan<T> {}
 
 impl<T: core::hash::Hash> core::hash::Hash for WithSpan<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.value.hash(state)
+        self.value.hash(state);
     }
 }

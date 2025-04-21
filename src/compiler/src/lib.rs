@@ -1,3 +1,9 @@
+#![warn(clippy::pedantic)]
+#![allow(
+    clippy::too_many_lines,
+    clippy::similar_names
+)]
+
 use std::{collections::HashMap, sync::Arc};
 
 use internment::ArcIntern;
@@ -15,6 +21,11 @@ mod macro_expansion;
 mod parsing;
 mod strip_expanded;
 
+/// Compiles a QAT program into a Q program
+///
+/// # Errors
+///
+/// Returns an error if the QAT program is invalid or if the macro expansion fails
 pub fn compile(
     qat: &str,
     find_import: impl Fn(&str) -> Result<ArcIntern<str>, String>,
@@ -75,7 +86,7 @@ impl RegisterReference {
     }
 
     fn try_parse_mod(name: &str) -> Option<Result<(&str, Int<U>), ParseIntError<U>>> {
-        let idx = name.rfind("%")?;
+        let idx = name.rfind('%')?;
         let num = match name[idx + 1..].parse::<Int<U>>() {
             Ok(v) => v,
             Err(e) => return Some(Err(e)),
@@ -173,10 +184,7 @@ impl MacroPatternComponent {
         match (self, other) {
             (P::Argument { name: _, ty: a }, P::Argument { name: _, ty: b }) => match (**a, **b) {
                 (A::Int, A::Int) => Some(ArcIntern::from("123")),
-                (A::Reg, A::Reg)
-                | (A::Ident, A::Reg)
-                | (A::Reg, A::Ident)
-                | (A::Ident, A::Ident) => Some(ArcIntern::from("a")),
+                (A::Reg | A::Ident, A::Reg | A::Ident) => Some(ArcIntern::from("a")),
                 (A::Block, A::Block) => Some(ArcIntern::from("{ }")),
                 _ => None,
             },
@@ -289,7 +297,7 @@ struct BlockInfoTracker(HashMap<BlockID, BlockInfo>);
 impl BlockInfoTracker {
     fn get_register(&self, reference: &RegisterReference) -> Option<(RegisterReference, &Puzzle)> {
         let mut from = reference.block_id;
-        let reg_name = reference.reg_name.to_owned();
+        let reg_name = reference.reg_name.clone();
 
         loop {
             let block_info = self.0.get(&from)?;
@@ -358,7 +366,7 @@ impl BlockInfoTracker {
                         name: ArcIntern::clone(&reference.name),
                         block_id: current,
                     });
-                };
+                }
             }
 
             current = info.parent_block?;
@@ -376,7 +384,7 @@ struct ExpansionInfo {
     macros: HashMap<(ArcIntern<str>, ArcIntern<str>), WithSpan<Macro>>,
     /// Map each (file contents containing macro call, macro name) to the file contents that the macro definition is in
     available_macros: HashMap<(ArcIntern<str>, ArcIntern<str>), ArcIntern<str>>,
-    /// Each file has its own LuaMacros; use the file contents as the key
+    /// Each file has its own `LuaMacros`; use the file contents as the key
     lua_macros: HashMap<ArcIntern<str>, LuaMacros>,
 }
 
@@ -388,7 +396,7 @@ struct ParsedSyntax {
 
 #[derive(Clone, Debug)]
 enum ExpandedCodeComponent {
-    Instruction(Primitive, BlockID),
+    Instruction(Box<Primitive>, BlockID),
     Label(Label),
 }
 

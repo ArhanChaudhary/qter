@@ -1,3 +1,5 @@
+#![warn(clippy::pedantic)]
+
 use core::{fmt::Debug, hash::Hash};
 use std::{cell::RefCell, collections::HashMap, iter::Sum, marker::PhantomData, rc::Rc};
 
@@ -8,7 +10,7 @@ trait Seal {}
 pub trait State: TakeFrom + core::fmt::Display + Debug + Sum + NumAssign {
     type NextDown: TakeFrom;
     const RANGE_SIZE: Self;
-    const RANGE_BITS: usize;
+    const RANGE_BITS: u32;
 
     fn ilog2(self) -> u32;
 }
@@ -42,7 +44,7 @@ macro_rules! state {
         impl State for $ty {
             type NextDown = $next_down;
             const RANGE_SIZE: $ty = (<$next_down>::MAX as $ty) + 1;
-            const RANGE_BITS: usize = <$next_down>::BITS as usize;
+            const RANGE_BITS: u32 = <$next_down>::BITS;
 
             fn ilog2(self) -> u32 {
                 self.ilog2()
@@ -183,18 +185,23 @@ fn coding_function<S: State, T: Debug>(
 ) -> Option<S> {
     let p = ranges[symbol];
 
-    if p == S::zero() {
-        panic!("Got a symbol with range zero: {symbol}; {ranges:?}; {fsm:?}");
-    }
+    assert!(
+        (p != S::zero()),
+        "Got a symbol with range zero: {symbol}; {ranges:?}; {fsm:?}"
+    );
 
     let divided = state / p;
 
     // Doing the bitshift will make the number fall out of range
-    if divided.leading_zeros() < (S::RANGE_BITS as u32) {
+    if divided.leading_zeros() < S::RANGE_BITS {
         return None;
     }
 
-    Some((divided << S::RANGE_BITS) + (state % p) + ranges.iter().take(symbol).copied().sum::<S>())
+    Some(
+        (divided << S::RANGE_BITS as usize)
+            + (state % p)
+            + ranges.iter().take(symbol).copied().sum::<S>(),
+    )
 }
 
 pub fn ans_encode<S: State, FSM: CodingFSM<S> + Clone>(
@@ -212,6 +219,11 @@ pub fn ans_encode<S: State, FSM: CodingFSM<S> + Clone>(
     ans_encode_inplace(stream, symbols, reversible);
 }
 
+/// Encodes the symbols in the stream, and reverses the stream
+///
+/// # Panics
+///
+/// Panics if the symbol is too large for the range
 pub fn ans_encode_inplace<S: State, FSM: ReversibleFSM<S>>(
     stream: &mut Vec<u8>,
     symbols: &[usize],
@@ -233,9 +245,10 @@ pub fn ans_encode_inplace<S: State, FSM: ReversibleFSM<S>>(
                 }
                 i += S::one();
 
-                if i > S::RANGE_SIZE {
-                    panic!();
-                }
+                assert!(
+                    i <= S::RANGE_SIZE,
+                    "The symbol {last} is too large for the range {i}; {last_ranges:?}; {final_state:?}"
+                );
             }
         }
         None => (S::zero(), symbols),
@@ -249,21 +262,17 @@ pub fn ans_encode_inplace<S: State, FSM: ReversibleFSM<S>>(
         final_state.predict_next_symbol(&mut ranges);
 
         loop {
-            match coding_function(state, *symbol, &ranges, &final_state) {
-                Some(new_state) => {
-                    state = new_state;
-                    break;
-                }
-                None => {
-                    stream.extend_from_slice(
-                        (<S::NextDown as NumCast>::from(state & (S::RANGE_SIZE - S::one())))
-                            .unwrap()
-                            .to_be_bytes()
-                            .as_ref(),
-                    );
-                    state = state >> S::RANGE_BITS;
-                }
-            };
+            if let Some(new_state) = coding_function(state, *symbol, &ranges, &final_state) {
+                state = new_state;
+                break;
+            }
+            stream.extend_from_slice(
+                (<S::NextDown as NumCast>::from(state & (S::RANGE_SIZE - S::one())))
+                    .unwrap()
+                    .to_be_bytes()
+                    .as_ref(),
+            );
+            state = state >> S::RANGE_BITS as usize;
         }
 
         symbols = prev;
@@ -322,11 +331,11 @@ pub fn ans_decode<S: State, FSM: CodingFSM<S>>(
             }
         }
 
-        state = ranges[symbol] * (state >> S::RANGE_BITS) + (state & mask) - cdf_val;
+        state = ranges[symbol] * (state >> S::RANGE_BITS as usize) + (state & mask) - cdf_val;
 
-        while state == S::zero() || state.ilog2() < (S::RANGE_BITS as u32) {
+        while state == S::zero() || state.ilog2() < S::RANGE_BITS {
             if let Some(v) = S::NextDown::take_from(data) {
-                state = (state << S::RANGE_BITS) | S::from(v).unwrap();
+                state = (state << S::RANGE_BITS as usize) | S::from(v).unwrap();
             } else {
                 break 'decoding;
             }

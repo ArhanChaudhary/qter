@@ -1,11 +1,11 @@
-use std::{collections::HashMap, iter::Peekable, ops::Deref, sync::Arc};
+use std::{collections::HashMap, iter::Peekable, sync::Arc};
 
 use internment::ArcIntern;
 use itertools::Itertools;
 use pest::error::Error;
 use qter_core::{
     Facelets, Instruction, Int, Program, RegisterGenerator, U, WithSpan,
-    architectures::{Algorithm, Architecture, PermutationGroup},
+    architectures::{Algorithm, Architecture, CycleGeneratorSubcycle, PermutationGroup},
     mk_error,
 };
 
@@ -41,7 +41,7 @@ impl RegisterIdx {
                             return Err(arch.registers()[idx]
                                 .unshared_cycles()
                                 .iter()
-                                .map(|v| v.chromatic_order())
+                                .map(CycleGeneratorSubcycle::chromatic_order)
                                 .sorted()
                                 .dedup()
                                 .collect_vec());
@@ -61,7 +61,10 @@ impl RegisterIdx {
                 ref arch,
                 modulus: _,
             } => RegisterGenerator::Puzzle {
-                generator: Algorithm::new_from_effect(arch, vec![(idx, Int::<U>::one())]),
+                generator: Box::new(Algorithm::new_from_effect(
+                    arch,
+                    vec![(idx, Int::<U>::one())],
+                )),
                 solved_goto_facelets: arch.registers()[idx].signature_facelets(),
             },
         }
@@ -74,9 +77,12 @@ fn coalesce_adds<V: Iterator<Item = WithSpan<ExpandedCodeComponent>>>(
 ) -> Option<Vec<WithSpan<CoalescedAdds>>> {
     let mut adds = HashMap::new();
 
-    while let Some(ExpandedCodeComponent::Instruction(Primitive::Add { amt, register }, _)) =
+    while let Some(ExpandedCodeComponent::Instruction(b, _)) =
         code_components_iter.peek().map(|v| &**v)
     {
+        let Primitive::Add { amt, register } = &**b else {
+            break;
+        };
         let (reg_idx, puzzle_idx) = global_regs.get_reg(register);
         adds.entry(puzzle_idx)
             .or_insert(Vec::new())
@@ -104,7 +110,7 @@ fn coalesce_adds<V: Iterator<Item = WithSpan<ExpandedCodeComponent>>>(
                     match &adds[0].0 {
                         RegisterIdx::Theoretical => CoalescedAdds::AddTheoretical(
                             puzzle_idx,
-                            adds.iter().map(|(_, amt)| *amt.deref()).sum::<Int<U>>(),
+                            adds.iter().map(|(_, amt)| **amt).sum::<Int<U>>(),
                         ),
                         RegisterIdx::Real {
                             idx: _,
@@ -125,7 +131,7 @@ fn coalesce_adds<V: Iterator<Item = WithSpan<ExpandedCodeComponent>>>(
                                                     modulus: _,
                                                 } => *idx,
                                             },
-                                            *add.deref(),
+                                            **add,
                                         )
                                     })
                                     .collect_vec(),
@@ -161,28 +167,27 @@ struct GlobalRegs {
 
 impl GlobalRegs {
     fn get_reg(&self, reference: &RegisterReference) -> (RegisterIdx, usize) {
-        match reference.block_id == BlockID(0) {
-            true => {
-                let mut reg = self
-                    .register_table
-                    .get(&reference.reg_name)
-                    .unwrap()
-                    .to_owned();
+        if reference.block_id == BlockID(0) {
+            let mut reg = self
+                .register_table
+                .get(&reference.reg_name)
+                .unwrap()
+                .to_owned();
 
-                if let Some(mod_) = reference.modulus {
-                    match &mut reg.0 {
-                        RegisterIdx::Theoretical => todo!(),
-                        RegisterIdx::Real {
-                            idx: _,
-                            arch: _,
-                            modulus,
-                        } => *modulus = Some(mod_),
-                    }
+            if let Some(mod_) = reference.modulus {
+                match &mut reg.0 {
+                    RegisterIdx::Theoretical => todo!(),
+                    RegisterIdx::Real {
+                        idx: _,
+                        arch: _,
+                        modulus,
+                    } => *modulus = Some(mod_),
                 }
-
-                reg
             }
-            false => todo!(),
+
+            reg
+        } else {
+            todo!()
         }
     }
 }
@@ -232,7 +237,7 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>
                 }
             }
         }
-    };
+    }
 
     // TODO: Coalesce add instructions
 
@@ -250,7 +255,7 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>
             match coalesced_adds.into_inner() {
                 CoalescedAdds::Instruction(ExpandedCodeComponent::Instruction(primitive, _)) => {
                     program_counter += 1;
-                    Some(CoalescedAddsRemovedLabels::Instruction(primitive))
+                    Some(CoalescedAddsRemovedLabels::Instruction(*primitive))
                 }
                 CoalescedAdds::Instruction(ExpandedCodeComponent::Label(label)) => {
                     label_locations.insert(
@@ -310,11 +315,8 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>
                     unreachable!()
                 }
                 Primitive::Goto { label } => {
-                    let label = match expanded.block_info.label_scope(&label) {
-                        Some(v) => v,
-                        None => {
-                            return Err(mk_error("Could not find label in scope", label.span()));
-                        }
+                    let Some(label) = expanded.block_info.label_scope(&label) else {
+                        return Err(mk_error("Could not find label in scope", label.span()));
                     };
 
                     Instruction::Goto {
@@ -322,11 +324,8 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>
                     }
                 }
                 Primitive::SolvedGoto { register, label } => {
-                    let label = match expanded.block_info.label_scope(&label) {
-                        Some(v) => v,
-                        None => {
-                            return Err(mk_error("Could not find label in scope", label.span()));
-                        }
+                    let Some(label) = expanded.block_info.label_scope(&label) else {
+                        return Err(mk_error("Could not find label in scope", label.span()));
                     };
 
                     let (reg_idx, puzzle_idx) = global_regs.get_reg(&register);
@@ -355,14 +354,12 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>
 
                         Instruction::Halt {
                             message: message.into_inner(),
-                            maybe_puzzle_idx: Some(puzzle_idx),
-                            maybe_register: Some(reg_idx.generator()),
+                            maybe_puzzle_idx_and_register: Some((puzzle_idx, reg_idx.generator())),
                         }
                     }
                     None => Instruction::Halt {
                         message: message.into_inner(),
-                        maybe_puzzle_idx: None,
-                        maybe_register: None,
+                        maybe_puzzle_idx_and_register: None,
                     },
                 },
                 Primitive::Print { message, register } => match register {
@@ -370,14 +367,12 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>
                         let (reg_idx, puzzle_idx) = global_regs.get_reg(&register);
                         Instruction::Print {
                             message: message.into_inner(),
-                            maybe_puzzle_idx: Some(puzzle_idx),
-                            maybe_register: Some(reg_idx.generator()),
+                            maybe_puzzle_idx_and_register: Some((puzzle_idx, reg_idx.generator())),
                         }
                     }
                     None => Instruction::Print {
                         message: message.into_inner(),
-                        maybe_puzzle_idx: None,
-                        maybe_register: None,
+                        maybe_puzzle_idx_and_register: None,
                     },
                 },
             };

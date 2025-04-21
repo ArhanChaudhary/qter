@@ -4,6 +4,7 @@ use crate::{
 };
 
 /// Calculate the GCD of two numbers
+#[must_use]
 pub fn gcd(mut a: Int<U>, mut b: Int<U>) -> Int<U> {
     loop {
         if b.is_zero() {
@@ -17,6 +18,11 @@ pub fn gcd(mut a: Int<U>, mut b: Int<U>) -> Int<U> {
 }
 
 /// Calculate the LCM of two numbers
+///
+/// # Panics
+///
+/// Panics if either number is zero.
+#[must_use]
 pub fn lcm(a: Int<U>, b: Int<U>) -> Int<U> {
     assert!(!a.is_zero());
     assert!(!b.is_zero());
@@ -30,6 +36,7 @@ pub fn lcm_iter(values: impl Iterator<Item = Int<U>>) -> Int<U> {
 }
 
 /// Calculate the GCD of two numbers as well as the coefficients of Bézout's identity
+#[must_use]
 pub fn extended_euclid(mut a: Int<U>, mut b: Int<U>) -> ((Int<I>, Int<I>), Int<U>) {
     let mut a_coeffs = (Int::<I>::one(), Int::<I>::zero());
     let mut b_coeffs = (Int::<I>::zero(), Int::<I>::one());
@@ -187,28 +194,28 @@ mod tests {
 
     #[test]
     fn lcm_and_gcd() {
-        let _lcm = |a: u64, b: u64| lcm(Int::from(a), Int::from(b)).to_u64();
-        let _gcd = |a: u64, b: u64| gcd(Int::from(a), Int::from(b)).to_u64();
-        let _ext_euc = |a: u64, b: u64| {
+        let lcm_int = |a: u64, b: u64| lcm(Int::from(a), Int::from(b)).to_u64();
+        let gcd_int = |a: u64, b: u64| gcd(Int::from(a), Int::from(b)).to_u64();
+        let extended_euclid_int = |a: u64, b: u64| {
             let ((x, y), z) = extended_euclid(Int::from(a), Int::from(b));
             assert_eq!(Int::<U>::from(a) * x + Int::<U>::from(b) * y, z);
             z.to_u64()
         };
 
-        assert_eq!(_gcd(3, 5), 1);
-        assert_eq!(_gcd(3, 6), 3);
-        assert_eq!(_gcd(4, 6), 2);
+        assert_eq!(gcd_int(3, 5), 1);
+        assert_eq!(gcd_int(3, 6), 3);
+        assert_eq!(gcd_int(4, 6), 2);
 
-        assert_eq!(_ext_euc(3, 5), 1);
-        assert_eq!(_ext_euc(3, 6), 3);
-        assert_eq!(_ext_euc(4, 6), 2);
+        assert_eq!(extended_euclid_int(3, 5), 1);
+        assert_eq!(extended_euclid_int(3, 6), 3);
+        assert_eq!(extended_euclid_int(4, 6), 2);
 
-        assert_eq!(_lcm(3, 5), 15);
-        assert_eq!(_lcm(3, 6), 6);
-        assert_eq!(_lcm(4, 6), 12);
+        assert_eq!(lcm_int(3, 5), 15);
+        assert_eq!(lcm_int(3, 6), 6);
+        assert_eq!(lcm_int(4, 6), 12);
     }
 
-    fn _crt(v: impl IntoIterator<Item = (u64, u64)>) -> Option<u64> {
+    fn crt_int(v: impl IntoIterator<Item = (u64, u64)>) -> Option<u64> {
         chinese_remainder_theorem(
             v.into_iter()
                 .map(|(a, b)| Some((Int::from(a), Int::from(b)))),
@@ -218,10 +225,10 @@ mod tests {
 
     #[test]
     fn crt() {
-        assert_eq!(_crt([(2, 3), (1, 2)]), Some(5));
-        assert_eq!(_crt([(3, 4), (1, 2)]), Some(3));
-        assert_eq!(_crt([(3, 4), (1, 2), (3, 5), (4, 7)]), Some(123));
-        assert_eq!(_crt([(2, 4), (1, 2)]), None);
+        assert_eq!(crt_int([(2, 3), (1, 2)]), Some(5));
+        assert_eq!(crt_int([(3, 4), (1, 2)]), Some(3));
+        assert_eq!(crt_int([(3, 4), (1, 2), (3, 5), (4, 7)]), Some(123));
+        assert_eq!(crt_int([(2, 4), (1, 2)]), None);
     }
 
     #[test]

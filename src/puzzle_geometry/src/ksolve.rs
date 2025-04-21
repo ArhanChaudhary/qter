@@ -4,10 +4,10 @@ use std::{
 };
 use thiserror::Error;
 
-/// A representation of a puzzle in the KSolve format. We choose to remain
-/// consistent with KSolve format and terminology because it is the
+/// A representation of a puzzle in the `KSolve` format. We choose to remain
+/// consistent with `KSolve` format and terminology because it is the
 /// lingua-franca of the puzzle theory community. twsearch, another popular
-/// puzzle software suite, also uses the KSolve format.
+/// puzzle software suite, also uses the `KSolve` format.
 #[derive(Clone, Debug, PartialEq)]
 pub struct KSolve {
     name: String,
@@ -16,8 +16,8 @@ pub struct KSolve {
     symmetries: Vec<KSolveMove>,
 }
 
-/// A piece orbit of a KSolve puzzle, or "Set" to remain consistent with the
-/// KSolve terminology
+/// A piece orbit of a `KSolve` puzzle, or "Set" to remain consistent with the
+/// `KSolve` terminology
 #[derive(Clone, Debug, PartialEq)]
 pub struct KSolveSet {
     name: String,
@@ -25,7 +25,7 @@ pub struct KSolveSet {
     orientation_count: NonZeroU8,
 }
 
-/// A transformation of a KSolve puzzle. A list of (permutation vector,
+/// A transformation of a `KSolve` puzzle. A list of (permutation vector,
 /// orientation vector)
 pub type KSolveTransformation = Vec<Vec<(NonZeroU16, u8)>>;
 
@@ -37,27 +37,34 @@ pub struct KSolveMove {
 
 impl KSolve {
     /// Get the name of the puzzle
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
     /// Get the sets of pieces on the puzzle
+    #[must_use]
     pub fn sets(&self) -> &[KSolveSet] {
         &self.sets
     }
 
     /// Get the set of available moves on the puzzle
+    #[must_use]
     pub fn moves(&self) -> &[KSolveMove] {
         &self.moves
     }
 
     /// Get the list of symmetries obeyed by the puzzle
     // TODO: how should reflection symmetries be represented?
+    #[must_use]
     pub fn symmetries(&self) -> &[KSolveMove] {
         &self.symmetries
     }
 
     /// Get the solved state of the puzzle
+    #[must_use]
+    // Should not panic
+    #[allow(clippy::missing_panics_doc)]
     pub fn solved(&self) -> KSolveTransformation {
         self.sets
             .iter()
@@ -70,6 +77,7 @@ impl KSolve {
             .collect()
     }
 
+    #[must_use]
     pub fn with_moves(self, moves: &[&str]) -> Self {
         let moves = self
             .moves
@@ -87,16 +95,19 @@ impl KSolve {
 
 impl KSolveSet {
     /// Get the name of the set
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
     /// Get the number of pieces in the set
+    #[must_use]
     pub fn piece_count(&self) -> NonZeroU16 {
         self.piece_count
     }
 
     /// Get the orientation modulo of the set
+    #[must_use]
     pub fn orientation_count(&self) -> NonZeroU8 {
         self.orientation_count
     }
@@ -104,17 +115,20 @@ impl KSolveSet {
 
 impl KSolveMove {
     /// Get the name of the move
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
     /// Get the transformation of the move
+    #[must_use]
     pub fn transformation(&self) -> &KSolveTransformation {
         &self.transformation
     }
 
-    /// Convenience method for converting KSolve's 1-indexed permutation vectors
+    /// Convenience method for converting `KSolve`'s 1-indexed permutation vectors
     /// to 0-indexed permutation vectors
+    #[must_use]
     pub fn zero_indexed_transformation(&self) -> Vec<Vec<(u16, u8)>> {
         self.transformation
             .iter()
@@ -128,7 +142,7 @@ impl KSolveMove {
     }
 }
 
-/// A possibly invalid KSolve puzzle representation
+/// A possibly invalid `KSolve` puzzle representation
 pub(crate) struct KSolveFields {
     name: String,
     sets: Vec<KSolveSet>,
@@ -156,7 +170,7 @@ impl TryFrom<KSolveFields> for KSolve {
     fn try_from(ksolve_fields: KSolveFields) -> Result<Self, Self::Error> {
         let expected_set_count = ksolve_fields.sets.len();
 
-        for ksolve_move in ksolve_fields.moves.iter() {
+        for ksolve_move in &ksolve_fields.moves {
             let actual_set_count = ksolve_move.transformation().len();
 
             if actual_set_count != expected_set_count {
@@ -224,7 +238,10 @@ impl TryFrom<KSolveFields> for KSolve {
     }
 }
 
-pub fn nonzero_perm(transformation: Vec<Vec<(u16, u8)>>) -> KSolveTransformation {
+#[allow(
+    clippy::needless_pass_by_value
+)]
+fn nonzero_perm(transformation: Vec<Vec<(u16, u8)>>) -> KSolveTransformation {
     transformation
         .iter()
         .map(|perm_and_ori| {
@@ -1642,7 +1659,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: TryFromIntError(())")]
     fn test_nonzero_perm() {
         nonzero_perm(vec![
             vec![(0, 0), (2, 0), (3, 0)],

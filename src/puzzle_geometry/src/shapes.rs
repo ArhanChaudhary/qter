@@ -30,12 +30,12 @@ pub static CUBE: LazyLock<Polyhedron> = LazyLock::new(|| {
         Point(Vector3::new(1., 1., -1.)),
     ]);
 
-    let right = up.to_owned().rotated(Vector3::new(1., 0., 0.), 4);
-    let down = right.to_owned().rotated(Vector3::new(1., 0., 0.), 4);
-    let left = down.to_owned().rotated(Vector3::new(1., 0., 0.), 4);
+    let right = up.clone().rotated(Vector3::new(1., 0., 0.), 4);
+    let down = right.clone().rotated(Vector3::new(1., 0., 0.), 4);
+    let left = down.clone().rotated(Vector3::new(1., 0., 0.), 4);
 
-    let front = up.to_owned().rotated(Vector3::new(0., 0., 1.), 4);
-    let back = up.to_owned().rotated(Vector3::new(0., 0., -1.), 4);
+    let front = up.clone().rotated(Vector3::new(0., 0., 1.), 4);
+    let back = up.clone().rotated(Vector3::new(0., 0., -1.), 4);
 
     Polyhedron(vec![up, right, down, left, front, back])
 });

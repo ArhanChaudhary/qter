@@ -30,10 +30,12 @@ pub struct Int<Signed> {
 
 impl<Signed> Int<Signed> {
     /// Returns `true` if the value is zero and `false` otherwise
+    #[must_use]
     pub fn is_zero(&self) -> bool {
         self.value == I512::ZERO
     }
 
+    #[must_use]
     pub fn zero() -> Int<Signed> {
         Int {
             value: I512::ZERO,
@@ -41,6 +43,7 @@ impl<Signed> Int<Signed> {
         }
     }
 
+    #[must_use]
     pub fn one() -> Int<Signed> {
         Int {
             value: I512::ONE,
@@ -48,6 +51,7 @@ impl<Signed> Int<Signed> {
         }
     }
 
+    #[must_use]
     pub fn abs_diff<Signed2>(&self, other: &Int<Signed2>) -> Int<U> {
         Int {
             value: self.value.abs_diff(other.value).cast_signed(),
@@ -63,6 +67,7 @@ impl<Signed> Int<Signed> {
     }
 
     #[cfg(test)]
+    #[must_use]
     pub fn to_u64(&self) -> u64 {
         use bnum::cast::As;
 
@@ -70,6 +75,7 @@ impl<Signed> Int<Signed> {
     }
 
     #[cfg(test)]
+    #[must_use]
     pub fn to_i64(&self) -> i64 {
         use bnum::cast::As;
 
@@ -78,10 +84,12 @@ impl<Signed> Int<Signed> {
 }
 
 impl Int<I> {
+    #[must_use]
     pub fn signum(&self) -> i8 {
         self.value.signum().as_()
     }
 
+    #[must_use]
     pub fn abs(self) -> Int<U> {
         Int {
             value: self.value.abs(),
@@ -306,9 +314,7 @@ impl_signed_variants!(Mul, mul, MulAssign, mul_assign, |a, b| signed a * b, unsi
 impl_signed_variants!(Sub, sub, SubAssign, sub_assign, |a, b| signed a - b, unsigned {
     let v = a - b;
 
-    if v < I512::ZERO {
-        panic!("Attempted to subtract with underflow!")
-    }
+    assert!(v >= I512::ZERO, "Attempted to subtract with underflow!");
 
     v
 });
@@ -363,7 +369,7 @@ impl<Signed> Eq for Int<Signed> {}
 
 impl<Signed> core::hash::Hash for Int<Signed> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.value.hash(state)
+        self.value.hash(state);
     }
 }
 

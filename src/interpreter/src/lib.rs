@@ -1,3 +1,6 @@
+#![warn(clippy::pedantic)]
+#![allow(clippy::too_many_lines)]
+
 use std::{collections::VecDeque, mem, sync::Arc};
 
 use qter_core::{
@@ -9,8 +12,7 @@ use qter_core::{
 /// If the interpreter is paused, this represents the reason why.
 pub enum PausedState {
     Halt {
-        maybe_register: Option<RegisterGenerator>,
-        maybe_puzzle_idx: Option<usize>,
+        maybe_puzzle_idx_and_register: Option<(usize, RegisterGenerator)>,
     },
     Input {
         max_input: Int<I>,
@@ -230,6 +232,7 @@ impl<P: PuzzleState> Interpreter<P> {
     /// Create a new interpreter from a program and initial states for registers
     ///
     /// If an initial state isn't specified, it defaults to zero.
+    #[must_use]
     pub fn new(program: Program) -> Self {
         let theoretical_states = program
             .theoretical
@@ -259,16 +262,19 @@ impl<P: PuzzleState> Interpreter<P> {
     }
 
     /// Return the instruction index to be executed next
+    #[must_use]
     pub fn program_counter(&self) -> usize {
         self.program_counter
     }
 
     /// The program currently being executed
+    #[must_use]
     pub fn program(&self) -> &Program {
         &self.program
     }
 
     /// Get the current execution state of the interpreter
+    #[must_use]
     pub fn execution_state(&self) -> &ExecutionState {
         &self.execution_state
     }
@@ -292,14 +298,11 @@ impl<P: PuzzleState> Interpreter<P> {
         if let ExecutionState::Paused(_) = self.execution_state() {
             return ActionPerformed::Paused;
         }
-        let instruction = match self.program.instructions.get(self.program_counter) {
-            Some(v) => v,
-            None => {
-                return interpreter_panic!(
-                    self,
-                    "Execution fell through the end of the program without reaching a halt instruction!"
-                );
-            }
+        let Some(instruction) = self.program.instructions.get(self.program_counter) else {
+            return interpreter_panic!(
+                self,
+                "Execution fell through the end of the program without reaching a halt instruction!"
+            );
         };
 
         match &**instruction {
@@ -350,30 +353,31 @@ impl<P: PuzzleState> Interpreter<P> {
 
                 ActionPerformed::Paused
             }
-            &Instruction::Halt {
-                ref message,
-                ref maybe_register,
-                maybe_puzzle_idx,
+            Instruction::Halt {
+                message,
+                // ref maybe_register,
+                // maybe_puzzle_idx,
+                maybe_puzzle_idx_and_register,
             } => {
                 self.execution_state = ExecutionState::Paused(PausedState::Halt {
-                    maybe_register: maybe_register.to_owned(),
-                    maybe_puzzle_idx,
+                    maybe_puzzle_idx_and_register: maybe_puzzle_idx_and_register
+                        .as_ref()
+                        .map(|&(puzzle_idx, ref register)| (puzzle_idx, register.to_owned())),
                 });
-                let full_message = if maybe_register.is_none() {
-                    message.to_owned()
-                } else {
-                    match self.puzzle_states.halt_with_register(
-                        maybe_puzzle_idx.unwrap(),
-                        maybe_register.as_ref().unwrap(),
-                    ) {
-                        Some(v) => format!("{message} {v}"),
-                        None => {
-                            return interpreter_panic!(
-                                self,
-                                "The register specified is not decodable!"
-                            );
+                // let full_message = match maybe_register {
+                let full_message = match maybe_puzzle_idx_and_register.as_ref() {
+                    Some(&(puzzle_idx, ref register)) => {
+                        match self.puzzle_states.halt_with_register(puzzle_idx, register) {
+                            Some(v) => format!("{message} {v}"),
+                            None => {
+                                return interpreter_panic!(
+                                    self,
+                                    "The register specified is not decodable!"
+                                );
+                            }
                         }
                     }
+                    None => message.to_owned(),
                 };
                 self.messages.push_back(full_message);
 
@@ -381,25 +385,40 @@ impl<P: PuzzleState> Interpreter<P> {
             }
             Instruction::Print {
                 message,
-                maybe_register: register,
-                maybe_puzzle_idx: register_idx,
+                // maybe_register: register,
+                // maybe_puzzle_idx: register_idx,
+                maybe_puzzle_idx_and_register,
             } => {
                 self.execution_state = ExecutionState::Running;
-                let full_message = if register.is_none() {
-                    message.to_owned()
-                } else {
-                    match self
-                        .puzzle_states
-                        .decode_register(register_idx.unwrap(), register.as_ref().unwrap())
-                    {
-                        Some(v) => format!("{message} {v}",),
-                        None => {
-                            return interpreter_panic!(
-                                self,
-                                "The register specified is not decodable!"
-                            );
+                // let full_message = if register.is_none() {
+                //     message.to_owned()
+                // } else {
+                //     match self
+                //         .puzzle_states
+                //         .decode_register(register_idx.unwrap(), register.as_ref().unwrap())
+                //     {
+                //         Some(v) => format!("{message} {v}",),
+                //         None => {
+                //             return interpreter_panic!(
+                //                 self,
+                //                 "The register specified is not decodable!"
+                //             );
+                //         }
+                //     }
+                // };
+                let full_message = match maybe_puzzle_idx_and_register.as_ref() {
+                    Some(&(puzzle_idx, ref register)) => {
+                        match self.puzzle_states.decode_register(puzzle_idx, register) {
+                            Some(v) => format!("{message} {v}"),
+                            None => {
+                                return interpreter_panic!(
+                                    self,
+                                    "The register specified is not decodable!"
+                                );
+                            }
                         }
                     }
+                    None => message.to_owned(),
                 };
                 self.messages.push_back(full_message);
                 self.program_counter += 1;
@@ -438,6 +457,10 @@ impl<P: PuzzleState> Interpreter<P> {
     /// Execute instructions until an input or halt instruction is reached
     ///
     /// Returns details of the paused state reached
+    ///
+    /// # Panics
+    ///
+    /// Panics if the interpreter is not in a paused state
     pub fn step_until_halt(&mut self) -> &PausedState {
         loop {
             if let ActionPerformed::Paused | ActionPerformed::Panicked = self.step() {
@@ -452,6 +475,12 @@ impl<P: PuzzleState> Interpreter<P> {
 
     /// Give an input to the interpreter, returning the puzzle index and the algorithm performed `value` times if applicable
     ///
+    /// # Errors
+    ///
+    /// Returns an error if the input is out of bounds
+    ///
+    /// # Panics
+    ///
     /// Panics if the interpreter is not executing an `input` instruction
     pub fn give_input(&mut self, value: Int<I>) -> Result<(usize, Option<Algorithm>), String> {
         let &ExecutionState::Paused(PausedState::Input {
@@ -464,10 +493,7 @@ impl<P: PuzzleState> Interpreter<P> {
         };
 
         if value > max_input {
-            return Err(format!(
-                "Your input must not be greater than {}.",
-                max_input
-            ));
+            return Err(format!("Your input must not be greater than {max_input}."));
         }
         if value < -max_input {
             return Err(format!("Your input must not be less than {}.", -max_input));
@@ -499,7 +525,7 @@ impl<P: PuzzleState> Interpreter<P> {
 
                 puzzle.compose_into(&algorithm);
 
-                Some(algorithm)
+                Some(*algorithm)
             }
         };
 
@@ -647,11 +673,13 @@ mod tests {
         assert!(matches!(
             interpreter.step_until_halt(),
             PausedState::Halt {
-                maybe_register: Some(RegisterGenerator::Puzzle {
-                    generator: _,
-                    solved_goto_facelets: _,
-                }),
-                maybe_puzzle_idx: Some(0),
+                maybe_puzzle_idx_and_register: Some((
+                    0,
+                    RegisterGenerator::Puzzle {
+                        generator: _,
+                        solved_goto_facelets: _,
+                    }
+                )),
             }
         ));
 
@@ -726,11 +754,13 @@ mod tests {
         assert!(matches!(
             interpreter.step_until_halt(),
             PausedState::Halt {
-                maybe_register: Some(RegisterGenerator::Puzzle {
-                    generator: _,
-                    solved_goto_facelets: _,
-                }),
-                maybe_puzzle_idx: Some(0),
+                maybe_puzzle_idx_and_register: Some((
+                    0,
+                    RegisterGenerator::Puzzle {
+                        generator: _,
+                        solved_goto_facelets: _,
+                    }
+                )),
             }
         ));
 
@@ -840,11 +870,13 @@ mod tests {
         assert!(matches!(
             interpreter.step_until_halt(),
             PausedState::Halt {
-                maybe_register: Some(RegisterGenerator::Puzzle {
-                    generator: _,
-                    solved_goto_facelets: _,
-                }),
-                maybe_puzzle_idx: Some(0),
+                maybe_puzzle_idx_and_register: Some((
+                    0,
+                    RegisterGenerator::Puzzle {
+                        generator: _,
+                        solved_goto_facelets: _,
+                    }
+                )),
             }
         ));
 

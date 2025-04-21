@@ -1,3 +1,6 @@
+#![warn(clippy::pedantic)]
+#![allow(clippy::too_many_lines)]
+
 use std::{fs, io, path::PathBuf};
 
 use clap::{ArgAction, Parser};
@@ -117,7 +120,7 @@ fn main() -> color_eyre::Result<()> {
 
             let to_encode = data
                 .split('\n')
-                .map(|v| v.trim())
+                .map(str::trim)
                 .filter(|v| !v.is_empty())
                 .map(|alg| {
                     alg.split_whitespace()
@@ -205,20 +208,13 @@ fn interpret_traced<P: PuzzleState>(
     mut interpreter: Interpreter<P>,
     trace_level: u8,
 ) -> color_eyre::Result<()> {
-    // FIXME: remove padding
-    let pad_amount = ((interpreter.program().instructions.len() - 1).ilog10() + 1) as usize;
-
     loop {
-        let mut program_counter = interpreter.program_counter().to_string();
+        let program_counter = interpreter.program_counter();
 
         let action = interpreter.step();
 
         if trace_level >= 3 {
-            while program_counter.len() < pad_amount {
-                program_counter.push(' ');
-            }
-
-            eprint!("{} | ", program_counter);
+            eprint!("{program_counter} | ");
         }
 
         let mut should_give_input = false;

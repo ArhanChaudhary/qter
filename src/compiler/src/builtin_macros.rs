@@ -10,11 +10,11 @@ use crate::{
 use std::collections::HashMap;
 
 fn expect_reg(
-    reg_value: WithSpan<Value>,
+    reg_value: &WithSpan<Value>,
     syntax: &ExpansionInfo,
     block_id: BlockID,
 ) -> Result<RegisterReference, Box<Error<Rule>>> {
-    match &*reg_value {
+    match &**reg_value {
         Value::Ident(reg_name) => match syntax.block_info.get_register(
             &RegisterReference::parse(
                 block_id,
@@ -38,10 +38,10 @@ fn expect_reg(
 }
 
 fn expect_label(
-    label_value: WithSpan<Value>,
+    label_value: &WithSpan<Value>,
     block_id: BlockID,
 ) -> Result<WithSpan<LabelReference>, Box<Error<Rule>>> {
-    match &*label_value {
+    match &**label_value {
         Value::Ident(label_name) => Ok(WithSpan::new(
             LabelReference {
                 name: ArcIntern::clone(label_name),
@@ -66,7 +66,7 @@ fn print_like(
     }
 
     let maybe_reg = if args.len() == 2 {
-        Some(expect_reg(args.pop().unwrap(), syntax, block_id)?)
+        Some(expect_reg(args.pop().as_ref().unwrap(), syntax, block_id)?)
     } else {
         None
     };
@@ -93,14 +93,14 @@ fn print_like(
 }
 
 pub fn builtin_macros(
-    prelude: ArcIntern<str>,
+    prelude: &ArcIntern<str>,
 ) -> HashMap<(ArcIntern<str>, ArcIntern<str>), WithSpan<Macro>> {
     let mut macros = HashMap::new();
 
     let dummy_span = Span::new(ArcIntern::from(" "), 0, 0);
 
     macros.insert(
-        (prelude.to_owned(), ArcIntern::from("add")),
+        (prelude.clone(), ArcIntern::from("add")),
         WithSpan::new(
             Macro::Builtin(|syntax, mut args, block_id| {
                 if args.len() != 2 {
@@ -118,14 +118,14 @@ pub fn builtin_macros(
                     }
                 };
 
-                let register = expect_reg(args.pop().unwrap(), syntax, block_id)?;
+                let register = expect_reg(args.pop().as_ref().unwrap(), syntax, block_id)?;
 
                 Ok(vec![Instruction::Code(Code::Primitive(Primitive::Add {
                     amt,
                     register,
                 }))])
             }),
-            dummy_span.to_owned(),
+            dummy_span.clone(),
         ),
     );
 
@@ -140,13 +140,13 @@ pub fn builtin_macros(
                     ));
                 }
 
-                let label = expect_label(args.pop().unwrap(), block_id)?;
+                let label = expect_label(args.pop().as_ref().unwrap(), block_id)?;
 
                 Ok(vec![Instruction::Code(Code::Primitive(Primitive::Goto {
                     label,
                 }))])
             }),
-            dummy_span.to_owned(),
+            dummy_span.clone(),
         ),
     );
 
@@ -161,14 +161,14 @@ pub fn builtin_macros(
                     ));
                 }
 
-                let label = expect_label(args.pop().unwrap(), block_id)?;
-                let register = expect_reg(args.pop().unwrap(), syntax, block_id)?;
+                let label = expect_label(args.pop().as_ref().unwrap(), block_id)?;
+                let register = expect_reg(args.pop().as_ref().unwrap(), syntax, block_id)?;
 
                 Ok(vec![Instruction::Code(Code::Primitive(
                     Primitive::SolvedGoto { register, label },
                 ))])
             }),
-            dummy_span.to_owned(),
+            dummy_span.clone(),
         ),
     );
 
@@ -183,7 +183,7 @@ pub fn builtin_macros(
                     ));
                 }
 
-                let register = expect_reg(args.pop().unwrap(), syntax, block_id)?;
+                let register = expect_reg(args.pop().as_ref().unwrap(), syntax, block_id)?;
 
                 let second_arg = args.pop().unwrap();
                 let span = second_arg.span().to_owned();
@@ -201,7 +201,7 @@ pub fn builtin_macros(
                     message,
                 }))])
             }),
-            dummy_span.to_owned(),
+            dummy_span.clone(),
         ),
     );
 
@@ -216,7 +216,7 @@ pub fn builtin_macros(
                     message,
                 }))])
             }),
-            dummy_span.to_owned(),
+            dummy_span.clone(),
         ),
     );
 
@@ -231,7 +231,7 @@ pub fn builtin_macros(
                     message,
                 }))])
             }),
-            dummy_span.to_owned(),
+            dummy_span.clone(),
         ),
     );
 

@@ -33,6 +33,10 @@ pub struct PuzzleDefinition {
 
 impl PuzzleDefinition {
     /// Parse a puzzle from the spec
+    ///
+    /// # Errors
+    ///
+    /// If the spec is invalid, it will return an error
     pub fn parse(spec: &str) -> Result<PuzzleDefinition, String> {
         puzzle_parser::parse(spec).map_err(|v| v.to_string())
     }
@@ -85,6 +89,7 @@ impl PuzzleDefinition {
     }
 
     /// Find a preset with the specified cycle orders
+    #[must_use]
     pub fn get_preset(&self, orders: &[Int<U>]) -> Option<Arc<Architecture>> {
         for preset in &self.presets {
             if preset.registers.len() != orders.len() {
@@ -111,7 +116,10 @@ pub struct PermutationGroup {
 impl PermutationGroup {
     /// Construct a new `PermutationGroup` from a list of facelet colors and generator permutations.
     ///
+    /// # Panics
+    ///
     /// This function will panic if a permutation does not include an inverse generator for each generator.
+    #[must_use]
     pub fn new(
         facelet_colors: Vec<ArcIntern<str>>,
         mut generators: HashMap<ArcIntern<str>, Permutation>,
@@ -122,16 +130,16 @@ impl PermutationGroup {
             assert!(generator.facelet_count <= facelet_colors.len());
         }
 
-        for (_, perm) in generators.iter_mut() {
+        for perm in generators.values_mut() {
             perm.facelet_count = facelet_colors.len();
         }
 
         let mut generator_inverses = HashMap::new();
 
-        'next_item: for (name, generator) in generators.iter() {
+        'next_item: for (name, generator) in &generators {
             let mut inverse_perm = generator.to_owned();
             inverse_perm.exponentiate(Int::from(-1));
-            for (name2, generator2) in generators.iter() {
+            for (name2, generator2) in &generators {
                 if generator2 == &inverse_perm {
                     generator_inverses.insert(ArcIntern::clone(name), ArcIntern::clone(name2));
                     continue 'next_item;
@@ -149,16 +157,19 @@ impl PermutationGroup {
     }
 
     /// The number of facelets in the permutation group
+    #[must_use]
     pub fn facelet_count(&self) -> usize {
         self.facelet_colors.len()
     }
 
     /// The colors of every facelet
+    #[must_use]
     pub fn facelet_colors(&self) -> &[ArcIntern<str>] {
         &self.facelet_colors
     }
 
     /// The identity/solved permutation of the group
+    #[must_use]
     pub fn identity(&self) -> Permutation {
         Permutation {
             // Map every value to itself
@@ -169,6 +180,7 @@ impl PermutationGroup {
     }
 
     /// Get a generator by it's name
+    #[must_use]
     pub fn get_generator(&self, name: &str) -> Option<&Permutation> {
         self.generators.get(&ArcIntern::from(name))
     }
@@ -182,16 +194,17 @@ impl PermutationGroup {
 
     /// Compose a list of generators into an existing permutation
     ///
-    /// If any of the generator names don't exist, it will compose all of the generators before it and return the name of the generator that doesn't exist.
+    /// # Errors
+    ///
+    /// If any of the generator names don't exist, it will compose all of the generators before it and return the name of the generator that doesn't exist as an error
     pub fn compose_generators_into<'a>(
         &self,
         permutation: &mut Permutation,
         generators: impl Iterator<Item = &'a ArcIntern<str>>,
     ) -> Result<(), ArcIntern<str>> {
         for generator in generators {
-            let generator = match self.generators.get(&ArcIntern::from(generator.as_ref())) {
-                Some(v) => v,
-                None => return Err(ArcIntern::clone(generator)),
+            let Some(generator) = self.generators.get(&ArcIntern::from(generator.as_ref())) else {
+                return Err(ArcIntern::clone(generator));
             };
 
             permutation.compose(generator);
@@ -201,6 +214,10 @@ impl PermutationGroup {
     }
 
     /// Find the inverse of a move sequence expressed as a product of generators
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the generator moves are not all valid generators of the group
     pub fn invert_generator_moves(&self, generator_moves: &mut [ArcIntern<str>]) {
         generator_moves.reverse();
 
@@ -226,7 +243,7 @@ impl core::fmt::Display for Permutation {
             a.push('(');
             a.push_str(
                 &v.iter()
-                    .map(|v| v.to_string())
+                    .map(ToString::to_string)
                     .collect::<Vec<String>>()
                     .join(", "),
             );
@@ -244,6 +261,12 @@ impl core::fmt::Debug for Permutation {
 }
 
 impl Permutation {
+    /// Create a permutation using mapping notation. `mapping` is a list of facelet indices where the index is the facelet and the value is the facelet it permutes to.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the mapping is not a valid permutation (i.e. if it contains duplicates or is not a complete mapping)
+    #[must_use]
     pub fn from_mapping(mapping: Vec<usize>) -> Permutation {
         let facelet_count = mapping.len();
 
@@ -257,12 +280,17 @@ impl Permutation {
     }
 
     /// Create a permutation using cycles notation. `cycles` is a list of cycles where each cycle is a list of facelet indices.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the cycles are not a valid permutation (i.e. if it contains duplicates or is not a complete mapping)
+    #[must_use]
     pub fn from_cycles(mut cycles: Vec<Vec<usize>>) -> Permutation {
         cycles.retain(|cycle| cycle.len() > 1);
 
         assert!(cycles.iter().all_unique());
 
-        let facelet_count = cycles.iter().flatten().max().map(|v| v + 1).unwrap_or(0);
+        let facelet_count = cycles.iter().flatten().max().map_or(0, |v| v + 1);
 
         Permutation {
             facelet_count,
@@ -272,6 +300,10 @@ impl Permutation {
     }
 
     /// Get the permutation in mapping notation where `.mapping()[facelet]` gives where the facelet permutes to
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if neither `mapping` nor `cycles` are defined
     pub fn mapping(&self) -> &[usize] {
         self.mapping.get_or_init(|| {
             let cycles = self
@@ -303,6 +335,10 @@ impl Permutation {
     }
 
     /// Get the permutation in cycles notation
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if neither `mapping` nor `cycles` are defined
     pub fn cycles(&self) -> &[Vec<usize>] {
         self.cycles.get_or_init(|| {
             let mapping = self
@@ -344,6 +380,7 @@ impl Permutation {
     /// Find the result of applying the permutation to the identity `power` times.
     ///
     /// This calculates the value in O(1) time with respect to `power`.
+    #[allow(clippy::missing_panics_doc)]
     pub fn exponentiate(&mut self, power: Int<I>) {
         self.cycles();
         let mut mapping = self
@@ -371,6 +408,10 @@ impl Permutation {
     }
 
     /// Compose another permutation into this permutation
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the other permutation does not have the same number of facelets as this permutation
     pub fn compose(&mut self, other: &Permutation) {
         assert_eq!(self.facelet_count, other.facelet_count);
 
@@ -401,11 +442,13 @@ pub struct CycleGeneratorSubcycle {
 
 impl CycleGeneratorSubcycle {
     /// Get the cycle of facelets
+    #[must_use]
     pub fn facelet_cycle(&self) -> &[usize] {
         &self.facelet_cycle
     }
 
     /// Get the order of the cycle after accounting for colors
+    #[must_use]
     pub fn chromatic_order(&self) -> Int<U> {
         self.chromatic_order
     }
@@ -425,6 +468,7 @@ impl Algorithm {
     /// Create an `Algorithm` from what values it should add to which registers.
     ///
     /// `effect` is a list of tuples of register indices and how much to add to add to them.
+    #[allow(clippy::missing_panics_doc)]
     pub fn new_from_effect(arch: &Architecture, effect: Vec<(usize, Int<U>)>) -> Algorithm {
         let mut move_seq = Vec::new();
 
@@ -459,6 +503,10 @@ impl Algorithm {
     }
 
     /// Create an `Algorithm` instance from a move sequence
+    ///
+    /// # Errors
+    ///
+    /// If any of the moves are not valid generators of the group, it will return an error
     pub fn new_from_move_seq(
         perm_group: Arc<PermutationGroup>,
         move_seq: Vec<ArcIntern<str>>,
@@ -634,7 +682,7 @@ impl CycleGenerator {
             // The chromatic order of a single cycle is bounded by the number of facelets in the permutation group, so this is OK even for big cubes
             let chromatic_order = cycle.chromatic_order().try_into().unwrap();
 
-            let mut uncovered = HashSet::<usize>::from_iter(1..chromatic_order);
+            let mut uncovered = (1..chromatic_order).collect::<HashSet<usize>>();
 
             let mut facelet_idx = 0;
             while !uncovered.is_empty() {
@@ -671,6 +719,7 @@ pub struct DecodingTable {
 
 impl DecodingTable {
     /// Find the algorithm that creates the requested cycle combination as closely as possible, as a sum of all offsets left over.
+    #[must_use]
     pub fn closest_alg<'s, 't>(
         &'s self,
         target: &'t [Int<U>],
@@ -778,7 +827,7 @@ impl Architecture {
         algorithms: Vec<Vec<ArcIntern<str>>>,
     ) -> Result<Architecture, ArcIntern<str>> {
         let (registers, shared_facelets) =
-            algorithms_to_cycle_generators(Arc::clone(&perm_group), &algorithms)?;
+            algorithms_to_cycle_generators(&perm_group, &algorithms)?;
 
         Ok(Architecture {
             perm_group,
@@ -831,7 +880,7 @@ impl Architecture {
             };
 
             for item in self.registers().iter().flat_map(|register| {
-                let mut inverse = register.algorithm.to_owned();
+                let mut inverse = register.algorithm.clone();
                 inverse.exponentiate(-Int::<I>::one());
                 [
                     register.algorithm.move_seq_iter().cloned().collect_vec(),
@@ -849,17 +898,13 @@ impl Architecture {
                 add_permutation(item);
             }
 
-            for item in table.into_iter() {
+            for item in table {
                 add_permutation(item);
             }
 
             DecodingTable {
                 table: data,
-                orders: self
-                    .registers()
-                    .iter()
-                    .map(|register| register.order())
-                    .collect(),
+                orders: self.registers().iter().map(CycleGenerator::order).collect(),
             }
         })
     }
@@ -885,6 +930,12 @@ impl Architecture {
     }
 }
 
+/// Get a puzzle definition by name
+///
+/// # Panics
+///
+/// This function will panic if the associated puzzle spec is invalid
+#[must_use]
 pub fn puzzle_by_name(name: &str) -> Option<PuzzleDefinition> {
     if name == "3x3" {
         Some(PuzzleDefinition::parse(include_str!("../puzzles/3x3.txt")).unwrap())
@@ -909,7 +960,7 @@ mod tests {
     fn three_by_three() {
         let cube_def = PuzzleDefinition::parse(include_str!("../puzzles/3x3.txt")).unwrap();
 
-        for (arch, expected) in [
+        for (arch, expected) in &[
             (&["U", "D"][..], &[4, 4][..]),
             (
                 &["R' F' L U' L U L F U' R", "U F R' D' R2 F R' U' D"],
@@ -927,13 +978,11 @@ mod tests {
                 ],
                 &[30, 30, 30],
             ),
-        ]
-        .iter()
-        {
+        ] {
             let arch = Architecture::new(
                 Arc::clone(&cube_def.perm_group),
                 arch.iter()
-                    .map(|alg| alg.split(" ").map(ArcIntern::from).collect_vec())
+                    .map(|alg| alg.split(' ').map(ArcIntern::from).collect_vec())
                     .collect_vec(),
             )
             .unwrap();

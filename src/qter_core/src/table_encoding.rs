@@ -18,6 +18,7 @@ struct TableStats {
 /// Returns an encoded table or None if there are too many unique generators to be able to encode them (contact Henry)
 ///
 /// Also returns the compressed size of the data with the header size subtracted out.
+#[must_use]
 pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
     // Statistical modelling of twisty puzzle algs:
     //
@@ -171,11 +172,11 @@ pub fn encode_table(algs: &[Vec<ArcIntern<str>>]) -> Option<(Vec<u8>, usize)> {
 }
 
 fn rest_unweighted(ranges: &mut [u16], mut range_left: usize) {
-    ranges.iter_mut().for_each(|v| {
+    for v in ranges.iter_mut() {
         if *v != 0 {
-            *v = 1
+            *v = 1;
         }
-    });
+    }
 
     let mut amt_to_set = ranges.iter().filter(|v| **v != 0).count();
 
@@ -357,7 +358,7 @@ impl CodingFSM<u16> for DisallowedPairSymbolsFSM {
         self.min_num_seeable = self.min_key_seeable;
 
         if found != end_of_alg_symbol {
-            self.min_num_seeable = found + (!self.prev_end_of_alg) as usize;
+            self.min_num_seeable = found + usize::from(!self.prev_end_of_alg);
         }
 
         if found == end_of_alg_symbol {
@@ -446,10 +447,10 @@ impl CodingFSM<u16> for DistributionFSM {
     fn found_symbol(&mut self, prev: usize) {
         let end_of_alg_symbol = self.data.stats.frequencies.len();
 
-        if prev != end_of_alg_symbol {
-            self.len += 1;
-        } else {
+        if prev == end_of_alg_symbol {
             self.len = 0;
+        } else {
+            self.len += 1;
         }
 
         self.prev = Some(prev);
@@ -463,19 +464,18 @@ impl CodingFSM<u16> for DistributionFSM {
 
         let mut range_left = 1 << u8::BITS;
 
-        if let Some((len_chance, lens_cdf)) = self.data.lens_cdf.get(&self.len) {
-            if *lens_cdf == 0 {
+        if let Some(&(len_chance, lens_cdf)) = self.data.lens_cdf.get(&self.len) {
+            if lens_cdf == 0 {
                 out[end_of_alg_symbol] = range_left;
                 return;
-            } else {
-                let amt_to_give = ((range_left as u32 * *len_chance / (*len_chance + *lens_cdf))
-                    as u16)
-                    .min(range_left - generator_count as u16)
-                    .max(1);
-
-                out[end_of_alg_symbol] = amt_to_give;
-                range_left -= amt_to_give;
             }
+            let amt_to_give = ((u32::from(range_left) * len_chance / (len_chance + lens_cdf))
+                as u16)
+                .min(range_left - generator_count as u16)
+                .max(1);
+
+            out[end_of_alg_symbol] = amt_to_give;
+            range_left -= amt_to_give;
         }
 
         for (sym, spot) in out.iter_mut().enumerate().take(generator_count) {
@@ -497,7 +497,7 @@ impl CodingFSM<u16> for DistributionFSM {
             &mut out[..end_of_alg_symbol],
             range_left as usize,
             &self.data.stats.frequencies,
-        )
+        );
     }
 }
 
@@ -512,11 +512,11 @@ mod tests {
 
     fn mk_algs_datastructure(spec: &str) -> Vec<Vec<ArcIntern<str>>> {
         spec.split('\n')
-            .map(|v| v.trim())
+            .map(str::trim)
             .filter(|v| !v.is_empty())
             .map(|alg| {
                 alg.split(' ')
-                    .map(|v| v.trim())
+                    .map(str::trim)
                     .filter(|v| !v.is_empty())
                     .map(ArcIntern::from)
                     .collect_vec()
@@ -620,7 +620,7 @@ R U R' U R U' R' U' R' F R F'";
 
         let algs = mk_algs_datastructure(spec);
 
-        let (encoded, data_without_header) = encode_table(&algs).unwrap();
+        let (encoded, _) = encode_table(&algs).unwrap();
         println!("{encoded:?}");
         let decoded = decode_table(&mut encoded.iter().copied()).unwrap();
         assert_eq!(algs, decoded);

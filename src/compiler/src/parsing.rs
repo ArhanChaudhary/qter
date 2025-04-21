@@ -8,9 +8,7 @@ use internment::ArcIntern;
 use pest::{Parser, error::Error, iterators::Pair};
 use pest_derive::Parser;
 use qter_core::{
-    Int, U, WithSpan,
-    architectures::{Architecture, puzzle_by_name},
-    mk_error,
+    architectures::{puzzle_by_name, Architecture}, mk_error, Int, Span, WithSpan, U
 };
 
 use crate::{
@@ -37,14 +35,14 @@ static PRELUDE: LazyLock<ParsedSyntax> = LazyLock::new(|| {
         Err(e) => panic!("{e}"),
     };
 
-    let builtin_macros = builtin_macros(prelude);
+    let builtin_macros = builtin_macros(&prelude);
     parsed_prelude
         .expansion_info
         .available_macros
         .extend(builtin_macros.keys().map(|source_and_macro_name| {
             (
                 source_and_macro_name.to_owned(),
-                source_and_macro_name.0.to_owned(),
+                source_and_macro_name.0.clone(),
             )
         }));
     parsed_prelude.expansion_info.macros.extend(builtin_macros);
@@ -87,11 +85,7 @@ pub fn parse(
     };
 
     if !is_prelude {
-        merge_files(
-            &mut parsed_syntax,
-            ArcIntern::clone(&qat),
-            (*PRELUDE).to_owned(),
-        );
+        merge_files(&mut parsed_syntax, &qat, (*PRELUDE).clone());
     }
 
     for pair in program {
@@ -133,7 +127,7 @@ pub fn parse(
 
                 parsed_syntax
                     .code
-                    .push(WithSpan::new((instruction.value, Some(BlockID(0))), span))
+                    .push(WithSpan::new((instruction.value, Some(BlockID(0))), span));
             }
             Statement::LuaBlock(code) => {
                 if let Err(e) = lua_macros.add_code(code) {
@@ -150,7 +144,7 @@ pub fn parse(
 
                 let importee = parse(&import, find_import, is_prelude)?;
 
-                merge_files(&mut parsed_syntax, ArcIntern::clone(&qat), importee);
+                merge_files(&mut parsed_syntax, &qat, importee);
             }
         }
     }
@@ -176,7 +170,7 @@ pub fn parse(
 
 fn merge_files(
     importer: &mut ParsedSyntax,
-    importer_contents: ArcIntern<str>,
+    importer_contents: &ArcIntern<str>,
     mut importee: ParsedSyntax,
 ) {
     // Block numbers shouldn't be defined deeper than the root in this stage
@@ -204,7 +198,7 @@ fn merge_files(
             .expansion_info
             .available_macros
             .entry((
-                ArcIntern::clone(&importer_contents),
+                ArcIntern::clone(importer_contents),
                 ArcIntern::clone(&source_and_macro_name.1),
             ))
             .or_insert_with(|| ArcIntern::clone(&macro_file));
@@ -271,16 +265,15 @@ fn parse_registers(pair: Pair<'_, Rule>) -> Result<RegistersDecl, Box<Error<Rule
                 architectures
                     .iter()
                     .flat_map(|architecture| architecture.0.iter())
-                    .map(|name| name.to_owned()),
+                    .map(std::borrow::ToOwned::to_owned),
             ),
         }
 
-        for item in found_names.into_iter() {
+        for item in found_names {
             if names.contains(&item) {
                 return Err(mk_error("Register name is already defined", item.span()));
-            } else {
-                names.insert(item);
             }
+            names.insert(item);
         }
 
         puzzles.push(puzzle);
@@ -348,9 +341,8 @@ fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Puzzle, Box<Error<Rule>>> {
             let mut arch = arch.into_inner();
 
             let puzzle_name = arch.next().unwrap();
-            let puzzle = match puzzle_by_name(puzzle_name.as_str()) {
-                Some(v) => v,
-                None => return Err(mk_error("Unknown puzzle", puzzle_name.as_span())),
+            let Some(puzzle) = puzzle_by_name(puzzle_name.as_str()) else {
+                return Err(mk_error("Unknown puzzle", puzzle_name.as_span()));
             };
 
             let decoded_arch = match rule {
@@ -465,8 +457,8 @@ fn parse_instruction(pair: Pair<'_, Rule>) -> Result<WithSpan<Instruction>, Box<
 
                 let span = arguments
                     .iter()
-                    .map(|v| v.span())
-                    .fold(name.span().to_owned().after(), |acc, v| acc.merge(v));
+                    .map(WithSpan::span)
+                    .fold(name.span().to_owned().after(), Span::merge);
 
                 Instruction::Code(Code::Macro(MacroCall {
                     name,
@@ -576,9 +568,9 @@ fn parse_macro(
 
         let mut pairs = branch.into_inner();
 
-        let pattern = parse_pattern(pairs.next().unwrap())?;
+        let pattern = parse_pattern(pairs.next().unwrap());
 
-        for branch in branches.iter() {
+        for branch in &branches {
             if let Some(counterexample) = pattern.conflicts_with(name_str, &branch.pattern) {
                 return Err(mk_error(
                     format!(
@@ -605,7 +597,7 @@ fn parse_macro(
                 code: body,
             },
             span.into(),
-        ))
+        ));
     }
 
     Ok((
@@ -614,7 +606,7 @@ fn parse_macro(
     ))
 }
 
-fn parse_pattern(pair: Pair<Rule>) -> Result<WithSpan<MacroPattern>, Box<Error<Rule>>> {
+fn parse_pattern(pair: Pair<Rule>) -> WithSpan<MacroPattern> {
     let mut pattern = Vec::new();
     let span = pair.as_span();
 
@@ -660,7 +652,7 @@ fn parse_pattern(pair: Pair<Rule>) -> Result<WithSpan<MacroPattern>, Box<Error<R
         ));
     }
 
-    Ok(WithSpan::new(MacroPattern(pattern), span.into()))
+    WithSpan::new(MacroPattern(pattern), span.into())
 }
 
 #[cfg(test)]

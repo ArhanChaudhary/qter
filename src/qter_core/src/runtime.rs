@@ -11,11 +11,10 @@ pub enum Facelets {
 
 /// The generator of a register along with the facelets needed to decode it
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant)]
 pub enum RegisterGenerator {
     Theoretical,
     Puzzle {
-        generator: Algorithm,
+        generator: Box<Algorithm>,
         solved_goto_facelets: Vec<usize>,
     },
 }
@@ -38,13 +37,11 @@ pub enum Instruction {
     },
     Halt {
         message: String,
-        maybe_puzzle_idx: Option<usize>,
-        maybe_register: Option<RegisterGenerator>,
+        maybe_puzzle_idx_and_register: Option<(usize, RegisterGenerator)>,
     },
     Print {
         message: String,
-        maybe_puzzle_idx: Option<usize>,
-        maybe_register: Option<RegisterGenerator>,
+        maybe_puzzle_idx_and_register: Option<(usize, RegisterGenerator)>,
     },
     /// Add to a theoretical register; has no representation in .Q
     AddTheoretical {

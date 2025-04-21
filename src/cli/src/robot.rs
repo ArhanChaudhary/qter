@@ -275,11 +275,11 @@ fn init_mapping() {
 }
 
 fn robot_debug(s: &str) {
-    eprintln!("robot: {:?}", s);
+    eprintln!("robot: {s:?}");
 }
 
 fn qter_debug(s: &str) {
-    eprintln!("qter: sending {:?} to robot", s);
+    eprintln!("qter: sending {s:?} to robot");
 }
 
 impl Drop for Cube3Robot {
@@ -317,9 +317,10 @@ impl Cube3Robot {
                 }
             }
 
-            if !stdout_valid {
-                panic!("Expected {:?} as output from robot executable", expected);
-            }
+            assert!(
+                stdout_valid,
+                "Expected {expected:?} as output from robot executable"
+            );
         }
     }
 
@@ -345,24 +346,23 @@ impl Cube3Robot {
                     robot_debug(&line);
                     if rob_string.is_none() && ret.is_none() {
                         if line.contains(expected1) {
-                            rob_string = Some(line[expected1.len()..].trim().to_string());
-                            // let mut buffer = String::new();
-                            // io::stdin().read_line(&mut buffer).unwrap();
-                            // rob_string = Some(buffer.trim().to_string());
+                            // rob_string = Some(line[expected1.len()..].trim().to_string());
+                            let mut buffer = String::new();
+                            io::stdin().read_line(&mut buffer).unwrap();
+                            rob_string = Some(buffer.trim().to_string());
                         }
                     } else {
                         if ret.is_none() && line.contains(expected2) {
                             match line[expected2.len()..].trim() {
                                 "Yes" => {
-                                    ret = Some(self.puzzle_state_with_rob_string(
+                                    ret = Some(Self::puzzle_state_with_rob_string(
                                         rob_string.as_ref().unwrap(),
                                     ));
                                 }
                                 "No" => (),
                                 _ => {
                                     panic!(
-                                        "Expected 'Yes' or 'No' as output from robot at {:?}",
-                                        line
+                                        "Expected 'Yes' or 'No' as output from robot at {line:?}"
                                     );
                                 }
                             }
@@ -385,13 +385,13 @@ impl Cube3Robot {
                 "WARNING: The cube state found by the robot is different than what is expected."
             );
             eprintln!("Expected: {:?}", self.expected_perm);
-            eprintln!("Found: {:?}", perm);
+            eprintln!("Found: {perm:?}");
         }
 
         perm
     }
 
-    fn puzzle_state_with_rob_string(&self, rob_string: &str) -> Permutation {
+    fn puzzle_state_with_rob_string(rob_string: &str) -> Permutation {
         assert_eq!(rob_string.len(), 54);
 
         let mut mapping = vec![0; 48];
@@ -435,15 +435,14 @@ mod tests {
     use interpreter::SimulatedPuzzle;
     use qter_core::architectures::PuzzleDefinition;
 
-    #[ignore]
     #[test]
     fn test_puzzle_state_with_rob_string() {
+        init_mapping();
         let perm_group = PuzzleDefinition::parse(include_str!("../../qter_core/puzzles/3x3.txt"))
             .unwrap()
             .perm_group;
 
         let solved = SimulatedPuzzle::initialize(Arc::clone(&perm_group));
-        let mut actual = Cube3Robot::initialize(Arc::clone(&perm_group));
 
         for [seq, rob_string] in [
             ["", "UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB"],
@@ -697,7 +696,7 @@ mod tests {
 
             assert_eq!(
                 expected.puzzle_state().mapping(),
-                actual.puzzle_state_with_rob_string(rob_string).mapping()
+                Cube3Robot::puzzle_state_with_rob_string(rob_string).mapping()
             );
         }
     }

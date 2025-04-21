@@ -1,6 +1,5 @@
-use puzzle_geometry::ksolve::{self, KSolveSet};
+use puzzle_geometry::ksolve::{KSolveSet, KPUZZLE_3X3};
 use qter_core::{Int, U};
-use std::num::NonZero;
 
 struct PrimePower {
     value: u16,
@@ -54,9 +53,9 @@ fn prime_powers_below_n(n: u16, orientable_pieces: &[u16]) -> Vec<Vec<PrimePower
     let mut primes: Vec<u16> = vec![2];
 
     // find all primes below n
-    for possible_prime in (3..n + 1).step_by(2) {
+    for possible_prime in (3..=n).step_by(2) {
         let mut is_prime = true;
-        for p in primes.iter() {
+        for p in &primes {
             if p * p > possible_prime {
                 break;
             }
@@ -161,7 +160,7 @@ fn possible_order_list(
         }
 
         // try adding all powers of the current prime
-        for p in prime_powers[s.index].iter() {
+        for p in &prime_powers[s.index] {
             // the new piece count will add min_pieces for the current power, plus two if parity needs handling
             let new_piece_count = s.piece_count
                 + p.min_pieces
@@ -240,9 +239,8 @@ fn possible_order_test(
             if orbit.orientation_count().get() == 1 {
                 if seen.contains(&cycle_cubie_counts[o]) {
                     continue;
-                } else {
-                    seen.push(cycle_cubie_counts[o]);
                 }
+                seen.push(cycle_cubie_counts[o]);
             }
 
             let mut new_cycle: u16;
@@ -250,7 +248,7 @@ fn possible_order_test(
             // if this orbit orients using the same prime as the power, add a cycle
             if orbit.orientation_count().get() > 1
                 && registers[s.register].prime_powers[s.power]
-                    % orbit.orientation_count().get() as u16
+                    % u16::from(orbit.orientation_count().get())
                     == 0
             {
                 new_cycle = registers[s.register].min_piece_counts[s.power];
@@ -452,7 +450,7 @@ fn optimal_equivalent_combination(
 }
 
 fn main() {
-    let puzzle = ksolve::KPUZZLE_3X3.sets();
+    let puzzle = KPUZZLE_3X3.sets();
     let cycle_combos: Option<CycleCombination> = optimal_equivalent_combination(puzzle, 3);
 
     println!(

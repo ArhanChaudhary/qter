@@ -1,3 +1,9 @@
+#![warn(clippy::pedantic)]
+#![allow(
+    clippy::too_many_lines,
+    clippy::similar_names
+)]
+
 pub mod architectures;
 mod puzzle_parser;
 mod shared_facelet_detection;
