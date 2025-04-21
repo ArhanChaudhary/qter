@@ -629,6 +629,7 @@ impl CycleGenerator {
     }
 
     /// Find a collection of facelets that allow decoding the register and that allow determining whether the register is solved
+    #[allow(clippy::missing_panics_doc)]
     pub fn signature_facelets(&self) -> Vec<usize> {
         // This will never fail when `remainder_mod` is the order.
         self.signature_facelets_mod(self.order()).unwrap()
@@ -637,6 +638,7 @@ impl CycleGenerator {
     /// Find a collection of facelets that allow decoding the register modulo a particular number.
     ///
     /// With some registers, you can decode cycles individually and pick out information about the register modulo some number. This will attempt to do so for a given remainder to target. It will return `None` if it's impossible to decode the given modulus from the register.
+    #[allow(clippy::missing_panics_doc)]
     pub fn signature_facelets_mod(&self, remainder_mod: Int<U>) -> Option<Vec<usize>> {
         let mut cycles_with_extras = vec![];
 
@@ -822,12 +824,15 @@ pub struct Architecture {
 
 impl Architecture {
     /// Create a new architecture from a permutation group and a list of algorithms.
+    ///
+    /// # Errors
+    ///
+    /// If the algorithms are invalid, it will return an error
     pub fn new(
         perm_group: Arc<PermutationGroup>,
-        algorithms: Vec<Vec<ArcIntern<str>>>,
+        algorithms: &[Vec<ArcIntern<str>>],
     ) -> Result<Architecture, ArcIntern<str>> {
-        let (registers, shared_facelets) =
-            algorithms_to_cycle_generators(&perm_group, &algorithms)?;
+        let (registers, shared_facelets) = algorithms_to_cycle_generators(&perm_group, algorithms)?;
 
         Ok(Architecture {
             perm_group,
@@ -981,7 +986,8 @@ mod tests {
         ] {
             let arch = Architecture::new(
                 Arc::clone(&cube_def.perm_group),
-                arch.iter()
+                &arch
+                    .iter()
                     .map(|alg| alg.split(' ').map(ArcIntern::from).collect_vec())
                     .collect_vec(),
             )

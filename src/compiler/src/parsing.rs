@@ -8,7 +8,9 @@ use internment::ArcIntern;
 use pest::{Parser, error::Error, iterators::Pair};
 use pest_derive::Parser;
 use qter_core::{
-    architectures::{puzzle_by_name, Architecture}, mk_error, Int, Span, WithSpan, U
+    Int, Span, U, WithSpan,
+    architectures::{Architecture, puzzle_by_name},
+    mk_error,
 };
 
 use crate::{
@@ -376,7 +378,7 @@ fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Puzzle, Box<Error<Rule>>> {
                         algorithms.push(generators);
                     }
 
-                    match Architecture::new(puzzle.perm_group, algorithms) {
+                    match Architecture::new(puzzle.perm_group, &algorithms) {
                         Ok(v) => Arc::new(v),
                         Err(e) => {
                             return Err(mk_error(

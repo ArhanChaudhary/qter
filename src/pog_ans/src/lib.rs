@@ -219,7 +219,7 @@ pub fn ans_encode<S: State, FSM: CodingFSM<S> + Clone>(
     ans_encode_inplace(stream, symbols, reversible);
 }
 
-/// Encodes the symbols in the stream, and reverses the stream
+/// Encodes the symbols in the stream
 ///
 /// # Panics
 ///

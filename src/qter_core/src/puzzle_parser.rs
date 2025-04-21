@@ -191,7 +191,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
             algorithms.push(moves);
         }
 
-        let mut architecture = match Architecture::new(Arc::clone(&group), algorithms) {
+        let mut architecture = match Architecture::new(Arc::clone(&group), &algorithms) {
             Ok(v) => v,
             Err(e) => {
                 return Err(Box::new(Error::new_from_span(
