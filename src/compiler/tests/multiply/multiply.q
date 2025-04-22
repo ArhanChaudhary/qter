@@ -4,10 +4,10 @@ A: 3x3
 1 | input "Enter number X"
           L2 F2 U L' F D' F' U' L' F U D L' U'
           max-input 29
-2 | solved-goto FR UFR 75
-3 | input "Enter number Y"
+2 | input "Enter number Y"
           R2 L U' R' L2 F' D R' D L B2 D2
           max-input 29
+3 | solved-goto FR UFR 75
 4 | solved-goto UB DLB 77
 5 | solved-goto UB 10
 6 | F2 B2 U F2 B2 D' B L2 D2 B' D B2 D L D2 B2 D'

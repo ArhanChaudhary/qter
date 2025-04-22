@@ -355,8 +355,6 @@ impl<P: PuzzleState> Interpreter<P> {
             }
             Instruction::Halt {
                 message,
-                // ref maybe_register,
-                // maybe_puzzle_idx,
                 maybe_puzzle_idx_and_register,
             } => {
                 self.execution_state = ExecutionState::Paused(PausedState::Halt {
@@ -364,7 +362,6 @@ impl<P: PuzzleState> Interpreter<P> {
                         .as_ref()
                         .map(|&(puzzle_idx, ref register)| (puzzle_idx, register.to_owned())),
                 });
-                // let full_message = match maybe_register {
                 let full_message = match maybe_puzzle_idx_and_register.as_ref() {
                     Some(&(puzzle_idx, ref register)) => {
                         match self.puzzle_states.halt_with_register(puzzle_idx, register) {
@@ -385,27 +382,9 @@ impl<P: PuzzleState> Interpreter<P> {
             }
             Instruction::Print {
                 message,
-                // maybe_register: register,
-                // maybe_puzzle_idx: register_idx,
                 maybe_puzzle_idx_and_register,
             } => {
                 self.execution_state = ExecutionState::Running;
-                // let full_message = if register.is_none() {
-                //     message.to_owned()
-                // } else {
-                //     match self
-                //         .puzzle_states
-                //         .decode_register(register_idx.unwrap(), register.as_ref().unwrap())
-                //     {
-                //         Some(v) => format!("{message} {v}",),
-                //         None => {
-                //             return interpreter_panic!(
-                //                 self,
-                //                 "The register specified is not decodable!"
-                //             );
-                //         }
-                //     }
-                // };
                 let full_message = match maybe_puzzle_idx_and_register.as_ref() {
                     Some(&(puzzle_idx, ref register)) => {
                         match self.puzzle_states.decode_register(puzzle_idx, register) {

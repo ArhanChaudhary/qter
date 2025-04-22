@@ -20,8 +20,9 @@ pub trait PuzzleState: Clone + PartialEq + Debug {
     fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv;
 
     /// Create a puzzle state from a sorted transformation and sorted
-    /// orbit defs. `sorted_transformations` most to correspond to
+    /// orbit defs. `sorted_transformations` must to correspond to
     /// `sorted_orbit_defs`.
+    // TODO: should the above invariant be better enforced?
     ///
     /// # Errors
     ///

@@ -209,7 +209,7 @@ fn interpret_traced<P: PuzzleState>(
     trace_level: u8,
 ) -> color_eyre::Result<()> {
     loop {
-        let program_counter = interpreter.program_counter();
+        let program_counter = interpreter.program_counter() + 1;
 
         let action = interpreter.step();
 

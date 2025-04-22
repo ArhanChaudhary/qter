@@ -870,7 +870,7 @@ impl Architecture {
 
             let mut add_permutation = |alg: Vec<ArcIntern<str>>| {
                 let permutation =
-                    Algorithm::new_from_move_seq(self.group_arc(), alg.to_owned()).unwrap();
+                    Algorithm::new_from_move_seq(self.group_arc(), alg.clone()).unwrap();
 
                 let maybe_decoded = registers_decoding_info
                     .iter()

@@ -3,8 +3,8 @@
 }
 
     input "Enter number X" C
-    solved-goto C l1
     input "Enter number Y" B
+    solved-goto C l1
     solved-goto B l2
 l3:
     solved-goto B%10 l4
