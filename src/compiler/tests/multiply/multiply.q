@@ -29,137 +29,148 @@ A: 3x3
 14 | repeat until UR ULF solved
             D' R L' U' F' B2 L B
             U B L U R' D2 B' U'
-15 | repeat until FR UFR solved
-            B2 L F D R2 F R' U
-            F' R2 F D2 L2 D L B2
-16 | repeat until UR solved
-            D2 L D' F' D' R D' R
-            U2 B R B2 U R' U F D
-17 | repeat until UR ULF solved
+15 | B2 L
+16 | repeat until FR UFR solved
+            F D R2 F R' U F'
+            R2 F D2 L2 D L2
+17 | L' B2 D2
+18 | repeat until UR solved
+            L D' F' D' R D' R U2
+            B R B2 U R' U F D'
+19 | D2
+20 | repeat until UR ULF solved
             F2 L' B' D F2 U' R2 F
             U2 R' D' B U2 F' L2 U
-18 | goto 5
-19 | repeat until UB DLB solved
+21 | goto 5
+22 | repeat until UB DLB solved
             U' R2 L2 U R2 F2 D2 R'
             F2 L' U2 L U L' B D' B
-20 | repeat until ULF solved
+23 | repeat until ULF solved
             D B2 D2 L' D' B2 D' B D2
             L2 B' D F2 B2 U' F2 B2
-21 | repeat until UR ULF solved
+24 | repeat until UR ULF solved
             D' R L' U' F' B2 L B
             U B L U R' D2 B' U'
-22 | repeat until FR UFR solved
+25 | repeat until FR UFR solved
             U' R' L2 B' L' D' F' R
             F' D R' L B2 R2 L2 U' R2
-23 | repeat until UR solved
-            D2 L D' F' D' R D' R
-            U2 B R B2 U R' U F D
-24 | repeat until UR ULF solved
+26 | D2
+27 | repeat until UR solved
+            L D' F' D' R D' R U2
+            B R B2 U R' U F D'
+28 | D2
+29 | repeat until UR ULF solved
             F2 L' B' D F2 U' R2 F
             U2 R' D' B U2 F' L2 U
-25 | goto 28
-26 | repeat until ULF solved
+30 | goto 33
+31 | repeat until ULF solved
             D B2 D2 L' D' B2 D' B D2
             L2 B' D F2 B2 U' F2 B2
-27 | repeat until UR ULF solved
+32 | repeat until UR ULF solved
             D' R L' U' F' B2 L B
             U B L U R' D2 B' U'
-28 | solved-goto DLB 19
-29 | D2 B2 L' D' R D' F R L2 U R2 L'
-30 | solved-goto UB DLB 78
-31 | goto 34
-32 | solved-goto UB 44
-33 | D2 B2 L' D' R D' F R L2 U R2 L'
-34 | U L2 B' L U' B' U2 R B' R' B L
-35 | solved-goto UB 53
-36 | F2 B2 U F2 B2 D' B L2 D2 B' D B2 D L D2 B2 D'
-37 | solved-goto UB 53
-38 | F2 B2 U F2 B2 D' B L2 D2 B' D B2 D L D2 B2 D'
-39 | solved-goto UB 53
-40 | F2 B2 U F2 B2 D' B L2 D2 B' D B2 D L D2 B2 D'
-41 | solved-goto UB 53
-42 | F2 B2 U F2 B2 D' B L2 D2 B' D B2 D L D2 B2 D'
-43 | goto 32
-44 | repeat until ULF solved
+33 | solved-goto DLB 22
+34 | D2 B2 L' D' R D' F R L2 U R2 L'
+35 | solved-goto UB DLB 89
+36 | goto 39
+37 | solved-goto UB 49
+38 | D2 B2 L' D' R D' F R L2 U R2 L'
+39 | U L2 B' L U' B' U2 R B' R' B L
+40 | solved-goto UB 60
+41 | F2 B2 U F2 B2 D' B L2 D2 B' D B2 D L D2 B2 D'
+42 | solved-goto UB 60
+43 | F2 B2 U F2 B2 D' B L2 D2 B' D B2 D L D2 B2 D'
+44 | solved-goto UB 60
+45 | F2 B2 U F2 B2 D' B L2 D2 B' D B2 D L D2 B2 D'
+46 | solved-goto UB 60
+47 | F2 B2 U F2 B2 D' B L2 D2 B' D B2 D L D2 B2 D'
+48 | goto 37
+49 | repeat until ULF solved
             D B2 D2 L' D' B2 D' B D2
             L2 B' D F2 B2 U' F2 B2
-45 | repeat until UR ULF solved
+50 | repeat until UR ULF solved
             D' R L' U' F' B2 L B
             U B L U R' D2 B' U'
-46 | repeat until UB DLB solved
+51 | repeat until UB DLB solved
             F2 B2 U F2 D L' B D2 B2
             D L2 D' B R' L2 B2 R L
-47 | repeat until ULF solved
+52 | repeat until ULF solved
             D B2 D2 L' D' B2 D' B D2
             L2 B' D F2 B2 U' F2 B2
-48 | repeat until UR ULF solved
+53 | repeat until UR ULF solved
             D' R L' U' F' B2 L B
             U B L U R' D2 B' U'
-49 | repeat until FR UFR solved
+54 | repeat until FR UFR solved
             D2 R' F' D2 R F R F' R'
             B' D F' L' D' B' L2 U' B2
-50 | repeat until UR solved
-            D2 L D' F' D' R D' R
-            U2 B R B2 U R' U F D
-51 | repeat until UR ULF solved
+55 | D2
+56 | repeat until UR solved
+            L D' F' D' R D' R U2
+            B R B2 U R' U F D'
+57 | D2
+58 | repeat until UR ULF solved
             F2 L' B' D F2 U' R2 F
             U2 R' D' B U2 F' L2 U
-52 | goto 32
-53 | repeat until ULF solved
+59 | goto 37
+60 | repeat until ULF solved
             D B2 D2 L' D' B2 D' B D2
             L2 B' D F2 B2 U' F2 B2
-54 | repeat until UR ULF solved
+61 | repeat until UR ULF solved
             D' R L' U' F' B2 L B
             U B L U R' D2 B' U'
-55 | D2 B2 L' D' R D' F R L2 U R2 L'
-56 | solved-goto UB 66
-57 | R2 L U' R' L2 F' D R' D L B2 D2
-58 | repeat until UB DLB solved
+62 | D2 B2 L' D' R D' F R L2 U R2 L'
+63 | solved-goto UB 75
+64 | R2 L U' R' L2 F' D R' D L B2 D2
+65 | repeat until UB DLB solved
             F' D' F' U' R B2 U2 D'
             R D F2 L B2 L D2 L2 D2
-59 | repeat until ULF solved
+66 | repeat until ULF solved
             D B2 D2 L' D' B2 D' B D2
             L2 B' D F2 B2 U' F2 B2
-60 | repeat until UR ULF solved
+67 | repeat until UR ULF solved
             D' R L' U' F' B2 L B
             U B L U R' D2 B' U'
-61 | repeat until FR UFR solved
+68 | repeat until FR UFR solved
             D2 F U2 R' U D2 F D'
             R D R2 D F' R U R
-62 | repeat until UR solved
-            D2 L D' F' D' R D' R
-            U2 B R B2 U R' U F D
-63 | repeat until UR ULF solved
+69 | D2
+70 | repeat until UR solved
+            L D' F' D' R D' R U2
+            B R B2 U R' U F D'
+71 | D2
+72 | repeat until UR ULF solved
             F2 L' B' D F2 U' R2 F
             U2 R' D' B U2 F' L2 U
-64 | goto 55
-65 | D2 B2 L' D' R D' F R L2 U R2 L'
-66 | solved-goto UB DLB 78
-67 | R2 L U' R' L2 F' D R' D L B2 D2
-68 | repeat until UB DLB solved
+73 | goto 62
+74 | D2 B2 L' D' R D' F R L2 U R2 L'
+75 | solved-goto UB DLB 89
+76 | R2 L U' R' L2 F' D R' D L B2 D2
+77 | repeat until UB DLB solved
             R' B' R D F L2 U' B2 L2
             B' U L2 U L' U' B2 L2 F'
-69 | repeat until ULF solved
+78 | repeat until ULF solved
             D B2 D2 L' D' B2 D' B D2
             L2 B' D F2 B2 U' F2 B2
-70 | repeat until UR ULF solved
+79 | repeat until UR ULF solved
             D' R L' U' F' B2 L B
             U B L U R' D2 B' U'
-71 | repeat until FR UFR solved
+80 | repeat until FR UFR solved
             R' F2 D F' B2 L2 U L2 U
             F' B2 R D2 R' D' F2 D'
-72 | repeat until UR solved
-            D2 L D' F' D' R D' R
-            U2 B R B2 U R' U F D
-73 | repeat until UR ULF solved
+81 | D2
+82 | repeat until UR solved
+            L D' F' D' R D' R U2
+            B R B2 U R' U F D'
+83 | D2
+84 | repeat until UR ULF solved
             F2 L' B' D F2 U' R2
             F U2 R' D' B U2 F' L2 U
-74 | goto 65
-75 | repeat until UB DLB solved
+85 | goto 74
+86 | repeat until UB DLB solved
             D2 B2 L' D' R D' F R L2 U R2 L'
-76 | goto 78
-77 | repeat until FR UFR solved
+87 | goto 89
+88 | repeat until FR UFR solved
             U L U' D' F' L U F D F' L U' F2 L2
-78 | halt until FR UFR solved
+89 | halt until FR UFR solved
           "(X * Y) mod 30 ="
           U L U' D' F' L U F D F' L U' F2 L2
