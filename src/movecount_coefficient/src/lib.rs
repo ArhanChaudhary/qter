@@ -1,8 +1,5 @@
 #![warn(clippy::pedantic)]
-#![allow(
-    unused_variables,
-    dead_code
-)]
+#![allow(unused_variables, dead_code)]
 
 //! A Rust port of the [Movecount Coefficient Calculator](https://trangium.github.io/MovecountCoefficient/)
 //! adapted with permission.
@@ -116,7 +113,8 @@ pub struct AlgSpeed {
 }
 
 impl AlgSpeed {
-    #[must_use] pub fn new(config: AlgSpeedConfig) -> Self {
+    #[must_use]
+    pub fn new(config: AlgSpeedConfig) -> Self {
         Self { config }
     }
 

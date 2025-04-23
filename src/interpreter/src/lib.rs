@@ -23,7 +23,6 @@ pub enum PausedState {
 }
 
 /// Whether the interpreter can be stepped forward or is paused for some reason
-#[allow(clippy::large_enum_variant)]
 pub enum ExecutionState {
     Running,
     Paused(PausedState),
@@ -95,7 +94,7 @@ impl PuzzleState for SimulatedPuzzle {
     }
 
     fn compose_into(&mut self, alg: &Algorithm) {
-        self.state.compose(alg.permutation());
+        self.state.compose_into(alg.permutation());
     }
 
     fn facelets_solved(&self, facelets: &[usize]) -> bool {
@@ -566,7 +565,7 @@ mod tests {
             SimulatedPuzzle::initialize(Arc::clone(&perm_group.perm_group));
 
         for i in 1..=23 {
-            cube.state.compose(b_permutation.permutation());
+            cube.state.compose_into(b_permutation.permutation());
             assert_eq!(
                 cube.print(&b_facelets, &b_permutation).unwrap(),
                 Int::from(i)
@@ -574,7 +573,7 @@ mod tests {
             assert!(!cube.facelets_solved(&b_facelets));
         }
 
-        cube.state.compose(b_permutation.permutation());
+        cube.state.compose_into(b_permutation.permutation());
         assert!(cube.facelets_solved(&b_facelets));
         assert_eq!(
             cube.print(&b_facelets, &b_permutation).unwrap(),
@@ -593,10 +592,10 @@ mod tests {
                     Int::from(j)
                 );
 
-                cube.state.compose(a_permutation.permutation());
+                cube.state.compose_into(a_permutation.permutation());
             }
 
-            cube.state.compose(b_permutation.permutation());
+            cube.state.compose_into(b_permutation.permutation());
         }
     }
 

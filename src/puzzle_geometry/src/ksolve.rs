@@ -238,9 +238,7 @@ impl TryFrom<KSolveFields> for KSolve {
     }
 }
 
-#[allow(
-    clippy::needless_pass_by_value
-)]
+#[allow(clippy::needless_pass_by_value)]
 fn nonzero_perm(transformation: Vec<Vec<(u16, u8)>>) -> KSolveTransformation {
     transformation
         .iter()

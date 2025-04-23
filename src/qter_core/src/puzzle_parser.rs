@@ -153,7 +153,7 @@ pub fn parse(spec: &str) -> Result<PuzzleDefinition, Box<Error<Rule>>> {
                 )));
             };
 
-            permutation.compose(next_permutation);
+            permutation.compose_into(next_permutation);
         }
 
         generators.insert(ArcIntern::from(name), permutation);

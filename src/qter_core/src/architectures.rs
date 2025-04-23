@@ -207,7 +207,7 @@ impl PermutationGroup {
                 return Err(ArcIntern::clone(generator));
             };
 
-            permutation.compose(generator);
+            permutation.compose_into(generator);
         }
 
         Ok(())
@@ -412,7 +412,7 @@ impl Permutation {
     /// # Panics
     ///
     /// This function will panic if the other permutation does not have the same number of facelets as this permutation
-    pub fn compose(&mut self, other: &Permutation) {
+    pub fn compose_into(&mut self, other: &Permutation) {
         assert_eq!(self.facelet_count, other.facelet_count);
 
         let my_mapping = self.mapping_mut();
@@ -1018,13 +1018,13 @@ mod tests {
 
         let mut repeat_compose_perm = cube_def.perm_group.identity();
 
-        repeat_compose_perm.compose(&perm);
-        repeat_compose_perm.compose(&perm);
-        repeat_compose_perm.compose(&perm);
-        repeat_compose_perm.compose(&perm);
-        repeat_compose_perm.compose(&perm);
-        repeat_compose_perm.compose(&perm);
-        repeat_compose_perm.compose(&perm);
+        repeat_compose_perm.compose_into(&perm);
+        repeat_compose_perm.compose_into(&perm);
+        repeat_compose_perm.compose_into(&perm);
+        repeat_compose_perm.compose_into(&perm);
+        repeat_compose_perm.compose_into(&perm);
+        repeat_compose_perm.compose_into(&perm);
+        repeat_compose_perm.compose_into(&perm);
 
         assert_eq!(exp_perm, repeat_compose_perm);
     }

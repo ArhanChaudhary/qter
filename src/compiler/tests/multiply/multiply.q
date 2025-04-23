@@ -163,8 +163,8 @@ A: 3x3
             B R B2 U R' U F D'
 83 | D2
 84 | repeat until UR ULF solved
-            F2 L' B' D F2 U' R2
-            F U2 R' D' B U2 F' L2 U
+            F2 L' B' D F2 U' R2 F
+            U2 R' D' B U2 F' L2 U
 85 | goto 74
 86 | repeat until UB DLB solved
             D2 B2 L' D' R D' F R L2 U R2 L'

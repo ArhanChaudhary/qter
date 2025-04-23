@@ -86,7 +86,7 @@ impl PuzzleState for Cube3Robot {
     fn compose_into(&mut self, alg: &Algorithm) {
         self.permutation = OnceCell::new();
 
-        self.expected_perm.compose(alg.permutation());
+        self.expected_perm.compose_into(alg.permutation());
 
         let moves_file_path = self.robot_path_buf.join("resource/testSequences/tmp.txt");
         let mut moves_file = File::create(moves_file_path).unwrap();

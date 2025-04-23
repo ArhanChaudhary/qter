@@ -1,4 +1,4 @@
-use puzzle_geometry::ksolve::{KSolveSet, KPUZZLE_3X3};
+use puzzle_geometry::ksolve::{KPUZZLE_3X3, KSolveSet};
 use qter_core::{Int, U};
 
 struct PrimePower {

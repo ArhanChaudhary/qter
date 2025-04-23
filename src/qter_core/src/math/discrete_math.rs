@@ -278,16 +278,16 @@ mod tests {
 
         assert_eq!(decode(&cube, &[8], &permutation).unwrap(), Int::<U>::zero());
 
-        cube.compose(permutation.permutation());
+        cube.compose_into(permutation.permutation());
         assert_eq!(decode(&cube, &[8], &permutation).unwrap(), Int::<U>::one());
 
-        cube.compose(permutation.permutation());
+        cube.compose_into(permutation.permutation());
         assert_eq!(decode(&cube, &[8], &permutation).unwrap(), Int::from(2));
 
-        cube.compose(permutation.permutation());
+        cube.compose_into(permutation.permutation());
         assert_eq!(decode(&cube, &[8], &permutation).unwrap(), Int::from(3));
 
-        cube.compose(permutation.permutation());
+        cube.compose_into(permutation.permutation());
         assert_eq!(decode(&cube, &[8], &permutation).unwrap(), Int::from(0));
     }
 }
