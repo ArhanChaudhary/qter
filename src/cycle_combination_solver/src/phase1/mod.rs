@@ -279,10 +279,9 @@ fn possible_order_test(
                 }
                 new_cycle = 1;
                 new_available -= 1;
-                // TODO add some kind of tracker here to make sure orbits aren't doubling
             }
 
-            // assume that every even cycle needs a parity to go with it. TODO make this assumption more efficient.
+            // assume that every even cycle needs a parity to go with it. TODO could be more efficient to share parity.
             let parity: u16 = if new_cycle % 2 == 0 && new_cycle > 0 {
                 2
             } else {
