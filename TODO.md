@@ -31,6 +31,7 @@
 ## PuzzleGeometry
 
 - Get a permutation group out of a puzzle definition
+- Canonical ordering of stickers
 - Define the moves as permutations and orientations of pieces
 - Calculate orientations and parities of the puzzle
 - Calculate the symmetries of the puzzle

@@ -62,25 +62,21 @@ pub struct FindResult<'a, S: SetInfo> {
 
 impl<S: SetInfo> FindResult<'_, S> {
     /// Returns the index of the element representing the root of the set
-    #[must_use]
     pub fn root_idx(&self) -> usize {
         self.root_idx
     }
 
     /// The total size of the set
-    #[must_use]
     pub fn set_size(&self) -> usize {
         self.set_size
     }
 
     /// Metadata associated with the set the element is a member of
-    #[must_use]
     pub fn set_meta(&self) -> &S {
         self.set_meta
     }
 
     /// Metadata associated with the path from this element to the root
-    #[must_use]
     pub fn path_meta(&self) -> Option<&S::PathInfo> {
         self.path_meta.as_ref()
     }
@@ -128,10 +124,7 @@ impl<S: SetInfo> UnionFind<S> {
 
     /// Find an element in the `UnionFind` and return metadata about it.
     ///
-    /// # Panics
-    ///
     /// Panics if the item is outside the range of numbers in the union-find.
-    #[must_use]
     pub fn find(&self, item: usize) -> FindResult<S> {
         let (entry, path_meta) = &self.sets[item];
 

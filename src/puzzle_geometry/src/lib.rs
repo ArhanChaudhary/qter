@@ -1,7 +1,11 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::too_many_lines)]
+#![allow(clippy::float_cmp)]
+
+use std::{collections::VecDeque, iter, mem, sync::Arc};
 
 use edge_cloud::EdgeCloud;
+use internment::ArcIntern;
 use itertools::Itertools;
 use ksolve::KSolve;
 use nalgebra::{Matrix3, Matrix3x2, Rotation3, Unit, Vector3};
@@ -46,26 +50,144 @@ impl Point {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct CutAxisNames<'a> {
-    /// The names for slices forward of the cut plane
-    pub forward_name: &'a str,
-    /// The names for slices backward of the cut plane
-    pub backward_name: &'a str,
-    /// The name of the odd slice in the middle
-    pub middle_name: &'a str,
+pub trait CutSurface: core::fmt::Debug {
+    fn region(&self, point: Point) -> Option<ArcIntern<str>>;
+
+    fn on_boundary(&self, point: Point) -> bool;
+
+    fn boundaries_between(&self, point_a: Point, point_b: Point) -> Vec<Point>;
+
+    fn join(&self, a: Point, b: Point) -> Vec<Point>;
 }
 
 #[derive(Clone, Debug)]
-pub struct CutAxis<'a> {
-    pub names: CutAxisNames<'a>,
-    /// The expected degree of symmetry of the cut. If this is `None`, the symmetry will be auto detected.
-    /// Otherwise, this symmetry will be verified and used.
-    pub expected_symmetry: Option<u8>,
-    /// Direction is normal to the cut plane
-    pub normal: Unit<Vector3<f64>>,
-    /// The distances away from the origin for all of the slices
-    pub distances: Vec<f64>,
+pub struct PlaneCut {
+    spot: Vector3<f64>,
+    normal: Vector3<f64>,
+    name: ArcIntern<str>,
+}
+
+impl CutSurface for PlaneCut {
+    fn region(&self, point: Point) -> Option<ArcIntern<str>> {
+        let signum = self.normal.dot(&(point.0 - self.spot)).signum();
+        assert!(signum == 1. || signum == -1.);
+        if signum == 1. {
+            Some(ArcIntern::clone(&self.name))
+        } else {
+            None
+        }
+    }
+
+    fn on_boundary(&self, point: Point) -> bool {
+        self.normal.dot(&(point.0 - self.spot)) < E
+    }
+
+    fn boundaries_between(&self, a: Point, b: Point) -> Vec<Point> {
+        let a_dot = self.normal.dot(&(a.0 - self.spot));
+        let b_dot = self.normal.dot(&(b.0 - self.spot));
+
+        if a_dot.signum() == b_dot.signum() {
+            return vec![];
+        }
+
+        let frac = a_dot.abs() / (a_dot.abs() + b_dot.abs());
+
+        let point = Point(a.0 * frac + b.0 * (1.0 - frac));
+        // assert!(self.on_boundary(point));
+
+        vec![point]
+    }
+
+    fn join(&self, _: Point, _: Point) -> Vec<Point> {
+        vec![]
+    }
+}
+
+fn do_cut<S: CutSurface + ?Sized>(surface: &S, face: Face) -> Vec<(Face, Option<ArcIntern<str>>)> {
+    assert!(!face.points.is_empty());
+
+    // TODO: Rewrite all of this
+    // let mut points = face
+    //     .points
+    //     .into_iter()
+    //     .cycle()
+    //     .tuple_windows()
+    //     .take(face.points.len())
+    //     .flat_map(|(a, b)| iter::once(a).chain(surface.boundaries_between(a, b).into_iter()))
+    //     .collect::<VecDeque<_>>();
+
+    let mut groups = face
+        .points
+        .into_iter()
+        .map(|v| (vec![v], surface.region(v)))
+        .coalesce(|mut a, b| {
+            if a.1 == b.1 {
+                a.0.extend_from_slice(&b.0);
+                Ok(a)
+            } else {
+                Err((a, b))
+            }
+        })
+        .collect_vec();
+    println!("{groups:?}");
+
+    if groups.len() != 1 {
+        if groups.len() % 2 == 1 {
+            let mut new_group = groups.pop().unwrap();
+            assert_eq!(new_group.1, groups[0].1);
+            new_group.0.extend_from_slice(&groups[0].0);
+            groups[0] = new_group;
+        }
+
+        (0..groups.len())
+            .cycle()
+            .tuple_windows()
+            .take(groups.len())
+            .for_each(|(a_idx, b_idx)| {
+                let a = groups[a_idx].0.last().unwrap();
+                let b = groups[b_idx].0.first().unwrap();
+
+                let mut boundaries = surface.boundaries_between(*a, *b);
+
+                groups[a_idx].0.extend_from_slice(&boundaries);
+                boundaries.reverse();
+                boundaries.extend_from_slice(&groups[b_idx].0);
+                groups[b_idx].0 = boundaries;
+            });
+    }
+    println!("{groups:?}");
+
+    for group in &mut groups {
+        let (new_group, sign) = mem::take(group);
+
+        *group = (
+            new_group
+                .into_iter()
+                .coalesce(|a, b| {
+                    if a.0.metric_distance(&b.0) < E {
+                        Ok(a)
+                    } else {
+                        Err((a, b))
+                    }
+                })
+                .collect(),
+            sign,
+        );
+    }
+    println!("{groups:?}");
+
+    groups
+        .into_iter()
+        .map(|(points, sign)| {
+            (
+                Face {
+                    points,
+                    color: ArcIntern::clone(&face.color),
+                },
+                sign,
+            )
+        })
+        .collect_vec()
 }
 
 fn rotation_of_degree(axis: Vector3<f64>, symm: u8) -> Matrix3<f64> {
@@ -79,7 +201,10 @@ fn rotation_of_degree(axis: Vector3<f64>, symm: u8) -> Matrix3<f64> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Face(pub Vec<Point>);
+pub struct Face {
+    pub points: Vec<Point>,
+    pub color: ArcIntern<str>,
+}
 
 impl Face {
     /// Rotate the face around the origin with the given axis and symmetry
@@ -87,7 +212,7 @@ impl Face {
     pub fn rotated(mut self, axis: Vector3<f64>, symmetry: u8) -> Face {
         let rotation = rotation_of_degree(axis, symmetry);
 
-        for point in &mut self.0 {
+        for point in &mut self.points {
             point.0 = rotation * point.0;
         }
 
@@ -97,17 +222,17 @@ impl Face {
     fn is_valid(&self) -> Result<(), PuzzleGeometryError> {
         // TEST DEGENERACY
 
-        if self.0.len() <= 2 {
+        if self.points.len() <= 2 {
             return Err(PuzzleGeometryError::FaceIsDegenerate(self.to_owned()));
         }
 
-        let origin = self.0[0].0;
+        let origin = self.points[0].0;
 
-        let line = (self.0[1].0 - origin).normalize();
+        let line = (self.points[1].0 - origin).normalize();
         // Projection matrix onto the line spanned by the first two points
         let line_proj = line * line.transpose();
 
-        for point in self.0.iter().skip(2) {
+        for point in self.points.iter().skip(2) {
             let offsetted = point.0 - origin;
             if (line_proj * offsetted).metric_distance(&offsetted) < E {
                 return Err(PuzzleGeometryError::FaceIsDegenerate(self.to_owned()));
@@ -117,8 +242,8 @@ impl Face {
         // TEST COPLANAR
 
         // These two vectors define a 3D subspace that all points in the face should lie in
-        let basis1 = self.0[1].0 - origin;
-        let basis2 = self.0[2].0 - origin;
+        let basis1 = self.points[1].0 - origin;
+        let basis2 = self.points[2].0 - origin;
 
         // Transform a 2D space into the 3D subspace
         let make_3d = Matrix3x2::from_columns(&[basis1, basis2]);
@@ -127,7 +252,7 @@ impl Face {
         // Project points into the subspace
         let plane_proj = make_3d * make_2d;
 
-        for point in self.0.iter().skip(3) {
+        for point in self.points.iter().skip(3) {
             let offsetted = point.0 - origin;
             if (plane_proj * offsetted).metric_distance(&offsetted) >= E {
                 return Err(PuzzleGeometryError::FaceNotCoplanar(self.to_owned()));
@@ -140,7 +265,13 @@ impl Face {
     fn edge_cloud(&self) -> EdgeCloud {
         let mut cloud = Vec::new();
 
-        for (vertex1, vertex2) in self.0.iter().cycle().tuple_windows().take(self.0.len()) {
+        for (vertex1, vertex2) in self
+            .points
+            .iter()
+            .cycle()
+            .tuple_windows()
+            .take(self.points.len())
+        {
             cloud.push((vertex1.0, vertex2.0));
         }
 
@@ -156,19 +287,26 @@ impl Face {
 pub struct Polyhedron(pub Vec<Face>);
 
 #[derive(Clone, Debug)]
-pub struct PuzzleGeometryDefinition<'a> {
+pub struct PuzzleGeometryDefinition {
     pub polyhedron: Polyhedron,
-    pub cut_axes: Vec<CutAxis<'a>>,
+    pub cut_surfaces: Vec<Arc<dyn CutSurface>>,
 }
 
 #[derive(Clone, Debug)]
-pub struct PuzzleGeometry {}
+pub struct PuzzleGeometry {
+    stickers: Vec<(Face, Vec<ArcIntern<str>>)>,
+}
 
 impl PuzzleGeometry {
     /// Get the puzzle as a permutation group over facelets
     #[must_use]
     pub fn permutation_group(&self) -> &PermutationGroup {
         todo!()
+    }
+
+    #[must_use]
+    pub fn stickers(&self) -> &[(Face, Vec<ArcIntern<str>>)] {
+        &self.stickers
     }
 
     /// Get the puzzle in its `KSolve` representation
@@ -181,128 +319,86 @@ impl PuzzleGeometry {
     }
 }
 
-impl PuzzleGeometryDefinition<'_> {
+impl PuzzleGeometryDefinition {
     /// Consume a `PuzzleGeometryDefinition` and return a `PuzzleGeometry`
     ///
     /// # Errors
     ///
     /// If the validity of the faces is not satisfied, or if the puzzle does
     /// not have the expected symmetries, this function will return an error.
-    pub fn geometry(mut self) -> Result<PuzzleGeometry, PuzzleGeometryError> {
-        for face in &self.polyhedron.0 {
+    pub fn geometry(self) -> Result<PuzzleGeometry, PuzzleGeometryError> {
+        let mut faces: Vec<(Face, Vec<ArcIntern<str>>)> = vec![];
+        for face in self.polyhedron.0 {
             face.is_valid()?;
+            faces.push((face, vec![]));
         }
 
-        self.find_symmetries()?;
-
-        Ok(PuzzleGeometry {})
-    }
-
-    fn find_symmetries(&mut self) -> Result<(), PuzzleGeometryError> {
-        let cloud = self.edge_cloud();
-        let mut into = cloud.clone();
-
-        for cut in &mut self.cut_axes {
-            if let Some(symm) = cut.expected_symmetry {
-                let matrix = rotation_of_degree(*cut.normal, symm);
-
-                if !cloud.try_symmetry(&mut into, matrix) {
-                    return Err(PuzzleGeometryError::PuzzleLacksExpectedSymmetry(
-                        *cut.normal,
-                        symm,
-                    ));
-                }
-            } else {
-                let mut min_symm = 1_u8;
-                let mut trying_symm = 1_u8;
-
-                loop {
-                    trying_symm = match trying_symm.checked_add(min_symm) {
-                        Some(new_symm) => new_symm,
-                        None => break,
-                    };
-
-                    let matrix = rotation_of_degree(*cut.normal, trying_symm);
-
-                    if cloud.try_symmetry(&mut into, matrix) {
-                        min_symm = trying_symm;
-                    }
-                }
-
-                cut.expected_symmetry = Some(min_symm);
-            }
-
-            if cut.expected_symmetry.unwrap() <= 1 {
-                return Err(PuzzleGeometryError::PuzzleLacksSymmetry(*cut.normal));
-            }
+        for cut_surface in self.cut_surfaces {
+            faces = faces
+                .into_iter()
+                .flat_map(|(face, name_components)| {
+                    do_cut(&*cut_surface, face).into_iter().map(
+                        move |(new_face, name_component)| {
+                            let mut name_components = name_components.clone();
+                            if let Some(component) = name_component {
+                                name_components.push(component);
+                            }
+                            (new_face, name_components)
+                        },
+                    )
+                })
+                .collect();
         }
 
-        Ok(())
-    }
+        let stickers = faces;
 
-    /// A sorted list of sorted points, used for structural equality
-    fn edge_cloud(&self) -> EdgeCloud {
-        let mut edges = Vec::new();
-        let mut cuts = Vec::new();
-        let mut zero_axes = Vec::new();
-
-        // TODO: Handle these cuts separately, mixing them in with the edges won't work in general
-
-        for cut_axis in &self.cut_axes {
-            // Cuts must also have the correct symmetry, but they are automatically rotationally symmetric with themselves
-            for cut in &cut_axis.distances {
-                if *cut < E {
-                    // In the case of just a cut through the middle, this will still ensure symmetry.
-                    // We can't push this directly because the direction will be inaccessible if the magnitude is zero and zero cuts in different directions will count
-                    zero_axes.push((*cut_axis.normal, -*cut_axis.normal));
-                    continue;
-                }
-
-                let cut_spot = *cut_axis.normal * *cut;
-                cuts.push((cut_spot, -cut_spot));
-            }
-        }
-
-        for face in &self.polyhedron.0 {
-            edges.extend_from_slice(&face.edge_cloud().sections()[0]);
-        }
-
-        EdgeCloud::new(vec![zero_axes, cuts, edges])
+        Ok(PuzzleGeometry { stickers })
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use crate::{
-        CutAxis, CutAxisNames, Face, Point, Polyhedron, PuzzleGeometryDefinition,
-        PuzzleGeometryError,
-        shapes::{CUBE, TETRAHEDRON},
+        Face, PlaneCut, Point, PuzzleGeometryDefinition, PuzzleGeometryError, do_cut, shapes::CUBE,
     };
-    use nalgebra::{Rotation3, Unit, Vector3};
+    use internment::ArcIntern;
+    use nalgebra::Vector3;
 
     #[test]
     fn degeneracy() {
-        let valid = Face(vec![Point(Vector3::new(1., 2., 3.))]).is_valid();
-        assert!(matches!(
-            valid,
-            Err(PuzzleGeometryError::FaceIsDegenerate(_))
-        ));
-
-        let valid = Face(vec![
-            Point(Vector3::new(1., 2., 3.)),
-            Point(Vector3::new(5., 4., 3.)),
-        ])
+        let valid = Face {
+            points: vec![Point(Vector3::new(1., 2., 3.))],
+            color: ArcIntern::from("aliceblue"),
+        }
         .is_valid();
         assert!(matches!(
             valid,
             Err(PuzzleGeometryError::FaceIsDegenerate(_))
         ));
 
-        let valid = Face(vec![
-            Point(Vector3::new(2., 2., 3.)),
-            Point(Vector3::new(3., 4., 6.)),
-            Point(Vector3::new(4., 6., 9.)),
-        ])
+        let valid = Face {
+            points: vec![
+                Point(Vector3::new(1., 2., 3.)),
+                Point(Vector3::new(5., 4., 3.)),
+            ],
+            color: ArcIntern::from("oklch(1 2 3)"),
+        }
+        .is_valid();
+        assert!(matches!(
+            valid,
+            Err(PuzzleGeometryError::FaceIsDegenerate(_))
+        ));
+
+        let valid = Face {
+            points: vec![
+                Point(Vector3::new(2., 2., 3.)),
+                Point(Vector3::new(3., 4., 6.)),
+                Point(Vector3::new(4., 6., 9.)),
+            ],
+            color: ArcIntern::from("fuschia"),
+        }
         .is_valid();
         assert!(matches!(
             valid,
@@ -312,12 +408,15 @@ mod tests {
 
     #[test]
     fn not_coplanar() {
-        let valid = Face(vec![
-            Point(Vector3::new(2., 2., 3.)),
-            Point(Vector3::new(3., 4., 6.)),
-            Point(Vector3::new(4., 6., 11.)),
-            Point(Vector3::new(6., 6., 11.)),
-        ])
+        let valid = Face {
+            points: vec![
+                Point(Vector3::new(2., 2., 3.)),
+                Point(Vector3::new(3., 4., 6.)),
+                Point(Vector3::new(4., 6., 11.)),
+                Point(Vector3::new(6., 6., 11.)),
+            ],
+            color: ArcIntern::from("blue"),
+        }
         .is_valid();
 
         assert!(matches!(
@@ -325,26 +424,130 @@ mod tests {
             Err(PuzzleGeometryError::FaceNotCoplanar(_))
         ));
 
-        let valid = Face(vec![
-            Point(Vector3::new(1., 1., 1.)),
-            Point(Vector3::new(1., 1., 0.)),
-            Point(Vector3::new(1., 0., 0.)),
-            Point(Vector3::new(1., 0., 1.)),
-        ])
+        let valid = Face {
+            points: vec![
+                Point(Vector3::new(1., 1., 1.)),
+                Point(Vector3::new(1., 1., 0.)),
+                Point(Vector3::new(1., 0., 0.)),
+                Point(Vector3::new(1., 0., 1.)),
+            ],
+            color: ArcIntern::from("bruh"),
+        }
         .is_valid();
 
         assert!(matches!(valid, Ok(())));
     }
 
     #[test]
+    fn plane_cut() {
+        let face = Face {
+            points: vec![
+                Point(Vector3::new(1., 0., 1.)),
+                Point(Vector3::new(1., 0., -1.)),
+                Point(Vector3::new(-1., 0., -1.)),
+                Point(Vector3::new(-1., 0., 1.)),
+            ],
+            color: ArcIntern::from("orange"),
+        };
+
+        let cutted = do_cut(
+            &PlaneCut {
+                spot: Vector3::new(0., 0., 0.),
+                normal: Vector3::new(1., 0., 0.),
+                name: ArcIntern::from("R"),
+            },
+            face,
+        );
+
+        assert_eq!(cutted.len(), 2);
+
+        let face1 = Face {
+            points: vec![
+                Point(Vector3::new(1., 0., 1.)),
+                Point(Vector3::new(1., 0., -1.)),
+                Point(Vector3::new(0., 0., -1.)),
+                Point(Vector3::new(0., 0., 1.)),
+            ],
+            color: ArcIntern::from("orange"),
+        };
+
+        let face2 = Face {
+            points: vec![
+                Point(Vector3::new(0., 0., 1.)),
+                Point(Vector3::new(0., 0., -1.)),
+                Point(Vector3::new(-1., 0., -1.)),
+                Point(Vector3::new(-1., 0., 1.)),
+            ],
+            color: ArcIntern::from("orange"),
+        };
+
+        if cutted[0].0.epsilon_eq(&face1) {
+            assert_eq!(cutted[0].1, Some(ArcIntern::from("R")));
+            assert!(cutted[1].0.epsilon_eq(&face2));
+            assert_eq!(cutted[1].1, None);
+        } else {
+            assert!(cutted[1].0.epsilon_eq(&face1));
+            assert_eq!(cutted[1].1, Some(ArcIntern::from("R")));
+            assert!(cutted[0].0.epsilon_eq(&face2));
+            assert_eq!(cutted[0].1, None);
+        }
+    }
+
+    #[test]
+    fn three_by_three() {
+        let cube = PuzzleGeometryDefinition {
+            polyhedron: CUBE.to_owned(),
+            cut_surfaces: vec![
+                Arc::from(PlaneCut {
+                    spot: Vector3::new(1. / 3., 0., 0.),
+                    normal: Vector3::new(1., 0., 0.),
+                    name: ArcIntern::from("L"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: Vector3::new(-1. / 3., 0., 0.),
+                    normal: Vector3::new(-1., 0., 0.),
+                    name: ArcIntern::from("R"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: Vector3::new(0., 1. / 3., 0.),
+                    normal: Vector3::new(0., 1., 0.),
+                    name: ArcIntern::from("U"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: Vector3::new(0., -1. / 3., 0.),
+                    normal: Vector3::new(0., -1., 0.),
+                    name: ArcIntern::from("D"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: Vector3::new(0., 0., 1. / 3.),
+                    normal: Vector3::new(0., 0., 1.),
+                    name: ArcIntern::from("F"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: Vector3::new(0., 0., -1. / 3.),
+                    normal: Vector3::new(0., 0., -1.),
+                    name: ArcIntern::from("B"),
+                }),
+            ],
+        };
+
+        let geometry = cube.geometry().unwrap();
+        assert_eq!(geometry.stickers().len(), 54);
+    }
+
+    /*
+    #[test]
     fn symmetries_simple() {
         let mut one_face = PuzzleGeometryDefinition {
-            polyhedron: Polyhedron(vec![Face(vec![
-                Point(Vector3::new(1., 0., 1.)),
-                Point(Vector3::new(-1., 0., 1.)),
-                Point(Vector3::new(-1., 0., -1.)),
-                Point(Vector3::new(1., 0., -1.)),
-            ])]),
+            polyhedron: Polyhedron(vec![Face {
+                points: vec![
+                    Point(Vector3::new(1., 0., 1.)),
+                    Point(Vector3::new(-1., 0., 1.)),
+                    Point(Vector3::new(-1., 0., -1.)),
+                    Point(Vector3::new(1., 0., -1.)),
+                ],
+                color: ArcIntern::from("bruh"),
+            }]),
             cut_axes: vec![CutAxis {
                 names: CutAxisNames {
                     forward_name: "F",
@@ -564,4 +767,5 @@ mod tests {
             assert_eq!(cut_axis.expected_symmetry, Some(3));
         }
     }
+    */
 }

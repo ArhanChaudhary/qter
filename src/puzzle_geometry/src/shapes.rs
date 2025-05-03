@@ -1,4 +1,5 @@
 use crate::{Face, Point, Polyhedron, PuzzleDescriptionString};
+use internment::ArcIntern;
 use nalgebra::{Rotation3, Unit, Vector3};
 use std::sync::LazyLock;
 
@@ -15,27 +16,47 @@ pub static TETRAHEDRON: LazyLock<Polyhedron> = LazyLock::new(|| {
     let down_3 = down_2.rotated(Vector3::new(0., 1., 0.), 3);
 
     Polyhedron(vec![
-        Face(vec![up, down_1, down_2]),
-        Face(vec![up, down_2, down_3]),
-        Face(vec![up, down_3, down_1]),
-        Face(vec![down_1, down_2, down_3]),
+        Face {
+            points: vec![up, down_1, down_2],
+            color: ArcIntern::from("green"),
+        },
+        Face {
+            points: vec![up, down_2, down_3],
+            color: ArcIntern::from("blue"),
+        },
+        Face {
+            points: vec![up, down_3, down_1],
+            color: ArcIntern::from("yellow"),
+        },
+        Face {
+            points: vec![down_1, down_2, down_3],
+            color: ArcIntern::from("red"),
+        },
     ])
 });
 
 pub static CUBE: LazyLock<Polyhedron> = LazyLock::new(|| {
-    let up = Face(vec![
-        Point(Vector3::new(1., 1., 1.)),
-        Point(Vector3::new(-1., 1., 1.)),
-        Point(Vector3::new(-1., 1., -1.)),
-        Point(Vector3::new(1., 1., -1.)),
-    ]);
+    let up = Face {
+        points: vec![
+            Point(Vector3::new(1., 1., 1.)),
+            Point(Vector3::new(-1., 1., 1.)),
+            Point(Vector3::new(-1., 1., -1.)),
+            Point(Vector3::new(1., 1., -1.)),
+        ],
+        color: ArcIntern::from("white"),
+    };
 
-    let right = up.clone().rotated(Vector3::new(1., 0., 0.), 4);
-    let down = right.clone().rotated(Vector3::new(1., 0., 0.), 4);
-    let left = down.clone().rotated(Vector3::new(1., 0., 0.), 4);
+    let mut right = up.clone().rotated(Vector3::new(1., 0., 0.), 4);
+    right.color = ArcIntern::from("red");
+    let mut down = right.clone().rotated(Vector3::new(1., 0., 0.), 4);
+    down.color = ArcIntern::from("yellow");
+    let mut left = down.clone().rotated(Vector3::new(1., 0., 0.), 4);
+    left.color = ArcIntern::from("orange");
 
-    let front = up.clone().rotated(Vector3::new(0., 0., 1.), 4);
-    let back = up.clone().rotated(Vector3::new(0., 0., -1.), 4);
+    let mut front = up.clone().rotated(Vector3::new(0., 0., 1.), 4);
+    front.color = ArcIntern::from("green");
+    let mut back = up.clone().rotated(Vector3::new(0., 0., -1.), 4);
+    back.color = ArcIntern::from("blue");
 
     Polyhedron(vec![up, right, down, left, front, back])
 });
