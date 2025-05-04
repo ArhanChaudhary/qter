@@ -1,5 +1,7 @@
 # TODO
 
+- human-panic
+
 ## SCC
 
 - Phase 2
@@ -53,7 +55,7 @@
 - Function macro
 - Directory of testing programs instead of hardcoding into Rust
   - Inline testing in the QAT format
-- `solve-puzzle`
+- `solve-puzzle` and instruction to copy solving moves to other puzzle
 - Analyzing branches and removing dead code
 - Architecture that avoids sharing a piece by always having two additions simultaneously which avoids parity
 

@@ -1,7 +1,10 @@
-#![feature(test)]
-#![feature(slice_index_methods)]
-#![feature(portable_simd)]
-#![feature(abi_vectorcall)]
+#![feature(
+    test,
+    slice_index_methods,
+    portable_simd,
+    abi_vectorcall,
+    try_reserve_kind
+)]
 #![warn(clippy::pedantic)]
 #![allow(
     clippy::similar_names,

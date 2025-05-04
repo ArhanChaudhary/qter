@@ -10,8 +10,9 @@
 
 use crate::phase2::puzzle::{MultiBvInterface, orbit_puzzle::SliceOrbitPuzzle};
 
-use super::puzzle::{
-    OrbitDef, OrientedPartition, PuzzleDef, PuzzleState, orbit_puzzle::OrbitPuzzleState,
+use super::{
+    FACT_UNTIL_20,
+    puzzle::{OrbitDef, OrientedPartition, PuzzleDef, PuzzleState, orbit_puzzle::OrbitPuzzleState},
 };
 use itertools::Itertools;
 use std::{iter::repeat_n, num::NonZeroU8};
@@ -183,7 +184,7 @@ mod private {
 }
 
 pub struct MaxSizeBytes(pub u64);
-pub struct MaxEntires(pub usize);
+pub struct MaxEntries(pub usize);
 pub struct NullMeta;
 
 impl From<u64> for MaxSizeBytes {
@@ -192,10 +193,9 @@ impl From<u64> for MaxSizeBytes {
     }
 }
 
-impl From<u64> for MaxEntires {
+impl From<u64> for MaxEntries {
     fn from(value: u64) -> Self {
-        // this will be revamped
-        MaxEntires(value as usize)
+        MaxEntries(value.try_into().unwrap())
     }
 }
 
@@ -204,17 +204,6 @@ impl From<u64> for NullMeta {
         NullMeta
     }
 }
-
-const FACT_UNTIL_20: [u64; 21] = {
-    let mut arr = [0; 21];
-    arr[0] = 1;
-    let mut i = 1;
-    while i <= 20 {
-        arr[i] = arr[i - 1] * i as u64;
-        i += 1;
-    }
-    arr
-};
 
 impl<'a, P: PuzzleState> OrbitPruningTablesGenerateMeta<'a, P> {
     /// Create a new `OrbitPruningTablesGenerateMeta` with the given parameters.
@@ -271,7 +260,8 @@ impl<P: PuzzleState> PruningTables<P> for OrbitPruningTables<P> {
         P: 'a;
 
     fn generate(generate_meta: OrbitPruningTablesGenerateMeta<P>) -> OrbitPruningTables<P> {
-        let mut orbit_pruning_tables = vec![];
+        let mut orbit_pruning_tables =
+            Vec::with_capacity(generate_meta.puzzle_def.sorted_orbit_defs.len());
         let mut remaining_size_bytes = generate_meta.max_size_bytes;
         // Already sorted by (piece count, orientation) which is (usually) from
         // smallest to largest which makes this work. This essentially populates
@@ -389,9 +379,9 @@ fn choose_pruning_table<P: PuzzleState>(
 }
 
 impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend<EXACT> {
-    type InitializationMeta = MaxEntires;
+    type InitializationMeta = MaxEntries;
 
-    fn initialize_from_meta(max_entries: MaxEntires) -> UncompressedStorageBackend<EXACT> {
+    fn initialize_from_meta(max_entries: MaxEntries) -> UncompressedStorageBackend<EXACT> {
         let max_entries = max_entries.0;
         let data = vec![OrbitPruneHeuristic::vacant(); max_entries].into_boxed_slice();
         UncompressedStorageBackend {
@@ -407,21 +397,34 @@ impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend<EXA
     }
 
     fn heuristic_hash(&self, hash: u64) -> OrbitPruneHeuristic {
-        #[allow(clippy::cast_possible_truncation)]
         if EXACT {
+            #[allow(clippy::cast_possible_truncation)]
+            // an exact hash implies (0..self.data.len()).contains(hash) . This
+            // also implies that hash is no larger than `self.data.len()` which
+            // is a usize. Therefore we can safely cast it to a usize given this
+            // condition upheld by the caller.
             self.data[hash as usize]
         } else {
-            let hash = (hash % self.data.len() as u64) as usize;
-            self.data[hash]
+            let hash = hash % self.data.len() as u64;
+            #[allow(clippy::cast_possible_truncation)]
+            // After the modulus `hash` is guaranteed to be less than
+            // `self.data.len()` which is a usize. Therefore we can safely cast
+            // it to a usize.
+            self.data[hash as usize]
         }
     }
 
     fn set_heuristic_hash(&mut self, hash: u64, orbit_prune_heuristic: OrbitPruneHeuristic) {
-        #[allow(clippy::cast_possible_truncation)]
         if EXACT {
-            self.data[hash as usize] = orbit_prune_heuristic;
+            #[allow(clippy::cast_possible_truncation)]
+            // see above for why this is safe
+            let hash = hash as usize;
+            self.data[hash] = orbit_prune_heuristic;
         } else {
-            let hash = (hash % self.data.len() as u64) as usize;
+            let hash = hash % self.data.len() as u64;
+            #[allow(clippy::cast_possible_truncation)]
+            // see above for why this is safe
+            let hash = hash as usize;
             self.data[hash] = self.data[hash].min(orbit_prune_heuristic);
         }
     }
@@ -432,11 +435,16 @@ impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend<EXA
 }
 
 impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend<EXACT> {
-    type InitializationMeta = MaxSizeBytes;
+    type InitializationMeta = u64;
 
-    fn initialize_from_meta(max_size_bytes: MaxSizeBytes) -> TANSStorageBackend<EXACT> {
-        let max_size_bytes = max_size_bytes.0;
-        todo!();
+    fn initialize_from_meta(initialization_meta: u64) -> TANSStorageBackend<EXACT> {
+        if EXACT {
+            let entry_count = initialization_meta;
+            todo!();
+        } else {
+            let max_size_bytes = initialization_meta;
+            todo!();
+        }
     }
 
     fn permissible_heuristic_hash(&self, hash: u64) -> u8 {
@@ -491,7 +499,7 @@ fn generate_exact_orbit_pruning_table<
     orbit_def: OrbitDef,
     orbit_identifier: usize,
     max_size_bytes: u64,
-) -> (ExactOrbitPruningTable<S>, u64) {
+) -> Option<(ExactOrbitPruningTable<S>, u64)> {
     let piece_count = orbit_def.piece_count.get();
 
     let entry_count = FACT_UNTIL_20[piece_count as usize]
@@ -499,58 +507,45 @@ fn generate_exact_orbit_pruning_table<
             u64::from(orbit_def.orientation_count.get()),
             u32::from(piece_count) - 1,
         );
-    let used_size_bytes = entry_count;
 
     let orbit_moves = puzzle_def
         .moves
         .iter()
         // TODO: make this filter map
         .map(|move_| {
+            // TODO: better way to do this?
             let (perm, ori) = move_.puzzle_state.orbit_bytes(orbit_identifier, orbit_def);
             O::from_orbit_transformation_unchecked(perm, ori, orbit_def)
         })
         .collect_vec();
 
     let mut ret = ExactOrbitPruningTable {
-        // TODO: look into
-        storage_backend: S::initialize_from_meta(max_size_bytes.into()),
+        storage_backend: S::initialize_from_meta(entry_count.into()),
         orbit_def,
         orbit_identifier,
     };
 
-    let mut result = {
-        let perm = (0..piece_count).collect_vec();
-        let ori = vec![0; piece_count as usize - 1];
-        O::from_orbit_transformation_unchecked(&perm, &ori, orbit_def)
-    };
+    let perm = (0..piece_count).collect_vec();
+    let ori = vec![0; piece_count as usize - 1];
+    let mut result = O::from_orbit_transformation_unchecked(&perm, &ori, orbit_def);
+
     let mut multi_bv = O::new_multi_bv(sorted_orbit_cycle_type);
     let mut depth = 0;
     let mut vacant_entry_count = entry_count;
-    while let Some(depth_heuristic) = OrbitPruneHeuristic::occupied(depth) {
-        for (exact_perm_hash, perm) in (0..piece_count)
-            .permutations(piece_count as usize)
-            .enumerate()
-        {
-            for (exact_ori_hash, ori) in
-                repeat_n(0..orbit_def.orientation_count.get(), piece_count as usize)
-                    .multi_cartesian_product()
-                    // TODO more efficient way than filtering and this overflows too
-                    .filter(|ori| {
-                        ori.iter()
-                            .sum::<u8>()
-                            .rem_euclid(orbit_def.orientation_count.get())
-                            == 0
-                    })
-                    .enumerate()
-            {
-                // TODO: is caching necessary?
-                let exact_orbit_hash = exact_perm_hash as u64
-                    * u64::pow(
-                        u64::from(orbit_def.orientation_count.get()),
-                        u32::from(piece_count) - 1,
-                    )
-                    + exact_ori_hash as u64;
 
+    let mut exact_orbit_hash = 0;
+    while let Some(depth_heuristic) = OrbitPruneHeuristic::occupied(depth) {
+        for perm in (0..piece_count).permutations(piece_count as usize) {
+            for ori in repeat_n(0..orbit_def.orientation_count.get(), piece_count as usize)
+                .multi_cartesian_product()
+                // TODO more efficient way than filtering and this overflows too
+                .filter(|ori| {
+                    ori.iter()
+                        .sum::<u8>()
+                        .rem_euclid(orbit_def.orientation_count.get())
+                        == 0
+                })
+            {
                 if depth != 0
                     && ret
                         .storage_backend
@@ -558,6 +553,7 @@ fn generate_exact_orbit_pruning_table<
                         .get_occupied()
                         != Some(depth - 1)
                 {
+                    exact_orbit_hash += 1;
                     continue;
                 }
 
@@ -572,12 +568,12 @@ fn generate_exact_orbit_pruning_table<
                             .set_heuristic_hash(exact_orbit_hash, depth_heuristic);
                         vacant_entry_count -= 1;
                     }
+                    exact_orbit_hash += 1;
                     continue;
                 }
 
                 for move_ in &orbit_moves {
                     result.replace_compose(&curr_state, move_, orbit_def);
-                    // let new_hash = exact_hash_orbit_bytes(&perm, &ori, orbit_def);
                     let new_hash = result.exact_hash(orbit_def);
                     if ret.storage_backend.heuristic_hash(new_hash).is_vacant() {
                         ret.storage_backend
@@ -585,46 +581,16 @@ fn generate_exact_orbit_pruning_table<
                         vacant_entry_count -= 1;
                     }
                 }
+                exact_orbit_hash += 1;
             }
         }
         if vacant_entry_count == 0 {
+            assert_eq!(exact_orbit_hash, entry_count);
             break;
         }
         depth += 1;
     }
-    assert!(used_size_bytes <= max_size_bytes);
-    (ret, entry_count)
-}
-
-fn exact_hash_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def: OrbitDef) -> u64 {
-    let piece_count = orbit_def.piece_count.get();
-    assert!(piece_count as usize <= FACT_UNTIL_20.len());
-
-    let mut exact_perm_hash = 0;
-    for i in 0..piece_count {
-        let mut res = 0;
-        for j in (i + 1)..piece_count {
-            if perm[j as usize] < perm[i as usize] {
-                res += 1;
-            }
-        }
-        exact_perm_hash += res * FACT_UNTIL_20[(piece_count - i - 1) as usize];
-    }
-
-    let mut exact_ori_hash = 0;
-    for i in 0..piece_count - 1 {
-        exact_ori_hash += u64::from(ori[i as usize]);
-        if i != piece_count - 2 {
-            exact_ori_hash *= u64::from(orbit_def.orientation_count.get());
-        }
-    }
-
-    exact_perm_hash
-        * u64::pow(
-            u64::from(orbit_def.orientation_count.get()),
-            u32::from(piece_count) - 1,
-        )
-        + exact_ori_hash
+    Some((ret, entry_count))
 }
 
 impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbitPruningTable<S> {
@@ -643,7 +609,9 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
                     orbit_def,
                     orbit_identifier,
                     max_size_bytes,
-                );
+                    // TODO
+                )
+                .unwrap();
                 return (table, used_size_bytes);
             }};
         }
@@ -652,14 +620,6 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
         table!(SliceOrbitPuzzle)
     }
 
-    // fn hash_orbit_state(&self, puzzle_state: &P) -> u64 {
-    //     let (perm, ori) = puzzle_state.orbit_bytes(self.orbit_identifier, self.orbit_def);
-    //     exact_hash_orbit_bytes(perm, ori, self.orbit_def)
-    // }
-
-    // fn permissible_heuristic_hash_outer(&self, hash: u64) -> u8 {
-    //     self.storage_backend.permissible_heuristic_hash(hash)
-    // }
     fn permissible_heuristic(&self, puzzle_state: &P) -> u8 {
         self.storage_backend.permissible_heuristic_hash(
             puzzle_state.exact_hash_orbit(self.orbit_identifier, self.orbit_def),
@@ -741,7 +701,7 @@ mod tests {
 
     #[test]
     fn test_exact_uncompressed_storage_backend() {
-        let mut storage = UncompressedStorageBackend::<true>::initialize_from_meta(MaxEntires(100));
+        let mut storage = UncompressedStorageBackend::<true>::initialize_from_meta(MaxEntries(100));
 
         storage.set_heuristic_hash(5, OrbitPruneHeuristic::occupied(3).unwrap());
         assert_eq!(storage.permissible_heuristic_hash(5), 3);
@@ -755,7 +715,7 @@ mod tests {
     #[test]
     fn test_approximate_uncompressed_storage_backend() {
         let mut storage =
-            UncompressedStorageBackend::<false>::initialize_from_meta(MaxEntires(100));
+            UncompressedStorageBackend::<false>::initialize_from_meta(MaxEntries(100));
 
         storage.set_heuristic_hash(6, OrbitPruneHeuristic::occupied(3).unwrap());
         assert_eq!(storage.permissible_heuristic_hash(6), 3);
@@ -848,7 +808,7 @@ mod tests {
 
     //     let exact_corners_pruning_table =
     //         ExactOrbitPruningTable::<UncompressedStorageBackend<true>> {
-    //             storage_backend: UncompressedStorageBackend::initialize_from_meta(MaxEntires(100)),
+    //             storage_backend: UncompressedStorageBackend::initialize_from_meta(MaxEntries(100)),
     //             orbit_def: cube3_def.sorted_orbit_defs[0],
     //             orbit_identifier: 0,
     //         };

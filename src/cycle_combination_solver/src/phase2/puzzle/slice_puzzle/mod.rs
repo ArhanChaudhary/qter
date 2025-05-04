@@ -1,4 +1,5 @@
 use super::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
+use crate::phase2::FACT_UNTIL_20;
 use std::{hash::Hash, num::NonZeroU8};
 
 #[derive(Clone, PartialEq, Debug)]
@@ -70,7 +71,8 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
     }
 
     fn exact_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64 {
-        todo!()
+        let (perm, ori) = self.orbit_bytes(orbit_identifier, orbit_def);
+        exact_hash_orbit_bytes(perm, ori, orbit_def)
     }
 }
 
@@ -134,7 +136,8 @@ impl PuzzleState for HeapPuzzle {
     }
 
     fn exact_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64 {
-        todo!()
+        let (perm, ori) = self.orbit_bytes(orbit_identifier, orbit_def);
+        exact_hash_orbit_bytes(perm, ori, orbit_def)
     }
 }
 
@@ -390,6 +393,37 @@ fn orbit_bytes_slice(
         &permutation[base..base + piece_count],
         &orientation[base..base + piece_count],
     )
+}
+
+fn exact_hash_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def: OrbitDef) -> u64 {
+    let piece_count = orbit_def.piece_count.get();
+    assert!(piece_count as usize <= FACT_UNTIL_20.len());
+
+    let mut exact_perm_hash = 0;
+    for i in 0..piece_count {
+        let mut res = 0;
+        for j in (i + 1)..piece_count {
+            if perm[j as usize] < perm[i as usize] {
+                res += 1;
+            }
+        }
+        exact_perm_hash += res * FACT_UNTIL_20[(piece_count - i - 1) as usize];
+    }
+
+    let mut exact_ori_hash = 0;
+    for i in 0..piece_count - 1 {
+        exact_ori_hash += u64::from(ori[i as usize]);
+        if i != piece_count - 2 {
+            exact_ori_hash *= u64::from(orbit_def.orientation_count.get());
+        }
+    }
+
+    exact_perm_hash
+        * u64::pow(
+            u64::from(orbit_def.orientation_count.get()),
+            u32::from(piece_count) - 1,
+        )
+        + exact_ori_hash
 }
 
 impl HeapPuzzle {
