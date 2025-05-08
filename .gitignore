@@ -3,3 +3,4 @@
 .direnv
 src/cli/*.qat
 src/cli/test.*
+.ipynb_checkpoints

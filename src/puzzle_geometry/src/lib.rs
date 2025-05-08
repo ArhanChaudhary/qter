@@ -2,17 +2,19 @@
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::float_cmp)]
 
-use std::{collections::VecDeque, iter, mem, sync::Arc};
+use std::sync::Arc;
 
 use edge_cloud::EdgeCloud;
 use internment::ArcIntern;
 use itertools::Itertools;
+use knife::{CutSurface, do_cut};
 use ksolve::KSolve;
-use nalgebra::{Matrix3, Matrix3x2, Rotation3, Unit, Vector3};
+use nalgebra::{Matrix2x3, Matrix3, Matrix3x2, Rotation3, Unit, Vector3};
 use qter_core::architectures::PermutationGroup;
 use thiserror::Error;
 
 mod edge_cloud;
+pub mod knife;
 pub mod ksolve;
 pub mod shapes;
 
@@ -29,8 +31,12 @@ type PuzzleDescriptionString<'a> = &'a str;
 pub enum PuzzleGeometryError {
     #[error("The vertices of the face are not coplanar: {0:?}")]
     FaceNotCoplanar(Face),
-    #[error("The face forms a line or a point rather than a plane: {0:?}")]
+    #[error("The face forms a line or a point rather than a plane, or has collinear edges: {0:?}")]
     FaceIsDegenerate(Face),
+    #[error(
+        "A cut surface has cyclical structure and cannot be cut. Consider re-ordering the cut surfaces. Cut: {0}; Face: {1:?}"
+    )]
+    CyclicalCutSurface(String, Face),
     #[error(
         "The puzzle does not have {1}-fold rotational symmetry as expected by the cut line: {0:?}"
     )]
@@ -48,146 +54,6 @@ impl Point {
 
         Point(rotation * self.0)
     }
-}
-
-pub trait CutSurface: core::fmt::Debug {
-    fn region(&self, point: Point) -> Option<ArcIntern<str>>;
-
-    fn on_boundary(&self, point: Point) -> bool;
-
-    fn boundaries_between(&self, point_a: Point, point_b: Point) -> Vec<Point>;
-
-    fn join(&self, a: Point, b: Point) -> Vec<Point>;
-}
-
-#[derive(Clone, Debug)]
-pub struct PlaneCut {
-    spot: Vector3<f64>,
-    normal: Vector3<f64>,
-    name: ArcIntern<str>,
-}
-
-impl CutSurface for PlaneCut {
-    fn region(&self, point: Point) -> Option<ArcIntern<str>> {
-        let signum = self.normal.dot(&(point.0 - self.spot)).signum();
-        assert!(signum == 1. || signum == -1.);
-        if signum == 1. {
-            Some(ArcIntern::clone(&self.name))
-        } else {
-            None
-        }
-    }
-
-    fn on_boundary(&self, point: Point) -> bool {
-        self.normal.dot(&(point.0 - self.spot)) < E
-    }
-
-    fn boundaries_between(&self, a: Point, b: Point) -> Vec<Point> {
-        let a_dot = self.normal.dot(&(a.0 - self.spot));
-        let b_dot = self.normal.dot(&(b.0 - self.spot));
-
-        if a_dot.signum() == b_dot.signum() {
-            return vec![];
-        }
-
-        let frac = a_dot.abs() / (a_dot.abs() + b_dot.abs());
-
-        let point = Point(a.0 * frac + b.0 * (1.0 - frac));
-        // assert!(self.on_boundary(point));
-
-        vec![point]
-    }
-
-    fn join(&self, _: Point, _: Point) -> Vec<Point> {
-        vec![]
-    }
-}
-
-fn do_cut<S: CutSurface + ?Sized>(surface: &S, face: Face) -> Vec<(Face, Option<ArcIntern<str>>)> {
-    assert!(!face.points.is_empty());
-
-    // TODO: Rewrite all of this
-    // let mut points = face
-    //     .points
-    //     .into_iter()
-    //     .cycle()
-    //     .tuple_windows()
-    //     .take(face.points.len())
-    //     .flat_map(|(a, b)| iter::once(a).chain(surface.boundaries_between(a, b).into_iter()))
-    //     .collect::<VecDeque<_>>();
-
-    let mut groups = face
-        .points
-        .into_iter()
-        .map(|v| (vec![v], surface.region(v)))
-        .coalesce(|mut a, b| {
-            if a.1 == b.1 {
-                a.0.extend_from_slice(&b.0);
-                Ok(a)
-            } else {
-                Err((a, b))
-            }
-        })
-        .collect_vec();
-    println!("{groups:?}");
-
-    if groups.len() != 1 {
-        if groups.len() % 2 == 1 {
-            let mut new_group = groups.pop().unwrap();
-            assert_eq!(new_group.1, groups[0].1);
-            new_group.0.extend_from_slice(&groups[0].0);
-            groups[0] = new_group;
-        }
-
-        (0..groups.len())
-            .cycle()
-            .tuple_windows()
-            .take(groups.len())
-            .for_each(|(a_idx, b_idx)| {
-                let a = groups[a_idx].0.last().unwrap();
-                let b = groups[b_idx].0.first().unwrap();
-
-                let mut boundaries = surface.boundaries_between(*a, *b);
-
-                groups[a_idx].0.extend_from_slice(&boundaries);
-                boundaries.reverse();
-                boundaries.extend_from_slice(&groups[b_idx].0);
-                groups[b_idx].0 = boundaries;
-            });
-    }
-    println!("{groups:?}");
-
-    for group in &mut groups {
-        let (new_group, sign) = mem::take(group);
-
-        *group = (
-            new_group
-                .into_iter()
-                .coalesce(|a, b| {
-                    if a.0.metric_distance(&b.0) < E {
-                        Ok(a)
-                    } else {
-                        Err((a, b))
-                    }
-                })
-                .collect(),
-            sign,
-        );
-    }
-    println!("{groups:?}");
-
-    groups
-        .into_iter()
-        .map(|(points, sign)| {
-            (
-                Face {
-                    points,
-                    color: ArcIntern::clone(&face.color),
-                },
-                sign,
-            )
-        })
-        .collect_vec()
 }
 
 fn rotation_of_degree(axis: Vector3<f64>, symm: u8) -> Matrix3<f64> {
@@ -226,34 +92,34 @@ impl Face {
             return Err(PuzzleGeometryError::FaceIsDegenerate(self.to_owned()));
         }
 
-        let origin = self.points[0].0;
+        if self
+            .points
+            .iter()
+            .circular_tuple_windows()
+            .any(|(a, b, c)| {
+                let line = (b.0 - a.0).normalize();
+                // Projection matrix onto the line spanned by the first two points
+                let line_proj = line * line.transpose();
 
-        let line = (self.points[1].0 - origin).normalize();
-        // Projection matrix onto the line spanned by the first two points
-        let line_proj = line * line.transpose();
-
-        for point in self.points.iter().skip(2) {
-            let offsetted = point.0 - origin;
-            if (line_proj * offsetted).metric_distance(&offsetted) < E {
-                return Err(PuzzleGeometryError::FaceIsDegenerate(self.to_owned()));
-            }
+                (line_proj * (c.0 - a.0)).metric_distance(&(c.0 - a.0)) < E
+            })
+        {
+            return Err(PuzzleGeometryError::FaceIsDegenerate(self.to_owned()));
         }
 
         // TEST COPLANAR
 
-        // These two vectors define a 3D subspace that all points in the face should lie in
-        let basis1 = self.points[1].0 - origin;
-        let basis2 = self.points[2].0 - origin;
+        let FaceSubspaceInfo {
+            make_3d,
+            make_2d,
+            offset,
+        } = self.subspace_info();
 
-        // Transform a 2D space into the 3D subspace
-        let make_3d = Matrix3x2::from_columns(&[basis1, basis2]);
-        // Project points in 3D space into the subspace and into the 2D space
-        let make_2d = make_3d.pseudo_inverse(E).unwrap();
         // Project points into the subspace
         let plane_proj = make_3d * make_2d;
 
         for point in self.points.iter().skip(3) {
-            let offsetted = point.0 - origin;
+            let offsetted = point.0 - offset;
             if (plane_proj * offsetted).metric_distance(&offsetted) >= E {
                 return Err(PuzzleGeometryError::FaceNotCoplanar(self.to_owned()));
             }
@@ -281,6 +147,40 @@ impl Face {
     fn epsilon_eq(&self, other: &Face) -> bool {
         self.edge_cloud().epsilon_eq(&other.edge_cloud())
     }
+
+    /// Returns a pair of matrices where the first matrix projects a 2D vector into the 3D subspace spanned by this face, and the second computes the projection of a 3D vector into the 2D subspace.
+    ///
+    /// Also returns an origin vector to capture the translation of the face with respect to ⟨0, 0, 0⟩.
+    fn subspace_info(&self) -> FaceSubspaceInfo {
+        let offset = self.points[0].0;
+
+        // These two vectors define a 3D subspace that all points in the face should lie in
+        let basis1 = self.points[1].0 - offset;
+        let basis2 = self.points[2].0 - offset;
+
+        // Transforms a 2D space into the 3D subspace
+        // Make it orthogonal because that's nice to have
+        let make_3d = Matrix3x2::from_columns(&[basis1, basis2]).qr().q();
+        // Project points in 3D space into the subspace and into the 2D space
+        let make_2d = make_3d.pseudo_inverse(E).unwrap();
+
+        FaceSubspaceInfo {
+            make_3d,
+            make_2d,
+            offset,
+        }
+    }
+}
+
+/// Encodes the information about the plane on which a face lies.
+#[derive(Clone, Copy, Debug)]
+pub struct FaceSubspaceInfo {
+    /// A matrix that converts a 2D vector to a 3D one in the subspace parallel to the face. To get a point on the face's plane, add `offset`.
+    pub make_3d: Matrix3x2<f64>,
+    /// Projects a 3D vector into the subspace parallel to the face. Given a point on the face's plane, subtract `offset` first.
+    pub make_2d: Matrix2x3<f64>,
+    /// The offset of the face from the origin. Subspaces must always include the origin due to how subspaces work mathematically so when projecting in/out, it is necessary to take the offset into account.
+    pub offset: Vector3<f64>,
 }
 
 #[derive(Clone, Debug)]
@@ -334,20 +234,21 @@ impl PuzzleGeometryDefinition {
         }
 
         for cut_surface in self.cut_surfaces {
-            faces = faces
-                .into_iter()
-                .flat_map(|(face, name_components)| {
-                    do_cut(&*cut_surface, face).into_iter().map(
-                        move |(new_face, name_component)| {
-                            let mut name_components = name_components.clone();
-                            if let Some(component) = name_component {
-                                name_components.push(component);
-                            }
-                            (new_face, name_components)
-                        },
-                    )
-                })
-                .collect();
+            let mut new_faces = Vec::new();
+
+            for (face, name_components) in faces {
+                new_faces.extend(do_cut(&*cut_surface, &face)?.into_iter().map(
+                    move |(new_face, name_component)| {
+                        let mut name_components = name_components.clone();
+                        if let Some(component) = name_component {
+                            name_components.push(component);
+                        }
+                        (new_face, name_components)
+                    },
+                ));
+            }
+
+            faces = new_faces;
         }
 
         let stickers = faces;
@@ -361,7 +262,8 @@ mod tests {
     use std::sync::Arc;
 
     use crate::{
-        Face, PlaneCut, Point, PuzzleGeometryDefinition, PuzzleGeometryError, do_cut, shapes::CUBE,
+        Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError, do_cut, knife::PlaneCut,
+        shapes::CUBE,
     };
     use internment::ArcIntern;
     use nalgebra::Vector3;
@@ -436,103 +338,6 @@ mod tests {
         .is_valid();
 
         assert!(matches!(valid, Ok(())));
-    }
-
-    #[test]
-    fn plane_cut() {
-        let face = Face {
-            points: vec![
-                Point(Vector3::new(1., 0., 1.)),
-                Point(Vector3::new(1., 0., -1.)),
-                Point(Vector3::new(-1., 0., -1.)),
-                Point(Vector3::new(-1., 0., 1.)),
-            ],
-            color: ArcIntern::from("orange"),
-        };
-
-        let cutted = do_cut(
-            &PlaneCut {
-                spot: Vector3::new(0., 0., 0.),
-                normal: Vector3::new(1., 0., 0.),
-                name: ArcIntern::from("R"),
-            },
-            face,
-        );
-
-        assert_eq!(cutted.len(), 2);
-
-        let face1 = Face {
-            points: vec![
-                Point(Vector3::new(1., 0., 1.)),
-                Point(Vector3::new(1., 0., -1.)),
-                Point(Vector3::new(0., 0., -1.)),
-                Point(Vector3::new(0., 0., 1.)),
-            ],
-            color: ArcIntern::from("orange"),
-        };
-
-        let face2 = Face {
-            points: vec![
-                Point(Vector3::new(0., 0., 1.)),
-                Point(Vector3::new(0., 0., -1.)),
-                Point(Vector3::new(-1., 0., -1.)),
-                Point(Vector3::new(-1., 0., 1.)),
-            ],
-            color: ArcIntern::from("orange"),
-        };
-
-        if cutted[0].0.epsilon_eq(&face1) {
-            assert_eq!(cutted[0].1, Some(ArcIntern::from("R")));
-            assert!(cutted[1].0.epsilon_eq(&face2));
-            assert_eq!(cutted[1].1, None);
-        } else {
-            assert!(cutted[1].0.epsilon_eq(&face1));
-            assert_eq!(cutted[1].1, Some(ArcIntern::from("R")));
-            assert!(cutted[0].0.epsilon_eq(&face2));
-            assert_eq!(cutted[0].1, None);
-        }
-    }
-
-    #[test]
-    fn three_by_three() {
-        let cube = PuzzleGeometryDefinition {
-            polyhedron: CUBE.to_owned(),
-            cut_surfaces: vec![
-                Arc::from(PlaneCut {
-                    spot: Vector3::new(1. / 3., 0., 0.),
-                    normal: Vector3::new(1., 0., 0.),
-                    name: ArcIntern::from("L"),
-                }),
-                Arc::from(PlaneCut {
-                    spot: Vector3::new(-1. / 3., 0., 0.),
-                    normal: Vector3::new(-1., 0., 0.),
-                    name: ArcIntern::from("R"),
-                }),
-                Arc::from(PlaneCut {
-                    spot: Vector3::new(0., 1. / 3., 0.),
-                    normal: Vector3::new(0., 1., 0.),
-                    name: ArcIntern::from("U"),
-                }),
-                Arc::from(PlaneCut {
-                    spot: Vector3::new(0., -1. / 3., 0.),
-                    normal: Vector3::new(0., -1., 0.),
-                    name: ArcIntern::from("D"),
-                }),
-                Arc::from(PlaneCut {
-                    spot: Vector3::new(0., 0., 1. / 3.),
-                    normal: Vector3::new(0., 0., 1.),
-                    name: ArcIntern::from("F"),
-                }),
-                Arc::from(PlaneCut {
-                    spot: Vector3::new(0., 0., -1. / 3.),
-                    normal: Vector3::new(0., 0., -1.),
-                    name: ArcIntern::from("B"),
-                }),
-            ],
-        };
-
-        let geometry = cube.geometry().unwrap();
-        assert_eq!(geometry.stickers().len(), 54);
     }
 
     /*

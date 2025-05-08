@@ -932,7 +932,7 @@ version = "0.1.0"
 dependencies = [
  "bnum",
  "internment",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "pest",
  "pest_derive",
  "pog_ans",
