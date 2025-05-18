@@ -341,7 +341,8 @@ impl<P: PuzzleState> PruningTables<P> for OrbitPruningTables<P> {
                             table_types
                                 .iter()
                                 .skip(orbit_index)
-                                .filter(|table_type| {
+                                .copied()
+                                .filter(|&table_type| {
                                     matches!(
                                         table_type,
                                         (OrbitPruningTableTy::Zero, _)
@@ -358,6 +359,10 @@ impl<P: PuzzleState> PruningTables<P> for OrbitPruningTables<P> {
                 ));
                 NonZeroUsize::new(1).unwrap()
             });
+            assert!(
+                unprocessed_orbits_count.get() <= generate_metas.puzzle_def.sorted_orbit_defs.len()
+            );
+
             let max_size_bytes = remaining_size_bytes / unprocessed_orbits_count;
 
             let generate_meta = OrbitPruningTableGenerationMeta {
@@ -659,9 +664,9 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
                     .puzzle_state
                     .orbit_bytes(orbit_identifier, orbit_def);
                 if O::from_orbit_transformation_unchecked(perm, ori, orbit_def) == orbit_solved {
-                    Some(i)
-                } else {
                     None
+                } else {
+                    Some(i)
                 }
             })
             .collect_vec();
@@ -679,17 +684,16 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
             })
             .collect_vec();
 
-        // let perm = (0..piece_count).collect_vec();
-        // let ori = vec![0; piece_count as usize - 1];
-        // let mut orbit_result = O::from_orbit_transformation_unchecked(&perm, &ori, orbit_def);
         let mut orbit_result = orbit_solved.clone();
 
-        let mut multi_bv = <O as OrbitPuzzleState>::new_multi_bv(sorted_orbit_cycle_type);
+        let mut multi_bv = <O as OrbitPuzzleState>::new_multi_bv(orbit_def);
         let mut depth = 0;
         let mut vacant_entry_count = entry_count;
 
-        let mut exact_orbit_hash = 0;
+        // TODO: multithreading
+        // TODO: replace first few with IDDFS
         while let Some(depth_heuristic) = OrbitPruneHeuristic::occupied(depth) {
+            let mut exact_orbit_hash = 0;
             for perm in (0..piece_count).permutations(piece_count as usize) {
                 for ori in repeat_n(0..orbit_def.orientation_count.get(), piece_count as usize)
                     .multi_cartesian_product()
@@ -987,6 +991,29 @@ mod tests {
         )
         .unwrap();
         let orbit_tables = OrbitPruningTables::try_generate(generate_metas).unwrap();
+        assert_eq!(orbit_tables.orbit_pruning_tables.len(), 2);
+        assert_eq!(orbit_tables.orbit_pruning_tables[0].permissible_heuristic(&cube3_def.new_solved_state()), 0);
+        // println!(
+        //     "{:?}",
+        //     orbit_tables.orbit_pruning_tables[1]
+        // )
+        // write the bytes of orbit_tables.orbit_pruning_tables[0] to a file
+        // use std::fs::File;
+        // let mut file = File::create("orbit_tables.bin").unwrap();
+        // // bincode::serialize_into(&mut file, &orbit_tables).unwrap();
+        // bincode::encode_to_vec(
+        //     &orbit_tables.orbit_pruning_tables[0],
+        //     bincode::config::standard(),
+        // )
+        // .unwrap();
+        // // write variable to file
+        // let mut file = File::create("orbit_tables.bin").unwrap();
+        // bincode::serialize_into(&mut file, &orbit_tables).unwrap();
+        // // read variable from file
+        // let mut file = File::open("orbit_tables.bin").unwrap();
+        // let orbit_tables: OrbitPruningTables<HeapPuzzle> =
+        //     bincode::deserialize_from(&mut file).unwrap();
+
     }
     // #[test]
     // fn test_exact_orbit_hasher_only_hashes_orbit() {

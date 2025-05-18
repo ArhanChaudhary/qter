@@ -10,6 +10,7 @@ pub struct HeapPuzzle(Box<[u8]>);
 
 impl<const N: usize> PuzzleState for StackPuzzle<N> {
     type MultiBv = Box<[u8]>;
+    type OrbitBytesBuf<'a> = &'a [u8];
 
     fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv {
         new_multi_bv_slice(sorted_orbit_defs)
@@ -78,6 +79,7 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
 
 impl PuzzleState for HeapPuzzle {
     type MultiBv = Box<[u8]>;
+    type OrbitBytesBuf<'a> = &'a [u8];
 
     fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv {
         new_multi_bv_slice(sorted_orbit_defs)
@@ -405,7 +407,7 @@ fn approximate_hash_orbit_slice(
     &orbit_states[base..base + piece_count * 2]
 }
 
-fn exact_hash_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def: OrbitDef) -> u64 {
+pub fn exact_hash_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def: OrbitDef) -> u64 {
     let piece_count = orbit_def.piece_count.get();
     assert!(piece_count as usize <= FACT_UNTIL_20.len());
 

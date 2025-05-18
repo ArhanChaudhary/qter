@@ -15,6 +15,9 @@ pub trait PuzzleState: Clone + PartialEq + Debug {
     /// A reusable multi bit vector type to hold temporary storage in
     /// `induces_sorted_cycle_type`.
     type MultiBv: MultiBvInterface;
+    type OrbitBytesBuf<'a>: AsRef<[u8]>
+    where
+        Self: 'a;
 
     /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
     fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv;
@@ -22,7 +25,7 @@ pub trait PuzzleState: Clone + PartialEq + Debug {
     /// Create a puzzle state from a sorted transformation and sorted
     /// orbit defs. `sorted_transformations` must to correspond to
     /// `sorted_orbit_defs`.
-    // TODO: should the above invariant be better enforced?
+    // TODO: should the above invariant be better enforced using type state?
     ///
     /// # Errors
     ///
@@ -54,7 +57,11 @@ pub trait PuzzleState: Clone + PartialEq + Debug {
 
     /// Get the bytes of the specified orbit index in the form (permutation
     /// vector, orientation vector).
-    fn orbit_bytes(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> (&[u8], &[u8]);
+    fn orbit_bytes(
+        &self,
+        orbit_identifier: usize,
+        orbit_def: OrbitDef,
+    ) -> (Self::OrbitBytesBuf<'_>, Self::OrbitBytesBuf<'_>);
 
     /// Return an integer that corresponds to a bijective mapping of the orbit
     /// identifier's states.

@@ -11,7 +11,7 @@ mod common {
         fn replace_compose(&mut self, a: &Self, b: &Self);
         fn replace_inverse(&mut self, a: &Self);
         fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool;
-        fn orbit_bytes(&self, orbit_index: usize) -> (&[u8], &[u8]);
+        fn orbit_bytes(&self, orbit_index: usize) -> (Vec<u8>, Vec<u8>);
         fn exact_hash_orbit(&self, orbit_index: usize) -> u64;
         fn approximate_hash_orbit(&self, orbit_index: usize) -> impl Hash;
     }
@@ -29,6 +29,10 @@ mod common {
 
     impl<C: Cube3Interface> PuzzleState for C {
         type MultiBv = ();
+        type OrbitBytesBuf<'a>
+            = Vec<u8>
+        where
+            Self: 'a;
 
         fn new_multi_bv(_sorted_orbit_defs: &[OrbitDef]) {}
 
@@ -71,7 +75,7 @@ mod common {
             orbit_identifier + 1
         }
 
-        fn orbit_bytes(&self, orbit_identifier: usize, _orbit_def: OrbitDef) -> (&[u8], &[u8]) {
+        fn orbit_bytes(&self, orbit_identifier: usize, _orbit_def: OrbitDef) -> (Vec<u8>, Vec<u8>) {
             self.orbit_bytes(orbit_identifier)
         }
 
