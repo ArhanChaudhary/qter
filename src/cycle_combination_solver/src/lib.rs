@@ -2,8 +2,7 @@
     test,
     slice_index_methods,
     portable_simd,
-    abi_vectorcall,
-    try_reserve_kind
+    abi_vectorcall
 )]
 #![warn(clippy::pedantic)]
 #![allow(

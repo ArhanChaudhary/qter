@@ -66,8 +66,8 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
         orbit_bytes_slice(&self.0, orbit_identifier, orbit_def)
     }
 
-    fn approximate_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64 {
-        todo!()
+    fn approximate_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> &[u8] {
+        approximate_hash_orbit_slice(&self.0, orbit_identifier, orbit_def)
     }
 
     fn exact_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64 {
@@ -132,7 +132,7 @@ impl PuzzleState for HeapPuzzle {
     }
 
     fn approximate_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> impl Hash {
-        todo!()
+        approximate_hash_orbit_slice(&self.0, orbit_identifier, orbit_def)
     }
 
     fn exact_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64 {
@@ -393,6 +393,16 @@ fn orbit_bytes_slice(
         &permutation[base..base + piece_count],
         &orientation[base..base + piece_count],
     )
+}
+
+fn approximate_hash_orbit_slice(
+    orbit_states: &[u8],
+    orbit_base_slice: usize,
+    orbit_def: OrbitDef,
+) -> &[u8] {
+    let piece_count = orbit_def.piece_count.get() as usize;
+    let base = orbit_base_slice * piece_count * 2;
+    &orbit_states[base..base + piece_count * 2]
 }
 
 fn exact_hash_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def: OrbitDef) -> u64 {

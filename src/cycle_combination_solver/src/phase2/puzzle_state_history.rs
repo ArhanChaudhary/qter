@@ -25,6 +25,7 @@ pub trait PuzzleStateHistoryInterface<P: PuzzleState> {
         move_index: usize,
         puzzle_def: &PuzzleDef<P>,
     ) {
+        debug_assert!(stack_pointer < buf.len());
         // SAFETY: move_index is guaranteed to be in bounds by the caller
         let puzzle_state = unsafe { &puzzle_def.moves.get_unchecked(move_index).puzzle_state };
         let (left, right) = buf.split_at_mut(stack_pointer + 1);

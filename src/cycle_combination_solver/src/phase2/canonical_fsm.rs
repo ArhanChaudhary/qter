@@ -5,6 +5,25 @@
 use super::puzzle::{PuzzleDef, PuzzleState};
 use std::{collections::HashMap, num::NonZeroUsize};
 
+pub trait CanonicalFSM {
+    fn next_state_lookup(&self) -> &[Vec<CanonicalFSMState>];
+
+    /// The next state of the FSM given the current state and a move class.
+    fn next_state(
+        &self,
+        current_fsm_state: CanonicalFSMState,
+        move_class_index: usize,
+    ) -> CanonicalFSMState {
+        // None passed in means we're in the initial state
+        // None returned means the move is illegal
+        let i = match current_fsm_state {
+            Some(state) => state.get(),
+            None => 0,
+        };
+        self.next_state_lookup()[i][move_class_index]
+    }
+}
+
 // Bit N is indexed by a `MoveClassIndex` value of N.
 type MoveClassMask = Vec<bool>;
 
@@ -15,12 +34,16 @@ struct MaskToState(HashMap<MoveClassMask, usize>);
 struct StateToMask(Vec<MoveClassMask>);
 
 #[derive(Debug)]
-pub struct CanonicalFSM<P: PuzzleState> {
+pub struct PuzzleCanonicalFSM<P: PuzzleState> {
     next_state_lookup: Vec<Vec<CanonicalFSMState>>,
     _marker: std::marker::PhantomData<P>,
 }
 
-impl<P: PuzzleState> From<&PuzzleDef<P>> for CanonicalFSM<P> {
+pub struct OrbitCanonicalFSM {
+    next_state_lookup: Vec<Vec<CanonicalFSMState>>,
+}
+
+impl<P: PuzzleState> From<&PuzzleDef<P>> for PuzzleCanonicalFSM<P> {
     fn from(puzzle_def: &PuzzleDef<P>) -> Self {
         let num_move_classes = puzzle_def.move_classes.len();
         let mut commutes: Vec<MoveClassMask> = vec![vec![true; num_move_classes]; num_move_classes];
@@ -121,20 +144,17 @@ impl<P: PuzzleState> From<&PuzzleDef<P>> for CanonicalFSM<P> {
     }
 }
 
-impl<P: PuzzleState> CanonicalFSM<P> {
-    #[must_use]
-    pub fn next_state(
-        &self,
-        current_fsm_state: CanonicalFSMState,
-        move_class_index: usize,
-    ) -> CanonicalFSMState {
-        // None passed in means we're in the initial state
-        // None returned means the move is illegal
-        let i = match current_fsm_state {
-            Some(state) => state.get(),
-            None => 0,
-        };
-        self.next_state_lookup[i][move_class_index]
+impl<P: PuzzleState> CanonicalFSM for PuzzleCanonicalFSM<P> {
+    fn next_state_lookup(&self) -> &[Vec<CanonicalFSMState>] {
+        &self.next_state_lookup
+    }
+}
+
+impl OrbitCanonicalFSM {}
+
+impl CanonicalFSM for OrbitCanonicalFSM {
+    fn next_state_lookup(&self) -> &[Vec<CanonicalFSMState>] {
+        &self.next_state_lookup
     }
 }
 
@@ -145,9 +165,9 @@ mod tests {
     use puzzle_geometry::ksolve::{KPUZZLE_3X3, KPUZZLE_4X4};
 
     #[test]
-    fn test_canonical_fsm_initially_all_legal() {
+    fn test_canonical_fsm_puzzle_initially_all_legal() {
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let canonical_fsm: CanonicalFSM<Cube3> = (&cube3_def).into();
+        let canonical_fsm: PuzzleCanonicalFSM<Cube3> = (&cube3_def).into();
 
         for move_class_index in 0..cube3_def.move_classes.len() {
             assert!(
@@ -159,9 +179,9 @@ mod tests {
     }
 
     #[test]
-    fn test_canonical_fsm_prevents_self() {
+    fn test_canonical_fsm_puzzle_prevents_self() {
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let canonical_fsm: CanonicalFSM<Cube3> = (&cube3_def).into();
+        let canonical_fsm: PuzzleCanonicalFSM<Cube3> = (&cube3_def).into();
         for move_class_index in 0..cube3_def.move_classes.len() {
             assert!(
                 canonical_fsm
@@ -179,9 +199,9 @@ mod tests {
     }
 
     #[test]
-    fn test_canonical_fsm_prevents_self_and_antipode() {
+    fn test_canonical_fsm_puzzle_prevents_self_and_antipode() {
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let canonical_fsm: CanonicalFSM<Cube3> = (&cube3_def).into();
+        let canonical_fsm: PuzzleCanonicalFSM<Cube3> = (&cube3_def).into();
 
         let mut result_1 = cube3_def.new_solved_state();
         let mut result_2 = result_1.clone();
@@ -239,7 +259,7 @@ mod tests {
     #[test]
     fn test_big_cube_prevents_move_class() {
         let cube4_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_4X4).try_into().unwrap();
-        let canonical_fsm: CanonicalFSM<HeapPuzzle> = (&cube4_def).into();
+        let canonical_fsm: PuzzleCanonicalFSM<HeapPuzzle> = (&cube4_def).into();
 
         let mut result_1 = cube4_def.new_solved_state();
         let mut result_2 = result_1.clone();
@@ -296,7 +316,7 @@ mod tests {
     #[test]
     fn test_big_cube_optimization() {
         let cube4_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_4X4).try_into().unwrap();
-        let canonical_fsm: CanonicalFSM<HeapPuzzle> = (&cube4_def).into();
+        let canonical_fsm: PuzzleCanonicalFSM<HeapPuzzle> = (&cube4_def).into();
 
         // - 1 to discount the initial FSM state
         assert_eq!(

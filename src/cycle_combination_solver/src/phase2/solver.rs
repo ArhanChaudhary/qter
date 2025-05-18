@@ -1,5 +1,5 @@
 use super::{
-    canonical_fsm::{CanonicalFSM, CanonicalFSMState},
+    canonical_fsm::{CanonicalFSM, CanonicalFSMState, PuzzleCanonicalFSM},
     pruning::PruningTables,
     puzzle::{Move, MultiBvInterface, OrientedPartition, PuzzleDef, PuzzleState},
     puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryInterface},
@@ -7,7 +7,7 @@ use super::{
 
 pub struct CycleTypeSolver<'a, P: PuzzleState, T: PruningTables<P>> {
     puzzle_def: &'a PuzzleDef<P>,
-    canonical_fsm: CanonicalFSM<P>,
+    canonical_fsm: PuzzleCanonicalFSM<P>,
     sorted_cycle_type: Vec<OrientedPartition>,
     pruning_tables: T,
 }
