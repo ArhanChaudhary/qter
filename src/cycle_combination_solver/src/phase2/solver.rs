@@ -165,7 +165,7 @@ mod tests {
     use super::*;
     use crate::phase2::{
         pruning::{
-            NullMeta, OrbitPruningTableTy, OrbitPruningTables, OrbitPruningTablesGenerateMeta,
+            OrbitPruningTableTy, OrbitPruningTables, OrbitPruningTablesGenerateMeta,
             StorageBackendTy, ZeroTable,
         },
         puzzle::{cube3::Cube3, slice_puzzle::HeapPuzzle},
@@ -178,14 +178,14 @@ mod tests {
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             &puzzle_def,
             vec![vec![], vec![]],
-            ZeroTable::generate(NullMeta),
+            ZeroTable::try_generate(()).unwrap(),
         );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 1);
         assert_eq!(solutions[0].len(), 0);
 
         let identity_cycle_type = vec![vec![], vec![]];
-        let pruning_tables = OrbitPruningTables::generate(
+        let pruning_tables = OrbitPruningTables::try_generate(
             OrbitPruningTablesGenerateMeta::new_with_table_types(
                 &puzzle_def,
                 &identity_cycle_type,
@@ -196,7 +196,8 @@ mod tests {
                 0,
             )
             .unwrap(),
-        );
+        )
+        .unwrap();
         let solver: CycleTypeSolver<Cube3, _> =
             CycleTypeSolver::new(&puzzle_def, identity_cycle_type, pruning_tables);
         let solutions = solver.solve::<[Cube3; 21]>();
@@ -213,7 +214,7 @@ mod tests {
                 vec![(4.try_into().unwrap(), false)],
                 vec![(4.try_into().unwrap(), false)],
             ],
-            ZeroTable::generate(NullMeta),
+            ZeroTable::try_generate(()).unwrap(),
         );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 12);
@@ -235,7 +236,7 @@ mod tests {
                     (2.try_into().unwrap(), false),
                 ],
             ],
-            ZeroTable::generate(NullMeta),
+            ZeroTable::try_generate(()).unwrap(),
         );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 6);
@@ -256,7 +257,7 @@ mod tests {
                 ],
                 vec![(1.try_into().unwrap(), true), (8.try_into().unwrap(), true)],
             ],
-            ZeroTable::generate(NullMeta),
+            ZeroTable::try_generate(()).unwrap(),
         );
         let solutions = solver.solve::<[Cube3; 21]>();
         assert_eq!(solutions.len(), 22); // TODO: should be 24
@@ -274,7 +275,7 @@ mod tests {
                 vec![(1.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
                 vec![(1.try_into().unwrap(), true), (7.try_into().unwrap(), true)],
             ],
-            ZeroTable::generate(NullMeta),
+            ZeroTable::try_generate(()).unwrap(),
         );
 
         let start = Instant::now();
@@ -302,8 +303,11 @@ mod tests {
     fn test_many_optimal_cycles() {
         let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
 
-        let mut solver: CycleTypeSolver<HeapPuzzle, _> =
-            CycleTypeSolver::new(&cube3_def, Vec::default(), ZeroTable::generate(NullMeta));
+        let mut solver: CycleTypeSolver<HeapPuzzle, _> = CycleTypeSolver::new(
+            &cube3_def,
+            Vec::default(),
+            ZeroTable::try_generate(()).unwrap(),
+        );
 
         // Test cases taken from Michael Gottlieb's order table
         // https://mzrg.com/rubik/orders.shtml
@@ -586,8 +590,11 @@ mod tests {
     fn test_big_cube_optimal_cycle() {
         let cube4_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_4X4).try_into().unwrap();
 
-        let mut solver: CycleTypeSolver<HeapPuzzle, _> =
-            CycleTypeSolver::new(&cube4_def, Vec::default(), ZeroTable::generate(NullMeta));
+        let mut solver: CycleTypeSolver<HeapPuzzle, _> = CycleTypeSolver::new(
+            &cube4_def,
+            Vec::default(),
+            ZeroTable::try_generate(()).unwrap(),
+        );
 
         // Test cases taken from Michael Gottlieb's order table
         // https://mzrg.com/rubik/orders.shtml
