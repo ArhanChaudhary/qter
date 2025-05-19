@@ -923,6 +923,22 @@ mod tests {
         ));
     }
 
+    // #[test]
+    // fn test_custom_orientation_index() {
+    //     let k = 8;
+    //     for orientation_count in 1..=4 {
+    //         for (i, orients) in repeat_n(0..orientation_count, k)
+    //             .multi_cartesian_product()
+    //             .filter(|p| p.iter().sum::<i8>().rem_euclid(orientation_count) == 0)
+    //             .enumerate()
+    //         {
+    //             let left = get_index_of_orientation(&orients, orientation_count as u8);
+    //             let right = i as u16;
+    //             assert_eq!(left, right);
+    //         }
+    //     }
+    // }
+
     #[test]
     fn test_new_orbit_generation_meta() {
         let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
