@@ -1,19 +1,20 @@
 #![cfg_attr(any(avx2, not(simd8and16)), allow(dead_code, unused_variables))]
 
 use super::common::Cube3Interface;
-use crate::phase2::puzzle::OrientedPartition;
+use crate::phase2::{FACT_UNTIL_20, puzzle::OrientedPartition};
 use std::{
     fmt,
     hash::Hash,
     num::NonZeroU8,
     simd::{
+        LaneCount, Simd, SupportedLaneCount,
         cmp::{SimdOrd, SimdPartialEq, SimdPartialOrd},
-        num::SimdInt,
+        num::{SimdInt, SimdUint},
         u8x8, u8x16,
     },
 };
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Hash)]
 pub struct Cube3 {
     pub ep: u8x16,
     pub eo: u8x16,
@@ -30,6 +31,33 @@ const EDGE_PERM_MASK: u8x16 = u8x16::splat(0b0000_1111);
 const CORNER_ORI_MASK: u8x8 = u8x8::splat(0b0011_0000);
 const CORNER_PERM_MASK: u8x8 = u8x8::splat(0b0000_0111);
 const CORNER_ORI_CARRY: u8x8 = u8x8::splat(0x30);
+
+#[derive(Hash)]
+pub enum Cube3Orbit {
+    Corners([u8x8; 2]),
+    Edges([u8x16; 2]),
+}
+
+fn exact_hash_cube3_orbit<const PIECE_COUNT: u16, const ORI_COUNT: u16, const LEN: usize>(
+    perm: Simd<u8, LEN>,
+    ori: Simd<u8, LEN>,
+    powers: Simd<u16, LEN>,
+) -> u64
+where
+    LaneCount<LEN>: SupportedLaneCount,
+{
+    (0..usize::from(PIECE_COUNT))
+        .map(|i| {
+            let lt_current_mask = perm.simd_lt(Simd::<u8, LEN>::splat(perm[i]));
+            let lt_before_current_count =
+                u64::from((lt_current_mask.to_bitmask() >> i).count_ones());
+            let fact = FACT_UNTIL_20[usize::from(PIECE_COUNT) - 1 - i];
+            lt_before_current_count * fact
+        })
+        .sum::<u64>()
+        * u64::from(ORI_COUNT.pow(u32::from(PIECE_COUNT) - 1))
+        + u64::from((ori.cast::<u16>() * powers).reduce_sum())
+}
 
 impl Cube3Interface for Cube3 {
     fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self {
@@ -245,21 +273,72 @@ impl Cube3Interface for Cube3 {
         cycle_type_pointer == sorted_cycle_type[1].len()
     }
 
-    fn orbit_bytes(&self, orbit_index: usize) -> (Vec<u8>, Vec<u8>) {
-        todo!()
+    fn orbit_bytes(&self, orbit_index: usize) -> ([u8; 16], [u8; 16]) {
+        match orbit_index {
+            0 => {
+                let mut perm = [0; 16];
+                let mut ori = [0; 16];
+                self.cp.copy_to_slice(&mut perm);
+                self.co.copy_to_slice(&mut ori);
+                (perm, ori)
+            }
+            1 => (self.ep.to_array(), self.eo.to_array()),
+            _ => panic!("Invalid orbit index"),
+        }
     }
 
     fn exact_hash_orbit(&self, orbit_index: usize) -> u64 {
-        todo!()
+        match orbit_index {
+            0 => {
+                const PIECE_COUNT: u16 = 8;
+                const ORI_COUNT: u16 = 3;
+
+                const LEN: usize = PIECE_COUNT.next_multiple_of(8) as usize;
+                const POWERS: Simd<u16, LEN> = const {
+                    let mut arr = [0; LEN];
+                    let mut i = 0;
+                    while i < PIECE_COUNT - 1 {
+                        arr[i as usize] =
+                            u16::checked_pow(ORI_COUNT, (PIECE_COUNT - 2 - i) as u32).unwrap();
+                        i += 1;
+                    }
+                    Simd::<u16, LEN>::from_array(arr)
+                };
+                exact_hash_cube3_orbit::<PIECE_COUNT, ORI_COUNT, LEN>(self.cp, self.co, POWERS)
+            }
+            1 => {
+                const PIECE_COUNT: u16 = 12;
+                const ORI_COUNT: u16 = 2;
+
+                const LEN: usize = PIECE_COUNT.next_multiple_of(8) as usize;
+                const POWERS: Simd<u16, LEN> = const {
+                    let mut arr = [0; LEN];
+                    let mut i = 0;
+                    while i < PIECE_COUNT - 1 {
+                        arr[i as usize] =
+                            u16::checked_pow(ORI_COUNT, (PIECE_COUNT - 2 - i) as u32).unwrap();
+                        i += 1;
+                    }
+                    Simd::<u16, LEN>::from_array(arr)
+                };
+                exact_hash_cube3_orbit::<PIECE_COUNT, ORI_COUNT, LEN>(self.ep, self.eo, POWERS)
+            }
+            _ => panic!("Invalid orbit index"),
+        }
     }
 
-    fn approximate_hash_orbit(&self, orbit_index: usize) -> impl Hash {
-        todo!()
+    #[allow(refining_impl_trait_reachable)]
+    fn approximate_hash_orbit(&self, orbit_index: usize) -> Cube3Orbit {
+        // TODO: using an enum works, but is this slow? same with compressedcube3
+        match orbit_index {
+            0 => Cube3Orbit::Corners([self.cp, self.co]),
+            1 => Cube3Orbit::Edges([self.ep, self.eo]),
+            _ => panic!("Invalid orbit index"),
+        }
     }
 }
 
 #[derive(PartialEq, Clone)]
-// TODO
 pub struct CompressedCube3 {
     edges: u8x16,
     corners: u8x8,
@@ -289,6 +368,12 @@ impl fmt::Debug for CompressedCube3 {
             .field("co", &co)
             .finish()
     }
+}
+
+#[derive(Hash)]
+pub enum CompressedCube3Orbit {
+    Edges(u8x16),
+    Corners(u8x8),
 }
 
 impl Cube3Interface for CompressedCube3 {
@@ -333,7 +418,7 @@ impl Cube3Interface for CompressedCube3 {
         todo!()
     }
 
-    fn orbit_bytes(&self, orbit_index: usize) -> (Vec<u8>, Vec<u8>) {
+    fn orbit_bytes(&self, orbit_index: usize) -> ([u8; 16], [u8; 16]) {
         todo!()
     }
 
@@ -341,8 +426,13 @@ impl Cube3Interface for CompressedCube3 {
         todo!()
     }
 
-    fn approximate_hash_orbit(&self, orbit_index: usize) -> impl Hash {
-        todo!()
+    #[allow(refining_impl_trait_reachable)]
+    fn approximate_hash_orbit(&self, orbit_index: usize) -> CompressedCube3Orbit {
+        match orbit_index {
+            0 => CompressedCube3Orbit::Corners(self.corners),
+            1 => CompressedCube3Orbit::Edges(self.edges),
+            _ => panic!("Invalid orbit index"),
+        }
     }
 }
 

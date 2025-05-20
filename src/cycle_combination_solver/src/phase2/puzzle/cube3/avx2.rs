@@ -293,7 +293,7 @@ impl Cube3Interface for Cube3 {
             && edge_cycle_type_pointer == sorted_cycle_type[1].len()
     }
 
-    fn orbit_bytes(&self, orbit_index: usize) -> (Vec<u8>, Vec<u8>) {
+    fn orbit_bytes(&self, orbit_index: usize) -> ([u8; 16], [u8; 16]) {
         todo!()
     }
 

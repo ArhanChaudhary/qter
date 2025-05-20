@@ -694,6 +694,7 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
         // TODO: replace first few with IDDFS
         while let Some(depth_heuristic) = OrbitPruneHeuristic::occupied(depth) {
             let mut exact_orbit_hash = 0;
+            let old = vacant_entry_count;
             for perm in (0..piece_count).permutations(piece_count as usize) {
                 for ori in repeat_n(0..orbit_def.orientation_count.get(), piece_count as usize)
                     .multi_cartesian_product()
@@ -750,6 +751,7 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
                     exact_orbit_hash += 1;
                 }
             }
+            eprintln!("Depth {depth}: {} filled", old - vacant_entry_count);
             if vacant_entry_count == 0 {
                 assert_eq!(exact_orbit_hash, entry_count);
                 break;
@@ -812,7 +814,7 @@ impl<P: PuzzleState> PruningTables<P> for ZeroTable<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::phase2::puzzle::{cube3::Cube3, random_3x3_state, slice_puzzle::HeapPuzzle};
+    use crate::phase2::puzzle::{cube3::Cube3, random_3x3_state};
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
     #[test]
@@ -881,7 +883,7 @@ mod tests {
             &identity_cycle_type,
             vec![
                 (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
-                (OrbitPruningTableTy::Exact, StorageBackendTy::Zero),
+                (OrbitPruningTableTy::Zero, StorageBackendTy::Tans),
             ],
             0,
         )
@@ -994,7 +996,7 @@ mod tests {
 
     #[test]
     fn test_wip() {
-        let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let identity_cycle_type = [vec![], vec![]];
         let generate_metas = OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
@@ -1008,7 +1010,11 @@ mod tests {
         .unwrap();
         let orbit_tables = OrbitPruningTables::try_generate(generate_metas).unwrap();
         assert_eq!(orbit_tables.orbit_pruning_tables.len(), 2);
-        assert_eq!(orbit_tables.orbit_pruning_tables[0].permissible_heuristic(&cube3_def.new_solved_state()), 0);
+        assert_eq!(
+            orbit_tables.orbit_pruning_tables[0]
+                .permissible_heuristic(&cube3_def.new_solved_state()),
+            0
+        );
         // println!(
         //     "{:?}",
         //     orbit_tables.orbit_pruning_tables[1]
@@ -1027,13 +1033,12 @@ mod tests {
         // bincode::serialize_into(&mut file, &orbit_tables).unwrap();
         // // read variable from file
         // let mut file = File::open("orbit_tables.bin").unwrap();
-        // let orbit_tables: OrbitPruningTables<HeapPuzzle> =
+        // let orbit_tables: OrbitPruningTables<Cube3> =
         //     bincode::deserialize_from(&mut file).unwrap();
-
     }
     // #[test]
     // fn test_exact_orbit_hasher_only_hashes_orbit() {
-    //     let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
+    //     let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
     //     let solved = cube3_def.new_solved_state();
     //     let mut result_1 = solved.clone();
     //     let mut result_2 = solved.clone();

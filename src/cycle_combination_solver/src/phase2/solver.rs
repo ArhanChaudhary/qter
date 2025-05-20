@@ -268,26 +268,38 @@ mod tests {
     fn test_control_optimal_cycle() {
         use std::time::Instant;
 
+        let prune_start = Instant::now();
         let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
-        let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
+        let sorted_cycle_type = vec![
+            vec![(1.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
+            vec![(1.try_into().unwrap(), true), (7.try_into().unwrap(), true)],
+        ];
+        let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
             &puzzle_def,
+            &sorted_cycle_type,
             vec![
-                vec![(1.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
-                vec![(1.try_into().unwrap(), true), (7.try_into().unwrap(), true)],
+                (OrbitPruningTableTy::Exact, StorageBackendTy::Uncompressed),
+                (OrbitPruningTableTy::Zero, StorageBackendTy::Zero),
             ],
-            ZeroTable::try_generate(()).unwrap(),
-        );
+            88_179_840,
+        )
+        .unwrap();
+        let pruning_tables = OrbitPruningTables::try_generate(generate_meta).unwrap();
+        let solver: CycleTypeSolver<Cube3, _> =
+            CycleTypeSolver::new(&puzzle_def, sorted_cycle_type, pruning_tables);
 
+        let duration = prune_start.elapsed();
+        eprintln!("Time to generate pruning tables: {duration:?}");
         let start = Instant::now();
         let solutions = solver.solve::<[Cube3; 21]>();
         let duration = start.elapsed();
         eprintln!("Time to find optimal cycle: {duration:?}");
-        // for solution in solutions.iter() {
-        //     for move_ in solution.iter() {
-        //         print!("{} ", &move_.name);
-        //     }
-        //     println!();
-        // }
+        for solution in &solutions {
+            for move_ in solution {
+                print!("{} ", &move_.name);
+            }
+            println!();
+        }
         assert_eq!(solutions.len(), 260); // TODO: should be 480
         assert!(solutions.iter().all(|solution| solution.len() == 5));
     }

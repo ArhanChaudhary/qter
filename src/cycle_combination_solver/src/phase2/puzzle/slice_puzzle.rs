@@ -1,6 +1,6 @@
 use super::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
 use crate::phase2::FACT_UNTIL_20;
-use std::{hash::Hash, num::NonZeroU8};
+use std::num::NonZeroU8;
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct StackPuzzle<const N: usize>([u8; N]);
@@ -67,6 +67,7 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
         orbit_bytes_slice(&self.0, orbit_identifier, orbit_def)
     }
 
+    #[allow(refining_impl_trait_reachable)]
     fn approximate_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> &[u8] {
         approximate_hash_orbit_slice(&self.0, orbit_identifier, orbit_def)
     }
@@ -133,7 +134,8 @@ impl PuzzleState for HeapPuzzle {
         orbit_bytes_slice(&self.0, orbit_identifier, orbit_def)
     }
 
-    fn approximate_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> impl Hash {
+    #[allow(refining_impl_trait_reachable)]
+    fn approximate_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> &[u8] {
         approximate_hash_orbit_slice(&self.0, orbit_identifier, orbit_def)
     }
 
@@ -407,7 +409,8 @@ fn approximate_hash_orbit_slice(
     &orbit_states[base..base + piece_count * 2]
 }
 
-pub fn exact_hash_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def: OrbitDef) -> u64 {
+// TODO: https://stackoverflow.com/a/24689277
+pub(super) fn exact_hash_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def: OrbitDef) -> u64 {
     let piece_count = orbit_def.piece_count.get();
     assert!(piece_count as usize <= FACT_UNTIL_20.len());
 

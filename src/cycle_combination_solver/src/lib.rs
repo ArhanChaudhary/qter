@@ -9,7 +9,6 @@
     clippy::similar_names,
     clippy::too_many_lines,
     clippy::inline_always,
-    refining_impl_trait_reachable
 )]
 
 mod phase1;
