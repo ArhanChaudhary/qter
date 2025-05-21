@@ -429,7 +429,7 @@ table_fn! { try_generate_approximate_tans_orbit_table,         ApproximateOrbitP
 table_fn! { try_generate_exact_uncompressed_orbit_table,       ExactOrbitPruningTable,       UncompressedStorageBackend, true  }
 table_fn! { try_generate_exact_tans_orbit_table,               ExactOrbitPruningTable,       TANSStorageBackend,         true  }
 table_fn! { try_generate_cycle_type_uncompressed_orbit_table,  CycleTypeOrbitPruningTable                                      }
-table_fn! { try_generate_zero_orbit_orbit_table,               ZeroOrbitTable                                                  }
+table_fn! { try_generate_zero_orbit_table,                     ZeroOrbitTable                                                  }
 
 fn try_generate_orbit_pruning_table_with_table_type<P: PuzzleState>(
     generate_meta: OrbitPruningTableGenerationMeta<P>,
@@ -461,7 +461,7 @@ fn try_generate_orbit_pruning_table_with_table_type<P: PuzzleState>(
             panic!("CycleType orbit tables are not supported for TANS storage backend")
         }
         (OrbitPruningTableTy::Zero, _) | (_, StorageBackendTy::Zero) => {
-            Ok(try_generate_zero_orbit_orbit_table(generate_meta).unwrap())
+            Ok(try_generate_zero_orbit_table(generate_meta).unwrap())
         }
         (OrbitPruningTableTy::Dynamic, _) | (_, StorageBackendTy::Dynamic) => {
             panic!("Dynamic orbit tables cannot be specified with a table type")
@@ -488,7 +488,7 @@ fn generate_orbit_pruning_table<P: PuzzleState>(
             }
         }
     }
-    try_generate_zero_orbit_orbit_table(generate_meta).unwrap()
+    try_generate_zero_orbit_table(generate_meta).unwrap()
 }
 
 impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend<EXACT> {
