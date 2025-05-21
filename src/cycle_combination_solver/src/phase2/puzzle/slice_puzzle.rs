@@ -1,5 +1,5 @@
 use super::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
-use crate::phase2::FACT_UNTIL_20;
+use crate::phase2::FACT_UNTIL_19;
 use std::num::NonZeroU8;
 
 #[derive(Clone, PartialEq, Debug)]
@@ -72,9 +72,9 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
         approximate_hash_orbit_slice(&self.0, orbit_identifier, orbit_def)
     }
 
-    fn exact_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64 {
+    fn exact_hasher_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64 {
         let (perm, ori) = self.orbit_bytes(orbit_identifier, orbit_def);
-        exact_hash_orbit_bytes(perm, ori, orbit_def)
+        exact_hasher_orbit_bytes(perm, ori, orbit_def)
     }
 }
 
@@ -139,9 +139,9 @@ impl PuzzleState for HeapPuzzle {
         approximate_hash_orbit_slice(&self.0, orbit_identifier, orbit_def)
     }
 
-    fn exact_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64 {
+    fn exact_hasher_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64 {
         let (perm, ori) = self.orbit_bytes(orbit_identifier, orbit_def);
-        exact_hash_orbit_bytes(perm, ori, orbit_def)
+        exact_hasher_orbit_bytes(perm, ori, orbit_def)
     }
 }
 
@@ -409,10 +409,10 @@ fn approximate_hash_orbit_slice(
     &orbit_states[base..base + piece_count * 2]
 }
 
-// TODO: https://stackoverflow.com/a/24689277
-pub(super) fn exact_hash_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def: OrbitDef) -> u64 {
+// TODO: https://stackoverflow.com/a/24689277 https://freedium.cfd/https://medium.com/@benjamin.botto/sequentially-indexing-permutations-a-linear-algorithm-for-computing-lexicographic-rank-a22220ffd6e3 https://stackoverflow.com/questions/1506078/fast-permutation-number-permutation-mapping-algorithms/1506337#1506337
+pub(super) fn exact_hasher_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def: OrbitDef) -> u64 {
     let piece_count = orbit_def.piece_count.get();
-    assert!(piece_count as usize <= FACT_UNTIL_20.len());
+    assert!(piece_count as usize <= FACT_UNTIL_19.len());
 
     let mut exact_perm_hash = 0;
     for i in 0..piece_count {
@@ -422,8 +422,11 @@ pub(super) fn exact_hash_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def: OrbitDe
                 res += 1;
             }
         }
-        exact_perm_hash += res * FACT_UNTIL_20[(piece_count - i - 1) as usize];
+        exact_perm_hash += res * FACT_UNTIL_19[(piece_count - i - 1) as usize];
     }
+
+    // TODO: IMPORTANT: we need parity as a const generic maybe? or an argument
+    // see the screenshot
 
     let mut exact_ori_hash = 0;
     for i in 0..piece_count - 1 {

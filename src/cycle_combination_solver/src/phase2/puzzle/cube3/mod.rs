@@ -12,7 +12,7 @@ mod common {
         fn replace_inverse(&mut self, a: &Self);
         fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool;
         fn orbit_bytes(&self, orbit_index: usize) -> ([u8; 16], [u8; 16]);
-        fn exact_hash_orbit(&self, orbit_index: usize) -> u64;
+        fn exact_hasher_orbit(&self, orbit_index: usize) -> u64;
         fn approximate_hash_orbit(&self, orbit_index: usize) -> impl Hash;
     }
 
@@ -83,8 +83,8 @@ mod common {
             self.orbit_bytes(orbit_identifier)
         }
 
-        fn exact_hash_orbit(&self, orbit_identifier: usize, _orbit_def: OrbitDef) -> u64 {
-            self.exact_hash_orbit(orbit_identifier)
+        fn exact_hasher_orbit(&self, orbit_identifier: usize, _orbit_def: OrbitDef) -> u64 {
+            self.exact_hasher_orbit(orbit_identifier)
         }
 
         fn approximate_hash_orbit(
@@ -104,7 +104,7 @@ pub(in crate::phase2::puzzle) mod simd8and16;
 pub use avx2::Cube3;
 
 #[cfg(all(not(avx2), simd8and16))]
-pub use simd8and16::Cube3;
+pub use simd8and16::UncompressedCube3 as Cube3;
 
 // TODO: avx512vl when we have time
 

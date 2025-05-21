@@ -11,7 +11,7 @@
 use crate::phase2::puzzle::{MultiBvInterface, orbit_puzzle::SliceOrbitPuzzle};
 
 use super::{
-    FACT_UNTIL_20,
+    FACT_UNTIL_19,
     puzzle::{OrbitDef, OrientedPartition, PuzzleDef, PuzzleState, orbit_puzzle::OrbitPuzzleState},
 };
 use itertools::Itertools;
@@ -150,8 +150,8 @@ pub struct ExactOrbitPruningTable<S: StorageBackend<true>> {
     orbit_identifier: usize,
 }
 
-pub struct CycleTypeOrbitPruningTable<S: StorageBackend<true>> {
-    storage_backend: S,
+pub struct CycleTypeOrbitPruningTable {
+    data: Box<[OrbitPruneHeuristic]>,
     orbit_def: OrbitDef,
     orbit_identifier: usize,
 }
@@ -170,7 +170,7 @@ pub enum TableTypeInstantiationError {
     InvalidOrbitPuzzleTypesLength { expected: usize, actual: usize },
     #[error("Puzzle state cannot be an orbit puzzle")]
     PuzzleStateCannotBeOrbitPuzzle,
-    #[error("Table type {0:?} not supported for this orbit puzzle type")]
+    #[error("Table type ({0:?}, {1:?}) not supported for this orbit puzzle type")]
     NotSupported(OrbitPruningTableTy, StorageBackendTy),
 }
 
@@ -428,8 +428,7 @@ table_fn! { try_generate_approximate_uncompressed_orbit_table, ApproximateOrbitP
 table_fn! { try_generate_approximate_tans_orbit_table,         ApproximateOrbitPruningTable, TANSStorageBackend,         false }
 table_fn! { try_generate_exact_uncompressed_orbit_table,       ExactOrbitPruningTable,       UncompressedStorageBackend, true  }
 table_fn! { try_generate_exact_tans_orbit_table,               ExactOrbitPruningTable,       TANSStorageBackend,         true  }
-table_fn! { try_generate_cycle_type_uncompressed_orbit_table,  CycleTypeOrbitPruningTable,   UncompressedStorageBackend, true  }
-// table_fn! { try_generate_cycle_type_tans_orbit_table,          CycleTypeOrbitPruningTable,   TANSStorageBackend,         true  }
+table_fn! { try_generate_cycle_type_uncompressed_orbit_table,  CycleTypeOrbitPruningTable                                      }
 table_fn! { try_generate_zero_orbit_orbit_table,               ZeroOrbitTable                                                  }
 
 fn try_generate_orbit_pruning_table_with_table_type<P: PuzzleState>(
@@ -630,9 +629,10 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
             max_size_bytes,
         } = generate_meta;
 
+        // TODO: make this common for all pruning tables
         let piece_count = orbit_def.piece_count.get();
 
-        let entry_count = FACT_UNTIL_20[piece_count as usize]
+        let entry_count = FACT_UNTIL_19[piece_count as usize]
             * u64::pow(
                 u64::from(orbit_def.orientation_count.get()),
                 u32::from(piece_count) - 1,
@@ -740,7 +740,7 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
                             move_,
                             orbit_def,
                         );
-                        let new_hash = orbit_result.exact_hash(orbit_def);
+                        let new_hash = orbit_result.exact_hasher(orbit_def);
                         if table.storage_backend.heuristic_hash(new_hash).is_vacant() {
                             table
                                 .storage_backend
@@ -763,23 +763,20 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
 
     fn permissible_heuristic(&self, puzzle_state: &P) -> u8 {
         self.storage_backend.permissible_heuristic_hash(
-            puzzle_state.exact_hash_orbit(self.orbit_identifier, self.orbit_def),
+            puzzle_state.exact_hasher_orbit(self.orbit_identifier, self.orbit_def),
         )
     }
 }
 
-impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P>
-    for CycleTypeOrbitPruningTable<S>
-{
+impl<P: PuzzleState> OrbitPruningTable<P> for CycleTypeOrbitPruningTable {
     fn try_generate(
         generate_meta: OrbitPruningTableGenerationMeta<P>,
-    ) -> Result<(CycleTypeOrbitPruningTable<S>, usize), OrbitPruningTableGenerationMeta<P>> {
+    ) -> Result<(CycleTypeOrbitPruningTable, usize), OrbitPruningTableGenerationMeta<P>> {
         todo!();
     }
 
     fn permissible_heuristic(&self, puzzle_state: &P) -> u8 {
         let hash = todo!();
-        self.storage_backend.permissible_heuristic_hash(hash)
     }
 }
 

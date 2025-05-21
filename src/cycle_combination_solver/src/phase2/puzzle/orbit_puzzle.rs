@@ -1,5 +1,5 @@
-use super::{MultiBvInterface, OrbitDef, slice_puzzle::exact_hash_orbit_bytes};
-use std::num::NonZeroU8;
+use super::{MultiBvInterface, OrbitDef, slice_puzzle::exact_hasher_orbit_bytes};
+use std::{hash::Hash, num::NonZeroU8};
 
 pub trait OrbitPuzzleState {
     type MultiBv: MultiBvInterface;
@@ -17,10 +17,11 @@ pub trait OrbitPuzzleState {
         orbit_def: OrbitDef,
         multi_bv: <Self::MultiBv as MultiBvInterface>::MultiBvReusableRef<'_>,
     ) -> bool;
-    fn exact_hash(&self, orbit_def: OrbitDef) -> u64;
+    fn approximate_hash(&self) -> impl Hash;
+    fn exact_hasher(&self, orbit_def: OrbitDef) -> u64;
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 pub struct SliceOrbitPuzzle(Box<[u8]>);
 
 impl OrbitPuzzleState for SliceOrbitPuzzle {
@@ -157,8 +158,13 @@ impl OrbitPuzzleState for SliceOrbitPuzzle {
         covered_cycles_count == sorted_orbit_cycle_type.len()
     }
 
-    fn exact_hash(&self, orbit_def: OrbitDef) -> u64 {
+    #[allow(refining_impl_trait)]
+    fn approximate_hash(&self) -> &Self {
+        self
+    }
+
+    fn exact_hasher(&self, orbit_def: OrbitDef) -> u64 {
         let (perm, ori) = self.0.split_at(orbit_def.piece_count.get() as usize);
-        exact_hash_orbit_bytes(perm, ori, orbit_def)
+        exact_hasher_orbit_bytes(perm, ori, orbit_def)
     }
 }

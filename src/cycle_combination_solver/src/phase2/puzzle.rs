@@ -65,7 +65,7 @@ pub trait PuzzleState: Clone + PartialEq + Debug {
 
     /// Return an integer that corresponds to a bijective mapping of the orbit
     /// identifier's states.
-    fn exact_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64;
+    fn exact_hasher_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64;
 
     /// Return a representation of the puzzle state that can be soundly hashed.
     fn approximate_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> impl Hash;
@@ -475,7 +475,7 @@ mod tests {
         #[cfg(simd8and16)]
         many_compositions::<cube3::simd8and16::Cube3>();
         #[cfg(simd8and16)]
-        many_compositions::<cube3::simd8and16::CompressedCube3>();
+        many_compositions::<cube3::simd8and16::Cube3>();
         #[cfg(avx2)]
         many_compositions::<cube3::avx2::Cube3>();
     }
@@ -528,7 +528,7 @@ mod tests {
         #[cfg(simd8and16)]
         expanded_move::<cube3::simd8and16::Cube3>();
         #[cfg(simd8and16)]
-        expanded_move::<cube3::simd8and16::CompressedCube3>();
+        expanded_move::<cube3::simd8and16::Cube3>();
         #[cfg(avx2)]
         expanded_move::<cube3::avx2::Cube3>();
     }
@@ -1005,7 +1005,7 @@ mod tests {
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_compose_cube3_simd8and16_compressed(b: &mut Bencher) {
-        bench_compose_helper::<cube3::simd8and16::CompressedCube3>(b);
+        bench_compose_helper::<cube3::simd8and16::Cube3>(b);
     }
 
     #[bench]

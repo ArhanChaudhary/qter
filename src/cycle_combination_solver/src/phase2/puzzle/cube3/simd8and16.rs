@@ -1,7 +1,7 @@
 #![cfg_attr(any(avx2, not(simd8and16)), allow(dead_code, unused_variables))]
 
 use super::common::Cube3Interface;
-use crate::phase2::{FACT_UNTIL_20, puzzle::OrientedPartition};
+use crate::phase2::{FACT_UNTIL_19, puzzle::OrientedPartition};
 use std::{
     fmt,
     hash::Hash,
@@ -15,7 +15,7 @@ use std::{
 };
 
 #[derive(Clone, Debug, PartialEq, Hash)]
-pub struct Cube3 {
+pub struct UncompressedCube3 {
     pub ep: u8x16,
     pub eo: u8x16,
     pub cp: u8x8,
@@ -33,25 +33,33 @@ const CORNER_PERM_MASK: u8x8 = u8x8::splat(0b0000_0111);
 const CORNER_ORI_CARRY: u8x8 = u8x8::splat(0x30);
 
 #[derive(Hash)]
-pub enum Cube3Orbit {
+pub enum UncompressedCube3Orbit {
     Corners([u8x8; 2]),
     Edges([u8x16; 2]),
 }
 
-fn exact_hash_cube3_orbit<const PIECE_COUNT: u16, const ORI_COUNT: u16, const LEN: usize>(
+fn exact_hasher_orbit<const PIECE_COUNT: u16, const ORI_COUNT: u16, const LEN: usize>(
     perm: Simd<u8, LEN>,
     ori: Simd<u8, LEN>,
-    powers: Simd<u16, LEN>,
 ) -> u64
 where
     LaneCount<LEN>: SupportedLaneCount,
 {
+    let powers: Simd<u16, LEN> = const {
+        let mut arr = [0; LEN];
+        let mut i = 0;
+        while i < PIECE_COUNT - 1 {
+            arr[i as usize] = u16::checked_pow(ORI_COUNT, (PIECE_COUNT - 2 - i) as u32).unwrap();
+            i += 1;
+        }
+        Simd::<u16, LEN>::from_array(arr)
+    };
     (0..usize::from(PIECE_COUNT))
         .map(|i| {
             let lt_current_mask = perm.simd_lt(Simd::<u8, LEN>::splat(perm[i]));
             let lt_before_current_count =
                 u64::from((lt_current_mask.to_bitmask() >> i).count_ones());
-            let fact = FACT_UNTIL_20[usize::from(PIECE_COUNT) - 1 - i];
+            let fact = FACT_UNTIL_19[usize::from(PIECE_COUNT) - 1 - i];
             lt_before_current_count * fact
         })
         .sum::<u64>()
@@ -59,7 +67,7 @@ where
         + u64::from((ori.cast::<u16>() * powers).reduce_sum())
 }
 
-impl Cube3Interface for Cube3 {
+impl Cube3Interface for UncompressedCube3 {
     fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self {
         let corners_transformation = &sorted_transformations[0];
         let edges_transformation = &sorted_transformations[1];
@@ -86,7 +94,7 @@ impl Cube3Interface for Cube3 {
             co[i] = orientation;
         }
 
-        Cube3 { ep, eo, cp, co }
+        UncompressedCube3 { ep, eo, cp, co }
     }
 
     fn replace_compose(&mut self, a: &Self, b: &Self) {
@@ -287,64 +295,50 @@ impl Cube3Interface for Cube3 {
         }
     }
 
-    fn exact_hash_orbit(&self, orbit_index: usize) -> u64 {
+    fn exact_hasher_orbit(&self, orbit_index: usize) -> u64 {
         match orbit_index {
             0 => {
                 const PIECE_COUNT: u16 = 8;
                 const ORI_COUNT: u16 = 3;
 
-                const LEN: usize = PIECE_COUNT.next_multiple_of(8) as usize;
-                const POWERS: Simd<u16, LEN> = const {
-                    let mut arr = [0; LEN];
-                    let mut i = 0;
-                    while i < PIECE_COUNT - 1 {
-                        arr[i as usize] =
-                            u16::checked_pow(ORI_COUNT, (PIECE_COUNT - 2 - i) as u32).unwrap();
-                        i += 1;
-                    }
-                    Simd::<u16, LEN>::from_array(arr)
-                };
-                exact_hash_cube3_orbit::<PIECE_COUNT, ORI_COUNT, LEN>(self.cp, self.co, POWERS)
+                exact_hasher_orbit::<
+                    PIECE_COUNT,
+                    ORI_COUNT,
+                    { PIECE_COUNT.next_power_of_two() as usize },
+                >(self.cp, self.co)
             }
             1 => {
                 const PIECE_COUNT: u16 = 12;
                 const ORI_COUNT: u16 = 2;
 
-                const LEN: usize = PIECE_COUNT.next_multiple_of(8) as usize;
-                const POWERS: Simd<u16, LEN> = const {
-                    let mut arr = [0; LEN];
-                    let mut i = 0;
-                    while i < PIECE_COUNT - 1 {
-                        arr[i as usize] =
-                            u16::checked_pow(ORI_COUNT, (PIECE_COUNT - 2 - i) as u32).unwrap();
-                        i += 1;
-                    }
-                    Simd::<u16, LEN>::from_array(arr)
-                };
-                exact_hash_cube3_orbit::<PIECE_COUNT, ORI_COUNT, LEN>(self.ep, self.eo, POWERS)
+                exact_hasher_orbit::<
+                    PIECE_COUNT,
+                    ORI_COUNT,
+                    { PIECE_COUNT.next_power_of_two() as usize },
+                >(self.ep, self.eo)
             }
             _ => panic!("Invalid orbit index"),
         }
     }
 
     #[allow(refining_impl_trait_reachable)]
-    fn approximate_hash_orbit(&self, orbit_index: usize) -> Cube3Orbit {
+    fn approximate_hash_orbit(&self, orbit_index: usize) -> UncompressedCube3Orbit {
         // TODO: using an enum works, but is this slow? same with compressedcube3
         match orbit_index {
-            0 => Cube3Orbit::Corners([self.cp, self.co]),
-            1 => Cube3Orbit::Edges([self.ep, self.eo]),
+            0 => UncompressedCube3Orbit::Corners([self.cp, self.co]),
+            1 => UncompressedCube3Orbit::Edges([self.ep, self.eo]),
             _ => panic!("Invalid orbit index"),
         }
     }
 }
 
 #[derive(PartialEq, Clone)]
-pub struct CompressedCube3 {
+pub struct Cube3 {
     edges: u8x16,
     corners: u8x8,
 }
 
-impl fmt::Debug for CompressedCube3 {
+impl fmt::Debug for Cube3 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut ep = [0; 16];
         let mut eo = [0; 16];
@@ -371,12 +365,12 @@ impl fmt::Debug for CompressedCube3 {
 }
 
 #[derive(Hash)]
-pub enum CompressedCube3Orbit {
+pub enum Cube3Orbit {
     Edges(u8x16),
     Corners(u8x8),
 }
 
-impl Cube3Interface for CompressedCube3 {
+impl Cube3Interface for Cube3 {
     fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self {
         let corners_transformation = &sorted_transformations[0];
         let edges_transformation = &sorted_transformations[1];
@@ -394,7 +388,7 @@ impl Cube3Interface for CompressedCube3 {
             corners[i] = perm | (orientation << 4);
         }
 
-        CompressedCube3 { edges, corners }
+        Cube3 { edges, corners }
     }
 
     fn replace_compose(&mut self, a: &Self, b: &Self) {
@@ -422,21 +416,21 @@ impl Cube3Interface for CompressedCube3 {
         todo!()
     }
 
-    fn exact_hash_orbit(&self, orbit_index: usize) -> u64 {
+    fn exact_hasher_orbit(&self, orbit_index: usize) -> u64 {
         todo!()
     }
 
     #[allow(refining_impl_trait_reachable)]
-    fn approximate_hash_orbit(&self, orbit_index: usize) -> CompressedCube3Orbit {
+    fn approximate_hash_orbit(&self, orbit_index: usize) -> Cube3Orbit {
         match orbit_index {
-            0 => CompressedCube3Orbit::Corners(self.corners),
-            1 => CompressedCube3Orbit::Edges(self.edges),
+            0 => Cube3Orbit::Corners(self.corners),
+            1 => Cube3Orbit::Edges(self.edges),
             _ => panic!("Invalid orbit index"),
         }
     }
 }
 
-impl Cube3 {
+impl UncompressedCube3 {
     pub fn replace_inverse_brute(&mut self, a: &Self) {
         // Benchmarked on a 2025 Mac M4: 4.11ns
         self.ep = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15]);
@@ -521,8 +515,8 @@ mod tests {
 
     #[test]
     #[cfg_attr(not(simd8and16), ignore)]
-    fn test_brute_force_inversion() {
-        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+    fn test_uncompressed_brute_force_inversion() {
+        let cube3_def: PuzzleDef<UncompressedCube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
 
@@ -562,8 +556,8 @@ mod tests {
 
     #[test]
     #[cfg_attr(not(simd8and16), ignore)]
-    fn test_raw_inversion() {
-        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+    fn test_uncompressed_raw_inversion() {
+        let cube3_def: PuzzleDef<UncompressedCube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
 
@@ -603,8 +597,8 @@ mod tests {
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
-    fn bench_brute_force_inversion(b: &mut test::Bencher) {
-        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+    fn bench_uncompressed_brute_force_inversion(b: &mut test::Bencher) {
+        let cube3_def: PuzzleDef<UncompressedCube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 100);
@@ -615,8 +609,8 @@ mod tests {
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
-    fn bench_raw_inversion(b: &mut test::Bencher) {
-        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+    fn bench_uncompressed_raw_inversion(b: &mut test::Bencher) {
+        let cube3_def: PuzzleDef<UncompressedCube3> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 100);

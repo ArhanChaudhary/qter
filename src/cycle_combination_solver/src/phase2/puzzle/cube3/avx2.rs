@@ -297,7 +297,7 @@ impl Cube3Interface for Cube3 {
         todo!()
     }
 
-    fn exact_hash_orbit(&self, orbit_index: usize) -> u64 {
+    fn exact_hasher_orbit(&self, orbit_index: usize) -> u64 {
         todo!()
     }
 
