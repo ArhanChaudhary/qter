@@ -1,35 +1,12 @@
-use super::{MultiBvInterface, OrbitDef, slice_puzzle::exact_hasher_orbit_bytes};
-use std::{hash::Hash, num::NonZeroU8};
-
-pub trait OrbitPuzzleState {
-    type MultiBv: MultiBvInterface;
-
-    fn new_multi_bv(orbit_def: OrbitDef) -> Self::MultiBv;
-    fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
-        perm: B,
-        ori: B,
-        orbit_def: OrbitDef,
-    ) -> Self;
-    fn replace_compose(&mut self, a: &Self, b: &Self, orbit_def: OrbitDef);
-    fn induces_sorted_orbit_cycle_type(
-        &self,
-        sorted_orbit_cycle_type: &[(NonZeroU8, bool)],
-        orbit_def: OrbitDef,
-        multi_bv: <Self::MultiBv as MultiBvInterface>::MultiBvReusableRef<'_>,
-    ) -> bool;
-    fn approximate_hash(&self) -> impl Hash;
-    fn exact_hasher(&self, orbit_def: OrbitDef) -> u64;
-}
+use super::{OrbitPuzzleConstructors, OrbitPuzzleState};
+use crate::phase2::puzzle::{OrbitDef, slice_puzzle::exact_hasher_orbit_bytes};
+use std::num::NonZeroU8;
 
 #[derive(Clone, PartialEq, Debug, Hash)]
 pub struct SliceOrbitPuzzle(Box<[u8]>);
 
 impl OrbitPuzzleState for SliceOrbitPuzzle {
     type MultiBv = Box<[u8]>;
-
-    fn new_multi_bv(orbit_def: OrbitDef) -> Box<[u8]> {
-        vec![0; orbit_def.piece_count.get().div_ceil(4) as usize].into_boxed_slice()
-    }
 
     // TODO: make everything here DRY
     fn replace_compose(&mut self, a: &Self, b: &Self, orbit_def: OrbitDef) {
@@ -60,20 +37,6 @@ impl OrbitPuzzleState for SliceOrbitPuzzle {
                 }
             }
         }
-    }
-
-    fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
-        perm: B,
-        ori: B,
-        orbit_def: OrbitDef,
-    ) -> Self {
-        let mut orbit_states = vec![0_u8; orbit_def.piece_count.get() as usize * 2];
-        let piece_count = orbit_def.piece_count.get();
-        for i in 0..piece_count {
-            orbit_states[(piece_count + i) as usize] = ori.as_ref()[i as usize];
-            orbit_states[i as usize] = perm.as_ref()[i as usize];
-        }
-        SliceOrbitPuzzle(orbit_states.into_boxed_slice())
     }
 
     fn induces_sorted_orbit_cycle_type(
@@ -166,5 +129,27 @@ impl OrbitPuzzleState for SliceOrbitPuzzle {
     fn exact_hasher(&self, orbit_def: OrbitDef) -> u64 {
         let (perm, ori) = self.0.split_at(orbit_def.piece_count.get() as usize);
         exact_hasher_orbit_bytes(perm, ori, orbit_def)
+    }
+}
+
+impl OrbitPuzzleConstructors for SliceOrbitPuzzle {
+    type MultiBv = Box<[u8]>;
+
+    fn new_multi_bv(orbit_def: OrbitDef) -> Box<[u8]> {
+        vec![0; orbit_def.piece_count.get().div_ceil(4) as usize].into_boxed_slice()
+    }
+
+    fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
+        perm: B,
+        ori: B,
+        orbit_def: OrbitDef,
+    ) -> Self {
+        let mut orbit_states = vec![0_u8; orbit_def.piece_count.get() as usize * 2];
+        let piece_count = orbit_def.piece_count.get();
+        for i in 0..piece_count {
+            orbit_states[(piece_count + i) as usize] = ori.as_ref()[i as usize];
+            orbit_states[i as usize] = perm.as_ref()[i as usize];
+        }
+        SliceOrbitPuzzle(orbit_states.into_boxed_slice())
     }
 }

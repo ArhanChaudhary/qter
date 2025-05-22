@@ -8,11 +8,16 @@
 //! from the solved state. For each state, the depth is recorded in a vector
 //! of the appropriate size.
 
-use crate::phase2::puzzle::{MultiBvInterface, orbit_puzzle::SliceOrbitPuzzle};
+use crate::phase2::{
+    orbit_puzzle::{
+        OrbitPuzzleConstructors, OrbitPuzzleState, slice_orbit_puzzle::SliceOrbitPuzzle,
+    },
+    puzzle::MultiBvInterface,
+};
 
 use super::{
     FACT_UNTIL_19,
-    puzzle::{OrbitDef, OrientedPartition, PuzzleDef, PuzzleState, orbit_puzzle::OrbitPuzzleState},
+    puzzle::{OrbitDef, OrientedPartition, PuzzleDef, PuzzleState},
 };
 use itertools::Itertools;
 use std::{
@@ -79,7 +84,13 @@ trait OrbitPruningTable<P: PuzzleState> {
     /// Generate a pruning table for a target orbit.
     fn try_generate(
         generate_meta: OrbitPruningTableGenerationMeta<P>,
-    ) -> Result<(Self, usize), OrbitPruningTableGenerationMeta<P>>
+    ) -> Result<
+        (Self, usize),
+        (
+            OrbitPruningTableGenerationError,
+            OrbitPruningTableGenerationMeta<P>,
+        ),
+    >
     where
         Self: Sized;
 
@@ -161,6 +172,14 @@ pub struct CycleTypeOrbitPruningTable {
 pub struct ZeroOrbitTable;
 
 #[derive(Error, Debug)]
+pub enum OrbitPruningTableGenerationError {
+    #[error("Orbit pruning table is not large enough to hold all entries")]
+    NotBigEnough,
+    #[error("Orbit pruning table stores too many entries")]
+    TooLargeLoadFactor,
+}
+
+#[derive(Error, Debug)]
 pub enum TableTypeInstantiationError {
     #[error("Invalid sorted cycle type length: expected {expected}, actual {actual}")]
     InvalidSortedCycleTypeLength { expected: usize, actual: usize },
@@ -172,12 +191,6 @@ pub enum TableTypeInstantiationError {
     PuzzleStateCannotBeOrbitPuzzle,
     #[error("Table type ({0:?}, {1:?}) not supported for this orbit puzzle type")]
     NotSupported(OrbitPruningTableTy, StorageBackendTy),
-}
-
-#[derive(Error, Debug)]
-pub enum TableTypeGenerationError {
-    #[error("Table cannot be generated, please change the table type")]
-    CannotBeGenerated,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -305,11 +318,11 @@ impl<P: PuzzleState> PruningTables<P> for OrbitPruningTables<P> {
         = OrbitPruningTablesGenerateMeta<'a, P>
     where
         P: 'a;
-    type GenerateError = TableTypeGenerationError;
+    type GenerateError = OrbitPruningTableGenerationError;
 
     fn try_generate(
         generate_metas: OrbitPruningTablesGenerateMeta<P>,
-    ) -> Result<OrbitPruningTables<P>, TableTypeGenerationError> {
+    ) -> Result<OrbitPruningTables<P>, OrbitPruningTableGenerationError> {
         let mut orbit_pruning_tables =
             Vec::with_capacity(generate_metas.puzzle_def.sorted_orbit_defs.len());
         let mut remaining_size_bytes = generate_metas.max_size_bytes;
@@ -408,7 +421,13 @@ macro_rules! table_fn {
     ($fn_name:ident, $table:ident, $storage:ident, $exact:ident) => {
         fn $fn_name<P: PuzzleState>(
             generate_meta: OrbitPruningTableGenerationMeta<P>,
-        ) -> Result<(Box<dyn OrbitPruningTable<P>>, usize), OrbitPruningTableGenerationMeta<P>> {
+        ) -> Result<
+            (Box<dyn OrbitPruningTable<P>>, usize),
+            (
+                OrbitPruningTableGenerationError,
+                OrbitPruningTableGenerationMeta<P>,
+            ),
+        > {
             let (table, used_size_bytes) =
                 $table::<$storage<{ $exact }>>::try_generate(generate_meta)?;
             Ok((Box::new(table), used_size_bytes))
@@ -417,7 +436,13 @@ macro_rules! table_fn {
     ($fn_name:ident, $table:ident) => {
         fn $fn_name<P: PuzzleState>(
             generate_meta: OrbitPruningTableGenerationMeta<P>,
-        ) -> Result<(Box<dyn OrbitPruningTable<P>>, usize), OrbitPruningTableGenerationMeta<P>> {
+        ) -> Result<
+            (Box<dyn OrbitPruningTable<P>>, usize),
+            (
+                OrbitPruningTableGenerationError,
+                OrbitPruningTableGenerationMeta<P>,
+            ),
+        > {
             let (table, used_size_bytes) = $table::try_generate(generate_meta)?;
             Ok((Box::new(table), used_size_bytes))
         }
@@ -434,28 +459,22 @@ table_fn! { try_generate_zero_orbit_table,                     ZeroOrbitTable   
 fn try_generate_orbit_pruning_table_with_table_type<P: PuzzleState>(
     generate_meta: OrbitPruningTableGenerationMeta<P>,
     table_type: (OrbitPruningTableTy, StorageBackendTy),
-) -> Result<(Box<dyn OrbitPruningTable<P>>, usize), TableTypeGenerationError> {
+) -> Result<(Box<dyn OrbitPruningTable<P>>, usize), OrbitPruningTableGenerationError> {
     match table_type {
-        // TODO: more detailed errors
         (OrbitPruningTableTy::Exact, StorageBackendTy::Uncompressed) => {
-            try_generate_exact_uncompressed_orbit_table(generate_meta)
-                .map_err(|_| TableTypeGenerationError::CannotBeGenerated)
+            try_generate_exact_uncompressed_orbit_table(generate_meta).map_err(|(err, _)| err)
         }
         (OrbitPruningTableTy::Exact, StorageBackendTy::Tans) => {
-            try_generate_exact_tans_orbit_table(generate_meta)
-                .map_err(|_| TableTypeGenerationError::CannotBeGenerated)
+            try_generate_exact_tans_orbit_table(generate_meta).map_err(|(err, _)| err)
         }
         (OrbitPruningTableTy::Approximate, StorageBackendTy::Uncompressed) => {
-            try_generate_approximate_uncompressed_orbit_table(generate_meta)
-                .map_err(|_| TableTypeGenerationError::CannotBeGenerated)
+            try_generate_approximate_uncompressed_orbit_table(generate_meta).map_err(|(err, _)| err)
         }
         (OrbitPruningTableTy::Approximate, StorageBackendTy::Tans) => {
-            try_generate_approximate_tans_orbit_table(generate_meta)
-                .map_err(|_| TableTypeGenerationError::CannotBeGenerated)
+            try_generate_approximate_tans_orbit_table(generate_meta).map_err(|(err, _)| err)
         }
         (OrbitPruningTableTy::CycleType, StorageBackendTy::Uncompressed) => {
-            try_generate_cycle_type_uncompressed_orbit_table(generate_meta)
-                .map_err(|_| TableTypeGenerationError::CannotBeGenerated)
+            try_generate_cycle_type_uncompressed_orbit_table(generate_meta).map_err(|(err, _)| err)
         }
         (OrbitPruningTableTy::CycleType, StorageBackendTy::Tans) => {
             panic!("CycleType orbit tables are not supported for TANS storage backend")
@@ -483,7 +502,7 @@ fn generate_orbit_pruning_table<P: PuzzleState>(
             Ok((orbit_pruning_table, used_size_bytes)) => {
                 return (orbit_pruning_table, used_size_bytes);
             }
-            Err(old_generate_meta) => {
+            Err((_, old_generate_meta)) => {
                 generate_meta = old_generate_meta;
             }
         }
@@ -602,7 +621,13 @@ impl<P: PuzzleState, S: StorageBackend<false>> OrbitPruningTable<P>
 {
     fn try_generate(
         generate_meta: OrbitPruningTableGenerationMeta<P>,
-    ) -> Result<(ApproximateOrbitPruningTable<S>, usize), OrbitPruningTableGenerationMeta<P>> {
+    ) -> Result<
+        (ApproximateOrbitPruningTable<S>, usize),
+        (
+            OrbitPruningTableGenerationError,
+            OrbitPruningTableGenerationMeta<P>,
+        ),
+    > {
         // Decide on a load factor to return an err
         todo!();
     }
@@ -618,7 +643,13 @@ impl<P: PuzzleState, S: StorageBackend<false>> OrbitPruningTable<P>
 impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbitPruningTable<S> {
     fn try_generate(
         generate_meta: OrbitPruningTableGenerationMeta<P>,
-    ) -> Result<(ExactOrbitPruningTable<S>, usize), OrbitPruningTableGenerationMeta<P>> {
+    ) -> Result<
+        (ExactOrbitPruningTable<S>, usize),
+        (
+            OrbitPruningTableGenerationError,
+            OrbitPruningTableGenerationMeta<P>,
+        ),
+    > {
         // TODO: properly pick an orbit puzzle type
         type O = SliceOrbitPuzzle;
         let OrbitPruningTableGenerationMeta {
@@ -642,7 +673,10 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
             S::initialization_meta_from_entry_count(entry_count.try_into().unwrap());
         let used_size_bytes = initialization_meta.used_size_bytes();
         if used_size_bytes > max_size_bytes {
-            return Err(generate_meta);
+            return Err((
+                OrbitPruningTableGenerationError::NotBigEnough,
+                generate_meta,
+            ));
         }
         let mut table = ExactOrbitPruningTable {
             storage_backend: S::initialize_from_meta(initialization_meta),
@@ -686,7 +720,7 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
 
         let mut orbit_result = orbit_solved.clone();
 
-        let mut multi_bv = <O as OrbitPuzzleState>::new_multi_bv(orbit_def);
+        let mut multi_bv = O::new_multi_bv(orbit_def);
         let mut depth = 0;
         let mut vacant_entry_count = entry_count;
 
@@ -734,12 +768,7 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
                     }
 
                     for move_ in &orbit_moves {
-                        <O as OrbitPuzzleState>::replace_compose(
-                            &mut orbit_result,
-                            &curr_state,
-                            move_,
-                            orbit_def,
-                        );
+                        orbit_result.replace_compose(&curr_state, move_, orbit_def);
                         let new_hash = orbit_result.exact_hasher(orbit_def);
                         if table.storage_backend.heuristic_hash(new_hash).is_vacant() {
                             table
@@ -771,7 +800,13 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
 impl<P: PuzzleState> OrbitPruningTable<P> for CycleTypeOrbitPruningTable {
     fn try_generate(
         generate_meta: OrbitPruningTableGenerationMeta<P>,
-    ) -> Result<(CycleTypeOrbitPruningTable, usize), OrbitPruningTableGenerationMeta<P>> {
+    ) -> Result<
+        (CycleTypeOrbitPruningTable, usize),
+        (
+            OrbitPruningTableGenerationError,
+            OrbitPruningTableGenerationMeta<P>,
+        ),
+    > {
         todo!();
     }
 
@@ -783,7 +818,13 @@ impl<P: PuzzleState> OrbitPruningTable<P> for CycleTypeOrbitPruningTable {
 impl<P: PuzzleState> OrbitPruningTable<P> for ZeroOrbitTable {
     fn try_generate(
         _generate_meta: OrbitPruningTableGenerationMeta<P>,
-    ) -> Result<(ZeroOrbitTable, usize), OrbitPruningTableGenerationMeta<P>> {
+    ) -> Result<
+        (ZeroOrbitTable, usize),
+        (
+            OrbitPruningTableGenerationError,
+            OrbitPruningTableGenerationMeta<P>,
+        ),
+    > {
         Ok((ZeroOrbitTable, 0))
     }
 
@@ -987,7 +1028,7 @@ mod tests {
         let orbit_tables = OrbitPruningTables::try_generate(generate_metas);
         assert!(matches!(
             orbit_tables,
-            Err(TableTypeGenerationError::CannotBeGenerated)
+            Err(OrbitPruningTableGenerationError::NotBigEnough)
         ));
     }
 

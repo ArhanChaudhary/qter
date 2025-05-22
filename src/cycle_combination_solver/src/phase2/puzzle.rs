@@ -5,7 +5,6 @@ use std::{fmt::Debug, hash::Hash, num::NonZeroU8};
 use thiserror::Error;
 
 pub mod cube3;
-pub mod orbit_puzzle;
 pub mod slice_puzzle;
 
 /// The puzzle state interface at the heart of the cycle combination solver.
