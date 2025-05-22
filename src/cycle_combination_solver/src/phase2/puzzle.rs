@@ -24,7 +24,6 @@ pub trait PuzzleState: Clone + PartialEq + Debug {
     /// Create a puzzle state from a sorted transformation and sorted
     /// orbit defs. `sorted_transformations` must to correspond to
     /// `sorted_orbit_defs`.
-    // TODO: should the above invariant be better enforced using type state?
     ///
     /// # Errors
     ///
@@ -562,6 +561,8 @@ mod tests {
         inversion::<StackCube3>();
         inversion::<HeapPuzzle>();
         #[cfg(simd8and16)]
+        inversion::<cube3::simd8and16::Cube3>();
+        #[cfg(simd8and16)]
         inversion::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
         inversion::<cube3::avx2::Cube3>();
@@ -586,6 +587,8 @@ mod tests {
     fn test_random_inversion() {
         random_inversion::<StackCube3>();
         random_inversion::<HeapPuzzle>();
+        #[cfg(simd8and16)]
+        random_inversion::<cube3::simd8and16::Cube3>();
         #[cfg(simd8and16)]
         random_inversion::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
@@ -979,13 +982,13 @@ mod tests {
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
-    fn bench_compose_cube3_simd8and16(b: &mut Bencher) {
+    fn bench_compose_uncompressed_cube3_simd8and16(b: &mut Bencher) {
         bench_compose_helper::<cube3::simd8and16::UncompressedCube3>(b);
     }
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
-    fn bench_inverse_cube3_simd8and16(b: &mut Bencher) {
+    fn bench_inverse_uncompressed_cube3_simd8and16(b: &mut Bencher) {
         bench_inverse_helper::<cube3::simd8and16::UncompressedCube3>(b);
     }
 
@@ -1003,8 +1006,14 @@ mod tests {
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
-    fn bench_compose_cube3_simd8and16_compressed(b: &mut Bencher) {
+    fn bench_compose_cube3_simd8and16(b: &mut Bencher) {
         bench_compose_helper::<cube3::simd8and16::Cube3>(b);
+    }
+
+    #[bench]
+    #[cfg_attr(not(simd8and16), ignore)]
+    fn bench_inverse_cube3_simd8and16(b: &mut Bencher) {
+        bench_inverse_helper::<cube3::simd8and16::Cube3>(b);
     }
 
     #[bench]

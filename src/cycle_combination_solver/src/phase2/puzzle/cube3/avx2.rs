@@ -79,7 +79,6 @@ const IDENTITY: u8x32 = u8x32::from_array([
 const EDGE_START: usize = 0;
 const CORNER_START: usize = 16;
 
-#[inline(always)]
 fn avx2_swizzle_lo(a: u8x32, b: u8x32) -> u8x32 {
     #[cfg(avx2)]
     // SAFETY: a and b are well defined. Honestly not sure why this is unsafe

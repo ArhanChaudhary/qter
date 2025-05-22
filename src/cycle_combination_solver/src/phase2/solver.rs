@@ -82,6 +82,9 @@ impl<'a, P: PuzzleState, T: PruningTables<P>> CycleTypeSolver<'a, P, T> {
 
         // TODO: this doesn't cover every symmetric sequence
         let mut next_entry_index = entry_index + 1;
+        // Tomas Rokicki's "sequence symmetry" optimization:
+        // <https://github.com/cubing/twsearch/commit/7b1d62bd9d9d232fb4729c7227d5255deed9673c>
+        //
         // SAFETY: `entry_index` starts at zero in the initial call, and
         // `B::initialize` guarantees that the first entry is bound. For every
         // recursive call, the puzzle history stack is pushed and `entry_index`

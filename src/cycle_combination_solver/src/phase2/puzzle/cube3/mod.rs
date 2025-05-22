@@ -16,7 +16,7 @@ mod common {
         fn approximate_hash_orbit(&self, orbit_index: usize) -> impl Hash;
     }
 
-    const CUBE_3_SORTED_ORBIT_DEFS: [OrbitDef; 2] = [
+    pub const CUBE_3_SORTED_ORBIT_DEFS: [OrbitDef; 2] = [
         OrbitDef {
             piece_count: NonZeroU8::new(8).unwrap(),
             orientation_count: NonZeroU8::new(3).unwrap(),
@@ -64,8 +64,8 @@ mod common {
             _sorted_orbit_defs: &[OrbitDef],
             _multi_bv: (),
         ) -> bool {
-            // SAFETY: `try_from_transformation_meta` guarantees that this will
-            // always be length 2
+            // SAFETY: `try_from_transformation_meta`, the only constructor,
+            // guarantees that this will always be length 2.
             self.induces_sorted_cycle_type(unsafe {
                 sorted_cycle_type.try_into().unwrap_unchecked()
             })

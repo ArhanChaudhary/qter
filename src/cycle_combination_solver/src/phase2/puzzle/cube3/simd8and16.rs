@@ -1,6 +1,6 @@
 #![cfg_attr(any(avx2, not(simd8and16)), allow(dead_code, unused_variables))]
 
-use super::common::Cube3Interface;
+use super::common::{CUBE_3_SORTED_ORBIT_DEFS, Cube3Interface};
 use crate::phase2::{FACT_UNTIL_19, puzzle::OrientedPartition};
 use std::{
     fmt,
@@ -22,7 +22,7 @@ pub struct UncompressedCube3 {
     pub co: u8x8,
 }
 
-const CO_INV_SWIZZLE: u8x8 = u8x8::from_array([0, 2, 1, 0, 2, 1, 0, 0]);
+const CO_INV_SWIZZLE: u8x8 = u8x8::from_array([0, 2, 1, 0, 0, 0, 0, 0]);
 const EP_IDENTITY: u8x16 =
     u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
 const CP_IDENTITY: u8x8 = u8x8::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
@@ -31,6 +31,8 @@ const EDGE_PERM_MASK: u8x16 = u8x16::splat(0b0000_1111);
 const CORNER_ORI_MASK: u8x8 = u8x8::splat(0b0011_0000);
 const CORNER_PERM_MASK: u8x8 = u8x8::splat(0b0000_0111);
 const CORNER_ORI_CARRY: u8x8 = u8x8::splat(0x30);
+#[allow(dead_code)]
+const CORNER_ORI_CARRY_LOWER: u8x8 = u8x8::splat(3);
 
 #[derive(Hash)]
 pub enum UncompressedCube3Orbit {
@@ -150,6 +152,10 @@ impl Cube3Interface for UncompressedCube3 {
         self.cp = self.cp.swizzle_dyn(self.cp);
         self.cp = self.cp.swizzle_dyn(self.cp).swizzle_dyn(pow_3_cp);
         self.cp = self.cp.swizzle_dyn(self.cp).swizzle_dyn(a.cp);
+        // slightly slower ...
+        // let mut added_ori = a.co + a.co;
+        // added_ori = added_ori.simd_min(added_ori - CORNER_ORI_CARRY_LOWER);
+        // self.co = added_ori.swizzle_dyn(self.cp);
         self.co = CO_INV_SWIZZLE.swizzle_dyn(a.co).swizzle_dyn(self.cp);
     }
 
@@ -298,8 +304,8 @@ impl Cube3Interface for UncompressedCube3 {
     fn exact_hasher_orbit(&self, orbit_index: usize) -> u64 {
         match orbit_index {
             0 => {
-                const PIECE_COUNT: u16 = 8;
-                const ORI_COUNT: u16 = 3;
+                const PIECE_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[0].piece_count.get() as u16;
+                const ORI_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[0].orientation_count.get() as u16;
 
                 exact_hasher_orbit::<
                     PIECE_COUNT,
@@ -308,8 +314,8 @@ impl Cube3Interface for UncompressedCube3 {
                 >(self.cp, self.co)
             }
             1 => {
-                const PIECE_COUNT: u16 = 12;
-                const ORI_COUNT: u16 = 2;
+                const PIECE_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[1].piece_count.get() as u16;
+                const ORI_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[1].orientation_count.get() as u16;
 
                 exact_hasher_orbit::<
                     PIECE_COUNT,
@@ -405,7 +411,55 @@ impl Cube3Interface for Cube3 {
     }
 
     fn replace_inverse(&mut self, a: &Self) {
-        todo!()
+        // Benchmarked on a 2025 Mac M4: TODO
+
+        let ep = a.edges & EDGE_PERM_MASK;
+        let mut pow_3_ep = ep.swizzle_dyn(ep);
+        pow_3_ep = pow_3_ep.swizzle_dyn(ep);
+        let mut inverse_ep = pow_3_ep.swizzle_dyn(pow_3_ep);
+        inverse_ep = inverse_ep.swizzle_dyn(inverse_ep);
+        inverse_ep = inverse_ep.swizzle_dyn(inverse_ep).swizzle_dyn(pow_3_ep);
+        inverse_ep = inverse_ep.swizzle_dyn(inverse_ep);
+        inverse_ep = inverse_ep.swizzle_dyn(inverse_ep);
+        inverse_ep = inverse_ep.swizzle_dyn(inverse_ep);
+        inverse_ep = inverse_ep.swizzle_dyn(inverse_ep).swizzle_dyn(ep);
+        inverse_ep = inverse_ep.swizzle_dyn(inverse_ep);
+        inverse_ep = inverse_ep.swizzle_dyn(inverse_ep);
+        inverse_ep = inverse_ep.swizzle_dyn(inverse_ep);
+        inverse_ep = inverse_ep.swizzle_dyn(inverse_ep);
+        inverse_ep = inverse_ep.swizzle_dyn(inverse_ep).swizzle_dyn(pow_3_ep);
+        inverse_ep = inverse_ep.swizzle_dyn(inverse_ep).swizzle_dyn(ep);
+        let mut inverse_eo = a.edges & EDGE_ORI_MASK;
+        inverse_eo = inverse_eo.swizzle_dyn(inverse_ep);
+        self.edges = inverse_eo | inverse_ep;
+
+        let cp = a.corners & CORNER_PERM_MASK;
+        let mut pow_3_cp = cp.swizzle_dyn(cp);
+        pow_3_cp = pow_3_cp.swizzle_dyn(cp);
+        let mut inverse_cp = pow_3_cp.swizzle_dyn(pow_3_cp);
+        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
+        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp).swizzle_dyn(pow_3_cp);
+        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
+        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
+        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
+        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp).swizzle_dyn(cp);
+        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
+        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
+        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
+        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
+        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp).swizzle_dyn(pow_3_cp);
+        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp).swizzle_dyn(cp);
+        let mut inverse_co = a.corners >> 4;
+        inverse_co = CO_INV_SWIZZLE
+            .swizzle_dyn(inverse_co)
+            .swizzle_dyn(inverse_cp);
+        inverse_co <<= 4;
+        // slightly slower ...
+        // let mut inverse_co = a.corners & CORNER_ORI_MASK;
+        // inverse_co += inverse_co;
+        // inverse_co = inverse_co.simd_min(inverse_co - CORNER_ORI_CARRY);
+        // inverse_co = inverse_co.swizzle_dyn(inverse_cp);
+        self.corners = inverse_co | inverse_cp;
     }
 
     fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
@@ -476,6 +530,10 @@ impl UncompressedCube3 {
         brute_unroll!(11);
 
         self.eo = a.eo.swizzle_dyn(self.ep);
+        // slightly slower ...
+        // let mut added_ori = a.co + a.co;
+        // added_ori = added_ori.simd_min(added_ori - CORNER_ORI_CARRY_LOWER);
+        // self.co = added_ori.swizzle_dyn(self.cp);
         self.co = CO_INV_SWIZZLE.swizzle_dyn(a.co).swizzle_dyn(self.cp);
     }
 
@@ -502,7 +560,21 @@ impl UncompressedCube3 {
         }
 
         self.eo = a.eo.swizzle_dyn(self.ep);
+        // slightly slower ...
+        // let mut added_ori = a.co + a.co;
+        // added_ori = added_ori.simd_min(added_ori - CORNER_ORI_CARRY_LOWER);
+        // self.co = added_ori.swizzle_dyn(self.cp);
         self.co = CO_INV_SWIZZLE.swizzle_dyn(a.co).swizzle_dyn(self.cp);
+    }
+}
+
+impl Cube3 {
+    pub fn replace_inverse_brute(&mut self, a: &Self) {
+        todo!();
+    }
+
+    pub fn replace_inverse_raw(&mut self, a: &Self) {
+        todo!();
     }
 }
 
