@@ -446,7 +446,7 @@ mod tests {
         commutes_with::<StackCube3>();
         commutes_with::<HeapPuzzle>();
         #[cfg(simd8and16)]
-        commutes_with::<cube3::simd8and16::Cube3>();
+        commutes_with::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
         commutes_with::<cube3::avx2::Cube3>();
     }
@@ -474,7 +474,7 @@ mod tests {
         #[cfg(simd8and16)]
         many_compositions::<cube3::simd8and16::Cube3>();
         #[cfg(simd8and16)]
-        many_compositions::<cube3::simd8and16::Cube3>();
+        many_compositions::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
         many_compositions::<cube3::avx2::Cube3>();
     }
@@ -503,7 +503,7 @@ mod tests {
         s_u4_symmetry::<StackCube3>();
         s_u4_symmetry::<HeapPuzzle>();
         #[cfg(simd8and16)]
-        s_u4_symmetry::<cube3::simd8and16::Cube3>();
+        s_u4_symmetry::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
         s_u4_symmetry::<cube3::avx2::Cube3>();
     }
@@ -527,7 +527,7 @@ mod tests {
         #[cfg(simd8and16)]
         expanded_move::<cube3::simd8and16::Cube3>();
         #[cfg(simd8and16)]
-        expanded_move::<cube3::simd8and16::Cube3>();
+        expanded_move::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
         expanded_move::<cube3::avx2::Cube3>();
     }
@@ -562,7 +562,7 @@ mod tests {
         inversion::<StackCube3>();
         inversion::<HeapPuzzle>();
         #[cfg(simd8and16)]
-        inversion::<cube3::simd8and16::Cube3>();
+        inversion::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
         inversion::<cube3::avx2::Cube3>();
     }
@@ -587,7 +587,7 @@ mod tests {
         random_inversion::<StackCube3>();
         random_inversion::<HeapPuzzle>();
         #[cfg(simd8and16)]
-        random_inversion::<cube3::simd8and16::Cube3>();
+        random_inversion::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
         random_inversion::<cube3::avx2::Cube3>();
     }
@@ -621,7 +621,7 @@ mod tests {
         induces_sorted_cycle_type_within_cycle::<StackCube3>();
         induces_sorted_cycle_type_within_cycle::<HeapPuzzle>();
         #[cfg(simd8and16)]
-        induces_sorted_cycle_type_within_cycle::<cube3::simd8and16::Cube3>();
+        induces_sorted_cycle_type_within_cycle::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
         induces_sorted_cycle_type_within_cycle::<cube3::avx2::Cube3>();
     }
@@ -869,7 +869,7 @@ mod tests {
         induces_sorted_cycle_type_many::<StackCube3>();
         induces_sorted_cycle_type_many::<HeapPuzzle>();
         #[cfg(simd8and16)]
-        induces_sorted_cycle_type_many::<cube3::simd8and16::Cube3>();
+        induces_sorted_cycle_type_many::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
         induces_sorted_cycle_type_many::<cube3::avx2::Cube3>();
     }
@@ -980,25 +980,25 @@ mod tests {
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_compose_cube3_simd8and16(b: &mut Bencher) {
-        bench_compose_helper::<cube3::simd8and16::Cube3>(b);
+        bench_compose_helper::<cube3::simd8and16::UncompressedCube3>(b);
     }
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_inverse_cube3_simd8and16(b: &mut Bencher) {
-        bench_inverse_helper::<cube3::simd8and16::Cube3>(b);
+        bench_inverse_helper::<cube3::simd8and16::UncompressedCube3>(b);
     }
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_induces_sorted_cycle_type_cube3_simd8and16_worst(b: &mut Bencher) {
-        bench_induces_sorted_cycle_type_worst_helper::<cube3::simd8and16::Cube3>(b);
+        bench_induces_sorted_cycle_type_worst_helper::<cube3::simd8and16::UncompressedCube3>(b);
     }
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_induces_sorted_cycle_type_cube3_simd8and16_average(b: &mut Bencher) {
-        bench_induces_sorted_cycle_type_average_helper::<cube3::simd8and16::Cube3>(b);
+        bench_induces_sorted_cycle_type_average_helper::<cube3::simd8and16::UncompressedCube3>(b);
     }
 
     #[bench]

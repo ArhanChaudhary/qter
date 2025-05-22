@@ -1,4 +1,4 @@
-use super::puzzle::{Move, PuzzleDef, PuzzleState, cube3::Cube3};
+use super::puzzle::{PuzzleDef, PuzzleState, cube3::Cube3};
 use std::{ops::Index, slice::SliceIndex};
 
 pub trait PuzzleStateHistoryInterface<P: PuzzleState> {
@@ -126,14 +126,10 @@ impl<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> PuzzleStateHistory<P, H>
     }
 
     /// Create a new move history from the current state of the stack.
-    pub fn create_move_history(&self, puzzle_def: &PuzzleDef<P>) -> Vec<Move<P>> {
+    pub fn create_move_history(&self) -> Vec<usize> {
         // TODO: MCC here. Do we have to do anything about the clone overhead?
         // I don't want to Rc it because that's a layer of indirection
-        let mut move_sequence = Vec::with_capacity(self.stack_pointer);
-        for i in 1..=self.stack_pointer {
-            move_sequence.push(puzzle_def.moves[self.stack[i].1].clone());
-        }
-        move_sequence
+        (1..=self.stack_pointer).map(|i| self.stack[i].1).collect()
     }
 }
 
@@ -187,7 +183,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::phase2::puzzle::cube3::Cube3;
+    use crate::phase2::puzzle::{Move, cube3::Cube3};
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
     fn move_index<P: PuzzleState>(puzzle_def: &PuzzleDef<P>, move_: &Move<P>) -> usize {

@@ -1,4 +1,4 @@
-use super::puzzle::{MultiBvInterface, OrbitDef, slice_puzzle::exact_hasher_orbit_bytes};
+use super::puzzle::{MultiBvInterface, OrbitDef};
 use std::{hash::Hash, num::NonZeroU8};
 
 pub mod cube3;
