@@ -174,7 +174,7 @@ impl<'a, P: PuzzleState, T: PruningTables<P>> CycleTypeSolver<'a, P, T> {
 }
 
 impl<'a, P: PuzzleState> IntoIterator for SolutionsIntoIter<'a, P> {
-    type Item = Vec<Move<P>>;
+    type Item = Vec<&'a Move<P>>;
     type IntoIter = SolutionsIter<'a, P>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -185,14 +185,14 @@ impl<'a, P: PuzzleState> IntoIterator for SolutionsIntoIter<'a, P> {
     }
 }
 
-impl<P: PuzzleState> Iterator for SolutionsIter<'_, P> {
-    type Item = Vec<Move<P>>;
+impl<'a, P: PuzzleState> Iterator for SolutionsIter<'a, P> {
+    type Item = Vec<&'a Move<P>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.solutions.next().map(|solution| {
             solution
                 .into_iter()
-                .map(|move_index| self.puzzle_def.moves[move_index].clone())
+                .map(|move_index| &self.puzzle_def.moves[move_index])
                 .collect()
         })
     }
