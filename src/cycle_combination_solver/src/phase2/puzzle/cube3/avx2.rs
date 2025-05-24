@@ -187,12 +187,11 @@ impl Cube3Interface for Cube3 {
                 .extract::<CORNER_START, 16>()
                 .simd_ne(u8x16::splat(0));
         let mut corner_cycle_type_pointer =
-            oriented_one_cycle_corner_mask.to_bitmask().count_ones() as usize;
+            (oriented_one_cycle_corner_mask.to_bitmask().count_ones() as usize).wrapping_sub(1);
         // Check oriented one cycles
-        if corner_cycle_type_pointer != 0
-            && (corner_cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
-                || sorted_cycle_type[0][corner_cycle_type_pointer - 1]
-                    != (1.try_into().unwrap(), true))
+        if corner_cycle_type_pointer != usize::MAX
+            && (corner_cycle_type_pointer >= sorted_cycle_type[0].len()
+                || sorted_cycle_type[0][corner_cycle_type_pointer] != (1.try_into().unwrap(), true))
         {
             return false;
         }
@@ -202,12 +201,11 @@ impl Cube3Interface for Cube3 {
                 .extract::<EDGE_START, 16>()
                 .simd_ne(u8x16::splat(0));
         let mut edge_cycle_type_pointer =
-            oriented_one_cycle_edge_mask.to_bitmask().count_ones() as usize;
+            (oriented_one_cycle_edge_mask.to_bitmask().count_ones() as usize).wrapping_sub(1);
         // Check oriented one cycles
-        if edge_cycle_type_pointer != 0
-            && (edge_cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
-                || sorted_cycle_type[1][edge_cycle_type_pointer - 1]
-                    != (1.try_into().unwrap(), true))
+        if edge_cycle_type_pointer != usize::MAX
+            && (edge_cycle_type_pointer >= sorted_cycle_type[1].len()
+                || sorted_cycle_type[1][edge_cycle_type_pointer] != (1.try_into().unwrap(), true))
         {
             return false;
         }
@@ -234,8 +232,8 @@ impl Cube3Interface for Cube3 {
                     corner_cycle_type_pointer +=
                         ((i_corner_cycle_count - i_oriented_corner_cycle_count)
                             / u32::from(i.get())) as usize;
-                    if corner_cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
-                        || sorted_cycle_type[0][corner_cycle_type_pointer - 1] != (i, false)
+                    if corner_cycle_type_pointer >= sorted_cycle_type[0].len()
+                        || sorted_cycle_type[0][corner_cycle_type_pointer] != (i, false)
                     {
                         return false;
                     }
@@ -245,8 +243,8 @@ impl Cube3Interface for Cube3 {
                 if i_oriented_corner_cycle_count != 0 {
                     corner_cycle_type_pointer +=
                         (i_oriented_corner_cycle_count / u32::from(i.get())) as usize;
-                    if corner_cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
-                        || sorted_cycle_type[0][corner_cycle_type_pointer - 1] != (i, true)
+                    if corner_cycle_type_pointer >= sorted_cycle_type[0].len()
+                        || sorted_cycle_type[0][corner_cycle_type_pointer] != (i, true)
                     {
                         return false;
                     }
@@ -288,8 +286,8 @@ impl Cube3Interface for Cube3 {
             i = unsafe { NonZeroU8::new_unchecked(i.get() + 1) };
         }
 
-        corner_cycle_type_pointer == sorted_cycle_type[0].len()
-            && edge_cycle_type_pointer == sorted_cycle_type[1].len()
+        corner_cycle_type_pointer == sorted_cycle_type[0].len().wrapping_sub(1)
+            && edge_cycle_type_pointer == sorted_cycle_type[1].len().wrapping_sub(1)
     }
 
     fn orbit_bytes(&self, orbit_index: usize) -> ([u8; 16], [u8; 16]) {
