@@ -30,9 +30,8 @@ const EDGE_ORI_MASK: u8x16 = u8x16::splat(0b0001_0000);
 const EDGE_PERM_MASK: u8x16 = u8x16::splat(0b0000_1111);
 const CORNER_ORI_MASK: u8x8 = u8x8::splat(0b0011_0000);
 const CORNER_PERM_MASK: u8x8 = u8x8::splat(0b0000_0111);
-const CORNER_ORI_CARRY: u8x8 = u8x8::splat(0x30);
 #[allow(dead_code)]
-const CORNER_ORI_CARRY_LOWER: u8x8 = u8x8::splat(3);
+const CORNER_ORI_CARRY: u8x8 = u8x8::splat(3);
 
 #[derive(Hash)]
 pub enum UncompressedCube3Orbit {
@@ -154,25 +153,24 @@ impl Cube3Interface for UncompressedCube3 {
         self.cp = self.cp.swizzle_dyn(self.cp).swizzle_dyn(a.cp);
         // slightly slower ...
         // let mut added_ori = a.co + a.co;
-        // added_ori = added_ori.simd_min(added_ori - CORNER_ORI_CARRY_LOWER);
+        // added_ori = added_ori.simd_min(added_ori - CORNER_ORI_MASK);
         // self.co = added_ori.swizzle_dyn(self.cp);
         self.co = CO_INV_SWIZZLE.swizzle_dyn(a.co).swizzle_dyn(self.cp);
     }
 
     fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
         // Benchmarked on a 2025 Mac M4: 14.34ns (worst case) 4.04ns (average)
+        //
+        // Explanation primer in `induces_sorted_cycle_type` in avx2.rs.
 
-        // Helps avoid bounds checks in codegen
-        #![allow(clippy::int_plus_one)]
-
-        let mut seen = self.cp.simd_eq(CP_IDENTITY);
-        let oriented_one_cycle_corner_mask = seen & self.co.simd_ne(u8x8::splat(0));
+        let mut seen_cp = self.cp.simd_eq(CP_IDENTITY);
+        let oriented_one_cycle_corner_mask = seen_cp & self.co.simd_ne(u8x8::splat(0));
         let mut cycle_type_pointer =
-            oriented_one_cycle_corner_mask.to_bitmask().count_ones() as usize;
+            (oriented_one_cycle_corner_mask.to_bitmask().count_ones() as usize).wrapping_sub(1);
         // Check oriented one cycles
-        if cycle_type_pointer != 0
-            && (cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
-                || sorted_cycle_type[0][cycle_type_pointer - 1] != (1.try_into().unwrap(), true))
+        if cycle_type_pointer != usize::MAX
+            && (cycle_type_pointer >= sorted_cycle_type[0].len()
+                || sorted_cycle_type[0][cycle_type_pointer] != (1.try_into().unwrap(), true))
         {
             return false;
         }
@@ -180,16 +178,17 @@ impl Cube3Interface for UncompressedCube3 {
         let mut i = NonZeroU8::new(2).unwrap();
         let mut iter_cp = self.cp;
         let mut iter_co = self.co;
-        while !seen.all() {
+        while !seen_cp.all() {
             iter_cp = iter_cp.swizzle_dyn(self.cp);
             iter_co = iter_co.swizzle_dyn(self.cp) + self.co;
 
-            let identity_eq = iter_cp.simd_eq(CP_IDENTITY);
-            let new_corners = identity_eq & !seen;
-            seen |= identity_eq;
+            let cp_identity_eq = iter_cp.simd_eq(CP_IDENTITY);
+            let new_corners = cp_identity_eq & !seen_cp;
+            seen_cp |= cp_identity_eq;
 
+            // Moving this inside of the if statement adds instructions
             let i_corner_cycle_count = new_corners.to_bitmask().count_ones();
-            if i_corner_cycle_count > 0 {
+            if new_corners.any() {
                 // x % 3 == 0 fast, https://lomont.org/posts/2017/divisibility-testing/
                 // for some reason the compiler wasn't doing this optimization,
                 // see https://github.com/rust-lang/portable-simd/issues/453
@@ -200,10 +199,12 @@ impl Cube3Interface for UncompressedCube3 {
 
                 // Unoriented cycles
                 if i_oriented_corner_cycle_count != i_corner_cycle_count {
-                    cycle_type_pointer += ((i_corner_cycle_count - i_oriented_corner_cycle_count)
-                        / u32::from(i.get())) as usize;
-                    if cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
-                        || sorted_cycle_type[0][cycle_type_pointer - 1] != (i, false)
+                    cycle_type_pointer = cycle_type_pointer.wrapping_add(
+                        ((i_corner_cycle_count - i_oriented_corner_cycle_count)
+                            / u32::from(i.get())) as usize,
+                    );
+                    if cycle_type_pointer >= sorted_cycle_type[0].len()
+                        || sorted_cycle_type[0][cycle_type_pointer] != (i, false)
                     {
                         return false;
                     }
@@ -211,10 +212,11 @@ impl Cube3Interface for UncompressedCube3 {
 
                 // Oriented cycles
                 if i_oriented_corner_cycle_count != 0 {
-                    cycle_type_pointer +=
-                        (i_oriented_corner_cycle_count / u32::from(i.get())) as usize;
-                    if cycle_type_pointer - 1 >= sorted_cycle_type[0].len()
-                        || sorted_cycle_type[0][cycle_type_pointer - 1] != (i, true)
+                    cycle_type_pointer = cycle_type_pointer.wrapping_add(
+                        (i_oriented_corner_cycle_count / u32::from(i.get())) as usize,
+                    );
+                    if cycle_type_pointer >= sorted_cycle_type[0].len()
+                        || sorted_cycle_type[0][cycle_type_pointer] != (i, true)
                     {
                         return false;
                     }
@@ -225,17 +227,18 @@ impl Cube3Interface for UncompressedCube3 {
             i = unsafe { NonZeroU8::new_unchecked(i.get() + 1) };
         }
 
-        if cycle_type_pointer != sorted_cycle_type[0].len() {
+        if cycle_type_pointer != sorted_cycle_type[0].len().wrapping_sub(1) {
             return false;
         }
 
-        let mut seen = self.ep.simd_eq(EP_IDENTITY);
-        let oriented_one_cycle_edge_mask = seen & self.eo.simd_ne(u8x16::splat(0));
-        cycle_type_pointer = oriented_one_cycle_edge_mask.to_bitmask().count_ones() as usize;
+        let mut seen_ep = self.ep.simd_eq(EP_IDENTITY);
+        let oriented_one_cycle_edge_mask = seen_ep & self.eo.simd_ne(u8x16::splat(0));
+        cycle_type_pointer =
+            (oriented_one_cycle_edge_mask.to_bitmask().count_ones() as usize).wrapping_sub(1);
         // Check oriented one cycles
-        if cycle_type_pointer != 0
-            && (cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
-                || sorted_cycle_type[1][cycle_type_pointer - 1] != (1.try_into().unwrap(), true))
+        if cycle_type_pointer != usize::MAX
+            && (cycle_type_pointer >= sorted_cycle_type[1].len()
+                || sorted_cycle_type[1][cycle_type_pointer] != (1.try_into().unwrap(), true))
         {
             return false;
         }
@@ -243,26 +246,29 @@ impl Cube3Interface for UncompressedCube3 {
         i = NonZeroU8::new(2).unwrap();
         let mut iter_ep = self.ep;
         let mut iter_eo = self.eo;
-        while !seen.all() {
+        while !seen_ep.all() {
             iter_ep = iter_ep.swizzle_dyn(self.ep);
             iter_eo = iter_eo.swizzle_dyn(self.ep) + self.eo;
 
-            let identity_eq = iter_ep.simd_eq(EP_IDENTITY);
-            let new_edges = identity_eq & !seen;
-            seen |= identity_eq;
+            let ep_identity_eq = iter_ep.simd_eq(EP_IDENTITY);
+            let new_edges = ep_identity_eq & !seen_ep;
+            seen_ep |= ep_identity_eq;
 
+            // Moving this inside of the if statement adds instructions
             let i_edge_cycle_count = new_edges.to_bitmask().count_ones();
-            if i_edge_cycle_count > 0 {
+            if new_edges.any() {
                 let mut oriented_edge_mask = (iter_eo & u8x16::splat(1)).simd_ne(u8x16::splat(0));
                 oriented_edge_mask &= new_edges;
                 let i_oriented_edge_cycle_count = oriented_edge_mask.to_bitmask().count_ones();
 
                 // Unoriented cycles
                 if i_oriented_edge_cycle_count != i_edge_cycle_count {
-                    cycle_type_pointer += ((i_edge_cycle_count - i_oriented_edge_cycle_count)
-                        / u32::from(i.get())) as usize;
-                    if cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
-                        || sorted_cycle_type[1][cycle_type_pointer - 1] != (i, false)
+                    cycle_type_pointer = cycle_type_pointer.wrapping_add(
+                        ((i_edge_cycle_count - i_oriented_edge_cycle_count) / u32::from(i.get()))
+                            as usize,
+                    );
+                    if cycle_type_pointer >= sorted_cycle_type[1].len()
+                        || sorted_cycle_type[1][cycle_type_pointer] != (i, false)
                     {
                         return false;
                     }
@@ -270,10 +276,10 @@ impl Cube3Interface for UncompressedCube3 {
 
                 // Oriented cycles
                 if i_oriented_edge_cycle_count != 0 {
-                    cycle_type_pointer +=
-                        (i_oriented_edge_cycle_count / u32::from(i.get())) as usize;
-                    if cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
-                        || sorted_cycle_type[1][cycle_type_pointer - 1] != (i, true)
+                    cycle_type_pointer = cycle_type_pointer
+                        .wrapping_add((i_oriented_edge_cycle_count / u32::from(i.get())) as usize);
+                    if cycle_type_pointer >= sorted_cycle_type[1].len()
+                        || sorted_cycle_type[1][cycle_type_pointer] != (i, true)
                     {
                         return false;
                     }
@@ -284,7 +290,7 @@ impl Cube3Interface for UncompressedCube3 {
             i = unsafe { NonZeroU8::new_unchecked(i.get() + 1) };
         }
 
-        cycle_type_pointer == sorted_cycle_type[1].len()
+        cycle_type_pointer == sorted_cycle_type[1].len().wrapping_sub(1)
     }
 
     fn orbit_bytes(&self, orbit_index: usize) -> ([u8; 16], [u8; 16]) {
@@ -404,7 +410,7 @@ impl Cube3Interface for Cube3 {
 
         let mut corners_composed = a.corners.swizzle_dyn(b.corners & CORNER_PERM_MASK);
         corners_composed += b.corners & CORNER_ORI_MASK;
-        corners_composed = corners_composed.simd_min(corners_composed - CORNER_ORI_CARRY);
+        corners_composed = corners_composed.simd_min(corners_composed - CORNER_ORI_MASK);
 
         self.edges = edges_composed;
         self.corners = corners_composed;
@@ -532,7 +538,7 @@ impl UncompressedCube3 {
         self.eo = a.eo.swizzle_dyn(self.ep);
         // slightly slower ...
         // let mut added_ori = a.co + a.co;
-        // added_ori = added_ori.simd_min(added_ori - CORNER_ORI_CARRY_LOWER);
+        // added_ori = added_ori.simd_min(added_ori - CORNER_ORI_MASK);
         // self.co = added_ori.swizzle_dyn(self.cp);
         self.co = CO_INV_SWIZZLE.swizzle_dyn(a.co).swizzle_dyn(self.cp);
     }
@@ -562,7 +568,7 @@ impl UncompressedCube3 {
         self.eo = a.eo.swizzle_dyn(self.ep);
         // slightly slower ...
         // let mut added_ori = a.co + a.co;
-        // added_ori = added_ori.simd_min(added_ori - CORNER_ORI_CARRY_LOWER);
+        // added_ori = added_ori.simd_min(added_ori - CORNER_ORI_MASK);
         // self.co = added_ori.swizzle_dyn(self.cp);
         self.co = CO_INV_SWIZZLE.swizzle_dyn(a.co).swizzle_dyn(self.cp);
     }
