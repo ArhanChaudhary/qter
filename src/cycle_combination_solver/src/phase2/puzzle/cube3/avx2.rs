@@ -178,11 +178,9 @@ impl Cube3Interface for Cube3 {
         #![allow(clippy::int_plus_one)]
 
         let compose_ori = self.0 & ORI_MASK;
-        let mut seen = (self.0 & PERM_MASK).simd_eq(IDENTITY);
+        let mut seen_perm = (self.0 & PERM_MASK).simd_eq(IDENTITY);
 
-        // TODO: extract leads to extra vextracti128 instructions, could trying
-        // to remove them be faster?
-        let oriented_one_cycle_corner_mask = seen.extract::<CORNER_START, 16>()
+        let oriented_one_cycle_corner_mask = seen_perm.extract::<CORNER_START, 16>()
             & compose_ori
                 .extract::<CORNER_START, 16>()
                 .simd_ne(u8x16::splat(0));
@@ -196,7 +194,7 @@ impl Cube3Interface for Cube3 {
             return false;
         }
 
-        let oriented_one_cycle_edge_mask = seen.extract::<EDGE_START, 16>()
+        let oriented_one_cycle_edge_mask = seen_perm.extract::<EDGE_START, 16>()
             & compose_ori
                 .extract::<EDGE_START, 16>()
                 .simd_ne(u8x16::splat(0));
@@ -212,16 +210,16 @@ impl Cube3Interface for Cube3 {
 
         let mut i = NonZeroU8::new(2).unwrap();
         let mut iter = self.0;
-        while !seen.all() {
+        while !seen_perm.all() {
             iter = avx2_swizzle_lo(iter, self.0) + compose_ori;
 
-            let identity_eq = (iter & PERM_MASK).simd_eq(IDENTITY);
-            let new_pieces = identity_eq & !seen;
-            seen |= identity_eq;
+            let perm_identity_eq = (iter & PERM_MASK).simd_eq(IDENTITY);
+            let new_pieces = perm_identity_eq & !seen_perm;
+            seen_perm |= perm_identity_eq;
 
             let new_corners = new_pieces.extract::<CORNER_START, 16>();
             let i_corner_cycle_count = new_corners.to_bitmask().count_ones();
-            if i_corner_cycle_count > 0 {
+            if new_corners.any() {
                 let iter_co_mod =
                     (iter.extract::<CORNER_START, 16>() >> u8x16::splat(4)) * u8x16::splat(171);
                 let oriented_corner_mask = new_corners & iter_co_mod.simd_gt(u8x16::splat(85));
@@ -253,7 +251,7 @@ impl Cube3Interface for Cube3 {
 
             let new_edges = new_pieces.extract::<EDGE_START, 16>();
             let i_edge_cycle_count = new_edges.to_bitmask().count_ones();
-            if i_edge_cycle_count > 0 {
+            if new_edges.any() {
                 let iter_eo_mod = iter.extract::<EDGE_START, 16>() & u8x16::splat(0b0001_0000);
                 let oriented_edge_mask = new_edges & iter_eo_mod.simd_ne(u8x16::splat(0));
                 let i_oriented_edge_cycle_count = oriented_edge_mask.to_bitmask().count_ones();
