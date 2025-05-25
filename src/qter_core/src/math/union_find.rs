@@ -18,7 +18,7 @@ pub trait SetInfo {
     const ALLOW_WEIGHTED: bool = false;
 
     /// Merge the info for two sets, used on the `union` call. Return the path info for the new child.
-    fn merge(&mut self, new_child: Self) -> Self::PathInfo;
+    fn merge(&mut self, new_child: Self);
 
     /// Join a path with the path of its parent. This function must be associative.
     fn join_paths(path: &mut Self::PathInfo, path_of_parent: &Self::PathInfo);
@@ -29,7 +29,7 @@ impl SetInfo for () {
 
     const ALLOW_WEIGHTED: bool = true;
 
-    fn merge(&mut self, _new_child: Self) -> Self::PathInfo {}
+    fn merge(&mut self, _new_child: Self) {}
 
     fn join_paths(_path: &mut Self::PathInfo, _path_of_old_root: &Self::PathInfo) {}
 }
@@ -62,21 +62,25 @@ pub struct FindResult<'a, S: SetInfo> {
 
 impl<S: SetInfo> FindResult<'_, S> {
     /// Returns the index of the element representing the root of the set
+    #[must_use]
     pub fn root_idx(&self) -> usize {
         self.root_idx
     }
 
     /// The total size of the set
+    #[must_use]
     pub fn set_size(&self) -> usize {
         self.set_size
     }
 
     /// Metadata associated with the set the element is a member of
+    #[must_use]
     pub fn set_meta(&self) -> &S {
         self.set_meta
     }
 
     /// Metadata associated with the path from this element to the root
+    #[must_use]
     pub fn path_meta(&self) -> Option<&S::PathInfo> {
         self.path_meta.as_ref()
     }
@@ -125,6 +129,8 @@ impl<S: SetInfo> UnionFind<S> {
     /// Find an element in the `UnionFind` and return metadata about it.
     ///
     /// Panics if the item is outside the range of numbers in the union-find.
+    #[must_use]
+    #[expect(clippy::missing_panics_doc)]
     pub fn find(&self, item: usize) -> FindResult<S> {
         let (entry, path_meta) = &self.sets[item];
 
@@ -159,7 +165,7 @@ impl<S: SetInfo> UnionFind<S> {
     /// Panics if either `parent` or `child` are outside of the range of elements in the union-find.
     ///
     /// If `S::ALLOW_WEIGHTED` is `true`, then this will implement weighted quick union and `parent` and `child` may be swapped for performance.
-    pub fn union(&mut self, parent: usize, child: usize) {
+    pub fn union(&mut self, parent: usize, child: usize, path_info: S::PathInfo) {
         let mut a_result = self.find(parent);
         let mut b_result = self.find(child);
 
@@ -177,6 +183,8 @@ impl<S: SetInfo> UnionFind<S> {
 
         drop(a_result);
         drop(b_result);
+
+        self.sets[b_idx].1.replace(Some(path_info));
 
         let old_b_data = mem::replace(
             &mut self.sets[b_idx].0,

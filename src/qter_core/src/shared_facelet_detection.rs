@@ -52,7 +52,7 @@ fn find_orbits(facelet_count: usize, permutations: &[Permutation]) -> UnionFind<
             let goes_to = permutation.mapping()[facelet];
 
             // They have the same orbit if one is mapped to the other
-            union_find.union(facelet, goes_to);
+            union_find.union(facelet, goes_to, ());
         }
     }
 

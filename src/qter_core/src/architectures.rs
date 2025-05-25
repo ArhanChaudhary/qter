@@ -1,6 +1,7 @@
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap, HashSet},
+    fmt::Debug,
     sync::{Arc, OnceLock},
 };
 
@@ -239,18 +240,19 @@ pub struct Permutation {
 
 impl core::fmt::Display for Permutation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.cycles().iter().fold(String::new(), |mut a, v| {
-            a.push('(');
-            a.push_str(
-                &v.iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<String>>()
-                    .join(", "),
-            );
-            a.push(')');
-
-            a
-        }))
+        let cycles = self.cycles();
+        if cycles.is_empty() {
+            f.write_str("e")
+        } else {
+            for cycle in cycles {
+                f.write_str("(")?;
+                for (i, item) in cycle.iter().enumerate() {
+                    write!(f, "{}{item}", if i == 0 { "" } else { ", " })?;
+                }
+                f.write_str(")")?;
+            }
+            Ok(())
+        }
     }
 }
 
@@ -401,7 +403,7 @@ impl Permutation {
         self.cycles = OnceLock::new();
     }
 
-    fn mapping_mut(&mut self) -> &mut [usize] {
+    fn mapping_mut(&mut self) -> &mut Vec<usize> {
         self.mapping();
 
         self.mapping.get_mut().unwrap()
@@ -413,13 +415,15 @@ impl Permutation {
     ///
     /// This function will panic if the other permutation does not have the same number of facelets as this permutation
     pub fn compose_into(&mut self, other: &Permutation) {
-        assert_eq!(self.facelet_count, other.facelet_count);
-
         let my_mapping = self.mapping_mut();
         let other_mapping = other.mapping();
 
+        while my_mapping.len() < other_mapping.len() {
+            my_mapping.push(my_mapping.len());
+        }
+
         for value in my_mapping.iter_mut() {
-            *value = other_mapping[*value];
+            *value = *other_mapping.get(*value).unwrap_or(value);
         }
 
         // Invalidate `cycles`
@@ -524,6 +528,29 @@ impl Algorithm {
         })
     }
 
+    /// Create a new algorithm that is the identity permutation (does nothing).
+    #[must_use]
+    pub fn identity(perm_group: Arc<PermutationGroup>) -> Algorithm {
+        let identity = perm_group.identity();
+        Algorithm {
+            perm_group,
+            permutation: identity,
+            move_seq: Vec::new(),
+            chromatic_orders: OnceLock::new(),
+            repeat: Int::<U>::one(),
+        }
+    }
+
+    pub fn compose_into(&mut self, other: &Algorithm) {
+        if self.repeat != Int::<U>::one() {
+            self.move_seq = self.move_seq_iter().cloned().collect();
+            self.repeat = Int::<U>::one();
+        }
+        self.move_seq.extend(other.move_seq_iter().cloned());
+        self.permutation.compose_into(&other.permutation);
+        self.chromatic_orders = OnceLock::new();
+    }
+
     /// Get the underlying permutation of the `Algorithm` instance
     pub fn permutation(&self) -> &Permutation {
         &self.permutation
@@ -583,12 +610,27 @@ impl Algorithm {
     }
 }
 
-impl core::fmt::Debug for Algorithm {
+impl PartialEq for Algorithm {
+    fn eq(&self, other: &Self) -> bool {
+        self.move_seq_iter()
+            .zip(other.move_seq_iter())
+            .all(|(a, b)| a == b)
+    }
+}
+
+impl Eq for Algorithm {}
+
+impl Debug for Algorithm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Algorithm")
-            .field("permutation", &self.permutation)
-            .field("move_seq", &self.move_seq.iter().map(|v| &**v).join(" "))
-            .finish_non_exhaustive()
+        for (i, generator) in self.move_seq_iter().enumerate() {
+            if i != 0 {
+                f.write_str(" ")?;
+            }
+            f.write_str(&generator)?;
+        }
+
+        f.write_str(" — ")?;
+        self.permutation().fmt(f)
     }
 }
 
