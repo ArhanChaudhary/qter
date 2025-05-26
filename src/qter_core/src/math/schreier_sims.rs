@@ -2,45 +2,35 @@ use std::{collections::VecDeque, option::Option, sync::Arc};
 
 use itertools::Itertools;
 
-use crate::architectures::{Algorithm, Permutation, PermutationGroup};
+use crate::architectures::{Permutation, PermutationGroup};
 
 use super::{I, Int, U};
 
-pub struct BeginnerMethod {
-    group: Arc<PermutationGroup>,
+pub struct StabilizerChain {
     stabilizers: Stabilizer,
 }
 
-impl BeginnerMethod {
+impl StabilizerChain {
+    /// Create a new stabilizer chain from the permutation group using the Schreier-Sims algorithm.
     #[must_use]
-    #[expect(clippy::missing_panics_doc)]
-    pub fn new(group: Arc<PermutationGroup>) -> BeginnerMethod {
-        let mut stabilizers = Stabilizer::new(
-            Arc::clone(&group),
-            &(0..group.facelet_count()).collect_vec(),
-        );
+    pub fn new(group: &Arc<PermutationGroup>) -> StabilizerChain {
+        let mut stabilizers =
+            Stabilizer::new(Arc::clone(group), &(0..group.facelet_count()).collect_vec());
 
-        for (name, _) in group.generators() {
-            stabilizers
-                .extend(Algorithm::new_from_move_seq(Arc::clone(&group), vec![name]).unwrap());
+        for (_, perm) in group.generators() {
+            stabilizers.extend(perm.to_owned());
         }
 
-        BeginnerMethod { group, stabilizers }
+        StabilizerChain { stabilizers }
     }
 
-    pub fn solve(&self, permutation: Permutation) -> Option<Algorithm> {
-        let mut alg = Algorithm::identity(Arc::clone(&self.group));
-        if self.stabilizers.solve(permutation, Some(&mut alg)) {
-            Some(alg)
-        } else {
-            None
-        }
-    }
-
+    /// Determine if a permutation is a member of the group
+    #[must_use]
     pub fn is_member(&self, permutation: Permutation) -> bool {
-        self.stabilizers.solve(permutation, None)
+        self.stabilizers.is_member(permutation)
     }
 
+    /// Calculate the cardinality of the group
     #[must_use]
     pub fn cardinality(&self) -> Int<U> {
         self.stabilizers.cardinality()
@@ -52,8 +42,8 @@ struct Stabilizer {
     group: Arc<PermutationGroup>,
     next: Option<Box<Stabilizer>>,
     stabilizes: usize,
-    generating_set: Vec<Algorithm>,
-    coset_reps: Box<[Option<Algorithm>]>,
+    generating_set: Vec<Permutation>,
+    coset_reps: Box<[Option<Permutation>]>,
 }
 
 impl Stabilizer {
@@ -61,7 +51,7 @@ impl Stabilizer {
         let (head, tail) = chain.split_first().unwrap();
 
         let mut coset_reps = Box::<[_]>::from(vec![None; group.facelet_count()]);
-        coset_reps[*head] = Some(Algorithm::identity(Arc::clone(&group)));
+        coset_reps[*head] = Some(group.identity());
 
         Stabilizer {
             stabilizes: *head,
@@ -81,7 +71,7 @@ impl Stabilizer {
     }
 
     #[must_use]
-    fn solve(&self, mut permutation: Permutation, mut maybe_alg: Option<&mut Algorithm>) -> bool {
+    fn is_member(&self, mut permutation: Permutation) -> bool {
         // println!("{} — {}", self.stabilizes, permutation);
         loop {
             let rep = permutation.mapping()[self.stabilizes];
@@ -90,37 +80,34 @@ impl Stabilizer {
                 break;
             }
 
-            let Some(other_alg) = &self.coset_reps[rep] else {
+            let Some(other_perm) = &self.coset_reps[rep] else {
                 return false;
             };
 
-            if let Some(alg) = maybe_alg.as_mut() {
-                alg.compose_into(other_alg);
-            }
-            permutation.compose_into(other_alg.permutation());
+            permutation.compose_into(other_perm);
         }
 
         match &self.next {
-            Some(next) => next.solve(permutation, maybe_alg),
+            Some(next) => next.is_member(permutation),
             None => true,
         }
     }
 
-    fn inverse_rep_to(&self, mut rep: usize, alg: &mut Algorithm) -> Result<(), ()> {
+    fn inverse_rep_to(&self, mut rep: usize, alg: &mut Permutation) -> Result<(), ()> {
         while rep != self.stabilizes {
             let Some(other_alg) = &self.coset_reps[rep] else {
                 return Err(());
             };
 
             alg.compose_into(other_alg);
-            rep = other_alg.permutation().mapping()[rep];
+            rep = other_alg.mapping()[rep];
         }
 
         Ok(())
     }
 
-    fn extend(&mut self, generator: Algorithm) {
-        if self.solve(generator.permutation().to_owned(), None) {
+    fn extend(&mut self, generator: Permutation) {
+        if self.is_member(generator.clone()) {
             // TODO: Check if the generator is shorter than the ones we already have
             return;
         }
@@ -129,7 +116,7 @@ impl Stabilizer {
         self.generating_set.push(generator);
         let generator = self.generating_set.last().unwrap();
 
-        let mapping = generator.permutation().mapping().to_owned();
+        let mapping = generator.mapping().to_owned();
         let mut inv = generator.clone();
         inv.exponentiate(-Int::<I>::one());
 
@@ -145,10 +132,10 @@ impl Stabilizer {
         }
 
         while let Some(spot) = newly_in_orbit.pop_front() {
-            for alg in &self.generating_set {
-                let goes_to = alg.permutation().mapping()[spot];
+            for perm in &self.generating_set {
+                let goes_to = perm.mapping()[spot];
                 if self.coset_reps[goes_to].is_none() {
-                    let mut inv_alg = alg.clone();
+                    let mut inv_alg = perm.clone();
                     inv_alg.exponentiate(-Int::<I>::one());
                     self.coset_reps[goes_to] = Some(inv_alg);
                     newly_in_orbit.push_back(goes_to);
@@ -161,7 +148,7 @@ impl Stabilizer {
         }
 
         for i in 0..self.coset_reps.len() {
-            let mut rep = Algorithm::identity(Arc::clone(&self.group));
+            let mut rep = self.group.identity();
             let Ok(()) = self.inverse_rep_to(i, &mut rep) else {
                 continue;
             };
@@ -171,11 +158,8 @@ impl Stabilizer {
             for generator in &self.generating_set {
                 let mut new_generator = rep.clone();
                 new_generator.compose_into(generator);
-                self.inverse_rep_to(
-                    new_generator.permutation().mapping()[self.stabilizes],
-                    &mut new_generator,
-                )
-                .unwrap();
+                self.inverse_rep_to(new_generator.mapping()[self.stabilizes], &mut new_generator)
+                    .unwrap();
                 self.next.as_mut().unwrap().extend(new_generator);
             }
         }
@@ -193,7 +177,7 @@ mod tests {
         architectures::{Algorithm, Permutation, PermutationGroup, PuzzleDefinition},
     };
 
-    use super::BeginnerMethod;
+    use super::StabilizerChain;
 
     #[test]
     fn simple() {
@@ -216,14 +200,10 @@ mod tests {
             perms,
         ));
 
-        let method = BeginnerMethod::new(Arc::clone(&puzzle));
+        let method = StabilizerChain::new(&puzzle);
         assert_eq!(method.cardinality(), Int::<U>::from(3_u32));
         assert!(!method.is_member(Permutation::from_cycles(vec![vec![0, 1]])));
         assert!(method.is_member(Permutation::from_cycles(vec![vec![0, 1, 2]])));
-        assert_eq!(
-            method.solve(Permutation::from_cycles(vec![vec![0, 1, 2]])),
-            Some(Algorithm::new_from_move_seq(puzzle, vec![ArcIntern::from("B")]).unwrap())
-        );
     }
 
     #[test]
@@ -232,7 +212,7 @@ mod tests {
             .unwrap()
             .perm_group;
 
-        let method = BeginnerMethod::new(Arc::clone(&cube_def));
+        let method = StabilizerChain::new(&cube_def);
 
         assert_eq!(
             method.cardinality(),
