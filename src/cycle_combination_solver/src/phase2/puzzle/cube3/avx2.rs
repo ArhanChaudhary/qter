@@ -9,7 +9,7 @@ use std::{
     simd::{
         cmp::{SimdOrd, SimdPartialEq, SimdPartialOrd},
         num::SimdInt,
-        u8x16, u8x32,
+        u8x32,
     },
 };
 
@@ -76,8 +76,6 @@ const IDENTITY: u8x32 = u8x32::from_array([
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
     13, 14, 15,
 ]);
-const EDGE_START: usize = 0;
-const CORNER_START: usize = 16;
 
 fn avx2_swizzle_lo(a: u8x32, b: u8x32) -> u8x32 {
     #[cfg(avx2)]
@@ -87,6 +85,14 @@ fn avx2_swizzle_lo(a: u8x32, b: u8x32) -> u8x32 {
     }
     #[cfg(not(avx2))]
     unimplemented!()
+}
+
+fn edge_bits(bitmask: u64) -> u64 {
+    bitmask & u64::from(!0_u16)
+}
+
+fn corner_bits(bitmask: u64) -> u64 {
+    bitmask >> 16
 }
 
 impl Cube3Interface for Cube3 {
@@ -180,13 +186,10 @@ impl Cube3Interface for Cube3 {
         let compose_ori = self.0 & ORI_MASK;
         let mut seen_perm = (self.0 & PERM_MASK).simd_eq(IDENTITY);
 
-        let oriented_one_cycle_corner_mask = seen_perm.extract::<CORNER_START, 16>()
-            & compose_ori
-                .extract::<CORNER_START, 16>()
-                .simd_ne(u8x16::splat(0));
+        let oriented_one_cycle_corner_mask = seen_perm & compose_ori.simd_ne(u8x32::splat(0));
         let mut corner_cycle_type_pointer =
-            (oriented_one_cycle_corner_mask.to_bitmask().count_ones() as usize).wrapping_sub(1);
-        // Check oriented one cycles
+            corner_bits(oriented_one_cycle_corner_mask.to_bitmask()).count_ones() as usize;
+        corner_cycle_type_pointer = corner_cycle_type_pointer.wrapping_sub(1);
         if corner_cycle_type_pointer != usize::MAX
             && (corner_cycle_type_pointer >= sorted_cycle_type[0].len()
                 || sorted_cycle_type[0][corner_cycle_type_pointer] != (1.try_into().unwrap(), true))
@@ -194,12 +197,10 @@ impl Cube3Interface for Cube3 {
             return false;
         }
 
-        let oriented_one_cycle_edge_mask = seen_perm.extract::<EDGE_START, 16>()
-            & compose_ori
-                .extract::<EDGE_START, 16>()
-                .simd_ne(u8x16::splat(0));
+        let oriented_one_cycle_edge_mask = seen_perm & compose_ori.simd_ne(u8x32::splat(0));
         let mut edge_cycle_type_pointer =
-            (oriented_one_cycle_edge_mask.to_bitmask().count_ones() as usize).wrapping_sub(1);
+            edge_bits(oriented_one_cycle_edge_mask.to_bitmask()).count_ones() as usize;
+        edge_cycle_type_pointer = edge_cycle_type_pointer.wrapping_sub(1);
         // Check oriented one cycles
         if edge_cycle_type_pointer != usize::MAX
             && (edge_cycle_type_pointer >= sorted_cycle_type[1].len()
@@ -217,13 +218,14 @@ impl Cube3Interface for Cube3 {
             let new_pieces = perm_identity_eq & !seen_perm;
             seen_perm |= perm_identity_eq;
 
-            let new_corners = new_pieces.extract::<CORNER_START, 16>();
-            let i_corner_cycle_count = new_corners.to_bitmask().count_ones();
-            if new_corners.any() {
-                let iter_co_mod =
-                    (iter.extract::<CORNER_START, 16>() >> u8x16::splat(4)) * u8x16::splat(171);
-                let oriented_corner_mask = new_corners & iter_co_mod.simd_gt(u8x16::splat(85));
-                let i_oriented_corner_cycle_count = oriented_corner_mask.to_bitmask().count_ones();
+            let new_pieces_bitmask = new_pieces.to_bitmask();
+
+            let i_corner_cycle_count = corner_bits(new_pieces_bitmask).count_ones();
+            if i_corner_cycle_count > 0 {
+                let iter_co_mod = (iter >> u8x32::splat(4)) * u8x32::splat(171);
+                let oriented_corner_mask = new_pieces & iter_co_mod.simd_gt(u8x32::splat(85));
+                let i_oriented_corner_cycle_count =
+                    corner_bits(oriented_corner_mask.to_bitmask()).count_ones();
 
                 // Unoriented cycles
                 if i_oriented_corner_cycle_count != i_corner_cycle_count {
@@ -249,20 +251,20 @@ impl Cube3Interface for Cube3 {
                 }
             }
 
-            let new_edges = new_pieces.extract::<EDGE_START, 16>();
-            let i_edge_cycle_count = new_edges.to_bitmask().count_ones();
-            if new_edges.any() {
-                let iter_eo_mod = iter.extract::<EDGE_START, 16>() & u8x16::splat(0b0001_0000);
-                let oriented_edge_mask = new_edges & iter_eo_mod.simd_ne(u8x16::splat(0));
-                let i_oriented_edge_cycle_count = oriented_edge_mask.to_bitmask().count_ones();
+            let i_edge_cycle_count = edge_bits(new_pieces_bitmask).count_ones();
+            if i_edge_cycle_count > 0 {
+                let iter_eo_mod = iter & u8x32::splat(0b0001_0000);
+                let oriented_edge_mask = new_pieces & iter_eo_mod.simd_ne(u8x32::splat(0));
+                let i_oriented_edge_cycle_count =
+                    edge_bits(oriented_edge_mask.to_bitmask()).count_ones();
 
                 // Unoriented cycles
                 if i_oriented_edge_cycle_count != i_edge_cycle_count {
                     edge_cycle_type_pointer += ((i_edge_cycle_count - i_oriented_edge_cycle_count)
                         / u32::from(i.get()))
                         as usize;
-                    if edge_cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
-                        || sorted_cycle_type[1][edge_cycle_type_pointer - 1] != (i, false)
+                    if edge_cycle_type_pointer >= sorted_cycle_type[1].len()
+                        || sorted_cycle_type[1][edge_cycle_type_pointer] != (i, false)
                     {
                         return false;
                     }
@@ -272,8 +274,8 @@ impl Cube3Interface for Cube3 {
                 if i_oriented_edge_cycle_count != 0 {
                     edge_cycle_type_pointer +=
                         (i_oriented_edge_cycle_count / u32::from(i.get())) as usize;
-                    if edge_cycle_type_pointer - 1 >= sorted_cycle_type[1].len()
-                        || sorted_cycle_type[1][edge_cycle_type_pointer - 1] != (i, true)
+                    if edge_cycle_type_pointer >= sorted_cycle_type[1].len()
+                        || sorted_cycle_type[1][edge_cycle_type_pointer] != (i, true)
                     {
                         return false;
                     }
