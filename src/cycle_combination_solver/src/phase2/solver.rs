@@ -21,11 +21,6 @@ struct CycleTypeSolverMutable<P: PuzzleState, H: PuzzleStateHistoryInterface<P>>
 
 pub struct SolutionsIntoIter<'a, P: PuzzleState> {
     puzzle_def: &'a PuzzleDef<P>,
-    solutions: Vec<Vec<usize>>,
-}
-
-pub struct SolutionsIter<'a, P: PuzzleState> {
-    puzzle_def: &'a PuzzleDef<P>,
     solutions: std::vec::IntoIter<Vec<usize>>,
 }
 
@@ -168,24 +163,12 @@ impl<'a, P: PuzzleState, T: PruningTables<P>> CycleTypeSolver<'a, P, T> {
 
         SolutionsIntoIter {
             puzzle_def: self.puzzle_def,
-            solutions: mutable.solutions,
+            solutions: mutable.solutions.into_iter(),
         }
     }
 }
 
-impl<'a, P: PuzzleState> IntoIterator for SolutionsIntoIter<'a, P> {
-    type Item = Vec<&'a Move<P>>;
-    type IntoIter = SolutionsIter<'a, P>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        SolutionsIter {
-            puzzle_def: self.puzzle_def,
-            solutions: self.solutions.into_iter(),
-        }
-    }
-}
-
-impl<'a, P: PuzzleState> Iterator for SolutionsIter<'a, P> {
+impl<'a, P: PuzzleState> Iterator for SolutionsIntoIter<'a, P> {
     type Item = Vec<&'a Move<P>>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -219,7 +202,7 @@ mod tests {
             vec![vec![], vec![]],
             ZeroTable::try_generate(()).unwrap(),
         );
-        let solutions = solver.solve::<[Cube3; 21]>().into_iter().collect_vec();
+        let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
         assert_eq!(solutions.len(), 1);
         assert_eq!(solutions[0].len(), 0);
 
@@ -239,7 +222,7 @@ mod tests {
         .unwrap();
         let solver: CycleTypeSolver<Cube3, _> =
             CycleTypeSolver::new(&puzzle_def, identity_cycle_type, pruning_tables);
-        let solutions = solver.solve::<[Cube3; 21]>().into_iter().collect_vec();
+        let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
         assert_eq!(solutions.len(), 1);
         assert_eq!(solutions[0].len(), 0);
     }
@@ -255,7 +238,7 @@ mod tests {
             ],
             ZeroTable::try_generate(()).unwrap(),
         );
-        let solutions = solver.solve::<[Cube3; 21]>().into_iter().collect_vec();
+        let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
         assert_eq!(solutions.len(), 12);
         assert!(solutions.iter().all(|solution| solution.len() == 1));
     }
@@ -277,7 +260,7 @@ mod tests {
             ],
             ZeroTable::try_generate(()).unwrap(),
         );
-        let solutions = solver.solve::<[Cube3; 21]>().into_iter().collect_vec();
+        let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
         assert_eq!(solutions.len(), 6);
         assert!(solutions.iter().all(|solution| solution.len() == 1));
     }
@@ -298,7 +281,7 @@ mod tests {
             ],
             ZeroTable::try_generate(()).unwrap(),
         );
-        let solutions = solver.solve::<[Cube3; 21]>().into_iter().collect_vec();
+        let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
         assert_eq!(solutions.len(), 22); // TODO: should be 24
         assert!(solutions.iter().all(|solution| solution.len() == 4));
     }
@@ -331,7 +314,7 @@ mod tests {
         let duration = prune_start.elapsed();
         eprintln!("Time to generate pruning tables: {duration:?}");
         let start = Instant::now();
-        let solutions = solver.solve::<[Cube3; 21]>().into_iter().collect_vec();
+        let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
         let duration = start.elapsed();
         eprintln!("Time to find optimal cycle: {duration:?}");
         for solution in &solutions {
@@ -628,7 +611,7 @@ mod tests {
                 result_1.cycle_type(&cube3_def.sorted_orbit_defs, multi_bv.reusable_ref());
             solver.set_sorted_cycle_type(cycle_type);
 
-            let solutions = solver.solve::<Vec<_>>().into_iter().collect_vec();
+            let solutions = solver.solve::<Vec<_>>().collect_vec();
             assert_eq!(solutions.len(), optimal_cycle_test.expected_partial_count);
             assert!(
                 solutions
@@ -994,7 +977,7 @@ mod tests {
                 result_1.cycle_type(&cube4_def.sorted_orbit_defs, multi_bv.reusable_ref());
             solver.set_sorted_cycle_type(cycle_type);
 
-            let solutions = solver.solve::<Vec<_>>().into_iter().collect_vec();
+            let solutions = solver.solve::<Vec<_>>().collect_vec();
             assert_eq!(solutions.len(), optimal_cycle_test.expected_partial_count);
             assert!(
                 solutions

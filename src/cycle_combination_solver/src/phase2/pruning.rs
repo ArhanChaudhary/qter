@@ -8,16 +8,15 @@
 //! from the solved state. For each state, the depth is recorded in a vector
 //! of the appropriate size.
 
+use super::{
+    FACT_UNTIL_19,
+    puzzle::{OrbitDef, OrientedPartition, PuzzleDef, PuzzleState},
+};
 use crate::phase2::{
     orbit_puzzle::{
         OrbitPuzzleConstructors, OrbitPuzzleState, slice_orbit_puzzle::SliceOrbitPuzzle,
     },
     puzzle::MultiBvInterface,
-};
-
-use super::{
-    FACT_UNTIL_19,
-    puzzle::{OrbitDef, OrientedPartition, PuzzleDef, PuzzleState},
 };
 use itertools::Itertools;
 use std::{
