@@ -1,3 +1,5 @@
+//! An AVX2 optimized implementation for 3x3 cubes
+
 #![cfg_attr(not(avx2), allow(dead_code, unused_variables))]
 
 use super::common::Cube3Interface;
@@ -18,6 +20,60 @@ use core::arch::x86::_mm256_shuffle_epi8;
 #[cfg(all(avx2, target_arch = "x86_64"))]
 use core::arch::x86_64::_mm256_shuffle_epi8;
 
+/// A representation of a 3x3 cube in a __m256i vector. The following design
+/// has been taken from Andrew Skalski's [vcube].
+///
+/// Low 128 bits:
+///
+/// ```text
+/// ---OEEEE
+/// ---OEEEE
+/// ---OEEEE
+/// ---OEEEE
+/// ---OEEEE
+/// ---OEEEE
+/// ---OEEEE
+/// ---OEEEE
+/// ---OEEEE
+/// ---OEEEE
+/// ---OEEEE
+/// ---OEEEE
+/// ----11--
+/// ----11-1
+/// ----111-
+/// ----1111
+/// ```
+///
+/// dash = unused (zero) \
+/// E = edge index (0-11) \
+/// O = edge orientation (0-1)
+///
+/// High 128 bits:
+///
+/// ```text
+/// --OO-CCC
+/// --OO-CCC
+/// --OO-CCC
+/// --OO-CCC
+/// --OO-CCC
+/// --OO-CCC
+/// --OO-CCC
+/// --OO-CCC
+/// ----1---
+/// ----1--1
+/// ----1-1-
+/// ----1-11
+/// ----11--
+/// ----11-1
+/// ----111-
+/// ----1111
+/// ```
+///
+/// dash = unused (zero) \
+/// C = corner index (0-7) \
+/// O = corner orientation (0-2)
+///
+/// [vcube]: https://github.com/Voltara/vcube
 #[derive(Clone)]
 pub struct Cube3(u8x32);
 
@@ -62,7 +118,9 @@ impl fmt::Debug for Cube3 {
     }
 }
 
+/// Extract the permutation bits from the cube state.
 const PERM_MASK: u8x32 = u8x32::splat(0b0000_1111);
+/// Extract the orientation bits from the cube state.
 const ORI_MASK: u8x32 = u8x32::splat(0b0011_0000);
 const ORI_CARRY: u8x32 = u8x32::from_array([
     0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
@@ -122,12 +180,30 @@ impl Cube3Interface for Cube3 {
     fn replace_compose(&mut self, a: &Self, b: &Self) {
         // Benchmarked on a 2x Intel Xeon E5-2667 v3: 1.55ns
         fn inner(dst: &mut Cube3, a: &Cube3, b: &Cube3) {
+            // First use _mm256_shuffle_epi8 to compose the permutation. Note
+            // that the SIMD instruction shuffles its argument bytes by the
+            // lower four bits of the second argument, meaning orientation will
+            // not interfere.
             let mut composed = avx2_swizzle_lo(a.0, b.0);
+            // Once permutation is done, we need to compose orientation, and
+            // "The Cubie Level" of Kociemba's [website] explains that all we
+            // have left to do is add just the orientation bits of the second
+            // argument to the first.
+            //
+            // [website]: https://kociemba.org/cube.htm
             composed += b.0 & ORI_MASK;
+            // Once added, the orientation bits may be in an invalid state. Each
+            // corner orientation index is defined as 0, 1, or 2, but it may be
+            // 4 or 5 after the addition. We subtract the value 0b0011_0000 or 3
+            // from each orientation value and minimize it with the original
+            // value. This will do nothing to values that are already 0, 1, or 2
+            // because of overflow, but it will set the values 3, 4, and 5 to 0,
+            // 1, and 2 respectively.
             composed = composed.simd_min(composed - ORI_CARRY);
 
             dst.0 = composed;
         }
+        // The vectorcall ABI is used to speed up the function calls
         #[cfg(avx2)]
         extern "vectorcall" fn replace_compose_vectorcall(dst: &mut Cube3, a: &Cube3, b: &Cube3) {
             inner(dst, a, b)
@@ -143,6 +219,18 @@ impl Cube3Interface for Cube3 {
     fn replace_inverse(&mut self, a: &Self) {
         // Benchmarked on a 2x Intel Xeon E5-2667 v3: 6.27ns
         fn inner(dst: &mut Cube3, a: &Cube3) {
+            // Permutation inversion taken from Andrew Skalski's [vcube].
+            //
+            // 27720 (11*9*8*7*5) is the LCM of all possible cycle
+            // decompositions, so we can invert the permutation by raising it to
+            // the 27719th power. The addition chain for 27719 was generated
+            // using the calculator provided by Achim Flammenkamp on his
+            // [website].
+            //
+            // [vcube]: https://github.com/Voltara/vcube
+            // [website]: http://wwwhomes.uni-bielefeld.de/achim/addition_chain.html
+
+            // Extract the permutation bits from the cube state
             let perm = a.0 & PERM_MASK;
 
             let mut pow_3 = avx2_swizzle_lo(perm, perm);
@@ -161,12 +249,17 @@ impl Cube3Interface for Cube3 {
             inverse = avx2_swizzle_lo(avx2_swizzle_lo(inverse, inverse), pow_3);
             inverse = avx2_swizzle_lo(avx2_swizzle_lo(inverse, inverse), perm);
 
+            // Explained in `replace_compose`
             let mut added_ori = a.0 & ORI_MASK;
             added_ori += added_ori;
             added_ori = added_ori.simd_min(added_ori - ORI_CARRY_INVERSE);
+
+            // Use the inverse permutation to permute the already inversed
+            // orientation bits
             added_ori = avx2_swizzle_lo(added_ori, inverse);
             *dst = Cube3(inverse | added_ori);
         }
+        // The vectorcall ABI is used to speed up the function calls
         #[cfg(avx2)]
         extern "vectorcall" fn replace_inverse_vectorcall(dst: &mut Cube3, a: &Cube3) {
             inner(dst, a);
@@ -180,32 +273,100 @@ impl Cube3Interface for Cube3 {
 
     fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
         // Benchmarked on a 2x Intel Xeon E5-2667 v3: 39.94ns (worst) 12.71ns (average)
-        // see simd8and16 for explanation
+        //
+        // The cycle type of a state is a sorted list of (int: cycle_length,
+        // bool: is_oriented). For example, the corner permutation:
+        //
+        // index 0 1 2 3 4 5 6 7
+        // perm  0 2 3 5 4 1 7 6
+        //
+        // has cycle lengths 2 and 4. is_oriented is true for each cycle length
+        // when the sum of orientation values of each piece in the cycle is
+        // nonzero modulo the orbit's orientation count.
+        //
+        // To calculate if a state induces a sorted cycle type we use a SIMD
+        // shuffling and counting approach. We perform the following for the
+        // corners and edges orbit. We first focus on finding the cycle lengths.
+        // To do so, repeatedly compose the permutation with its original value
+        // and equality mask it with the identity permutation. If any element is
+        // set, then there are X / Y cycles of length Y, where X is the number
+        // of set elements and Y is the number of repititions. This should make
+        // sense; after two repetitions, if there are six set elements, there
+        // must be three cycles of length two. Each of the two pieces of the
+        // three cycles are returning to their original position. To account
+        // for orientation, we first make note of the nonobvious fact that every
+        // piece's orientation is the same when cycled back to their original
+        // positions. In a cycle, think of each piece position as an addition to
+        // the visitor's orientation count. Each piece cycles through each
+        // position exactly once, so each piece will be added to by the same
+        // value (the sum of each piece's orientation value). Since the identity
+        // state has every orientation value the same (zero), each piece
+        // must therefore have the same orientation value after a full cycle.
+        // Thus, we can find how many of those cycles of the same length are
+        // oriented cycles by using same technique.
+
+        // Helps avoid bound checks in codegen
         #![allow(clippy::int_plus_one)]
 
+        // The orientation to add every composition repetition
         let compose_ori = self.0 & ORI_MASK;
+        // A rolling mask of the pieces that have been seen. Once there are
+        // no more pieces to see, we have our result
         let mut seen_perm = (self.0 & PERM_MASK).simd_eq(IDENTITY);
 
+        // Create a mask of cycles that are (1, true), or just orient in place.
+        // Special case for this first cycle because it is convenient and fast.
         let oriented_one_cycle_corner_mask = seen_perm & compose_ori.simd_ne(u8x32::splat(0));
+
+        // We need a way to cross-reference the computed cycles with the given
+        // cycle type to test if the current state induces it. I settled on
+        // using an index pointer to the given cycle type list, taking advantage
+        // of the fact that the list is sorted.
+        //
+        // Let's say we test against the cycle type [(1, true), (1, true),
+        // (2, false), (4, true)]. We have already presented an algorithm to
+        // compute the number of cycles of each length. For every cycle length,
+        // we can add that number to the index pointer starting at -1 and check
+        // if that index is that computed cycle length. It is trivial to extend
+        // this approach to account for orientations
+        //
+        // We initialize the index pointer to the number of oriented one cycles
         let mut corner_cycle_type_pointer =
             corner_bits(oriented_one_cycle_corner_mask.to_bitmask()).count_ones() as usize;
+        // Subtract one to make it zero indexed
         corner_cycle_type_pointer = corner_cycle_type_pointer.wrapping_sub(1);
+
+        // Error checking for the (1, true) cycle type.
         if corner_cycle_type_pointer == usize::MAX {
+            // If the state has no (1, true) cycle types, then get the first
+            // cycle of the specified sorted cycle type.
             if let Some(&first_cycle) = sorted_cycle_type[0].first() {
+                // If sorted cycle type has a first cycle, it must not be
+                // (1, true) because this branch only runs when the state has
+                // no (1, true) cycle types.
                 if first_cycle == (1.try_into().unwrap(), true) {
+                    // So we short circuit
                     return false;
                 }
             }
-        } else if corner_cycle_type_pointer >= sorted_cycle_type[0].len()
+        } else if
+        // If the corner cycle type pointer is out of range then something
+        // is wrong
+        corner_cycle_type_pointer >= sorted_cycle_type[0].len()
+            // If the corner cycle type is in range, but it doesn't point to
+            // (1, true) then the cycle type is mismatched
             || sorted_cycle_type[0][corner_cycle_type_pointer] != (1.try_into().unwrap(), true)
         {
+            // In both cases short circuit
             return false;
         }
 
+        // We use the same techniques as above but for edges
         let oriented_one_cycle_edge_mask = seen_perm & compose_ori.simd_ne(u8x32::splat(0));
         let mut edge_cycle_type_pointer =
             edge_bits(oriented_one_cycle_edge_mask.to_bitmask()).count_ones() as usize;
         edge_cycle_type_pointer = edge_cycle_type_pointer.wrapping_sub(1);
+
         if edge_cycle_type_pointer == usize::MAX {
             if let Some(&first_cycle) = sorted_cycle_type[1].first() {
                 if first_cycle == (1.try_into().unwrap(), true) {
@@ -218,83 +379,121 @@ impl Cube3Interface for Cube3 {
             return false;
         }
 
-        let mut i = NonZeroU8::new(2).unwrap();
+        // The main loop. We repeatedly compose the permutation with its
+        // original value and check if any new pieces have been seen. First
+        // initialize the number of composition reptitions to 2, because we just
+        // processed the first composition, and we are about to process the
+        // second. We use a `NonZeroU8` to avoid division bounds checking
+        let mut reps = NonZeroU8::new(2).unwrap();
+        // The repeatedly composed permutation
         let mut iter = self.0;
         while !seen_perm.all() {
+            // Compose the permutation with its original value without fixing
+            // orientation. This is important and will be utilized later
             iter = avx2_swizzle_lo(iter, self.0) + compose_ori;
 
+            // SIMD mask the iterated permutation with the identity and remove
+            // already seen pieces to get the iteration's new pieces
             let perm_identity_eq = (iter & PERM_MASK).simd_eq(IDENTITY);
             let new_pieces = perm_identity_eq & !seen_perm;
             seen_perm |= perm_identity_eq;
 
             let new_pieces_bitmask = new_pieces.to_bitmask();
 
-            let i_corner_cycle_count = corner_bits(new_pieces_bitmask).count_ones();
-            if i_corner_cycle_count > 0 {
+            // Variables prefixed with `reps_` are that value times the number
+            // of repetitions. This variable for example is the number of corner
+            // cycles times the number of repetitions. Recall from earlier that
+            // the number of corner cycles is the number of bits set during the
+            // iteration divided by the number of repetitions
+            let reps_corner_cycle_count = corner_bits(new_pieces_bitmask).count_ones();
+            // If there are any corner cycles, we need to check if they match
+            // the specified sorted cycle type. Note that this if statement is
+            // compiled to more optimized assembly during codegen
+            if reps_corner_cycle_count > 0 {
+                // We now calculate how many of those corner cycles are
+                // oriented. Recall a corner is oriented if O % 3 != 0, where O
+                // is the orientation value. [This blog] demonstrates how the
+                // expression is exactly equivalent to O * 171 > 85 for u8 sized
+                // arithmetic. Rust was not optimizing this expression so I
+                // opened this [issue].
+                //
+                // [This blog]: https://lomont.org/posts/2017/divisibility-testing
+                // [issue]: https://github.com/rust-lang/portable-simd/issues/453
                 let iter_co_mod = (iter >> u8x32::splat(4)) * u8x32::splat(171);
                 let oriented_corner_mask = new_pieces & iter_co_mod.simd_gt(u8x32::splat(85));
-                let i_oriented_corner_cycle_count =
+                // Simply counting the bits gives us the number of oriented
+                // corner cycles times reps.
+                let reps_oriented_corner_cycle_count =
                     corner_bits(oriented_corner_mask.to_bitmask()).count_ones();
 
-                // Unoriented cycles
-                if i_oriented_corner_cycle_count != i_corner_cycle_count {
+                // The number of unoriented cycles is the number of corner
+                // cycles minus the number of oriented cycles. If there are
+                // unoriented corner cycles we need to advance the corner cycle
+                // type pointer
+                if reps_oriented_corner_cycle_count != reps_corner_cycle_count {
+                    // and then divide it by the number of repetitions to get
+                    // the number of unoriented cycles
                     corner_cycle_type_pointer +=
-                        ((i_corner_cycle_count - i_oriented_corner_cycle_count)
-                            / u32::from(i.get())) as usize;
+                        ((reps_corner_cycle_count - reps_oriented_corner_cycle_count)
+                            / u32::from(reps.get())) as usize;
+                    // Same error checking as before
                     if corner_cycle_type_pointer >= sorted_cycle_type[0].len()
-                        || sorted_cycle_type[0][corner_cycle_type_pointer] != (i, false)
+                        || sorted_cycle_type[0][corner_cycle_type_pointer] != (reps, false)
                     {
                         return false;
                     }
                 }
 
-                // Oriented cycles
-                if i_oriented_corner_cycle_count != 0 {
+                // Perform the same logic for oriented corner cycles
+                if reps_oriented_corner_cycle_count != 0 {
                     corner_cycle_type_pointer +=
-                        (i_oriented_corner_cycle_count / u32::from(i.get())) as usize;
+                        (reps_oriented_corner_cycle_count / u32::from(reps.get())) as usize;
                     if corner_cycle_type_pointer >= sorted_cycle_type[0].len()
-                        || sorted_cycle_type[0][corner_cycle_type_pointer] != (i, true)
+                        || sorted_cycle_type[0][corner_cycle_type_pointer] != (reps, true)
                     {
                         return false;
                     }
                 }
             }
 
-            let i_edge_cycle_count = edge_bits(new_pieces_bitmask).count_ones();
-            if i_edge_cycle_count > 0 {
-                let iter_eo_mod = iter & u8x32::splat(0b0001_0000);
+            // Repeat everything for edges.
+            let reps_edge_cycle_count = edge_bits(new_pieces_bitmask).count_ones();
+            if reps_edge_cycle_count > 0 {
+                // The only notable difference is that O % 2 != 0 is equivalent
+                // to O & 1 != 0 so this becomes easier
+                let iter_eo_mod = iter & u8x32::splat(1 << 4);
                 let oriented_edge_mask = new_pieces & iter_eo_mod.simd_ne(u8x32::splat(0));
-                let i_oriented_edge_cycle_count =
+                let reps_oriented_edge_cycle_count =
                     edge_bits(oriented_edge_mask.to_bitmask()).count_ones();
 
-                // Unoriented cycles
-                if i_oriented_edge_cycle_count != i_edge_cycle_count {
-                    edge_cycle_type_pointer += ((i_edge_cycle_count - i_oriented_edge_cycle_count)
-                        / u32::from(i.get()))
-                        as usize;
+                if reps_oriented_edge_cycle_count != reps_edge_cycle_count {
+                    edge_cycle_type_pointer +=
+                        ((reps_edge_cycle_count - reps_oriented_edge_cycle_count)
+                            / u32::from(reps.get())) as usize;
                     if edge_cycle_type_pointer >= sorted_cycle_type[1].len()
-                        || sorted_cycle_type[1][edge_cycle_type_pointer] != (i, false)
+                        || sorted_cycle_type[1][edge_cycle_type_pointer] != (reps, false)
                     {
                         return false;
                     }
                 }
 
-                // Oriented cycles
-                if i_oriented_edge_cycle_count != 0 {
+                if reps_oriented_edge_cycle_count != 0 {
                     edge_cycle_type_pointer +=
-                        (i_oriented_edge_cycle_count / u32::from(i.get())) as usize;
+                        (reps_oriented_edge_cycle_count / u32::from(reps.get())) as usize;
                     if edge_cycle_type_pointer >= sorted_cycle_type[1].len()
-                        || sorted_cycle_type[1][edge_cycle_type_pointer] != (i, true)
+                        || sorted_cycle_type[1][edge_cycle_type_pointer] != (reps, true)
                     {
                         return false;
                     }
                 }
             }
             // SAFETY: this loop will only ever run 12 times at max because that
-            // is the longest cycle length among edges
-            i = unsafe { NonZeroU8::new_unchecked(i.get() + 1) };
+            // is the longest cycle length among the orbits
+            reps = unsafe { NonZeroU8::new_unchecked(reps.get() + 1) };
         }
 
+        // Finally, confirm that the cycle type pointers have visited every
+        // cycle type in the sorted cycle type list. If so, then return true
         corner_cycle_type_pointer == sorted_cycle_type[0].len().wrapping_sub(1)
             && edge_cycle_type_pointer == sorted_cycle_type[1].len().wrapping_sub(1)
     }
@@ -313,6 +512,8 @@ impl Cube3Interface for Cube3 {
 }
 
 impl Cube3 {
+    /// An alternative to `replace_inverse` that uses a brute force approach to
+    /// find the inverse of a cube state. Not really useful as it is slower
     #[inline(always)]
     pub fn replace_inverse_brute(&mut self, a: &Self) {
         // Benchmarked on a 2x Intel Xeon E5-2667 v3: 6.77ns
@@ -324,6 +525,7 @@ impl Cube3 {
                 0, 0, 12, 13, 14, 15,
             ]);
 
+            // Build the inverse permutation one at a time
             macro_rules! brute_unroll {
                 ($i:literal) => {
                     let inv_trial = u8x32::splat($i);
@@ -348,6 +550,7 @@ impl Cube3 {
             brute_unroll!(10);
             brute_unroll!(11);
 
+            // Explained in `replace_compose`
             let mut added_ori = a.0 & ORI_MASK;
             added_ori += added_ori;
             added_ori = added_ori.simd_min(added_ori - ORI_CARRY_INVERSE);
