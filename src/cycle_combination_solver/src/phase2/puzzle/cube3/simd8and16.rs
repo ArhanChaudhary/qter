@@ -168,9 +168,15 @@ impl Cube3Interface for UncompressedCube3 {
         let mut cycle_type_pointer =
             (oriented_one_cycle_corner_mask.to_bitmask().count_ones() as usize).wrapping_sub(1);
         // Check oriented one cycles
-        if cycle_type_pointer != usize::MAX
-            && (cycle_type_pointer >= sorted_cycle_type[0].len()
-                || sorted_cycle_type[0][cycle_type_pointer] != (1.try_into().unwrap(), true))
+        // Hot path for short circuiting early
+        if cycle_type_pointer == usize::MAX {
+            if let Some(&first_cycle) = sorted_cycle_type[0].first() {
+                if first_cycle == (1.try_into().unwrap(), true) {
+                    return false;
+                }
+            }
+        } else if cycle_type_pointer >= sorted_cycle_type[0].len()
+            || sorted_cycle_type[0][cycle_type_pointer] != (1.try_into().unwrap(), true)
         {
             return false;
         }
@@ -236,9 +242,14 @@ impl Cube3Interface for UncompressedCube3 {
         cycle_type_pointer =
             (oriented_one_cycle_edge_mask.to_bitmask().count_ones() as usize).wrapping_sub(1);
         // Check oriented one cycles
-        if cycle_type_pointer != usize::MAX
-            && (cycle_type_pointer >= sorted_cycle_type[1].len()
-                || sorted_cycle_type[1][cycle_type_pointer] != (1.try_into().unwrap(), true))
+        if cycle_type_pointer == usize::MAX {
+            if let Some(&first_cycle) = sorted_cycle_type[1].first() {
+                if first_cycle == (1.try_into().unwrap(), true) {
+                    return false;
+                }
+            }
+        } else if cycle_type_pointer >= sorted_cycle_type[1].len()
+            || sorted_cycle_type[1][cycle_type_pointer] != (1.try_into().unwrap(), true)
         {
             return false;
         }
