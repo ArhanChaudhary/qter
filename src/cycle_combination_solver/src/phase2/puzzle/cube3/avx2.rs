@@ -73,6 +73,9 @@ use core::arch::x86_64::_mm256_shuffle_epi8;
 /// C = corner index (0-7) \
 /// O = corner orientation (0-2)
 ///
+/// It is important for the unused bytes to correspond to their index for the
+/// `_mm256_shuffle_epi8` instruction to work correctly.
+///
 /// [vcube]: https://github.com/Voltara/vcube
 #[derive(Clone)]
 pub struct Cube3(u8x32);
@@ -137,7 +140,7 @@ const IDENTITY: u8x32 = u8x32::from_array([
 
 fn avx2_swizzle_lo(a: u8x32, b: u8x32) -> u8x32 {
     #[cfg(avx2)]
-    // SAFETY: a and b are well defined. Honestly not sure why this is unsafe
+    // SAFETY: cfg guarantees that AVX2 is available
     unsafe {
         _mm256_shuffle_epi8(a.into(), b.into()).into();
     }
@@ -145,10 +148,12 @@ fn avx2_swizzle_lo(a: u8x32, b: u8x32) -> u8x32 {
     unimplemented!()
 }
 
+/// Extract the edge bits from a permutation identity equality bitmask
 fn edge_bits(bitmask: u64) -> u64 {
     bitmask & u64::from(!0_u16)
 }
 
+/// Extract the corner bits from a permutation identity equality bitmask
 fn corner_bits(bitmask: u64) -> u64 {
     bitmask >> 16
 }
@@ -249,9 +254,11 @@ impl Cube3Interface for Cube3 {
             inverse = avx2_swizzle_lo(avx2_swizzle_lo(inverse, inverse), pow_3);
             inverse = avx2_swizzle_lo(avx2_swizzle_lo(inverse, inverse), perm);
 
-            // Explained in `replace_compose`
+            // Compose orientation as explained in `replace_compose`
             let mut added_ori = a.0 & ORI_MASK;
             added_ori += added_ori;
+            // The orientation for edges remain the same during inversion, so
+            // we slightly modify the carry constant
             added_ori = added_ori.simd_min(added_ori - ORI_CARRY_INVERSE);
 
             // Use the inverse permutation to permute the already inversed
@@ -315,7 +322,7 @@ impl Cube3Interface for Cube3 {
         let mut seen_perm = (self.0 & PERM_MASK).simd_eq(IDENTITY);
 
         // Create a mask of cycles that are (1, true), or just orient in place.
-        // Special case for this first cycle because it is convenient and fast.
+        // Special case for this first cycle because it is convenient and fast
         let oriented_one_cycle_corner_mask = seen_perm & compose_ori.simd_ne(u8x32::splat(0));
 
         // We need a way to cross-reference the computed cycles with the given
@@ -328,7 +335,7 @@ impl Cube3Interface for Cube3 {
         // compute the number of cycles of each length. For every cycle length,
         // we can add that number to the index pointer starting at -1 and check
         // if that index is that computed cycle length. It is trivial to extend
-        // this approach to account for orientations
+        // this approach to account for orientations.
         //
         // We initialize the index pointer to the number of oriented one cycles
         let mut corner_cycle_type_pointer =
@@ -336,14 +343,15 @@ impl Cube3Interface for Cube3 {
         // Subtract one to make it zero indexed
         corner_cycle_type_pointer = corner_cycle_type_pointer.wrapping_sub(1);
 
-        // Error checking for the (1, true) cycle type.
+        // Error checking for the (1, true) cycle type. This isn't actually
+        // necessary. It's just a hot path for failing early
         if corner_cycle_type_pointer == usize::MAX {
             // If the state has no (1, true) cycle types, then get the first
-            // cycle of the specified sorted cycle type.
+            // cycle of the specified sorted cycle type
             if let Some(&first_cycle) = sorted_cycle_type[0].first() {
                 // If sorted cycle type has a first cycle, it must not be
                 // (1, true) because this branch only runs when the state has
-                // no (1, true) cycle types.
+                // no (1, true) cycle types
                 if first_cycle == (1.try_into().unwrap(), true) {
                     // So we short circuit
                     return false;
@@ -419,7 +427,10 @@ impl Cube3Interface for Cube3 {
                 //
                 // [This blog]: https://lomont.org/posts/2017/divisibility-testing
                 // [issue]: https://github.com/rust-lang/portable-simd/issues/453
-                let iter_co_mod = (iter >> u8x32::splat(4)) * u8x32::splat(171);
+                let iter_co_mod =
+                    // Move corner orientation bits to the LSB
+                    (iter >> u8x32::splat(4))
+                    * u8x32::splat(171);
                 let oriented_corner_mask = new_pieces & iter_co_mod.simd_gt(u8x32::splat(85));
                 // Simply counting the bits gives us the number of oriented
                 // corner cycles times reps.
@@ -456,7 +467,7 @@ impl Cube3Interface for Cube3 {
                 }
             }
 
-            // Repeat everything for edges.
+            // Repeat everything for edges
             let reps_edge_cycle_count = edge_bits(new_pieces_bitmask).count_ones();
             if reps_edge_cycle_count > 0 {
                 // The only notable difference is that O % 2 != 0 is equivalent

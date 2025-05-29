@@ -1,3 +1,6 @@
+//! The default and fallback implementation for 3x3 orbits during pruning table
+//! generation.
+
 use super::{OrbitPuzzleConstructors, OrbitPuzzleState};
 use crate::phase2::puzzle::{OrbitDef, slice_puzzle::exact_hasher_orbit_bytes};
 use std::num::NonZeroU8;

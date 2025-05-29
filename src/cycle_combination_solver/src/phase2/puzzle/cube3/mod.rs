@@ -1,3 +1,5 @@
+//! SIMD optimized implementations for 3x3 cubes
+
 #[cfg(not(any(avx2, simd8and16)))]
 pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
@@ -6,13 +8,30 @@ mod common {
     use std::hash::Hash;
     use std::{fmt::Debug, num::NonZeroU8};
 
+    /// The interface for a 3x3 cube puzzle state
     pub trait Cube3Interface: Clone + PartialEq + Debug {
+        /// Create a Cube3 state from a sorted list of move transformations.
         fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self;
+
+        /// Compose a and b into self.
         fn replace_compose(&mut self, a: &Self, b: &Self);
+
+        /// Inverse a into self.
         fn replace_inverse(&mut self, a: &Self);
+
+        /// Check if the cube induces a sorted cycle type.
         fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool;
+
+        /// Convert an orbit of the cube state into a pair of (ep, eo) bytes.
+        /// For implementation reasons that should ideally be abstracted away,
+        /// we have to make the arrays length 16.
         fn orbit_bytes(&self, orbit_index: usize) -> ([u8; 16], [u8; 16]);
+
+        /// Exact hasher for an orbit. Note that this is different from a
+        /// "hash", which in Rust terminology is something that implements Hash
         fn exact_hasher_orbit(&self, orbit_index: usize) -> u64;
+
+        /// Approximate hash for an orbit
         fn approximate_hash_orbit(&self, orbit_index: usize) -> impl Hash;
     }
 
@@ -34,7 +53,10 @@ mod common {
         where
             Self: 'a;
 
-        fn new_multi_bv(_sorted_orbit_defs: &[OrbitDef]) {}
+        fn new_multi_bv(_sorted_orbit_defs: &[OrbitDef]) {
+            // Induces cycle type for 3x3 cubes doesn't require auxilliary
+            // memory
+        }
 
         fn try_from_transformation_meta(
             sorted_transformations: &[Vec<(u8, u8)>],

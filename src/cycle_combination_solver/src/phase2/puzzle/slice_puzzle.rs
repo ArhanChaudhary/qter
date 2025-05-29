@@ -1,3 +1,5 @@
+//! The default and fallback implementation for 3x3 cubes.
+
 use super::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
 use crate::phase2::FACT_UNTIL_19;
 use std::num::NonZeroU8;
