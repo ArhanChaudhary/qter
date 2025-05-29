@@ -1,4 +1,4 @@
-//! The default and fallback implementation for 3x3 cubes.
+//! The default, generic implementation for representing puzzle states.
 
 use super::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
 use crate::phase2::FACT_UNTIL_19;

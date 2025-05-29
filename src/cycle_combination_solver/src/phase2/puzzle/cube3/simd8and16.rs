@@ -1,3 +1,6 @@
+//! A SIMD optimized implementation for 3x3 cubes for platforms that support
+//! 8 and 16 byte SIMD.
+
 #![cfg_attr(any(avx2, not(simd8and16)), allow(dead_code, unused_variables))]
 
 use super::common::{CUBE_3_SORTED_ORBIT_DEFS, Cube3Interface};
@@ -14,6 +17,9 @@ use std::{
     },
 };
 
+/// An uncompressed 3x3 cube representation. This is a combination of
+/// (edge permutation, edge orientation, corner permutation, corner orientation)
+/// which uniquely identifies any cube state
 #[derive(Clone, Debug, PartialEq, Hash)]
 pub struct UncompressedCube3 {
     pub ep: u8x16,
@@ -22,23 +28,40 @@ pub struct UncompressedCube3 {
     pub co: u8x8,
 }
 
+/// A lookup table used to correct orientation during composition
+const CO_MOD_SWIZZLE: u8x8 = u8x8::from_array([0, 1, 2, 0, 1, 0, 0, 0]);
+/// A lookup table used to inverse a corner orientation.
 const CO_INV_SWIZZLE: u8x8 = u8x8::from_array([0, 2, 1, 0, 0, 0, 0, 0]);
+/// The identity permutation for edges.
 const EP_IDENTITY: u8x16 =
     u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+/// The identity permutation for corners.
 const CP_IDENTITY: u8x8 = u8x8::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
+
+/// Masks for edge and corner orientations and permutations.
 const EDGE_ORI_MASK: u8x16 = u8x16::splat(0b0001_0000);
 const EDGE_PERM_MASK: u8x16 = u8x16::splat(0b0000_1111);
 const CORNER_ORI_MASK: u8x8 = u8x8::splat(0b0011_0000);
 const CORNER_PERM_MASK: u8x8 = u8x8::splat(0b0000_0111);
+
+/// Experimental carry for corner orientations, not used
 #[allow(dead_code)]
 const CORNER_ORI_CARRY: u8x8 = u8x8::splat(3);
 
+/// Corner or edge data for `UncompressedCube3` orbits
 #[derive(Hash)]
 pub enum UncompressedCube3Orbit {
+    /// (cp, co)
     Corners((u8x8, u8x8)),
+    /// (ep, eo)
     Edges((u8x16, u8x16)),
 }
 
+// TODO: move this to orbit_puzzle/simd8and16.rs
+/// Efficently exactly hash an orbit into a u64, panicking at compile-time if
+/// not possible. This function uses a combination of SIMD lehmer coding and an
+/// efficient n-ary base hash. Uses `u16`s for const generics because usize
+/// implements From<u16>.
 fn exact_hasher_orbit<const PIECE_COUNT: u16, const ORI_COUNT: u16, const LEN: usize>(
     perm: Simd<u8, LEN>,
     ori: Simd<u8, LEN>,
@@ -46,29 +69,68 @@ fn exact_hasher_orbit<const PIECE_COUNT: u16, const ORI_COUNT: u16, const LEN: u
 where
     LaneCount<LEN>: SupportedLaneCount,
 {
+    // Powers of ORI_COUNT used to efficiently hash the orientation to an n-ary
+    // base. The hash is essentially a dot product of the orientation vector
+    // with the powers of ORI_COUNT
     let powers: Simd<u16, LEN> = const {
+        // Everything not a power must be zero to make sure nothing interferes
         let mut arr = [0; LEN];
         let mut i = 0;
+        // We do an important check that the next power does not overflow `u16`.
+        // The dot product will eventually be collapsed to a value larger than
+        // ORI_COUNT.pow(PIECE_COUNT - 2) but less than
+        // ORI_COUNT.pow(PIECE_COUNT - 1).
         u16::checked_pow(ORI_COUNT, PIECE_COUNT as u32 - 1).unwrap();
+        // The sum of the orientation vector must be divisible by ORI_COUNT.
+        // As a consequence, you don't need the last element to uniquely
+        // identify an orientation vector, so we skip processing for it by
+        // only computing powers up to PIECE_COUNT - 1
         while i < PIECE_COUNT - 1 {
-            arr[i as usize] = u16::checked_pow(ORI_COUNT, (PIECE_COUNT - 2 - i) as u32).unwrap();
+            // Under the hood LLVM splits up the dot product calculation into
+            // chunks of 128 bit registers so having a the smallest possible
+            // data type (u16) is important
+            arr[i as usize] = u16::checked_pow(
+                ORI_COUNT,
+                (
+                    // The powers are computed in reverse order to match the
+                    // order of lexicographic permutation with replacement.
+                    // Reverse order in general is len - i - 1, and len is
+                    // PIECE_COUNT - 1
+                    (PIECE_COUNT - 1) - i - 1
+                ) as u32,
+            )
+            .unwrap();
             i += 1;
         }
         Simd::<u16, LEN>::from_array(arr)
     };
+    // We compute: lehmer code * number_of_states(n-ary hash) + n-ary hash
+    //
+    // One thing to note about the last element for Lehmer codes is no matter
+    // what, there will always be an equal number of elements to its left that
+    // are less than it. This allows us to hard code it to 0 and iterate from 0
+    // to PIECE_COUNT - 1
     (0..usize::from(PIECE_COUNT) - 1)
         .map(|i| {
             let lt_before_current_count = if i == 0 {
+                // There are no elements left of the first element less than it
                 u64::from(perm[0])
             } else {
-            let lt_current_mask = perm.simd_lt(Simd::<u8, LEN>::splat(perm[i]));
+                // Count how many elements to the left of the current element
+                // are less than it
+                let lt_current_mask = perm.simd_lt(Simd::<u8, LEN>::splat(perm[i]));
                 u64::from((lt_current_mask.to_bitmask() >> i).count_ones())
             };
+            // FACT_UNTIL_19[i] = i!
             let fact = FACT_UNTIL_19[usize::from(PIECE_COUNT) - 1 - i];
             lt_before_current_count * fact
         })
         .sum::<u64>()
+        // Orientation is a permutation with replacement. The number of states
+        // is trivially ORI_COUNT.pow(PIECE_COUNT), but subtract one because the
+        // last element is ignored as described above
         * u64::from(ORI_COUNT.pow(u32::from(PIECE_COUNT) - 1))
+        // Compute the aforementioned dot product
         + u64::from((ori.cast::<u16>() * powers).reduce_sum())
 }
 
@@ -104,11 +166,20 @@ impl Cube3Interface for UncompressedCube3 {
 
     fn replace_compose(&mut self, a: &Self, b: &Self) {
         // Benchmarked on a 2025 Mac M4: 1.67ns
-        const CO_MOD_SWIZZLE: u8x8 = u8x8::from_array([0, 1, 2, 0, 1, 2, 0, 0]);
 
+        // Compose edge permutation using the built-in SIMD swizzle
         self.ep = a.ep.swizzle_dyn(b.ep);
+        // "The Cubie Level" of Kociemba's [website] explains that orientation
+        // during composition changes like so: (A*B)(x).o=A(B(x).c).o+B(x).o
+        // Edge orientation is defined as either 0 or 1. Adding two orientations
+        // together may result in 2, so we need to modulo 2 the result
         self.eo = (a.eo.swizzle_dyn(b.ep) + b.eo) & u8x16::splat(1);
+        // Compose corner permutation using the built-in SIMD swizzle
         self.cp = a.cp.swizzle_dyn(b.cp);
+        // Like the edge orientation, corner orientation is defined as
+        // either 0, 1, or 2. Adding two corner orientations together may result
+        // in 3 or 4. It was found fastest to use a lookup table to perform
+        // this correction
         self.co = CO_MOD_SWIZZLE.swizzle_dyn(a.co.swizzle_dyn(b.cp) + b.co);
     }
 
@@ -117,7 +188,7 @@ impl Cube3Interface for UncompressedCube3 {
         //
         // See `replace_inverse` in avx2.rs for explanation. Note that there
         // does not seem to be any speed difference when these instructions are
-        // reordered (codegen puts all u8x8 and u8x16 swizzles together).
+        // reordered (codegen puts all u8x8 and u8x16 swizzles together)
         let mut pow_3_ep = a.ep.swizzle_dyn(a.ep);
         pow_3_ep = pow_3_ep.swizzle_dyn(a.ep);
         self.ep = pow_3_ep.swizzle_dyn(pow_3_ep);
@@ -133,6 +204,7 @@ impl Cube3Interface for UncompressedCube3 {
         self.ep = self.ep.swizzle_dyn(self.ep);
         self.ep = self.ep.swizzle_dyn(self.ep).swizzle_dyn(pow_3_ep);
         self.ep = self.ep.swizzle_dyn(self.ep).swizzle_dyn(a.ep);
+        // eo doesn't change during inversion; all we need to do is permute it
         self.eo = a.eo.swizzle_dyn(self.ep);
 
         let mut pow_3_cp = a.cp.swizzle_dyn(a.cp);
@@ -160,14 +232,13 @@ impl Cube3Interface for UncompressedCube3 {
     fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
         // Benchmarked on a 2025 Mac M4: TODO (worst case) TODO (average)
         //
-        // Explanation primer in `induces_sorted_cycle_type` in avx2.rs.
+        // Explanation in `induces_sorted_cycle_type` in avx2.rs
 
         let mut seen_cp = self.cp.simd_eq(CP_IDENTITY);
         let oriented_one_cycle_corner_mask = seen_cp & self.co.simd_ne(u8x8::splat(0));
         let mut cycle_type_pointer =
             (oriented_one_cycle_corner_mask.to_bitmask().count_ones() as usize).wrapping_sub(1);
         // Check oriented one cycles
-        // Hot path for short circuiting early
         if cycle_type_pointer == usize::MAX {
             if let Some(&first_cycle) = sorted_cycle_type[0].first() {
                 if first_cycle == (1.try_into().unwrap(), true) {
@@ -191,7 +262,8 @@ impl Cube3Interface for UncompressedCube3 {
             let new_corners = cp_identity_eq & !seen_cp;
             seen_cp |= cp_identity_eq;
 
-            // Moving this inside of the if statement adds instructions
+            // Moving this inside of the if statement adds instructions for some
+            // reason; see https://www.diffchecker.com/graztmK5/
             let reps_corner_cycle_count = new_corners.to_bitmask().count_ones();
             if new_corners.any() {
                 let mut oriented_corner_mask =
@@ -353,6 +425,9 @@ impl Cube3Interface for UncompressedCube3 {
     }
 }
 
+/// A compressed 3x3 cube representation. The byte layout is equivalent to
+/// Cube3 in `avx2.rs`, but uses 8 bytes for corners intead of 16.
+// TODO: shift the corner bits one right
 #[derive(PartialEq, Clone)]
 pub struct Cube3 {
     edges: u8x16,

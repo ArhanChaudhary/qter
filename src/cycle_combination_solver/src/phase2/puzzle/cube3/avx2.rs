@@ -125,14 +125,17 @@ impl fmt::Debug for Cube3 {
 const PERM_MASK: u8x32 = u8x32::splat(0b0000_1111);
 /// Extract the orientation bits from the cube state.
 const ORI_MASK: u8x32 = u8x32::splat(0b0011_0000);
+/// The carry constant used to fix orientation bits after permutation.
 const ORI_CARRY: u8x32 = u8x32::from_array([
     0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
     0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
 ]);
+/// The carry constant used to fix orientation bits after inversion.
 const ORI_CARRY_INVERSE: u8x32 = u8x32::from_array([
     0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10,
     0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
 ]);
+/// The identity cube state.
 const IDENTITY: u8x32 = u8x32::from_array([
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
     13, 14, 15,
@@ -190,10 +193,11 @@ impl Cube3Interface for Cube3 {
             // lower four bits of the second argument, meaning orientation will
             // not interfere.
             let mut composed = avx2_swizzle_lo(a.0, b.0);
-            // Once permutation is done, we need to compose orientation, and
-            // "The Cubie Level" of Kociemba's [website] explains that all we
-            // have left to do is add just the orientation bits of the second
-            // argument to the first.
+            // Composing permutation composes the orientation bits too. "The
+            // Cubie Level" of Kociemba's [website] explains that orientation
+            // during composition changes like so: (A*B)(x).o=A(B(x).c).o+B(x).o
+            // We've just done the first part, so we now need to add the add
+            // the orientation bits of the second argument to the first.
             //
             // [website]: https://kociemba.org/cube.htm
             composed += b.0 & ORI_MASK;
