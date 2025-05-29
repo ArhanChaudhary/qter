@@ -391,11 +391,10 @@ fn orbit_bytes_slice(
     orbit_def: OrbitDef,
 ) -> (&[u8], &[u8]) {
     let piece_count = orbit_def.piece_count.get() as usize;
-    let base = orbit_base_slice * piece_count * 2;
-    let (permutation, orientation) = orbit_states.split_at(base + piece_count);
     (
-        &permutation[base..base + piece_count],
-        &orientation[base..base + piece_count],
+        &orbit_states[orbit_base_slice..orbit_base_slice + piece_count],
+        &orbit_states[orbit_base_slice + piece_count
+            ..next_orbit_identifier_slice(orbit_base_slice, orbit_def)],
     )
 }
 
@@ -404,9 +403,7 @@ fn approximate_hash_orbit_slice(
     orbit_base_slice: usize,
     orbit_def: OrbitDef,
 ) -> &[u8] {
-    let piece_count = orbit_def.piece_count.get() as usize;
-    let base = orbit_base_slice * piece_count * 2;
-    &orbit_states[base..base + piece_count * 2]
+    &orbit_states[orbit_base_slice..next_orbit_identifier_slice(orbit_base_slice, orbit_def)]
 }
 
 // TODO: https://stackoverflow.com/a/24689277 https://freedium.cfd/https://medium.com/@benjamin.botto/sequentially-indexing-permutations-a-linear-algorithm-for-computing-lexicographic-rank-a22220ffd6e3 https://stackoverflow.com/questions/1506078/fast-permutation-number-permutation-mapping-algorithms/1506337#1506337
