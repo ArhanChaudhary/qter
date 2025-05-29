@@ -877,6 +877,66 @@ mod tests {
         induces_sorted_cycle_type_many::<cube3::avx2::Cube3>();
     }
 
+    fn exact_hasher_orbit<P: PuzzleState>() {
+        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let solved = cube3_def.new_solved_state();
+
+        for (test_state, exp_hashes) in [
+            (solved.clone(), [0, 0]),
+            (
+                apply_moves(&cube3_def, &solved, "U", 1),
+                [24_476_904, 161_792],
+            ),
+            (
+                apply_moves(&cube3_def, &solved, "U", 2),
+                [57_868_020, 219_136],
+            ),
+            (
+                apply_moves(&cube3_def, &solved, "R U R' U'", 1),
+                [11_876_463, 825_765_658_624],
+            ),
+            (
+                apply_moves(&cube3_def, &solved, "R U2 D' B D'", 1),
+                [61_275_986, 279_798_716_817],
+            ),
+            (
+                apply_moves(
+                    &cube3_def,
+                    &solved,
+                    "B2 U' B' D B' L' D' B U' R2 B2 R U B2 R B' R U",
+                    1,
+                ),
+                [857_489, 7_312_476_362],
+            ),
+            (
+                apply_moves(
+                    &cube3_def,
+                    &solved,
+                    "F2 B' R' F' L' D B' U' F U B' U2 D L' F' L' B R2",
+                    1,
+                ),
+                [79_925_404, 38_328_854_695],
+            ),
+        ] {
+            let mut orbit_identifier = 0;
+            for (i, &orbit_def) in cube3_def.sorted_orbit_defs.iter().enumerate() {
+                let hash = test_state.exact_hasher_orbit(orbit_identifier, orbit_def);
+                assert_eq!(hash, exp_hashes[i]);
+                orbit_identifier = P::next_orbit_identifer(orbit_identifier, orbit_def);
+            }
+        }
+    }
+
+    #[test]
+    fn test_exact_hasher_orbit() {
+        exact_hasher_orbit::<StackCube3>();
+        exact_hasher_orbit::<HeapPuzzle>();
+        #[cfg(simd8and16)]
+        exact_hasher_orbit::<cube3::simd8and16::UncompressedCube3>();
+        #[cfg(avx2)]
+        exact_hasher_orbit::<cube3::avx2::Cube3>();
+    }
+
     pub fn bench_compose_helper<P: PuzzleState>(b: &mut Bencher) {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let mut solved = cube3_def.new_solved_state();
@@ -960,6 +1020,8 @@ mod tests {
         });
     }
 
+    // --- HeapPuzzle benchmarks ---
+
     #[bench]
     fn bench_compose_cube3_heap(b: &mut Bencher) {
         bench_compose_helper::<HeapPuzzle>(b);
@@ -979,6 +1041,8 @@ mod tests {
     fn bench_induces_sorted_cycle_type_cube3_heap_average(b: &mut Bencher) {
         bench_induces_sorted_cycle_type_average_helper::<HeapPuzzle>(b);
     }
+
+    // --- simd8and16::UncompressedCube3 benchmarks ---
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
@@ -1004,6 +1068,8 @@ mod tests {
         bench_induces_sorted_cycle_type_average_helper::<cube3::simd8and16::UncompressedCube3>(b);
     }
 
+    // --- simd8and16::Cube3 benchmarks ---
+
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_compose_cube3_simd8and16(b: &mut Bencher) {
@@ -1015,6 +1081,8 @@ mod tests {
     fn bench_inverse_cube3_simd8and16(b: &mut Bencher) {
         bench_inverse_helper::<cube3::simd8and16::Cube3>(b);
     }
+
+    // --- avx2::Cube3 benchmarks ---
 
     #[bench]
     #[cfg_attr(not(avx2), ignore)]

@@ -56,11 +56,14 @@ where
         }
         Simd::<u16, LEN>::from_array(arr)
     };
-    (0..usize::from(PIECE_COUNT))
+    (0..usize::from(PIECE_COUNT) - 1)
         .map(|i| {
+            let lt_before_current_count = if i == 0 {
+                u64::from(perm[0])
+            } else {
             let lt_current_mask = perm.simd_lt(Simd::<u8, LEN>::splat(perm[i]));
-            let lt_before_current_count =
-                u64::from((lt_current_mask.to_bitmask() >> i).count_ones());
+                u64::from((lt_current_mask.to_bitmask() >> i).count_ones())
+            };
             let fact = FACT_UNTIL_19[usize::from(PIECE_COUNT) - 1 - i];
             lt_before_current_count * fact
         })

@@ -411,8 +411,8 @@ pub(crate) fn exact_hasher_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def: Orbit
     let piece_count = orbit_def.piece_count.get();
     assert!(piece_count as usize <= FACT_UNTIL_19.len());
 
-    let mut exact_perm_hash = 0;
-    for i in 0..piece_count {
+    let mut exact_perm_hash = u64::from(perm[0]) * FACT_UNTIL_19[(piece_count - 1) as usize];
+    for i in 1..piece_count - 1 {
         let mut res = 0;
         for j in (i + 1)..piece_count {
             if perm[j as usize] < perm[i as usize] {
@@ -427,10 +427,8 @@ pub(crate) fn exact_hasher_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def: Orbit
 
     let mut exact_ori_hash = 0;
     for i in 0..piece_count - 1 {
+        exact_ori_hash *= u64::from(orbit_def.orientation_count.get());
         exact_ori_hash += u64::from(ori[i as usize]);
-        if i != piece_count - 2 {
-            exact_ori_hash *= u64::from(orbit_def.orientation_count.get());
-        }
     }
 
     exact_perm_hash
