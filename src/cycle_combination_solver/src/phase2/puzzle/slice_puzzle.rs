@@ -24,7 +24,7 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
     ) -> Result<Self, KSolveConversionError> {
         if N < sorted_orbit_defs
             .iter()
-            .map(|orbit_def| (orbit_def.piece_count.get() as usize) * 2)
+            .map(|orbit_def| orbit_def.piece_count.get() as usize * 2)
             .sum()
         {
             return Err(KSolveConversionError::NotEnoughBufferSpace);
@@ -196,7 +196,7 @@ fn replace_compose_slice(
     debug_assert_eq!(
         sorted_orbit_defs
             .iter()
-            .map(|orbit_def| (orbit_def.piece_count.get() as usize) * 2)
+            .map(|orbit_def| orbit_def.piece_count.get() as usize * 2)
             .sum::<usize>(),
         orbit_states_mut.len()
     );

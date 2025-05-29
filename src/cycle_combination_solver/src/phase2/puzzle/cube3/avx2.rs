@@ -3,7 +3,10 @@
 #![cfg_attr(not(avx2), allow(dead_code, unused_variables))]
 
 use super::common::Cube3Interface;
-use crate::phase2::puzzle::OrientedPartition;
+use crate::phase2::{
+    orbit_puzzle::exact_hasher_orbit,
+    puzzle::{OrientedPartition, cube3::common::CUBE_3_SORTED_ORBIT_DEFS},
+};
 use std::{
     fmt,
     hash::Hash,
@@ -11,7 +14,7 @@ use std::{
     simd::{
         cmp::{SimdOrd, SimdPartialEq, SimdPartialOrd},
         num::SimdInt,
-        u8x32,
+        u8x8, u8x16, u8x32,
     },
 };
 
@@ -77,8 +80,56 @@ use core::arch::x86_64::_mm256_shuffle_epi8;
 /// `_mm256_shuffle_epi8` instruction to work correctly.
 ///
 /// [vcube]: https://github.com/Voltara/vcube
-#[derive(Clone)]
+#[allow(clippy::derived_hash_with_manual_eq)]
+#[derive(Clone, Hash)]
 pub struct Cube3(u8x32);
+
+/// Extract the permutation bits from the cube state.
+const PERM_MASK_1: u8x32 = u8x32::splat(0b0000_1111);
+const PERM_MASK_2: u8x16 = u8x16::splat(0b0000_1111);
+const PERM_MASK_3: u8x8 = u8x8::splat(0b0000_1111);
+
+/// Extract the orientation bits from the cube state.
+const ORI_MASK: u8x32 = u8x32::splat(0b0011_0000);
+/// The carry constant used to fix orientation bits after permutation.
+const ORI_CARRY: u8x32 = u8x32::from_array([
+    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+    0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+]);
+/// The carry constant used to fix orientation bits after inversion.
+const ORI_CARRY_INVERSE: u8x32 = u8x32::from_array([
+    0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10,
+    0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+]);
+/// The identity cube state.
+const IDENTITY: u8x32 = u8x32::from_array([
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+    13, 14, 15,
+]);
+/// The starting index for edge bits
+const EDGE_START: usize = 0;
+/// The starting index for corner bits
+const CORNER_START: usize = 16;
+
+fn avx2_swizzle_lo(a: u8x32, b: u8x32) -> u8x32 {
+    #[cfg(avx2)]
+    // SAFETY: cfg guarantees that AVX2 is available
+    unsafe {
+        _mm256_shuffle_epi8(a.into(), b.into()).into();
+    }
+    #[cfg(not(avx2))]
+    unimplemented!()
+}
+
+/// Extract the edge bits from a permutation identity equality bitmask
+fn edge_bits(bitmask: u64) -> u64 {
+    bitmask & u64::from(!0_u16)
+}
+
+/// Extract the corner bits from a permutation identity equality bitmask
+fn corner_bits(bitmask: u64) -> u64 {
+    bitmask >> 16
+}
 
 impl PartialEq for Cube3 {
     #[inline(always)]
@@ -119,46 +170,6 @@ impl fmt::Debug for Cube3 {
             .field("co", &co)
             .finish()
     }
-}
-
-/// Extract the permutation bits from the cube state.
-const PERM_MASK: u8x32 = u8x32::splat(0b0000_1111);
-/// Extract the orientation bits from the cube state.
-const ORI_MASK: u8x32 = u8x32::splat(0b0011_0000);
-/// The carry constant used to fix orientation bits after permutation.
-const ORI_CARRY: u8x32 = u8x32::from_array([
-    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
-    0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-]);
-/// The carry constant used to fix orientation bits after inversion.
-const ORI_CARRY_INVERSE: u8x32 = u8x32::from_array([
-    0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10,
-    0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-]);
-/// The identity cube state.
-const IDENTITY: u8x32 = u8x32::from_array([
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-    13, 14, 15,
-]);
-
-fn avx2_swizzle_lo(a: u8x32, b: u8x32) -> u8x32 {
-    #[cfg(avx2)]
-    // SAFETY: cfg guarantees that AVX2 is available
-    unsafe {
-        _mm256_shuffle_epi8(a.into(), b.into()).into();
-    }
-    #[cfg(not(avx2))]
-    unimplemented!()
-}
-
-/// Extract the edge bits from a permutation identity equality bitmask
-fn edge_bits(bitmask: u64) -> u64 {
-    bitmask & u64::from(!0_u16)
-}
-
-/// Extract the corner bits from a permutation identity equality bitmask
-fn corner_bits(bitmask: u64) -> u64 {
-    bitmask >> 16
 }
 
 impl Cube3Interface for Cube3 {
@@ -240,7 +251,7 @@ impl Cube3Interface for Cube3 {
             // [website]: http://wwwhomes.uni-bielefeld.de/achim/addition_chain.html
 
             // Extract the permutation bits from the cube state
-            let perm = a.0 & PERM_MASK;
+            let perm = a.0 & PERM_MASK_1;
 
             let mut pow_3 = avx2_swizzle_lo(perm, perm);
             pow_3 = avx2_swizzle_lo(pow_3, perm);
@@ -323,7 +334,7 @@ impl Cube3Interface for Cube3 {
         let compose_ori = self.0 & ORI_MASK;
         // A rolling mask of the pieces that have been seen. Once there are
         // no more pieces to see, we have our result
-        let mut seen_perm = (self.0 & PERM_MASK).simd_eq(IDENTITY);
+        let mut seen_perm = (self.0 & PERM_MASK_1).simd_eq(IDENTITY);
 
         // Create a mask of cycles that are (1, true), or just orient in place.
         // Special case for this first cycle because it is convenient and fast
@@ -406,7 +417,7 @@ impl Cube3Interface for Cube3 {
 
             // SIMD mask the iterated permutation with the identity and remove
             // already seen pieces to get the iteration's new pieces
-            let perm_identity_eq = (iter & PERM_MASK).simd_eq(IDENTITY);
+            let perm_identity_eq = (iter & PERM_MASK_1).simd_eq(IDENTITY);
             let new_pieces = perm_identity_eq & !seen_perm;
             seen_perm |= perm_identity_eq;
 
@@ -514,15 +525,51 @@ impl Cube3Interface for Cube3 {
     }
 
     fn orbit_bytes(&self, orbit_index: usize) -> ([u8; 16], [u8; 16]) {
-        todo!()
+        // TODO: is using an enum faster?
+        let orbit = match orbit_index {
+            0 => self.0.extract::<CORNER_START, 16>(),
+            1 => self.0.extract::<EDGE_START, 16>(),
+            _ => panic!("Invalid orbit index"),
+        };
+        let perm = orbit & PERM_MASK_2;
+        let ori = orbit >> 4;
+        (perm.to_array(), ori.to_array())
     }
 
     fn exact_hasher_orbit(&self, orbit_index: usize) -> u64 {
-        todo!()
+        match orbit_index {
+            0 => {
+                const PIECE_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[0].piece_count.get() as u16;
+                const ORI_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[0].orientation_count.get() as u16;
+                const LEN: usize = PIECE_COUNT.next_power_of_two() as usize;
+
+                let corners = self.0.extract::<CORNER_START, LEN>();
+                let perm = corners & PERM_MASK_3;
+                let ori = corners >> 4;
+                exact_hasher_orbit::<PIECE_COUNT, ORI_COUNT, LEN>(perm, ori)
+            }
+            1 => {
+                const PIECE_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[1].piece_count.get() as u16;
+                const ORI_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[1].orientation_count.get() as u16;
+                const LEN: usize = PIECE_COUNT.next_power_of_two() as usize;
+
+                let edges = self.0.extract::<EDGE_START, LEN>();
+                let perm = edges & PERM_MASK_2;
+                let ori = edges >> 4;
+                exact_hasher_orbit::<PIECE_COUNT, ORI_COUNT, LEN>(perm, ori)
+            }
+            _ => panic!("Invalid orbit index"),
+        }
     }
 
-    fn approximate_hash_orbit(&self, orbit_index: usize) -> impl Hash {
-        todo!()
+    #[allow(refining_impl_trait_reachable)]
+    fn approximate_hash_orbit(&self, orbit_index: usize) -> u8x16 {
+        // TODO: is it faster to use an enum?
+        match orbit_index {
+            0 => self.0.extract::<CORNER_START, 16>(),
+            1 => self.0.extract::<EDGE_START, 16>(),
+            _ => panic!("Invalid orbit index"),
+        }
     }
 }
 
@@ -533,7 +580,7 @@ impl Cube3 {
     pub fn replace_inverse_brute(&mut self, a: &Self) {
         // Benchmarked on a 2x Intel Xeon E5-2667 v3: 6.77ns
         fn inner(dst: &mut Cube3, a: &Cube3) {
-            let perm = a.0 & PERM_MASK;
+            let perm = a.0 & PERM_MASK_1;
 
             let mut inverse = u8x32::from_array([
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
