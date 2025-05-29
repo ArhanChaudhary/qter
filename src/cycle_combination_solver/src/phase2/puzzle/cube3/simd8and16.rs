@@ -35,8 +35,8 @@ const CORNER_ORI_CARRY: u8x8 = u8x8::splat(3);
 
 #[derive(Hash)]
 pub enum UncompressedCube3Orbit {
-    Corners([u8x8; 2]),
-    Edges([u8x16; 2]),
+    Corners((u8x8, u8x8)),
+    Edges((u8x16, u8x16)),
 }
 
 fn exact_hasher_orbit<const PIECE_COUNT: u16, const ORI_COUNT: u16, const LEN: usize>(
@@ -343,8 +343,8 @@ impl Cube3Interface for UncompressedCube3 {
     fn approximate_hash_orbit(&self, orbit_index: usize) -> UncompressedCube3Orbit {
         // TODO: using an enum works, but is this slow? same with compressedcube3
         match orbit_index {
-            0 => UncompressedCube3Orbit::Corners([self.cp, self.co]),
-            1 => UncompressedCube3Orbit::Edges([self.ep, self.eo]),
+            0 => UncompressedCube3Orbit::Corners((self.cp, self.co)),
+            1 => UncompressedCube3Orbit::Edges((self.ep, self.eo)),
             _ => panic!("Invalid orbit index"),
         }
     }
@@ -479,7 +479,23 @@ impl Cube3Interface for Cube3 {
     }
 
     fn orbit_bytes(&self, orbit_index: usize) -> ([u8; 16], [u8; 16]) {
-        todo!()
+        match orbit_index {
+            0 => {
+                let perm = self.corners & CORNER_PERM_MASK;
+                let ori = self.corners >> 4;
+                let mut perm_arr = [0; 16];
+                let mut ori_arr = [0; 16];
+                perm.copy_to_slice(&mut perm_arr);
+                ori.copy_to_slice(&mut ori_arr);
+                (perm_arr, ori_arr)
+            }
+            1 => {
+                let perm = self.edges & EDGE_PERM_MASK;
+                let ori = self.edges >> 4;
+                (perm.to_array(), ori.to_array())
+            }
+            _ => panic!("Invalid orbit index"),
+        }
     }
 
     fn exact_hasher_orbit(&self, orbit_index: usize) -> u64 {

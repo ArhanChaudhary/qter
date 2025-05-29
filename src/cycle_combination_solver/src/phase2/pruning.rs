@@ -513,8 +513,8 @@ impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend<EXA
     type InitializationMeta = MaxSizeBytes;
 
     fn initialize_from_meta(initialization_meta: MaxSizeBytes) -> Self {
-        let max_size_bytes = initialization_meta.used_size_bytes();
-        let data = vec![OrbitPruneHeuristic::vacant(); max_size_bytes].into_boxed_slice();
+        let used_size_bytes = initialization_meta.used_size_bytes();
+        let data = vec![OrbitPruneHeuristic::vacant(); used_size_bytes].into_boxed_slice();
         UncompressedStorageBackend {
             data,
             depth_traversed: 0,
