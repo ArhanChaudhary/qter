@@ -217,8 +217,8 @@ impl Cube3Interface for Cube3 {
             // 4 or 5 after the addition. We subtract the value 0b0011_0000 or 3
             // from each orientation value and minimize it with the original
             // value. This will do nothing to values that are already 0, 1, or 2
-            // because of overflow, but it will set the values 3, 4, and 5 to 0,
-            // 1, and 2 respectively.
+            // because of overflow, but it will set the values 3 and 4 to 0 and
+            // 1 respectively.
             composed = composed.simd_min(composed - ORI_CARRY);
 
             dst.0 = composed;
@@ -253,8 +253,7 @@ impl Cube3Interface for Cube3 {
             // Extract the permutation bits from the cube state
             let perm = a.0 & PERM_MASK_1;
 
-            let mut pow_3 = avx2_swizzle_lo(perm, perm);
-            pow_3 = avx2_swizzle_lo(pow_3, perm);
+            let pow_3 = avx2_swizzle_lo(avx2_swizzle_lo(perm, perm), perm);
             let mut inverse = avx2_swizzle_lo(pow_3, pow_3);
             inverse = avx2_swizzle_lo(inverse, inverse);
             inverse = avx2_swizzle_lo(avx2_swizzle_lo(inverse, inverse), pow_3);

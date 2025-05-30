@@ -445,6 +445,8 @@ mod tests {
         commutes_with::<StackCube3>();
         commutes_with::<HeapPuzzle>();
         #[cfg(simd8and16)]
+        many_compositions::<cube3::simd8and16::Cube3>();
+        #[cfg(simd8and16)]
         commutes_with::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
         commutes_with::<cube3::avx2::Cube3>();
@@ -502,6 +504,8 @@ mod tests {
         s_u4_symmetry::<StackCube3>();
         s_u4_symmetry::<HeapPuzzle>();
         #[cfg(simd8and16)]
+        many_compositions::<cube3::simd8and16::Cube3>();
+        #[cfg(simd8and16)]
         s_u4_symmetry::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
         s_u4_symmetry::<cube3::avx2::Cube3>();
@@ -552,6 +556,7 @@ mod tests {
             let state = apply_moves(&cube3_def, &solved, "L F L' F'", i);
             result.replace_inverse(&state, &cube3_def.sorted_orbit_defs);
             let remaining_state = apply_moves(&cube3_def, &solved, "L F L' F'", 6 - i);
+            println!("{result:?}\n{remaining_state:?}\n\n");
             assert_eq!(result, remaining_state);
         }
     }
@@ -623,6 +628,8 @@ mod tests {
     fn test_induces_sorted_cycle_type_within_cycle() {
         induces_sorted_cycle_type_within_cycle::<StackCube3>();
         induces_sorted_cycle_type_within_cycle::<HeapPuzzle>();
+        #[cfg(simd8and16)]
+        many_compositions::<cube3::simd8and16::Cube3>();
         #[cfg(simd8and16)]
         induces_sorted_cycle_type_within_cycle::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
@@ -872,6 +879,8 @@ mod tests {
         induces_sorted_cycle_type_many::<StackCube3>();
         induces_sorted_cycle_type_many::<HeapPuzzle>();
         #[cfg(simd8and16)]
+        many_compositions::<cube3::simd8and16::Cube3>();
+        #[cfg(simd8and16)]
         induces_sorted_cycle_type_many::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
         induces_sorted_cycle_type_many::<cube3::avx2::Cube3>();
@@ -931,6 +940,8 @@ mod tests {
     fn test_exact_hasher_orbit() {
         exact_hasher_orbit::<StackCube3>();
         exact_hasher_orbit::<HeapPuzzle>();
+        #[cfg(simd8and16)]
+        many_compositions::<cube3::simd8and16::Cube3>();
         #[cfg(simd8and16)]
         exact_hasher_orbit::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
@@ -1058,13 +1069,13 @@ mod tests {
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
-    fn bench_induces_sorted_cycle_type_cube3_simd8and16_worst(b: &mut Bencher) {
+    fn bench_induces_sorted_cycle_type_uncompressed_cube3_simd8and16_worst(b: &mut Bencher) {
         bench_induces_sorted_cycle_type_worst_helper::<cube3::simd8and16::UncompressedCube3>(b);
     }
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
-    fn bench_induces_sorted_cycle_type_cube3_simd8and16_average(b: &mut Bencher) {
+    fn bench_induces_sorted_cycle_type_uncompressed_cube3_simd8and16_average(b: &mut Bencher) {
         bench_induces_sorted_cycle_type_average_helper::<cube3::simd8and16::UncompressedCube3>(b);
     }
 
@@ -1080,6 +1091,18 @@ mod tests {
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_inverse_cube3_simd8and16(b: &mut Bencher) {
         bench_inverse_helper::<cube3::simd8and16::Cube3>(b);
+    }
+
+    #[bench]
+    #[cfg_attr(not(simd8and16), ignore)]
+    fn bench_induces_sorted_cycle_type_cube3_simd8and16_worst(b: &mut Bencher) {
+        bench_induces_sorted_cycle_type_worst_helper::<cube3::simd8and16::Cube3>(b);
+    }
+
+    #[bench]
+    #[cfg_attr(not(simd8and16), ignore)]
+    fn bench_induces_sorted_cycle_type_cube3_simd8and16_average(b: &mut Bencher) {
+        bench_induces_sorted_cycle_type_average_helper::<cube3::simd8and16::Cube3>(b);
     }
 
     // --- avx2::Cube3 benchmarks ---

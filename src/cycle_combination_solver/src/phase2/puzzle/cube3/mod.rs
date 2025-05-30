@@ -126,7 +126,7 @@ pub(in crate::phase2::puzzle) mod simd8and16;
 pub use avx2::Cube3;
 
 #[cfg(all(not(avx2), simd8and16))]
-pub use simd8and16::UncompressedCube3 as Cube3;
+pub use simd8and16::Cube3;
 
 // TODO: avx512vl when we have time
 
