@@ -95,6 +95,26 @@ impl Cube3Interface for UncompressedCube3 {
         self.eo = (a.eo.swizzle_dyn(b.ep) + b.eo) & u8x16::splat(1);
         // Compose corner permutation using the built-in SIMD swizzle
         self.cp = a.cp.swizzle_dyn(b.cp);
+
+        // slightly slower ...
+        // self.co = (u8x8::from(unsafe {
+        //     vshl_u8(
+        //         u8x8::splat(0b_11_00_01_11).into(),
+        //         vreinterpret_s8_u8(((a.co.swizzle_dyn(b.cp) + b.co) << 1).into()),
+        //     )
+        // }) + u8x8::splat(1 << 6))
+        //     >> 6;
+
+        // slightly slower ...
+        // self.co = u8x8::from(unsafe {
+        //     vshl_u8(
+        //         u8x8::splat(0b_01_10_00_01).into(),
+        //         vreinterpret_s8_u8(
+        //             ((a.co.swizzle_dyn(b.cp) + b.co - u8x8::splat(1)) << 1).into(),
+        //         ),
+        //     )
+        // }) >> 6;
+
         // Like the edge orientation, corner orientation is defined as
         // either 0, 1, or 2. Adding two corner orientations together may result
         // in 3 or 4. It was found fastest to use a lookup table to perform
@@ -139,10 +159,19 @@ impl Cube3Interface for UncompressedCube3 {
         self.cp = self.cp.swizzle_dyn(self.cp);
         self.cp = self.cp.swizzle_dyn(self.cp).swizzle_dyn(pow_3_cp);
         self.cp = self.cp.swizzle_dyn(self.cp).swizzle_dyn(a.cp);
+
         // slightly slower ...
         // let mut added_ori = a.co + a.co;
         // added_ori = added_ori.simd_min(added_ori - CORNER_ORI_CARRY);
         // self.co = added_ori.swizzle_dyn(self.cp);
+
+        // slightly slower ...
+        // self.co = u8x8::from(unsafe {
+        //     vshl_u8(
+        //         u8x8::splat(0b_00_10_01_00).into(),
+        //         vreinterpret_s8_u8((a.co.swizzle_dyn(self.cp) << 1).into()),
+        //     )
+        // }) >> 6;
 
         self.co =
             // It was found faster to use an orientation inversion lookup table to
