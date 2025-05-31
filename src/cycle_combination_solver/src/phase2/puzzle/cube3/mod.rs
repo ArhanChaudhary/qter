@@ -72,7 +72,7 @@ mod common {
             }
         }
 
-        fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: &[OrbitDef]) {
+        unsafe fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: &[OrbitDef]) {
             self.replace_compose(a, b);
         }
 

@@ -34,7 +34,11 @@ pub trait PuzzleState: Clone + PartialEq + Debug {
     ) -> Result<Self, KSolveConversionError>;
 
     /// Compose two puzzle states in place
-    fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: &[OrbitDef]);
+    ///
+    /// # Safety
+    ///
+    /// `a` and `b` must both correspond to `sorted_orbit_defs`.
+    unsafe fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: &[OrbitDef]);
 
     /// Inverse of a puzzle state
     fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]);
@@ -122,15 +126,22 @@ pub struct OrbitDef {
 pub type OrientedPartition = Vec<(NonZeroU8, bool)>;
 
 impl<P: PuzzleState> Move<P> {
-    pub fn commutes_with(
+    /// # Safety
+    ///
+    /// `self` and `other` must both correspond to `sorted_orbit_defs`.
+    pub unsafe fn commutes_with(
         &self,
         other: &Self,
         result_1: &mut P,
         result_2: &mut P,
         sorted_orbit_defs: &[OrbitDef],
     ) -> bool {
+        // SAFETY: the caller guarantees that `self` and `other` correspond to
+        // `sorted_orbit_defs`
+        unsafe {
         result_1.replace_compose(&self.puzzle_state, &other.puzzle_state, sorted_orbit_defs);
         result_2.replace_compose(&other.puzzle_state, &self.puzzle_state, sorted_orbit_defs);
+        }
         result_1 == result_2
     }
 }
@@ -223,10 +234,8 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                 .map(|&i| sorted_transformations[i].clone())
                 .collect();
 
-            let puzzle_state = P::try_from_transformation_meta(
-                &sorted_transformations,
-                sorted_orbit_defs.as_slice(),
-            )?;
+            let puzzle_state =
+                P::try_from_transformation_meta(&sorted_transformations, &sorted_orbit_defs)?;
 
             if i >= ksolve.moves().len() {
                 let base_move = Move {
@@ -256,7 +265,14 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
 
             let mut move_powers: Vec<P> = vec![];
             for _ in 0..MAX_MOVE_POWER {
-                result_1.replace_compose(&result_2, &base_move.puzzle_state, &sorted_orbit_defs);
+                // SAFETY: the arguments correspond to `sorted_orbit_defs`
+                unsafe {
+                    result_1.replace_compose(
+                        &result_2,
+                        &base_move.puzzle_state,
+                        &sorted_orbit_defs,
+                    );
+                }
                 if result_1 == solved {
                     break;
                 }
@@ -334,7 +350,10 @@ pub fn random_3x3_state<P: PuzzleState>(cube3_def: &PuzzleDef<P>, solved: &P) ->
     for _ in 0..20 {
         let move_index = fastrand::choice(0_u8..18).unwrap();
         let move_ = &cube3_def.moves[move_index as usize];
+        // SAFETY: the arguments correspond to `sorted_orbit_defs`
+        unsafe {
         result_1.replace_compose(&result_2, &move_.puzzle_state, &cube3_def.sorted_orbit_defs);
+        }
         std::mem::swap(&mut result_2, &mut result_1);
     }
     result_2
@@ -357,11 +376,14 @@ pub fn apply_moves<P: PuzzleState + Clone>(
     for _ in 0..repeat {
         for name in moves.split_whitespace() {
             let move_ = puzzle_def.find_move(name).unwrap();
+            // SAFETY: the arguments correspond to `sorted_orbit_defs`
+            unsafe {
             result_2.replace_compose(
                 &result_1,
                 &move_.puzzle_state,
                 &puzzle_def.sorted_orbit_defs,
             );
+            }
             std::mem::swap(&mut result_1, &mut result_2);
         }
     }

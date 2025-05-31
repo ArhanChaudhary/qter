@@ -58,12 +58,15 @@ impl<P: PuzzleState> From<&PuzzleDef<P>> for PuzzleCanonicalFSM<P> {
         let mut result_2 = result_1.clone();
         for (i, move_class_1_index) in puzzle_def.move_classes.iter().copied().enumerate() {
             for (j, move_class_2_index) in puzzle_def.move_classes.iter().copied().enumerate() {
-                if !puzzle_def.moves[move_class_1_index].commutes_with(
+                // SAFETY: the arguments correspond to `sorted_orbit_defs`
+                if !unsafe {
+                    puzzle_def.moves[move_class_1_index].commutes_with(
                     &puzzle_def.moves[move_class_2_index],
                     &mut result_1,
                     &mut result_2,
                     &puzzle_def.sorted_orbit_defs,
-                ) {
+                    )
+                } {
                     commutes[i][j] = false;
                     commutes[j][i] = false;
                 }
@@ -212,12 +215,15 @@ mod tests {
                 cube3_def.move_classes.iter().copied().enumerate()
             {
                 let move_2 = &cube3_def.moves[move_class_2];
-                if !move_1.commutes_with(
+                // SAFETY: the arguments correspond to `sorted_orbit_defs`
+                if !unsafe {
+                    move_1.commutes_with(
                     move_2,
                     &mut result_1,
                     &mut result_2,
                     &cube3_def.sorted_orbit_defs,
-                ) {
+                    )
+                } {
                     continue;
                 }
 
@@ -269,12 +275,15 @@ mod tests {
             for (other_move_class_index, &other_move_class) in
                 cube4_def.move_classes.iter().enumerate()
             {
-                if cube4_def.moves[move_class].commutes_with(
+                // SAFETY: the arguments correspond to `sorted_orbit_defs`
+                if unsafe {
+                    cube4_def.moves[move_class].commutes_with(
                     &cube4_def.moves[other_move_class],
                     &mut result_1,
                     &mut result_2,
                     &cube4_def.sorted_orbit_defs,
-                ) {
+                    )
+                } {
                     commute.push(other_move_class_index);
                 }
             }

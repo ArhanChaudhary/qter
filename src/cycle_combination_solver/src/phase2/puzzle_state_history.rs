@@ -36,11 +36,14 @@ pub trait PuzzleStateHistoryInterface<P: PuzzleState> {
         // SAFETY: We split_at_mut at stack_pointer + 1 which is nonzero, so
         // stack_pointer is a valid index.
         let last_entry_puzzle_state = unsafe { &left.get_unchecked(stack_pointer).0 };
+        // SAFETY: the arguments correspond to `sorted_orbit_defs`
+        unsafe {
         next_entry.0.replace_compose(
             last_entry_puzzle_state,
             puzzle_state,
             &puzzle_def.sorted_orbit_defs,
         );
+        }
         next_entry.1 = move_index;
     }
 }

@@ -7,15 +7,14 @@
 - Phase 2
   - pruning table
     - cartesian product tables
-    - hash simd stuff
     - fix storage backend initialization meta
     - tANS table compression
     - cycle type pruning table
       - with fewer state spaces, go back to an exact pruning table
-    - with fewer goal states, go back to an approximate table
     - each thread fills in 1024 entires at a time
     - exact: dfs at low levels instead of scanning
     - dynamic simd detection rather than -Ctarget-cpu=native
+    - ghostcell instead of unsafe replace compose
   - stabilizer
   - avoid symmetric moves from the start
   - fix corner in stabilizer for 4x4

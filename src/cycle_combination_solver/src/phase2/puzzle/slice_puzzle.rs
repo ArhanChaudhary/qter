@@ -39,13 +39,17 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
         Ok(StackPuzzle(orbit_states))
     }
 
-    fn replace_compose(
+    unsafe fn replace_compose(
         &mut self,
         a: &StackPuzzle<N>,
         b: &StackPuzzle<N>,
         sorted_orbit_defs: &[OrbitDef],
     ) {
+        // SAFETY: the caller guarantees that all arguments correspond to the
+        // same orbit defs
+        unsafe {
         replace_compose_slice(&mut self.0, &a.0, &b.0, sorted_orbit_defs);
+        }
     }
 
     fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]) {
@@ -111,8 +115,17 @@ impl PuzzleState for HeapPuzzle {
         Ok(HeapPuzzle(orbit_states))
     }
 
-    fn replace_compose(&mut self, a: &HeapPuzzle, b: &HeapPuzzle, sorted_orbit_defs: &[OrbitDef]) {
+    unsafe fn replace_compose(
+        &mut self,
+        a: &HeapPuzzle,
+        b: &HeapPuzzle,
+        sorted_orbit_defs: &[OrbitDef],
+    ) {
+        // SAFETY: the caller guarantees that all arguments correspond to the
+        // same orbit defs
+        unsafe {
         replace_compose_slice(&mut self.0, &a.0, &b.0, sorted_orbit_defs);
+        }
     }
 
     fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]) {
@@ -187,7 +200,10 @@ fn ksolve_move_to_slice_unchecked(
     }
 }
 
-fn replace_compose_slice(
+/// # SAFETY
+///
+/// `orbit_states_mut`, `a`, and `b` must all correspond to `sorted_orbit_defs`.
+unsafe fn replace_compose_slice(
     orbit_states_mut: &mut [u8],
     a: &[u8],
     b: &[u8],
@@ -452,7 +468,7 @@ impl HeapPuzzle {
         &self,
         sorted_orbit_defs: &[OrbitDef],
         multi_bv: &mut [u8],
-    ) -> Vec<Vec<(NonZeroU8, bool)>> {
+    ) -> Vec<OrientedPartition> {
         let mut cycle_type = vec![];
         let mut base = 0;
         for &OrbitDef {
