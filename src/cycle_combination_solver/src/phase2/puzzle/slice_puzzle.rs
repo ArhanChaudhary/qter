@@ -22,20 +22,8 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
         sorted_transformations: &[Vec<(u8, u8)>],
         sorted_orbit_defs: &[OrbitDef],
     ) -> Result<Self, KSolveConversionError> {
-        if N < sorted_orbit_defs
-            .iter()
-            .map(|orbit_def| orbit_def.piece_count.get() as usize * 2)
-            .sum()
-        {
-            return Err(KSolveConversionError::NotEnoughBufferSpace);
-        }
-
         let mut orbit_states = [0_u8; N];
-        ksolve_move_to_slice_unchecked(
-            &mut orbit_states,
-            sorted_orbit_defs,
-            sorted_transformations,
-        );
+        ksolve_move_to_slice(&mut orbit_states, sorted_transformations, sorted_orbit_defs)?;
         Ok(StackPuzzle(orbit_states))
     }
 
@@ -96,9 +84,6 @@ impl PuzzleState for HeapPuzzle {
         sorted_transformations: &[Vec<(u8, u8)>],
         sorted_orbit_defs: &[OrbitDef],
     ) -> Result<Self, KSolveConversionError> {
-        // No validation needed. from_sorted_transformations_unchecked creates
-        // an orbit states buffer that is guaranteed to be the right size, and
-        // there is no restriction on the expected orbit defs
         let mut orbit_states = vec![
             0_u8;
             sorted_orbit_defs
@@ -107,11 +92,10 @@ impl PuzzleState for HeapPuzzle {
                 .sum()
         ]
         .into_boxed_slice();
-        ksolve_move_to_slice_unchecked(
-            &mut orbit_states,
-            sorted_orbit_defs,
-            sorted_transformations,
-        );
+        // No validation needed. from_sorted_transformations_unchecked creates
+        // an orbit states buffer that is guaranteed to be the right size, and
+        // there is no restriction on the expected orbit defs
+        ksolve_move_to_slice(&mut orbit_states, sorted_transformations, sorted_orbit_defs).unwrap();
         Ok(HeapPuzzle(orbit_states))
     }
 
@@ -173,11 +157,19 @@ fn new_multi_bv_slice(sorted_orbit_defs: &[OrbitDef]) -> Box<[u8]> {
     .into_boxed_slice()
 }
 
-fn ksolve_move_to_slice_unchecked(
+fn ksolve_move_to_slice(
     orbit_states: &mut [u8],
-    sorted_orbit_defs: &[OrbitDef],
     sorted_transformations: &[Vec<(u8, u8)>],
-) {
+    sorted_orbit_defs: &[OrbitDef],
+) -> Result<(), KSolveConversionError> {
+    if orbit_states.len()
+        < sorted_orbit_defs
+            .iter()
+            .map(|orbit_def| orbit_def.piece_count.get() as usize * 2)
+            .sum()
+    {
+        return Err(KSolveConversionError::NotEnoughBufferSpace);
+    }
     let mut i = 0;
     for (transformation, orbit_def) in sorted_transformations.iter().zip(sorted_orbit_defs.iter()) {
         let piece_count = orbit_def.piece_count.get();
@@ -198,6 +190,7 @@ fn ksolve_move_to_slice_unchecked(
         }
         i += piece_count * 2;
     }
+    Ok(())
 }
 
 /// # SAFETY
