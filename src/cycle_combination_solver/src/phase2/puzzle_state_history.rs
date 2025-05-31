@@ -38,11 +38,11 @@ pub trait PuzzleStateHistoryInterface<P: PuzzleState> {
         let last_entry_puzzle_state = unsafe { &left.get_unchecked(stack_pointer).0 };
         // SAFETY: the arguments correspond to `sorted_orbit_defs`
         unsafe {
-        next_entry.0.replace_compose(
-            last_entry_puzzle_state,
-            puzzle_state,
-            &puzzle_def.sorted_orbit_defs,
-        );
+            next_entry.0.replace_compose(
+                last_entry_puzzle_state,
+                puzzle_state,
+                &puzzle_def.sorted_orbit_defs,
+            );
         }
         next_entry.1 = move_index;
     }
@@ -265,11 +265,13 @@ mod tests {
 
         assert_eq!(puzzle_state_history.stack_pointer, 2);
         let mut r_prime_state = solved.clone();
-        r_prime_state.replace_compose(
-            &solved,
-            &r_prime_move.puzzle_state,
-            &cube3_def.sorted_orbit_defs,
-        );
+        unsafe {
+            r_prime_state.replace_compose(
+                &solved,
+                &r_prime_move.puzzle_state,
+                &cube3_def.sorted_orbit_defs,
+            );
+        }
         assert_eq!(&puzzle_state_history.stack[2].0, &r_prime_state);
         assert_eq!(puzzle_state_history.stack[2].1, r2_move_index);
 
@@ -277,7 +279,9 @@ mod tests {
 
         assert_eq!(puzzle_state_history.stack_pointer, 1);
         let mut r_state = solved.clone();
-        r_state.replace_compose(&solved, &r_move.puzzle_state, &cube3_def.sorted_orbit_defs);
+        unsafe {
+            r_state.replace_compose(&solved, &r_move.puzzle_state, &cube3_def.sorted_orbit_defs);
+        }
         assert_eq!(&puzzle_state_history.stack[1].0, &r_state);
 
         unsafe {
@@ -286,11 +290,13 @@ mod tests {
 
         assert_eq!(puzzle_state_history.stack_pointer, 2);
         let mut r_f2_state = solved.clone();
-        r_f2_state.replace_compose(
-            &r_state,
-            &f2_move.puzzle_state,
-            &cube3_def.sorted_orbit_defs,
-        );
+        unsafe {
+            r_f2_state.replace_compose(
+                &r_state,
+                &f2_move.puzzle_state,
+                &cube3_def.sorted_orbit_defs,
+            );
+        }
         assert_eq!(&puzzle_state_history.stack[2].0, &r_f2_state);
 
         unsafe {
