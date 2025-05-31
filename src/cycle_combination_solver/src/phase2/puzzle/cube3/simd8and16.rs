@@ -767,9 +767,9 @@ impl Cube3 {
     }
 
     pub fn replace_inverse_raw(&mut self, a: &Self) {
-        // Benchmarked on a 2025 Mac M4: 6.58ns
-        let mut ep = self.edges & EDGE_PERM_MASK;
-        let mut cp = self.corners & CORNER_PERM_MASK;
+        // Benchmarked on a 2025 Mac M4: 6.54ns
+        let mut ep = BLANK_EP;
+        let mut cp = u8x8::splat(0);
         let other_ep = a.edges & EDGE_PERM_MASK;
         let other_eo = a.edges & EDGE_ORI_MASK;
         let other_cp = a.corners & CORNER_PERM_MASK;
