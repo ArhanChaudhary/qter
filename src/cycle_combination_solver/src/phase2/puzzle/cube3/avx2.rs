@@ -458,9 +458,10 @@ impl Cube3Interface for Cube3 {
                 if reps_oriented_corner_cycle_count != reps_corner_cycle_count {
                     // and then divide it by the number of repetitions to get
                     // the number of unoriented cycles
-                    corner_cycle_type_pointer +=
+                    corner_cycle_type_pointer = corner_cycle_type_pointer.wrapping_add(
                         ((reps_corner_cycle_count - reps_oriented_corner_cycle_count)
-                            / u32::from(reps.get())) as usize;
+                            / u32::from(reps.get())) as usize,
+                    );
                     // Same error checking as before
                     if corner_cycle_type_pointer >= sorted_cycle_type[0].len()
                         || sorted_cycle_type[0][corner_cycle_type_pointer] != (reps, false)
@@ -471,8 +472,9 @@ impl Cube3Interface for Cube3 {
 
                 // Perform the same logic for oriented corner cycles
                 if reps_oriented_corner_cycle_count != 0 {
-                    corner_cycle_type_pointer +=
-                        (reps_oriented_corner_cycle_count / u32::from(reps.get())) as usize;
+                    corner_cycle_type_pointer = corner_cycle_type_pointer.wrapping_add(
+                        (reps_oriented_corner_cycle_count / u32::from(reps.get())) as usize,
+                    );
                     if corner_cycle_type_pointer >= sorted_cycle_type[0].len()
                         || sorted_cycle_type[0][corner_cycle_type_pointer] != (reps, true)
                     {
@@ -492,9 +494,10 @@ impl Cube3Interface for Cube3 {
                     edge_bits(oriented_edge_mask.to_bitmask()).count_ones();
 
                 if reps_oriented_edge_cycle_count != reps_edge_cycle_count {
-                    edge_cycle_type_pointer +=
+                    edge_cycle_type_pointer = edge_cycle_type_pointer.wrapping_add(
                         ((reps_edge_cycle_count - reps_oriented_edge_cycle_count)
-                            / u32::from(reps.get())) as usize;
+                            / u32::from(reps.get())) as usize,
+                    );
                     if edge_cycle_type_pointer >= sorted_cycle_type[1].len()
                         || sorted_cycle_type[1][edge_cycle_type_pointer] != (reps, false)
                     {
@@ -503,8 +506,9 @@ impl Cube3Interface for Cube3 {
                 }
 
                 if reps_oriented_edge_cycle_count != 0 {
-                    edge_cycle_type_pointer +=
-                        (reps_oriented_edge_cycle_count / u32::from(reps.get())) as usize;
+                    edge_cycle_type_pointer = edge_cycle_type_pointer.wrapping_add(
+                        (reps_oriented_edge_cycle_count / u32::from(reps.get())) as usize,
+                    );
                     if edge_cycle_type_pointer >= sorted_cycle_type[1].len()
                         || sorted_cycle_type[1][edge_cycle_type_pointer] != (reps, true)
                     {
