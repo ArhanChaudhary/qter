@@ -48,7 +48,7 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
         // SAFETY: the caller guarantees that all arguments correspond to the
         // same orbit defs
         unsafe {
-        replace_compose_slice(&mut self.0, &a.0, &b.0, sorted_orbit_defs);
+            replace_compose_slice(&mut self.0, &a.0, &b.0, sorted_orbit_defs);
         }
     }
 
@@ -124,7 +124,7 @@ impl PuzzleState for HeapPuzzle {
         // SAFETY: the caller guarantees that all arguments correspond to the
         // same orbit defs
         unsafe {
-        replace_compose_slice(&mut self.0, &a.0, &b.0, sorted_orbit_defs);
+            replace_compose_slice(&mut self.0, &a.0, &b.0, sorted_orbit_defs);
         }
     }
 

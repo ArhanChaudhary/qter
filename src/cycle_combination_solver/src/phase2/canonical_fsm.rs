@@ -61,10 +61,10 @@ impl<P: PuzzleState> From<&PuzzleDef<P>> for PuzzleCanonicalFSM<P> {
                 // SAFETY: the arguments correspond to `sorted_orbit_defs`
                 if !unsafe {
                     puzzle_def.moves[move_class_1_index].commutes_with(
-                    &puzzle_def.moves[move_class_2_index],
-                    &mut result_1,
-                    &mut result_2,
-                    &puzzle_def.sorted_orbit_defs,
+                        &puzzle_def.moves[move_class_2_index],
+                        &mut result_1,
+                        &mut result_2,
+                        &puzzle_def.sorted_orbit_defs,
                     )
                 } {
                     commutes[i][j] = false;
@@ -218,10 +218,10 @@ mod tests {
                 // SAFETY: the arguments correspond to `sorted_orbit_defs`
                 if !unsafe {
                     move_1.commutes_with(
-                    move_2,
-                    &mut result_1,
-                    &mut result_2,
-                    &cube3_def.sorted_orbit_defs,
+                        move_2,
+                        &mut result_1,
+                        &mut result_2,
+                        &cube3_def.sorted_orbit_defs,
                     )
                 } {
                     continue;
@@ -278,10 +278,10 @@ mod tests {
                 // SAFETY: the arguments correspond to `sorted_orbit_defs`
                 if unsafe {
                     cube4_def.moves[move_class].commutes_with(
-                    &cube4_def.moves[other_move_class],
-                    &mut result_1,
-                    &mut result_2,
-                    &cube4_def.sorted_orbit_defs,
+                        &cube4_def.moves[other_move_class],
+                        &mut result_1,
+                        &mut result_2,
+                        &cube4_def.sorted_orbit_defs,
                     )
                 } {
                     commute.push(other_move_class_index);

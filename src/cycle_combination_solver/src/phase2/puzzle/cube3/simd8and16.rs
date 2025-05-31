@@ -21,6 +21,7 @@ use std::{
 /// (edge permutation, edge orientation, corner permutation, corner orientation)
 /// which uniquely identifies any cube state
 #[derive(Clone, Debug, PartialEq, Hash)]
+#[non_exhaustive]
 pub struct UncompressedCube3 {
     pub ep: u8x16,
     pub eo: u8x16,
@@ -84,7 +85,7 @@ impl Cube3Interface for UncompressedCube3 {
     }
 
     fn replace_compose(&mut self, a: &Self, b: &Self) {
-        // Benchmarked on a 2025 Mac M4: 1.67ns
+        // Benchmarked on a 2025 Mac M4: 1.70ns
 
         // Compose edge permutation using the built-in SIMD swizzle
         self.ep = a.ep.swizzle_dyn(b.ep);
@@ -123,7 +124,7 @@ impl Cube3Interface for UncompressedCube3 {
     }
 
     fn replace_inverse(&mut self, a: &Self) {
-        // Benchmarked on a 2025 Mac M4: 2.5ns
+        // Benchmarked on a 2025 Mac M4: 2.61ns
         //
         // See `replace_inverse` in avx2.rs for explanation. Note that there
         // does not seem to be any speed difference when these instructions are
@@ -180,6 +181,7 @@ impl Cube3Interface for UncompressedCube3 {
     }
 
     fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
+        // Benchmarked on a 2025 Mac M4: 14.88 (worst case) 3.79ns (average)
         induces_sorted_cycle_type(sorted_cycle_type, self.cp, self.co, self.ep, self.eo)
     }
 
@@ -281,9 +283,10 @@ impl Cube3Interface for UncompressedCube3 {
 /// It is important for the unused bytes to correspond to their index for the
 /// swizzling to permute the values in place.
 #[derive(PartialEq, Clone)]
+#[non_exhaustive]
 pub struct Cube3 {
-    edges: u8x16,
-    corners: u8x8,
+    pub edges: u8x16,
+    pub corners: u8x8,
 }
 
 #[derive(Hash)]
@@ -340,7 +343,7 @@ impl Cube3Interface for Cube3 {
     }
 
     fn replace_compose(&mut self, a: &Self, b: &Self) {
-        // Benchmarked on a 2025 Mac M4: 1.12ns
+        // Benchmarked on a 2025 Mac M4: 1.15ns
         //
         // For reasons still unknown, this composition is faster than that of
         // UncompressedCube3. llvm-mca does not favor this implementation, so
@@ -360,7 +363,7 @@ impl Cube3Interface for Cube3 {
     }
 
     fn replace_inverse(&mut self, a: &Self) {
-        // Benchmarked on a 2025 Mac M4: TODO
+        // Benchmarked on a 2025 Mac M4: 3.01ns
         //
         // See `replace_inverse` in avx2.rs for explanation
 
@@ -412,6 +415,7 @@ impl Cube3Interface for Cube3 {
     }
 
     fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
+        // Benchmarked on a 2025 Mac M4: 15.13 (worst case) 3.74ns (average)
         let cp = self.corners & CORNER_PERM_MASK;
         let co = self.corners >> 3;
         let ep = self.edges & EDGE_PERM_MASK;
@@ -486,8 +490,6 @@ fn induces_sorted_cycle_type(
     ep: u8x16,
     eo: u8x16,
 ) -> bool {
-    // Benchmarked on a 2025 Mac M4: TODO (worst case) TODO (average)
-    //
     // Explanation in `induces_sorted_cycle_type` in avx2.rs
     let mut seen_cp = cp.simd_eq(CP_IDENTITY);
     let oriented_one_cycle_corner_mask = seen_cp & co.simd_ne(u8x8::splat(0));
@@ -630,7 +632,7 @@ fn induces_sorted_cycle_type(
 #[allow(dead_code)]
 impl UncompressedCube3 {
     fn replace_inverse_brute(&mut self, a: &Self) {
-        // Benchmarked on a 2025 Mac M4: 4.11ns
+        // Benchmarked on a 2025 Mac M4: 4.25ns
         self.ep = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15]);
         self.cp = u8x8::splat(0);
         // Brute force the inverse by checking all possible values and
@@ -678,7 +680,7 @@ impl UncompressedCube3 {
     }
 
     fn replace_inverse_raw(&mut self, a: &Self) {
-        // Benchmarked on a 2025 Mac M4: 3.8ns
+        // Benchmarked on a 2025 Mac M4: 3.97ns
 
         for i in 0..12 {
             // SAFETY: ep is length 12, so i is always in bounds
@@ -706,6 +708,7 @@ impl UncompressedCube3 {
 
 impl Cube3 {
     pub fn replace_inverse_brute(&mut self, a: &Self) {
+        // Benchmarked on a 2025 Mac M4: 4.69ns
         let other_ep = a.edges & EDGE_PERM_MASK;
         let other_eo = a.edges & EDGE_ORI_MASK;
         let other_cp = a.corners & CORNER_PERM_MASK;
@@ -761,6 +764,7 @@ impl Cube3 {
     }
 
     pub fn replace_inverse_raw(&mut self, a: &Self) {
+        // Benchmarked on a 2025 Mac M4: 6.58ns
         let mut ep = self.edges & EDGE_PERM_MASK;
         let mut cp = self.corners & CORNER_PERM_MASK;
         let other_ep = a.edges & EDGE_PERM_MASK;

@@ -125,6 +125,22 @@ pub struct OrbitDef {
 
 pub type OrientedPartition = Vec<(NonZeroU8, bool)>;
 
+#[non_exhaustive]
+pub struct TransformationMeta<'a> {
+    pub sorted_transformation: Vec<(u8, u8)>,
+    pub sorted_orbit_defs: &'a [OrbitDef],
+}
+
+impl<'a> TransformationMeta<'a> {
+    #[must_use]
+    pub fn new(sorted_transformation: Vec<(u8, u8)>, sorted_orbit_defs: &'a [OrbitDef]) -> Self {
+        Self {
+            sorted_transformation,
+            sorted_orbit_defs,
+        }
+    }
+}
+
 impl<P: PuzzleState> Move<P> {
     /// # Safety
     ///
@@ -139,8 +155,8 @@ impl<P: PuzzleState> Move<P> {
         // SAFETY: the caller guarantees that `self` and `other` correspond to
         // `sorted_orbit_defs`
         unsafe {
-        result_1.replace_compose(&self.puzzle_state, &other.puzzle_state, sorted_orbit_defs);
-        result_2.replace_compose(&other.puzzle_state, &self.puzzle_state, sorted_orbit_defs);
+            result_1.replace_compose(&self.puzzle_state, &other.puzzle_state, sorted_orbit_defs);
+            result_2.replace_compose(&other.puzzle_state, &self.puzzle_state, sorted_orbit_defs);
         }
         result_1 == result_2
     }
@@ -343,6 +359,7 @@ impl MultiBvInterface for () {
     fn reusable_ref(&mut self) -> Self::MultiBvReusableRef<'_> {}
 }
 
+// TODO: move to cube3
 #[allow(clippy::missing_panics_doc)]
 pub fn random_3x3_state<P: PuzzleState>(cube3_def: &PuzzleDef<P>, solved: &P) -> P {
     let mut result_1 = solved.clone();
@@ -352,7 +369,7 @@ pub fn random_3x3_state<P: PuzzleState>(cube3_def: &PuzzleDef<P>, solved: &P) ->
         let move_ = &cube3_def.moves[move_index as usize];
         // SAFETY: the arguments correspond to `sorted_orbit_defs`
         unsafe {
-        result_1.replace_compose(&result_2, &move_.puzzle_state, &cube3_def.sorted_orbit_defs);
+            result_1.replace_compose(&result_2, &move_.puzzle_state, &cube3_def.sorted_orbit_defs);
         }
         std::mem::swap(&mut result_2, &mut result_1);
     }
@@ -378,11 +395,11 @@ pub fn apply_moves<P: PuzzleState + Clone>(
             let move_ = puzzle_def.find_move(name).unwrap();
             // SAFETY: the arguments correspond to `sorted_orbit_defs`
             unsafe {
-            result_2.replace_compose(
-                &result_1,
-                &move_.puzzle_state,
-                &puzzle_def.sorted_orbit_defs,
-            );
+                result_2.replace_compose(
+                    &result_1,
+                    &move_.puzzle_state,
+                    &puzzle_def.sorted_orbit_defs,
+                );
             }
             std::mem::swap(&mut result_1, &mut result_2);
         }
@@ -419,48 +436,48 @@ mod tests {
         let d2_move = cube3_def.find_move("D2").unwrap();
         let r_move = cube3_def.find_move("R").unwrap();
         unsafe {
-        assert!(u_move.commutes_with(
-            u_move,
-            &mut result_1,
-            &mut result_2,
-            &cube3_def.sorted_orbit_defs
-        ));
-        assert!(d2_move.commutes_with(
-            d2_move,
-            &mut result_1,
-            &mut result_2,
-            &cube3_def.sorted_orbit_defs
-        ));
-        assert!(u_move.commutes_with(
-            d2_move,
-            &mut result_1,
-            &mut result_2,
-            &cube3_def.sorted_orbit_defs
-        ));
-        assert!(!u_move.commutes_with(
-            r_move,
-            &mut result_1,
-            &mut result_2,
-            &cube3_def.sorted_orbit_defs
-        ));
-        assert!(!d2_move.commutes_with(
-            r_move,
-            &mut result_1,
-            &mut result_2,
-            &cube3_def.sorted_orbit_defs
-        ));
-        assert!(!r_move.commutes_with(
-            u_move,
-            &mut result_1,
-            &mut result_2,
-            &cube3_def.sorted_orbit_defs
-        ));
-        assert!(!r_move.commutes_with(
-            d2_move,
-            &mut result_1,
-            &mut result_2,
-            &cube3_def.sorted_orbit_defs
-        ));
+            assert!(u_move.commutes_with(
+                u_move,
+                &mut result_1,
+                &mut result_2,
+                &cube3_def.sorted_orbit_defs
+            ));
+            assert!(d2_move.commutes_with(
+                d2_move,
+                &mut result_1,
+                &mut result_2,
+                &cube3_def.sorted_orbit_defs
+            ));
+            assert!(u_move.commutes_with(
+                d2_move,
+                &mut result_1,
+                &mut result_2,
+                &cube3_def.sorted_orbit_defs
+            ));
+            assert!(!u_move.commutes_with(
+                r_move,
+                &mut result_1,
+                &mut result_2,
+                &cube3_def.sorted_orbit_defs
+            ));
+            assert!(!d2_move.commutes_with(
+                r_move,
+                &mut result_1,
+                &mut result_2,
+                &cube3_def.sorted_orbit_defs
+            ));
+            assert!(!r_move.commutes_with(
+                u_move,
+                &mut result_1,
+                &mut result_2,
+                &cube3_def.sorted_orbit_defs
+            ));
+            assert!(!r_move.commutes_with(
+                d2_move,
+                &mut result_1,
+                &mut result_2,
+                &cube3_def.sorted_orbit_defs
+            ));
         }
     }
 
@@ -513,11 +530,11 @@ mod tests {
         let mut result_2 = solved.clone();
         for _ in 0..4 {
             unsafe {
-            result_2.replace_compose(
-                &result_1,
-                &s_u4_symmetry.puzzle_state,
-                &cube3_def.sorted_orbit_defs,
-            );
+                result_2.replace_compose(
+                    &result_1,
+                    &s_u4_symmetry.puzzle_state,
+                    &cube3_def.sorted_orbit_defs,
+                );
             }
             std::mem::swap(&mut result_1, &mut result_2);
         }
@@ -609,7 +626,7 @@ mod tests {
             let mut result_2 = solved.clone();
             result_1.replace_inverse(&random_state, &cube3_def.sorted_orbit_defs);
             unsafe {
-            result_2.replace_compose(&result_1, &random_state, &cube3_def.sorted_orbit_defs);
+                result_2.replace_compose(&result_1, &random_state, &cube3_def.sorted_orbit_defs);
             }
 
             assert_eq!(result_2, solved);
@@ -677,68 +694,68 @@ mod tests {
 
         let tests = [
             (
-            "F2 L' U2 F U F U L' B U' F' U D2 L F2 B'",
+                "F2 L' U2 F U F U L' B U' F' U D2 L F2 B'",
                 &[ct(&[(1, true), (3, true)]), ct(&[(1, true), (5, true)])],
             ),
             (
-            "U2 L B L2 F U2 B' U2 R U' F R' F' R F' L' U2",
+                "U2 L B L2 F U2 B' U2 R U' F R' F' R F' L' U2",
                 &[ct(&[(1, true), (5, true)]), ct(&[(1, true), (7, true)])],
             ),
             (
-            "R' U2 R' U2 F' D' L F L2 F U2 F2 D' L' D2 F R2",
+                "R' U2 R' U2 F' D' L F L2 F U2 F2 D' L' D2 F R2",
                 &[ct(&[(1, true), (3, true)]), ct(&[(1, true), (7, true)])],
             ),
             (
-            "B2 U' B' D B' L' D' B U' R2 B2 R U B2 R B' R U",
+                "B2 U' B' D B' L' D' B U' R2 B2 R U B2 R B' R U",
                 &[
-            ct(&[(1, true), (1, true), (3, true)]),
-            ct(&[(1, true), (7, true)]),
+                    ct(&[(1, true), (1, true), (3, true)]),
+                    ct(&[(1, true), (7, true)]),
                 ],
             ),
             (
-            "R2 L2 D' B L2 D' B L' B D2 R2 B2 R' D' B2 L2 U'",
+                "R2 L2 D' B L2 D' B L' B D2 R2 B2 R' D' B2 L2 U'",
                 &[ct(&[(2, true), (3, true)]), ct(&[(4, true), (5, true)])],
             ),
             (
-            "F' B2 R L U2 B U2 L2 F2 U R L B' L' D' R' D' B'",
+                "F' B2 R L U2 B U2 L2 F2 U R L B' L' D' R' D' B'",
                 &[
-            ct(&[(1, true), (2, true), (3, true)]),
-            ct(&[(4, true), (5, true)]),
+                    ct(&[(1, true), (2, true), (3, true)]),
+                    ct(&[(4, true), (5, true)]),
                 ],
             ),
             (
-            "L' D2 F B2 U F' L2 B R F2 D R' L F R' F' D",
+                "L' D2 F B2 U F' L2 B R F2 D R' L F R' F' D",
                 &[
-            ct(&[(2, true), (3, true)]),
-            ct(&[(1, true), (4, true), (5, false)]),
+                    ct(&[(2, true), (3, true)]),
+                    ct(&[(1, true), (4, true), (5, false)]),
                 ],
             ),
             (
-            "B' L' F2 R U' R2 F' L2 F R' L B L' U' F2 U' D2 L",
+                "B' L' F2 R U' R2 F' L2 F R' L B L' U' F2 U' D2 L",
                 &[
-            ct(&[(1, true), (2, true), (3, true)]),
-            ct(&[(1, true), (4, true), (5, false)]),
+                    ct(&[(1, true), (2, true), (3, true)]),
+                    ct(&[(1, true), (4, true), (5, false)]),
                 ],
             ),
             (
-            "F2 D2 L' F D R2 F2 U2 L2 F R' B2 D2 R2 U R2 U",
+                "F2 D2 L' F D R2 F2 U2 L2 F R' B2 D2 R2 U R2 U",
                 &[
-            ct(&[(1, true), (2, false), (3, true)]),
-            ct(&[(4, true), (5, true)]),
+                    ct(&[(1, true), (2, false), (3, true)]),
+                    ct(&[(4, true), (5, true)]),
                 ],
             ),
             (
-            "F2 B' R' F' L' D B' U' F U B' U2 D L' F' L' B R2",
+                "F2 B' R' F' L' D B' U' F U B' U2 D L' F' L' B R2",
                 &[
-            ct(&[(1, true), (2, false), (3, true)]),
-            ct(&[(1, true), (4, true), (5, false)]),
+                    ct(&[(1, true), (2, false), (3, true)]),
+                    ct(&[(1, true), (4, true), (5, false)]),
                 ],
             ),
             (
                 "U L U L2 U2 B2",
                 &[
-            ct(&[(1, true), (2, false), (3, true)]),
-            ct(&[(2, false), (3, false), (3, false)]),
+                    ct(&[(1, true), (2, false), (3, true)]),
+                    ct(&[(2, false), (3, false), (3, false)]),
                 ],
             ),
             ("U", &[ct(&[(4, false)]), ct(&[(4, false)])]),
@@ -748,17 +765,17 @@ mod tests {
         for (i, &(moves_str, expected_cts)) in tests.iter().enumerate() {
             let random_state = apply_moves(&cube3_def, &solved, moves_str, 1);
 
-        assert!(random_state.induces_sorted_cycle_type(
+            assert!(random_state.induces_sorted_cycle_type(
                 expected_cts,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
+                &cube3_def.sorted_orbit_defs,
+                multi_bv.reusable_ref(),
+            ));
 
-        assert!(!solved.induces_sorted_cycle_type(
+            assert!(!solved.induces_sorted_cycle_type(
                 expected_cts,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
+                &cube3_def.sorted_orbit_defs,
+                multi_bv.reusable_ref(),
+            ));
 
             for (j, &(other_moves, _)) in tests.iter().enumerate() {
                 if i == j {
@@ -767,9 +784,9 @@ mod tests {
                 let other_state = apply_moves(&cube3_def, &solved, other_moves, 1);
                 assert!(!other_state.induces_sorted_cycle_type(
                     expected_cts,
-            &cube3_def.sorted_orbit_defs,
+                    &cube3_def.sorted_orbit_defs,
                     multi_bv.reusable_ref()
-        ));
+                ));
             }
         }
     }

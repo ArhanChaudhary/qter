@@ -22,7 +22,7 @@ mod common {
         /// Check if the cube induces a sorted cycle type.
         fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool;
 
-        /// Convert an orbit of the cube state into a pair of (ep, eo) bytes.
+        /// Convert an orbit of the cube state into a pair of (perm, ori) bytes.
         /// For implementation reasons that should ideally be abstracted away,
         /// we have to make the arrays length 16.
         fn orbit_bytes(&self, orbit_index: usize) -> ([u8; 16], [u8; 16]);
@@ -88,6 +88,7 @@ mod common {
         ) -> bool {
             // SAFETY: `try_from_transformation_meta`, the only constructor,
             // guarantees that this will always be length 2.
+            // TODO: make sorted_cycle_type an actual type
             self.induces_sorted_cycle_type(unsafe {
                 sorted_cycle_type.try_into().unwrap_unchecked()
             })

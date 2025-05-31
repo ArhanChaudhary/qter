@@ -82,7 +82,8 @@ use core::arch::x86_64::_mm256_shuffle_epi8;
 /// [vcube]: https://github.com/Voltara/vcube
 #[allow(clippy::derived_hash_with_manual_eq)]
 #[derive(Clone, Hash)]
-pub struct Cube3(u8x32);
+#[non_exhaustive]
+pub struct Cube3(pub u8x32);
 
 /// Extract the permutation bits from the cube state.
 const PERM_MASK_1: u8x32 = u8x32::splat(0b0000_1111);
@@ -128,7 +129,7 @@ fn edge_bits(bitmask: u64) -> u64 {
 
 /// Extract the corner bits from a permutation identity equality bitmask
 fn corner_bits(bitmask: u64) -> u64 {
-    bitmask >> 16
+    bitmask >> CORNER_START
 }
 
 impl PartialEq for Cube3 {
@@ -197,7 +198,7 @@ impl Cube3Interface for Cube3 {
 
     #[inline(always)]
     fn replace_compose(&mut self, a: &Self, b: &Self) {
-        // Benchmarked on a 2x Intel Xeon E5-2667 v3: 1.55ns
+        // Benchmarked on a 2x Intel Xeon E5-2667 v3: 1.41ns
         fn inner(dst: &mut Cube3, a: &Cube3, b: &Cube3) {
             // First use _mm256_shuffle_epi8 to compose the permutation. Note
             // that the SIMD instruction shuffles its argument bytes by the
@@ -237,7 +238,7 @@ impl Cube3Interface for Cube3 {
 
     #[inline(always)]
     fn replace_inverse(&mut self, a: &Self) {
-        // Benchmarked on a 2x Intel Xeon E5-2667 v3: 6.27ns
+        // Benchmarked on a 2x Intel Xeon E5-2667 v3: 5.58ns
         fn inner(dst: &mut Cube3, a: &Cube3) {
             // Permutation inversion taken from Andrew Skalski's [vcube].
             //
@@ -293,7 +294,7 @@ impl Cube3Interface for Cube3 {
     }
 
     fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
-        // Benchmarked on a 2x Intel Xeon E5-2667 v3: 39.94ns (worst) 12.71ns (average)
+        // Benchmarked on a 2x Intel Xeon E5-2667 v3: 36.47ns (worst) 7.33ns (average)
         //
         // The cycle type of a state is a sorted list of (int: cycle_length,
         // bool: is_oriented). For example, the corner permutation:
@@ -581,7 +582,7 @@ impl Cube3 {
     /// find the inverse of a cube state. Not really useful as it is slower
     #[inline(always)]
     pub fn replace_inverse_brute(&mut self, a: &Self) {
-        // Benchmarked on a 2x Intel Xeon E5-2667 v3: 6.77ns
+        // Benchmarked on a 2x Intel Xeon E5-2667 v3: 7.31ns
         fn inner(dst: &mut Cube3, a: &Cube3) {
             let perm = a.0 & PERM_MASK_1;
 
