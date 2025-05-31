@@ -54,6 +54,9 @@ const EDGE_PERM_MASK: u8x16 = u8x16::splat(0b0000_1111);
 const CORNER_ORI_MASK: u8x8 = u8x8::splat(0b0001_1000);
 const CORNER_PERM_MASK: u8x8 = u8x8::splat(0b0000_0111);
 
+/// An unitialized vector of edge permutation
+const BLANK_EP: u8x16 = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15]);
+
 impl Cube3Interface for UncompressedCube3 {
     fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self {
         let corners_transformation = &sorted_transformations[0];
@@ -326,7 +329,7 @@ impl Cube3Interface for Cube3 {
         let corners_transformation = &sorted_transformations[0];
         let edges_transformation = &sorted_transformations[1];
 
-        let mut edges = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15]);
+        let mut edges = BLANK_EP;
         let mut corners = u8x8::splat(0);
 
         for i in 0..12 {
@@ -633,7 +636,7 @@ fn induces_sorted_cycle_type(
 impl UncompressedCube3 {
     fn replace_inverse_brute(&mut self, a: &Self) {
         // Benchmarked on a 2025 Mac M4: 4.25ns
-        self.ep = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15]);
+        self.ep = BLANK_EP;
         self.cp = u8x8::splat(0);
         // Brute force the inverse by checking all possible values and
         // using a mask to check when equal to identity (also inspired by
@@ -712,7 +715,7 @@ impl Cube3 {
         let other_ep = a.edges & EDGE_PERM_MASK;
         let other_eo = a.edges & EDGE_ORI_MASK;
         let other_cp = a.corners & CORNER_PERM_MASK;
-        let mut ep = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15]);
+        let mut ep = BLANK_EP;
         let mut cp = u8x8::splat(0);
         // Brute force the inverse by checking all possible values and
         // using a mask to check when equal to identity (also inspired by

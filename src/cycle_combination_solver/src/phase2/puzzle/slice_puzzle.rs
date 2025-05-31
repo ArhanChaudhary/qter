@@ -360,6 +360,7 @@ fn induces_sorted_cycle_type_slice(
             if actual_cycle_length == 1 && !actual_orients {
                 continue;
             }
+            // TODO: take advantage of the fact that cycle lengths are sorted
             let Some(valid_cycle_index) = partition.iter().enumerate().position(
                 |(j, &(expected_cycle_length, expected_orients))| {
                     let (div, rem) = (j / 4, j % 4);

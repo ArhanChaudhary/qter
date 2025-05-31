@@ -107,6 +107,11 @@ const IDENTITY: u8x32 = u8x32::from_array([
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
     13, 14, 15,
 ]);
+/// An unitialized cube state.
+const BLANK: u8x32 = u8x32::from_array([
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 8, 9, 10, 11, 12,
+    13, 14, 15,
+]);
 /// The starting index for edge bits
 const EDGE_START: usize = 0;
 /// The starting index for corner bits
@@ -178,10 +183,7 @@ impl Cube3Interface for Cube3 {
         let corners_transformation = &sorted_transformations[0];
         let edges_transformation = &sorted_transformations[1];
 
-        let mut cube = u8x32::from_array([
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 8, 9, 10,
-            11, 12, 13, 14, 15,
-        ]);
+        let mut cube = BLANK;
 
         for i in 0..12 {
             let (perm, ori) = edges_transformation[i];
@@ -270,6 +272,7 @@ impl Cube3Interface for Cube3 {
             inverse = avx2_swizzle_lo(avx2_swizzle_lo(inverse, inverse), perm);
 
             // Compose orientation as explained in `replace_compose`
+            // xoring this with `perm` does not make this faster
             let mut added_ori = a.0 & ORI_MASK;
             added_ori += added_ori;
             // The orientation for edges remain the same during inversion, so
@@ -579,17 +582,14 @@ impl Cube3Interface for Cube3 {
 
 impl Cube3 {
     /// An alternative to `replace_inverse` that uses a brute force approach to
-    /// find the inverse of a cube state. Not really useful as it is slower
+    /// find the inverse of a cube state. Not really useful as it is slower.
     #[inline(always)]
     pub fn replace_inverse_brute(&mut self, a: &Self) {
         // Benchmarked on a 2x Intel Xeon E5-2667 v3: 7.31ns
         fn inner(dst: &mut Cube3, a: &Cube3) {
             let perm = a.0 & PERM_MASK_1;
 
-            let mut inverse = u8x32::from_array([
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 12, 13, 14, 15,
-            ]);
+            let mut inverse = BLANK;
 
             // Build the inverse permutation one at a time
             macro_rules! brute_unroll {
@@ -632,6 +632,42 @@ impl Cube3 {
             inner(dst, a);
         }
         replace_inverse_brute_vectorcall(self, a);
+    }
+
+    /// An alternative to `replace_inverse` that uses a raw permutation
+    /// inversion algorithm. Not really useful as it is slower.
+    #[inline(always)]
+    pub fn replace_inverse_raw(&mut self, a: &Self) {
+        // Benchmarked on a 2x Intel Xeon E5-2667 v3: 13.2ns
+        fn inner(dst: &mut Cube3, a: &Cube3) {
+            let mut perm = BLANK;
+            for i in 0..12 {
+                unsafe {
+                    *perm
+                        .as_mut_array()
+                        .get_unchecked_mut(a.0[i as usize] as usize) = i;
+                    if i < 8 {
+                        *perm
+                            .as_mut_array()
+                            .get_unchecked_mut(a.0[i as usize + 16] as usize + 16) = i;
+                    }
+                }
+            }
+            let mut added_ori = a.0 & ORI_MASK;
+            added_ori += added_ori;
+            added_ori = added_ori.simd_min(added_ori - ORI_CARRY_INVERSE);
+            added_ori = avx2_swizzle_lo(added_ori, perm);
+            *dst = Cube3(perm | added_ori);
+        }
+        #[cfg(avx2)]
+        extern "vectorcall" fn replace_inverse_raw_vectorcall(dst: &mut Cube3, a: &Cube3) {
+            inner(dst, a);
+        }
+        #[cfg(not(avx2))]
+        fn replace_inverse_raw_vectorcall(dst: &mut Cube3, a: &Cube3) {
+            inner(dst, a);
+        }
+        replace_inverse_raw_vectorcall(self, a);
     }
 }
 
@@ -683,6 +719,47 @@ mod tests {
         }
     }
 
+    #[test]
+    #[cfg_attr(not(avx2), ignore)]
+    fn test_raw_inversion() {
+        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let solved = cube3_def.new_solved_state();
+        let mut result = solved.clone();
+
+        let state_r2_b_prime = apply_moves(&cube3_def, &solved, "R2 B'", 1);
+        result.replace_inverse_raw(&state_r2_b_prime);
+
+        let state_b_r2 = apply_moves(&cube3_def, &solved, "B R2", 1);
+        assert_eq!(result, state_b_r2);
+
+        let in_r_f_cycle = apply_moves(&cube3_def, &solved, "R F", 40);
+        result.replace_inverse_raw(&in_r_f_cycle);
+
+        let remaining_r_f_cycle = apply_moves(&cube3_def, &solved, "R F", 65);
+        assert_eq!(result, remaining_r_f_cycle);
+
+        for i in 1..=5 {
+            let state = apply_moves(&cube3_def, &solved, "L F L' F'", i);
+            result.replace_inverse_raw(&state);
+            let remaining_state = apply_moves(&cube3_def, &solved, "L F L' F'", 6 - i);
+            assert_eq!(result, remaining_state);
+        }
+
+        for _ in 0..100 {
+            let mut result_1 = solved.clone();
+            let mut result_2 = solved.clone();
+            for _ in 0..20 {
+                let move_index = fastrand::choice(0_u8..18).unwrap();
+                let move_ = &cube3_def.moves[move_index as usize];
+                result_1.replace_compose(&result_2, &move_.puzzle_state);
+                std::mem::swap(&mut result_2, &mut result_1);
+            }
+            result_1.replace_inverse_raw(&result_2);
+            result_2.replace_compose(&result_1, &result_2.clone());
+            assert_eq!(result_2, solved);
+        }
+    }
+
     #[bench]
     #[cfg_attr(not(avx2), ignore)]
     fn bench_brute_force_inversion(b: &mut test::Bencher) {
@@ -692,6 +769,18 @@ mod tests {
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 100);
         b.iter(|| {
             test::black_box(&mut result).replace_inverse_brute(test::black_box(&order_1260));
+        });
+    }
+
+    #[bench]
+    #[cfg_attr(not(avx2), ignore)]
+    fn bench_raw_inversion(b: &mut test::Bencher) {
+        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let solved = cube3_def.new_solved_state();
+        let mut result = solved.clone();
+        let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 100);
+        b.iter(|| {
+            test::black_box(&mut result).replace_inverse_raw(test::black_box(&order_1260));
         });
     }
 }
