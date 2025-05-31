@@ -418,6 +418,7 @@ mod tests {
         let u_move = cube3_def.find_move("U").unwrap();
         let d2_move = cube3_def.find_move("D2").unwrap();
         let r_move = cube3_def.find_move("R").unwrap();
+        unsafe {
         assert!(u_move.commutes_with(
             u_move,
             &mut result_1,
@@ -460,6 +461,7 @@ mod tests {
             &mut result_2,
             &cube3_def.sorted_orbit_defs
         ));
+        }
     }
 
     #[test]
@@ -467,7 +469,7 @@ mod tests {
         commutes_with::<StackCube3>();
         commutes_with::<HeapPuzzle>();
         #[cfg(simd8and16)]
-        many_compositions::<cube3::simd8and16::Cube3>();
+        commutes_with::<cube3::simd8and16::Cube3>();
         #[cfg(simd8and16)]
         commutes_with::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
@@ -510,11 +512,13 @@ mod tests {
         let mut result_1 = solved.clone();
         let mut result_2 = solved.clone();
         for _ in 0..4 {
+            unsafe {
             result_2.replace_compose(
                 &result_1,
                 &s_u4_symmetry.puzzle_state,
                 &cube3_def.sorted_orbit_defs,
             );
+            }
             std::mem::swap(&mut result_1, &mut result_2);
         }
 
@@ -526,7 +530,7 @@ mod tests {
         s_u4_symmetry::<StackCube3>();
         s_u4_symmetry::<HeapPuzzle>();
         #[cfg(simd8and16)]
-        many_compositions::<cube3::simd8and16::Cube3>();
+        s_u4_symmetry::<cube3::simd8and16::Cube3>();
         #[cfg(simd8and16)]
         s_u4_symmetry::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
@@ -604,7 +608,9 @@ mod tests {
             let mut result_1 = solved.clone();
             let mut result_2 = solved.clone();
             result_1.replace_inverse(&random_state, &cube3_def.sorted_orbit_defs);
+            unsafe {
             result_2.replace_compose(&result_1, &random_state, &cube3_def.sorted_orbit_defs);
+            }
 
             assert_eq!(result_2, solved);
         }
@@ -651,7 +657,7 @@ mod tests {
         induces_sorted_cycle_type_within_cycle::<StackCube3>();
         induces_sorted_cycle_type_within_cycle::<HeapPuzzle>();
         #[cfg(simd8and16)]
-        many_compositions::<cube3::simd8and16::Cube3>();
+        induces_sorted_cycle_type_within_cycle::<cube3::simd8and16::Cube3>();
         #[cfg(simd8and16)]
         induces_sorted_cycle_type_within_cycle::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
@@ -662,238 +668,110 @@ mod tests {
         let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
         let solved = cube3_def.new_solved_state();
         let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
+
         assert!(solved.induces_sorted_cycle_type(
             &[vec![], vec![]],
             &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
         ));
 
-        let random_state = apply_moves(
-            &cube3_def,
-            &solved,
+        let tests = [
+            (
             "F2 L' U2 F U F U L' B U' F' U D2 L F2 B'",
-            1,
-        );
-        let sorted_cycle_type = [ct(&[(1, true), (3, true)]), ct(&[(1, true), (5, true)])];
-        assert!(random_state.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-        assert!(!solved.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-
-        let random_state = apply_moves(
-            &cube3_def,
-            &solved,
+                &[ct(&[(1, true), (3, true)]), ct(&[(1, true), (5, true)])],
+            ),
+            (
             "U2 L B L2 F U2 B' U2 R U' F R' F' R F' L' U2",
-            1,
-        );
-        let sorted_cycle_type = [ct(&[(1, true), (5, true)]), ct(&[(1, true), (7, true)])];
-        assert!(random_state.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-        assert!(!solved.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-
-        let random_state = apply_moves(
-            &cube3_def,
-            &solved,
+                &[ct(&[(1, true), (5, true)]), ct(&[(1, true), (7, true)])],
+            ),
+            (
             "R' U2 R' U2 F' D' L F L2 F U2 F2 D' L' D2 F R2",
-            1,
-        );
-        let sorted_cycle_type = [ct(&[(1, true), (3, true)]), ct(&[(1, true), (7, true)])];
-        assert!(random_state.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-        assert!(!solved.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-
-        let random_state = apply_moves(
-            &cube3_def,
-            &solved,
+                &[ct(&[(1, true), (3, true)]), ct(&[(1, true), (7, true)])],
+            ),
+            (
             "B2 U' B' D B' L' D' B U' R2 B2 R U B2 R B' R U",
-            1,
-        );
-        let sorted_cycle_type = [
+                &[
             ct(&[(1, true), (1, true), (3, true)]),
             ct(&[(1, true), (7, true)]),
-        ];
-        assert!(random_state.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-        assert!(!solved.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-
-        let random_state = apply_moves(
-            &cube3_def,
-            &solved,
+                ],
+            ),
+            (
             "R2 L2 D' B L2 D' B L' B D2 R2 B2 R' D' B2 L2 U'",
-            1,
-        );
-        let sorted_cycle_type = [ct(&[(2, true), (3, true)]), ct(&[(4, true), (5, true)])];
-        assert!(random_state.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-        assert!(!solved.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-
-        let random_state = apply_moves(
-            &cube3_def,
-            &solved,
+                &[ct(&[(2, true), (3, true)]), ct(&[(4, true), (5, true)])],
+            ),
+            (
             "F' B2 R L U2 B U2 L2 F2 U R L B' L' D' R' D' B'",
-            1,
-        );
-        let sorted_cycle_type = [
+                &[
             ct(&[(1, true), (2, true), (3, true)]),
             ct(&[(4, true), (5, true)]),
-        ];
-        assert!(random_state.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-        assert!(!solved.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-
-        let random_state = apply_moves(
-            &cube3_def,
-            &solved,
+                ],
+            ),
+            (
             "L' D2 F B2 U F' L2 B R F2 D R' L F R' F' D",
-            1,
-        );
-        let sorted_cycle_type = [
+                &[
             ct(&[(2, true), (3, true)]),
             ct(&[(1, true), (4, true), (5, false)]),
-        ];
-        assert!(random_state.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-        assert!(!solved.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-
-        let random_state = apply_moves(
-            &cube3_def,
-            &solved,
+                ],
+            ),
+            (
             "B' L' F2 R U' R2 F' L2 F R' L B L' U' F2 U' D2 L",
-            1,
-        );
-        let sorted_cycle_type = [
+                &[
             ct(&[(1, true), (2, true), (3, true)]),
             ct(&[(1, true), (4, true), (5, false)]),
-        ];
-        assert!(random_state.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-        assert!(!solved.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-
-        let random_state = apply_moves(
-            &cube3_def,
-            &solved,
+                ],
+            ),
+            (
             "F2 D2 L' F D R2 F2 U2 L2 F R' B2 D2 R2 U R2 U",
-            1,
-        );
-        let sorted_cycle_type = [
+                &[
             ct(&[(1, true), (2, false), (3, true)]),
             ct(&[(4, true), (5, true)]),
-        ];
-        assert!(random_state.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-        assert!(!solved.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-
-        let random_state = apply_moves(
-            &cube3_def,
-            &solved,
+                ],
+            ),
+            (
             "F2 B' R' F' L' D B' U' F U B' U2 D L' F' L' B R2",
-            1,
-        );
-        let sorted_cycle_type = [
+                &[
             ct(&[(1, true), (2, false), (3, true)]),
             ct(&[(1, true), (4, true), (5, false)]),
-        ];
-        assert!(random_state.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-        assert!(!solved.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-
-        let random_state = apply_moves(&cube3_def, &solved, "U L U L2 U2 B2", 1);
-        let sorted_cycle_type = [
+                ],
+            ),
+            (
+                "U L U L2 U2 B2",
+                &[
             ct(&[(1, true), (2, false), (3, true)]),
             ct(&[(2, false), (3, false), (3, false)]),
+                ],
+            ),
+            ("U", &[ct(&[(4, false)]), ct(&[(4, false)])]),
         ];
+
+        // for (moves_str, expected_cts) in tests {
+        for (i, &(moves_str, expected_cts)) in tests.iter().enumerate() {
+            let random_state = apply_moves(&cube3_def, &solved, moves_str, 1);
+
         assert!(random_state.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
-        assert!(!solved.induces_sorted_cycle_type(
-            &sorted_cycle_type,
+                expected_cts,
             &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
         ));
 
-        let random_state = apply_moves(&cube3_def, &solved, "U", 1);
-        let sorted_cycle_type = [ct(&[(4, false)]), ct(&[(4, false)])];
-        assert!(random_state.induces_sorted_cycle_type(
-            &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
-            multi_bv.reusable_ref(),
-        ));
         assert!(!solved.induces_sorted_cycle_type(
-            &sorted_cycle_type,
+                expected_cts,
             &cube3_def.sorted_orbit_defs,
             multi_bv.reusable_ref(),
         ));
+
+            for (j, &(other_moves, _)) in tests.iter().enumerate() {
+                if i == j {
+                    continue;
+                }
+                let other_state = apply_moves(&cube3_def, &solved, other_moves, 1);
+                assert!(!other_state.induces_sorted_cycle_type(
+                    expected_cts,
+            &cube3_def.sorted_orbit_defs,
+                    multi_bv.reusable_ref()
+        ));
+            }
+        }
     }
 
     #[test]
@@ -901,7 +779,7 @@ mod tests {
         induces_sorted_cycle_type_many::<StackCube3>();
         induces_sorted_cycle_type_many::<HeapPuzzle>();
         #[cfg(simd8and16)]
-        many_compositions::<cube3::simd8and16::Cube3>();
+        induces_sorted_cycle_type_many::<cube3::simd8and16::Cube3>();
         #[cfg(simd8and16)]
         induces_sorted_cycle_type_many::<cube3::simd8and16::UncompressedCube3>();
         #[cfg(avx2)]
@@ -975,7 +853,7 @@ mod tests {
         let mut solved = cube3_def.new_solved_state();
         let r_move = cube3_def.find_move("R").unwrap();
         let f_move = cube3_def.find_move("F").unwrap();
-        b.iter(|| {
+        b.iter(|| unsafe {
             test::black_box(&mut solved).replace_compose(
                 test::black_box(&r_move.puzzle_state),
                 test::black_box(&f_move.puzzle_state),
