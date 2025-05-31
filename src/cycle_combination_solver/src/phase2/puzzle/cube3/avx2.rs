@@ -115,7 +115,7 @@ fn avx2_swizzle_lo(a: u8x32, b: u8x32) -> u8x32 {
     #[cfg(avx2)]
     // SAFETY: cfg guarantees that AVX2 is available
     unsafe {
-        _mm256_shuffle_epi8(a.into(), b.into()).into();
+        _mm256_shuffle_epi8(a.into(), b.into()).into()
     }
     #[cfg(not(avx2))]
     unimplemented!()

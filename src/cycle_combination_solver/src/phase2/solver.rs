@@ -967,11 +967,13 @@ mod tests {
             let mut move_count = 0;
             for name in optimal_cycle_test.moves_str.split_whitespace() {
                 let move_ = cube4_def.find_move(name).unwrap();
+                unsafe {
                 result_2.replace_compose(
                     &result_1,
                     &move_.puzzle_state,
                     &cube4_def.sorted_orbit_defs,
                 );
+                }
                 std::mem::swap(&mut result_1, &mut result_2);
                 move_count += 1;
             }
