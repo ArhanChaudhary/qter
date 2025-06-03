@@ -107,6 +107,8 @@ mod common {
         }
 
         fn exact_hasher_orbit(&self, orbit_identifier: usize, _orbit_def: OrbitDef) -> u64 {
+            // TODO: ghostcell trick to avoid the index check
+            // TODO: make orbit_index an enum
             self.exact_hasher_orbit(orbit_identifier)
         }
 
@@ -128,10 +130,6 @@ pub use avx2::Cube3;
 
 #[cfg(all(not(avx2), simd8and16))]
 pub use simd8and16::Cube3;
-
-// TODO: avx512vl when we have time
-
-// TODO: NxN cubes:
 
 // pub struct StackEvenCubeSimd<const S_24S: usize> {
 //     cp: u8x8,

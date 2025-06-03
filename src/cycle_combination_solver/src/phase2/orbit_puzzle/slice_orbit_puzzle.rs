@@ -11,7 +11,7 @@ pub struct SliceOrbitPuzzle(Box<[u8]>);
 impl OrbitPuzzleState for SliceOrbitPuzzle {
     type MultiBv = Box<[u8]>;
 
-    // TODO: make everything here DRY
+    // TODO: make everything here DRY, orientation mod isn't optimized yet
     fn replace_compose(&mut self, a: &Self, b: &Self, orbit_def: OrbitDef) {
         let piece_count = orbit_def.piece_count.get() as usize;
         let orientation_count = orbit_def.orientation_count;
