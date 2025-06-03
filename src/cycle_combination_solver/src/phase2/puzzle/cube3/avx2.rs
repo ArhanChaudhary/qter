@@ -492,7 +492,13 @@ impl Cube3Interface for Cube3 {
             if reps_edge_cycle_count > 0 {
                 // The only notable difference is that O % 2 != 0 is equivalent
                 // to O & 1 != 0 so this becomes easier
-                let iter_eo_mod = iter & u8x32::splat(1 << 4);
+                let iter_eo_mod = iter
+                    & u8x32::splat(
+                        1
+                        // we avoid shifting the edge orientation bits by shifting
+                        // the mask instead
+                        << 4,
+                    );
                 let oriented_edge_mask = new_pieces & iter_eo_mod.simd_ne(u8x32::splat(0));
                 let reps_oriented_edge_cycle_count =
                     edge_bits(oriented_edge_mask.to_bitmask()).count_ones();

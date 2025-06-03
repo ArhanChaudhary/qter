@@ -16,13 +16,11 @@ use crate::phase2::{
     orbit_puzzle::{
         OrbitPuzzleConstructors, OrbitPuzzleState, slice_orbit_puzzle::SliceOrbitPuzzle,
     },
+    permutator::pandita2,
     puzzle::MultiBvInterface,
 };
 use itertools::Itertools;
-use std::{
-    iter::repeat_n,
-    num::{NonZeroU8, NonZeroUsize},
-};
+use std::num::{NonZeroU8, NonZeroUsize};
 use thiserror::Error;
 
 pub trait PruningTables<P: PuzzleState> {
@@ -639,6 +637,29 @@ impl<P: PuzzleState, S: StorageBackend<false>> OrbitPruningTable<P>
     }
 }
 
+/// Use Knuth's algorithm M to generate the next orientation vector
+/// lexicographically. From:
+///
+/// # Safety
+///
+/// Each `ori` value must be less than `orientation_count`. This function must
+/// not be called more than `(ori.len() - 1).pow(orientation_count.get()) - 1`
+/// times.
+unsafe fn knuthm(ori: &mut [u8], orientation_count: NonZeroU8) {
+    let (last, free) = unsafe { ori.split_last_mut().unwrap_unchecked() };
+    let mut j = free.len() - 1;
+    while unsafe { *free.get_unchecked(j) } == orientation_count.get() - 1 {
+        free[j] = 0;
+        *last += 2;
+        j -= 1;
+    }
+    free[j] += 1;
+    if free[j] == orientation_count.get() {
+        free[j] = 0;
+    }
+    *last = (*last + 2) % orientation_count.get();
+}
+
 impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbitPruningTable<S> {
     fn try_generate(
         generate_meta: OrbitPruningTableGenerationMeta<P>,
@@ -662,12 +683,11 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
         // TODO: make this common for all pruning tables
         let piece_count = orbit_def.piece_count.get();
 
-        let entry_count = FACT_UNTIL_19[piece_count as usize]
-            * u64::pow(
-                u64::from(orbit_def.orientation_count.get()),
-                u32::from(piece_count) - 1,
-            );
-
+        let orientation_count = u64::pow(
+            u64::from(orbit_def.orientation_count.get()),
+            u32::from(piece_count) - 1,
+        );
+        let entry_count = FACT_UNTIL_19[piece_count as usize] * orientation_count;
         let initialization_meta =
             S::initialization_meta_from_entry_count(entry_count.try_into().unwrap());
         let used_size_bytes = initialization_meta.used_size_bytes();
@@ -725,20 +745,28 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
 
         // TODO: multithreading
         // TODO: replace first few with IDDFS
+        let mut perm = (0..piece_count).collect_vec().into_boxed_slice();
+        let mut ori = vec![0; piece_count as usize].into_boxed_slice();
         while let Some(depth_heuristic) = OrbitPruneHeuristic::occupied(depth) {
-            let mut exact_orbit_hash = 0;
             let old = vacant_entry_count;
-            for perm in (0..piece_count).permutations(piece_count as usize) {
-                for ori in repeat_n(0..orbit_def.orientation_count.get(), piece_count as usize)
-                    .multi_cartesian_product()
-                    // TODO more efficient way than filtering and this overflows too
-                    .filter(|ori| {
-                        ori.iter()
-                            .sum::<u8>()
-                            .rem_euclid(orbit_def.orientation_count.get())
-                            == 0
-                    })
-                {
+            let mut exact_orbit_hash = 0;
+            for i in 0..piece_count {
+                perm[i as usize] = i;
+            }
+            while exact_orbit_hash < entry_count {
+                ori.fill(0);
+                let mut first = true;
+                loop {
+                    if first {
+                        first = false;
+                    } else {
+                        if exact_orbit_hash % orientation_count == 0 {
+                            break;
+                        }
+                        unsafe {
+                            knuthm(&mut ori, orbit_def.orientation_count);
+                        }
+                    }
                     if depth != 0
                         && table
                             .storage_backend
@@ -777,6 +805,9 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
                         }
                     }
                     exact_orbit_hash += 1;
+                }
+                unsafe {
+                    pandita2(&mut perm);
                 }
             }
             eprintln!("Depth {depth}: {} filled", old - vacant_entry_count);
@@ -1029,6 +1060,46 @@ mod tests {
             orbit_tables,
             Err(OrbitPruningTableGenerationError::NotBigEnough)
         ));
+    }
+
+    #[test]
+    fn test_knuthm() {
+        let piece_count = 4;
+        let mut ori = vec![0; piece_count];
+        for i in 0..26 {
+            unsafe { knuthm(&mut ori, NonZeroU8::new(3).unwrap()) };
+            assert_eq!(
+                ori,
+                [
+                    [0, 0, 1, 2],
+                    [0, 0, 2, 1],
+                    [0, 1, 0, 2],
+                    [0, 1, 1, 1],
+                    [0, 1, 2, 0],
+                    [0, 2, 0, 1],
+                    [0, 2, 1, 0],
+                    [0, 2, 2, 2],
+                    [1, 0, 0, 2],
+                    [1, 0, 1, 1],
+                    [1, 0, 2, 0],
+                    [1, 1, 0, 1],
+                    [1, 1, 1, 0],
+                    [1, 1, 2, 2],
+                    [1, 2, 0, 0],
+                    [1, 2, 1, 2],
+                    [1, 2, 2, 1],
+                    [2, 0, 0, 1],
+                    [2, 0, 1, 0],
+                    [2, 0, 2, 2],
+                    [2, 1, 0, 0],
+                    [2, 1, 1, 2],
+                    [2, 1, 2, 1],
+                    [2, 2, 0, 2],
+                    [2, 2, 1, 1],
+                    [2, 2, 2, 0]
+                ][i]
+            );
+        }
     }
 
     #[test]

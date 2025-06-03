@@ -701,13 +701,16 @@ mod tests {
         #![allow(clippy::many_single_char_names)]
         let len = 5;
 
-        let mut perm = vec![0; len as usize];
-        let mut a = (0..=len).collect_vec();
+        let mut perm = vec![0; len as usize].into_boxed_slice();
+        let mut a = (0..=len).collect_vec().into_boxed_slice();
         let mut k = 1;
-        let mut l = (1..=len).chain(std::iter::once(0)).collect_vec();
+        let mut l = (1..=len)
+            .chain(std::iter::once(0))
+            .collect_vec()
+            .into_boxed_slice();
         let mut p = 0;
         let mut q = 1;
-        let mut u = vec![0; len as usize + 1];
+        let mut u = vec![0; len as usize + 1].into_boxed_slice();
 
         b.iter(|| {
             perm.fill(0);
