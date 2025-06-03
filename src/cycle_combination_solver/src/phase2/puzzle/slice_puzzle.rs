@@ -241,8 +241,8 @@ unsafe fn replace_compose_slice(
                         a.get_unchecked(base + *b.get_unchecked(base_i) as usize + piece_count);
                     let b_ori = b.get_unchecked(base_i + piece_count);
                     *orbit_states_mut.get_unchecked_mut(base_i) = *pos;
-                    *orbit_states_mut.get_unchecked_mut(base_i + piece_count) =
-                        (*a_ori + *b_ori) % orientation_count;
+                    *orbit_states_mut.get_unchecked_mut(base_i + piece_count) = (*a_ori + *b_ori)
+                        .min((*a_ori + *b_ori).wrapping_sub(orientation_count.get()));
                 }
             }
         }
@@ -288,7 +288,7 @@ fn replace_inverse_slice(orbit_states_mut: &mut [u8], a: &[u8], sorted_orbit_def
                     *orbit_states_mut
                         .get_unchecked_mut((base + a[base_i] + piece_count) as usize) =
                         (orientation_count.get() - a[base_i + piece_count as usize])
-                            % orientation_count;
+                            .min(a[base_i + piece_count as usize].wrapping_neg());
                 }
             }
         }
