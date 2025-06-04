@@ -48,7 +48,7 @@ pub trait PuzzleState: Clone + PartialEq + Debug {
         &self,
         sorted_cycle_type: &[OrientedPartition],
         sorted_orbit_defs: &[OrbitDef],
-        multi_bv: <Self::MultiBv as MultiBvInterface>::MultiBvReusableRef<'_>,
+        multi_bv: <Self::MultiBv as MultiBvInterface>::ReusableRef<'_>,
     ) -> bool;
 
     /// Get a usize that "identifies" an orbit. This is implementor-specific.
@@ -74,11 +74,11 @@ pub trait PuzzleState: Clone + PartialEq + Debug {
 }
 
 pub trait MultiBvInterface {
-    type MultiBvReusableRef<'a>
+    type ReusableRef<'a>
     where
         Self: 'a;
 
-    fn reusable_ref(&mut self) -> Self::MultiBvReusableRef<'_>;
+    fn reusable_ref(&mut self) -> Self::ReusableRef<'_>;
 }
 
 #[derive(Debug)]
@@ -334,29 +334,10 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
     }
 }
 
-impl MultiBvInterface for Box<[u8]> {
-    type MultiBvReusableRef<'a> = &'a mut [u8];
-
-    fn reusable_ref(&mut self) -> Self::MultiBvReusableRef<'_> {
-        self
-    }
-}
-
-impl<T: PrimInt, const N: usize> MultiBvInterface for [T; N] {
-    type MultiBvReusableRef<'a>
-        = [T; N]
-    where
-        T: 'a;
-
-    fn reusable_ref(&mut self) -> Self::MultiBvReusableRef<'_> {
-        *self
-    }
-}
-
 impl MultiBvInterface for () {
-    type MultiBvReusableRef<'a> = ();
+    type ReusableRef<'a> = ();
 
-    fn reusable_ref(&mut self) -> Self::MultiBvReusableRef<'_> {}
+    fn reusable_ref(&mut self) -> Self::ReusableRef<'_> {}
 }
 
 // TODO: move to cube3

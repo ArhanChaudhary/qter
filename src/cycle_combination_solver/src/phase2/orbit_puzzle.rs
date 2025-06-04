@@ -17,9 +17,9 @@ pub trait OrbitPuzzleState {
     unsafe fn replace_compose(&mut self, a: &Self, b: &Self, orbit_def: OrbitDef);
     fn induces_sorted_cycle_type(
         &self,
-        sorted_orbit_cycle_type: &[(NonZeroU8, bool)],
+        sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
         orbit_def: OrbitDef,
-        multi_bv: <Self::MultiBv as MultiBvInterface>::MultiBvReusableRef<'_>,
+        multi_bv: <Self::MultiBv as MultiBvInterface>::ReusableRef<'_>,
     ) -> bool;
     fn approximate_hash(&self) -> impl Hash;
     fn exact_hasher(&self, orbit_def: OrbitDef) -> u64;

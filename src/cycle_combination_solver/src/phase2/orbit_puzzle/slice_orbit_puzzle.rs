@@ -2,14 +2,25 @@
 //! generation.
 
 use super::{OrbitPuzzleConstructors, OrbitPuzzleState};
-use crate::phase2::puzzle::{OrbitDef, slice_puzzle::exact_hasher_orbit_bytes};
+use crate::phase2::puzzle::{MultiBvInterface, OrbitDef, slice_puzzle::exact_hasher_orbit_bytes};
 use std::{cmp::Ordering, num::NonZeroU8};
 
 #[derive(Clone, PartialEq, Debug, Hash)]
 pub struct SliceOrbitPuzzle(Box<[u8]>);
 
+pub struct SliceOrbitMultiBv(Box<[u8]>);
+pub struct SliceOrbitMultiBvRefMut<'a>(&'a mut [u8]);
+
+impl MultiBvInterface for SliceOrbitMultiBv {
+    type ReusableRef<'a> = SliceOrbitMultiBvRefMut<'a>;
+
+    fn reusable_ref(&mut self) -> Self::ReusableRef<'_> {
+        SliceOrbitMultiBvRefMut(&mut self.0)
+    }
+}
+
 impl OrbitPuzzleState for SliceOrbitPuzzle {
-    type MultiBv = Box<[u8]>;
+    type MultiBv = SliceOrbitMultiBv;
 
     unsafe fn replace_compose(&mut self, a: &Self, b: &Self, orbit_def: OrbitDef) {
         unsafe { replace_compose_slice_orbit(&mut self.0, 0, &a.0, &b.0, orbit_def) };
@@ -17,17 +28,17 @@ impl OrbitPuzzleState for SliceOrbitPuzzle {
 
     fn induces_sorted_cycle_type(
         &self,
-        sorted_orbit_cycle_type: &[(NonZeroU8, bool)],
+        sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
         orbit_def: OrbitDef,
-        multi_bv: &mut [u8],
+        multi_bv: SliceOrbitMultiBvRefMut<'_>,
     ) -> bool {
         unsafe {
             induces_sorted_cycle_type_slice_orbit(
                 &self.0,
                 0,
-                sorted_orbit_cycle_type,
+                sorted_cycle_type_orbit,
                 orbit_def,
-                multi_bv,
+                multi_bv.0,
             )
         }
     }
@@ -44,10 +55,12 @@ impl OrbitPuzzleState for SliceOrbitPuzzle {
 }
 
 impl OrbitPuzzleConstructors for SliceOrbitPuzzle {
-    type MultiBv = Box<[u8]>;
+    type MultiBv = SliceOrbitMultiBv;
 
-    fn new_multi_bv(orbit_def: OrbitDef) -> Box<[u8]> {
-        vec![0; orbit_def.piece_count.get().div_ceil(4) as usize].into_boxed_slice()
+    fn new_multi_bv(orbit_def: OrbitDef) -> SliceOrbitMultiBv {
+        SliceOrbitMultiBv(
+            vec![0; orbit_def.piece_count.get().div_ceil(4) as usize].into_boxed_slice(),
+        )
     }
 
     fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
@@ -101,6 +114,7 @@ pub unsafe fn replace_compose_slice_orbit(
     }
 }
 
+#[inline]
 pub unsafe fn induces_sorted_cycle_type_slice_orbit(
     orbit_states: &[u8],
     base: usize,

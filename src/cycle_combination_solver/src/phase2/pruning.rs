@@ -110,7 +110,7 @@ pub struct OrbitPruningTables<P: PuzzleState> {
 #[derive(Debug)]
 struct OrbitPruningTableGenerationMeta<'a, P: PuzzleState> {
     puzzle_def: &'a PuzzleDef<P>,
-    sorted_orbit_cycle_type: &'a [(NonZeroU8, bool)],
+    sorted_cycle_type_orbit: &'a [(NonZeroU8, bool)],
     orbit_def: OrbitDef,
     orbit_identifier: usize,
     max_size_bytes: usize,
@@ -339,7 +339,7 @@ impl<P: PuzzleState> PruningTables<P> for OrbitPruningTables<P> {
                 .as_ref()
                 .map(|table_types| table_types[orbit_index]);
 
-            let sorted_orbit_cycle_type = &generate_metas.sorted_cycle_type[orbit_index];
+            let sorted_cycle_type_orbit = &generate_metas.sorted_cycle_type[orbit_index];
 
             let unprocessed_orbits_count = NonZeroUsize::new(
                 generate_metas.puzzle_def.sorted_orbit_defs.len()
@@ -377,7 +377,7 @@ impl<P: PuzzleState> PruningTables<P> for OrbitPruningTables<P> {
 
             let generate_meta = OrbitPruningTableGenerationMeta {
                 puzzle_def: generate_metas.puzzle_def,
-                sorted_orbit_cycle_type,
+                sorted_cycle_type_orbit,
                 orbit_def,
                 orbit_identifier,
                 max_size_bytes,
@@ -674,7 +674,7 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
         type O = SliceOrbitPuzzle;
         let OrbitPruningTableGenerationMeta {
             puzzle_def,
-            sorted_orbit_cycle_type,
+            sorted_cycle_type_orbit,
             orbit_def,
             orbit_identifier,
             max_size_bytes,
@@ -781,7 +781,7 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
                     let curr_state = O::from_orbit_transformation_unchecked(&perm, &ori, orbit_def);
                     if depth == 0 {
                         if curr_state.induces_sorted_cycle_type(
-                            sorted_orbit_cycle_type,
+                            sorted_cycle_type_orbit,
                             orbit_def,
                             multi_bv.reusable_ref(),
                         ) {
@@ -934,7 +934,7 @@ mod tests {
 
         let generate_meta = OrbitPruningTableGenerationMeta {
             puzzle_def: &cube3_def,
-            sorted_orbit_cycle_type: &[],
+            sorted_cycle_type_orbit: &[],
             orbit_def: cube3_def.sorted_orbit_defs[0],
             orbit_identifier: 0,
             max_size_bytes: 0,

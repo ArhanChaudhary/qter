@@ -1,10 +1,10 @@
 pub mod canonical_fsm;
 pub mod orbit_puzzle;
+pub mod permutator;
 pub mod pruning;
 pub mod puzzle;
 pub mod puzzle_state_history;
 pub mod solver;
-pub mod permutator;
 
 // We can do one more however it will overflow when adding more to it which is
 // common in context

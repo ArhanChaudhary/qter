@@ -1,6 +1,6 @@
 //! The default, generic implementation for representing puzzle states.
 
-use super::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
+use super::{KSolveConversionError, MultiBvInterface, OrbitDef, OrientedPartition, PuzzleState};
 use crate::phase2::{
     FACT_UNTIL_19,
     orbit_puzzle::slice_orbit_puzzle::{
@@ -15,10 +15,19 @@ pub struct StackPuzzle<const N: usize>([u8; N]);
 #[derive(Clone, PartialEq, Debug)]
 pub struct HeapPuzzle(Box<[u8]>);
 
+pub struct SliceMultiBv(Box<[u8]>);
+pub struct SliceMultiBvRefMut<'a>(&'a mut [u8]);
+
+impl MultiBvInterface for SliceMultiBv {
+    type ReusableRef<'a> = SliceMultiBvRefMut<'a>;
+
+    fn reusable_ref(&mut self) -> Self::ReusableRef<'_> {
+        SliceMultiBvRefMut(&mut self.0)
+    }
+}
+
 impl<const N: usize> PuzzleState for StackPuzzle<N> {
-    // TODO: make this newtype to ensure induces sorted cycle type is always
-    // sound
-    type MultiBv = Box<[u8]>;
+    type MultiBv = SliceMultiBv;
     type OrbitBytesBuf<'a> = &'a [u8];
 
     fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv {
@@ -55,9 +64,9 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
         &self,
         sorted_cycle_type: &[OrientedPartition],
         sorted_orbit_defs: &[OrbitDef],
-        multi_bv: &mut [u8],
+        multi_bv: SliceMultiBvRefMut<'_>,
     ) -> bool {
-        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
+        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv.0)
     }
 
     fn next_orbit_identifer(orbit_identifier: usize, orbit_def: OrbitDef) -> usize {
@@ -80,7 +89,7 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
 }
 
 impl PuzzleState for HeapPuzzle {
-    type MultiBv = Box<[u8]>;
+    type MultiBv = SliceMultiBv;
     type OrbitBytesBuf<'a> = &'a [u8];
 
     fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv {
@@ -127,9 +136,9 @@ impl PuzzleState for HeapPuzzle {
         &self,
         sorted_cycle_type: &[OrientedPartition],
         sorted_orbit_defs: &[OrbitDef],
-        multi_bv: &mut [u8],
+        multi_bv: SliceMultiBvRefMut<'_>,
     ) -> bool {
-        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
+        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv.0)
     }
 
     fn next_orbit_identifer(orbit_identifier: usize, orbit_def: OrbitDef) -> usize {
@@ -151,17 +160,19 @@ impl PuzzleState for HeapPuzzle {
     }
 }
 
-fn new_multi_bv_slice(sorted_orbit_defs: &[OrbitDef]) -> Box<[u8]> {
-    vec![
-        0;
-        sorted_orbit_defs
-            .last()
-            .unwrap()
-            .piece_count
-            .get()
-            .div_ceil(4) as usize
-    ]
-    .into_boxed_slice()
+fn new_multi_bv_slice(sorted_orbit_defs: &[OrbitDef]) -> SliceMultiBv {
+    SliceMultiBv(
+        vec![
+            0;
+            sorted_orbit_defs
+                .last()
+                .unwrap()
+                .piece_count
+                .get()
+                .div_ceil(4) as usize
+        ]
+        .into_boxed_slice(),
+    )
 }
 
 fn ksolve_move_to_slice(
@@ -274,6 +285,7 @@ fn replace_inverse_slice(orbit_states_mut: &mut [u8], a: &[u8], sorted_orbit_def
     }
 }
 
+#[inline]
 fn induces_sorted_cycle_type_slice(
     orbit_states: &[u8],
     sorted_cycle_type: &[OrientedPartition],
@@ -365,10 +377,11 @@ impl HeapPuzzle {
     ///
     /// Panics if the generated cycle type is deemed to be invalid because of
     /// bad implementation of the function.
+    #[must_use]
     pub fn cycle_type(
         &self,
         sorted_orbit_defs: &[OrbitDef],
-        multi_bv: &mut [u8],
+        multi_bv: SliceMultiBvRefMut<'_>,
     ) -> Vec<OrientedPartition> {
         let mut cycle_type = vec![];
         let mut base = 0;
@@ -378,15 +391,15 @@ impl HeapPuzzle {
         } in sorted_orbit_defs
         {
             let mut cycle_type_piece = vec![];
-            multi_bv.fill(0);
+            multi_bv.0.fill(0);
             let piece_count = piece_count.get() as usize;
             for i in 0..piece_count {
                 let (div, rem) = (i / 4, i % 4);
-                if multi_bv[div] & (1 << rem) != 0 {
+                if multi_bv.0[div] & (1 << rem) != 0 {
                     continue;
                 }
 
-                multi_bv[div] |= 1 << rem;
+                multi_bv.0[div] |= 1 << rem;
                 let mut actual_cycle_length = 1;
                 let mut piece = self.0[base + i] as usize;
                 let mut orientation_sum = self.0[base + piece + piece_count];
@@ -394,7 +407,7 @@ impl HeapPuzzle {
                 while piece != i {
                     actual_cycle_length += 1;
                     let (div, rem) = (piece / 4, piece % 4);
-                    multi_bv[div] |= 1 << rem;
+                    multi_bv.0[div] |= 1 << rem;
                     piece = self.0[base + piece] as usize;
                     orientation_sum += self.0[base + piece + piece_count];
                 }
