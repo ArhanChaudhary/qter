@@ -6,14 +6,14 @@
 
 - Phase 2
   - ⭐pruning table
-    - ⭐cartesian product tables
+    - cartesian product tables
     - ⭐fix storage backend initialization meta
     - tANS table compression
     - ⭐cycle type pruning table
       - ⭐with fewer state spaces, go back to an exact pruning table
     - ⭐each thread fills in 1024 entires at a time
     - ⭐exact: dfs at low levels instead of scanning
-    - ⭐dynamic simd detection rather than -Ctarget-cpu=native
+    - dynamic simd detection rather than -Ctarget-cpu=native
     - ghostcell instead of unsafe replace compose
   - ⭐stabilizer
   - ⭐avoid symmetric moves from the start
@@ -48,8 +48,8 @@
   - ⭐`after` syntax
   - ⭐Lua stuff
 - Architecture switching
-- Memory tapes
-  - Implement in QAT
+- ⭐Memory tapes
+  - ⭐Implement in QAT
 - Dynamically shuffle sub-cycles with syntax X ← A\*B\*C\*D, Y ← E\*F\*G\*H
 - ⭐Function macro
 - ⭐Directory of testing programs instead of hardcoding into Rust
@@ -71,7 +71,7 @@
 - ⭐"[repeat|print|halt] until _ solved" syntax
 - ⭐optimize out immediate gotos after a label
 - ⭐Asher's repeated move post process optimization: R U R repeated = R then U R2 repeated then R'
-- force conditional blocks that end with "halt" to codegen at the end of the instruction memory, optimizing a goto
+- ⭐force conditional blocks that end with "halt" to codegen at the end of the instruction memory, optimizing a goto
 
 ## End user
 
