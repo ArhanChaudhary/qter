@@ -3,7 +3,7 @@
 
 use super::{OrbitPuzzleConstructors, OrbitPuzzleState};
 use crate::phase2::puzzle::{OrbitDef, slice_puzzle::exact_hasher_orbit_bytes};
-use std::num::NonZeroU8;
+use std::{cmp::Ordering, num::NonZeroU8};
 
 #[derive(Clone, PartialEq, Debug, Hash)]
 pub struct SliceOrbitPuzzle(Box<[u8]>);
@@ -157,17 +157,27 @@ pub unsafe fn induces_sorted_cycle_type_slice_orbit(
         if actual_cycle_length == 1 && !actual_orients {
             continue;
         }
-        // TODO: take advantage of the fact that cycle lengths are sorted
-        let Some(valid_cycle_index) = sorted_cycle_type_orbit.iter().enumerate().position(
-            |(j, &(expected_cycle_length, expected_orients))| {
-                let (div, rem) = (j / 4, j % 4);
-                expected_cycle_length.get() == actual_cycle_length
-                        && expected_orients == actual_orients
+        let mut valid_cycle_index = None;
+        for (j, &(expected_cycle_length, expected_orients)) in
+            sorted_cycle_type_orbit.iter().enumerate()
+        {
+            match expected_cycle_length.get().cmp(&actual_cycle_length) {
+                Ordering::Less => (),
+                Ordering::Equal => {
+                    let (div, rem) = (j / 4, j % 4);
+                    if expected_orients == actual_orients
                         // SAFETY: default_multi_bv_slice ensures that (j / 4)
                         // always fits in multi_bv
                         && unsafe { *multi_bv.get_unchecked(div) } & (1 << (rem + 4)) == 0
-            },
-        ) else {
+                    {
+                        valid_cycle_index = Some(j);
+                        break;
+                    }
+                }
+                Ordering::Greater => return false,
+            }
+        }
+        let Some(valid_cycle_index) = valid_cycle_index else {
             return false;
         };
         let (div, rem) = (valid_cycle_index / 4, valid_cycle_index % 4);
