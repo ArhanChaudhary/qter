@@ -14,8 +14,8 @@ pub mod slice_orbit_puzzle;
 pub trait OrbitPuzzleState {
     type MultiBv: MultiBvInterface;
 
-    fn replace_compose(&mut self, a: &Self, b: &Self, orbit_def: OrbitDef);
-    fn induces_sorted_orbit_cycle_type(
+    unsafe fn replace_compose(&mut self, a: &Self, b: &Self, orbit_def: OrbitDef);
+    fn induces_sorted_cycle_type(
         &self,
         sorted_orbit_cycle_type: &[(NonZeroU8, bool)],
         orbit_def: OrbitDef,

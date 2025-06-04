@@ -780,7 +780,7 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
 
                     let curr_state = O::from_orbit_transformation_unchecked(&perm, &ori, orbit_def);
                     if depth == 0 {
-                        if curr_state.induces_sorted_orbit_cycle_type(
+                        if curr_state.induces_sorted_cycle_type(
                             sorted_orbit_cycle_type,
                             orbit_def,
                             multi_bv.reusable_ref(),
@@ -795,7 +795,7 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
                     }
 
                     for move_ in &orbit_moves {
-                        orbit_result.replace_compose(&curr_state, move_, orbit_def);
+                        unsafe { orbit_result.replace_compose(&curr_state, move_, orbit_def) };
                         let new_hash = orbit_result.exact_hasher(orbit_def);
                         if table.storage_backend.heuristic_hash(new_hash).is_vacant() {
                             table
