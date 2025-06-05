@@ -340,23 +340,6 @@ impl MultiBvInterface for () {
     fn reusable_ref(&mut self) -> Self::ReusableRef<'_> {}
 }
 
-// TODO: move to cube3
-#[allow(clippy::missing_panics_doc)]
-pub fn random_3x3_state<P: PuzzleState>(cube3_def: &PuzzleDef<P>, solved: &P) -> P {
-    let mut result_1 = solved.clone();
-    let mut result_2 = solved.clone();
-    for _ in 0..20 {
-        let move_index = fastrand::choice(0_u8..18).unwrap();
-        let move_ = &cube3_def.moves[move_index as usize];
-        // SAFETY: the arguments correspond to `sorted_orbit_defs`
-        unsafe {
-            result_1.replace_compose(&result_2, &move_.puzzle_state, &cube3_def.sorted_orbit_defs);
-        }
-        std::mem::swap(&mut result_2, &mut result_1);
-    }
-    result_2
-}
-
 /// A utility function for testing. Not optimized.
 ///
 /// # Panics
@@ -396,6 +379,7 @@ mod tests {
         slice_puzzle::{HeapPuzzle, StackPuzzle},
         *,
     };
+    use crate::phase2::orbit_puzzle::cube3::random_3x3_state;
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
     use test::Bencher;
 
