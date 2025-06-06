@@ -78,6 +78,7 @@ impl OrbitPuzzleConstructors for SliceOrbitPuzzle {
     }
 }
 
+#[inline]
 pub unsafe fn replace_compose_slice_orbit(
     orbit_states_mut: &mut [u8],
     base: usize,

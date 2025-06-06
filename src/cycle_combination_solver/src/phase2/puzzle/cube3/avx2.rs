@@ -82,8 +82,7 @@ use core::arch::x86_64::_mm256_shuffle_epi8;
 /// [vcube]: https://github.com/Voltara/vcube
 #[allow(clippy::derived_hash_with_manual_eq)]
 #[derive(Clone, Hash)]
-#[non_exhaustive]
-pub struct Cube3(pub u8x32);
+pub struct Cube3(u8x32);
 
 /// Extract the permutation bits from the cube state.
 const PERM_MASK_1: u8x32 = u8x32::splat(0b0000_1111);

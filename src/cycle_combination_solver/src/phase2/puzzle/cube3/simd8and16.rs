@@ -21,12 +21,11 @@ use std::{
 /// (edge permutation, edge orientation, corner permutation, corner orientation)
 /// which uniquely identifies any cube state
 #[derive(Clone, Debug, PartialEq, Hash)]
-#[non_exhaustive]
 pub struct UncompressedCube3 {
-    pub ep: u8x16,
-    pub eo: u8x16,
-    pub cp: u8x8,
-    pub co: u8x8,
+    ep: u8x16,
+    eo: u8x16,
+    cp: u8x8,
+    co: u8x8,
 }
 
 /// Corner or edge data for `UncompressedCube3` orbits
@@ -286,10 +285,9 @@ impl Cube3Interface for UncompressedCube3 {
 /// It is important for the unused bytes to correspond to their index for the
 /// swizzling to permute the values in place.
 #[derive(PartialEq, Clone)]
-#[non_exhaustive]
 pub struct Cube3 {
-    pub edges: u8x16,
-    pub corners: u8x8,
+    edges: u8x16,
+    corners: u8x8,
 }
 
 #[derive(Hash)]

@@ -6,7 +6,6 @@ use crate::phase2::puzzle::{PuzzleDef, PuzzleState};
 pub mod avx2;
 pub mod simd8and16;
 
-// TODO: move to cube3
 #[allow(clippy::missing_panics_doc)]
 pub fn random_3x3_state<P: PuzzleState>(cube3_def: &PuzzleDef<P>, solved: &P) -> P {
     let mut result_1 = solved.clone();

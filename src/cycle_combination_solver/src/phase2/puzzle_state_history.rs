@@ -118,7 +118,7 @@ impl<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> PuzzleStateHistory<P, H>
         unsafe { &(*self.stack_pointer.get_unchecked(self.stack.as_ref())).0 }
     }
 
-    /// Get the move index of the entry at the given index.
+    /// Get the move index of an entry at the given index.
     ///
     /// # Safety
     ///
@@ -130,8 +130,6 @@ impl<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> PuzzleStateHistory<P, H>
 
     /// Create a new move history from the current state of the stack.
     pub fn create_move_history(&self) -> Vec<usize> {
-        // TODO: MCC here. Do we have to do anything about the clone overhead?
-        // I don't want to Rc it because that's a layer of indirection
         (1..=self.stack_pointer).map(|i| self.stack[i].1).collect()
     }
 }
@@ -172,6 +170,7 @@ where
 
     fn initialize(puzzle_def: &PuzzleDef<P>) -> [(P, usize); N] {
         let mut ret = core::array::from_fn(|_| (puzzle_def.new_solved_state(), usize::MAX));
+        // it is important this is zero so `start` is zero when empty
         ret[0].1 = 0;
         ret
     }
