@@ -6,6 +6,8 @@
 
 PROJECT STATUS: almost MVP; many features incomplete
 
+No part of this README was written with AI.
+
 Qter is a human-friendly Rubik's cube computer. This means you can compile a program and physically execute it by turning a Rubik's cube (or any twisty puzzle), without knowing how computers work. Following is an example executable program that accepts an index as user input and computes the corresponding Fibonacci number. It is written in our custom Rubik's cube file format named Q:
 
 `fib.q`
