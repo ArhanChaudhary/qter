@@ -15,7 +15,7 @@ use interpreter::{
 };
 use itertools::Itertools;
 use qter_core::{
-    I, Int,
+    ByPuzzleType, I, Int,
     architectures::Algorithm,
     table_encoding::{decode_table, encode_table},
 };
@@ -174,7 +174,7 @@ fn interpret<P: PuzzleState>(
             }
         );
 
-        while let Some(message) = interpreter.messages().pop_front() {
+        while let Some(message) = interpreter.state_mut().messages().pop_front() {
             println!("{message}");
         }
 
@@ -209,7 +209,7 @@ fn interpret_traced<P: PuzzleState>(
     trace_level: u8,
 ) -> color_eyre::Result<()> {
     loop {
-        let program_counter = interpreter.program_counter() + 1;
+        let program_counter = interpreter.state().program_counter() + 1;
 
         let action = interpreter.step();
 
@@ -228,7 +228,7 @@ fn interpret_traced<P: PuzzleState>(
             }
             ActionPerformed::Paused => {
                 let is_input = matches!(
-                    interpreter.execution_state(),
+                    interpreter.state().execution_state(),
                     ExecutionState::Paused(PausedState::Input {
                         max_input: _,
                         puzzle_idx: _,
@@ -272,19 +272,13 @@ fn interpret_traced<P: PuzzleState>(
                     eprintln!("Inspect puzzle {puzzle_idx} - {}", "TAKEN".green());
                 }
             }
-            ActionPerformed::AddedToTheoretical {
-                puzzle_idx: register_idx,
-                amt,
-            } => {
-                eprintln!("Theoretical {register_idx} += {amt}");
+            ActionPerformed::Added(ByPuzzleType::Theoretical((action, amt))) => {
+                eprintln!("Theoretical {} += {amt}", action.puzzle_idx);
             }
-            ActionPerformed::ExecutedAlgorithm {
-                puzzle_idx,
-                algorithm,
-            } => {
-                eprint!("Puzzle {puzzle_idx}:");
+            ActionPerformed::Added(ByPuzzleType::Puzzle((action, alg))) => {
+                eprint!("Puzzle {}:", action.puzzle_idx);
 
-                for move_ in algorithm.move_seq_iter() {
+                for move_ in alg.move_seq_iter() {
                     eprint!(" {move_}");
                 }
 
@@ -296,7 +290,7 @@ fn interpret_traced<P: PuzzleState>(
             }
         }
 
-        while let Some(interpreter_message) = interpreter.messages().pop_front() {
+        while let Some(interpreter_message) = interpreter.state_mut().messages().pop_front() {
             println!("{interpreter_message}");
         }
 
