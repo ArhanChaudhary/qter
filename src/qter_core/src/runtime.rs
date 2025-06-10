@@ -46,12 +46,20 @@ where
 /// A qter instruction
 #[derive(Debug)]
 pub enum Instruction {
-    Goto { instruction_idx: usize },
+    Goto {
+        instruction_idx: usize,
+    },
     SolvedGoto(ByPuzzleType<'static, SolvedGoto>),
     Input(ByPuzzleType<'static, Input>),
     Halt(ByPuzzleType<'static, Halt>),
     Print(ByPuzzleType<'static, Print>),
     PerformAlgorithm(ByPuzzleType<'static, PerformAlgorithm>),
+    Solve(ByPuzzleType<'static, Solve>),
+    RepeatUntil {
+        puzzle_idx: usize,
+        facelets: Facelets,
+        alg: Algorithm,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -109,6 +117,17 @@ impl SeparatesByPuzzleType for PerformAlgorithm {
     type Theoretical<'s> = (Self, Int<U>);
 
     type Puzzle<'s> = (Self, Algorithm);
+}
+
+#[derive(Clone, Debug)]
+pub struct Solve {
+    pub puzzle_idx: usize,
+}
+
+impl SeparatesByPuzzleType for Solve {
+    type Theoretical<'s> = Self;
+
+    type Puzzle<'s> = Self;
 }
 
 /// A qter program

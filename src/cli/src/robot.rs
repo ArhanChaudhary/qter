@@ -219,6 +219,15 @@ impl PuzzleState for Cube3Robot {
 
         Some(sum)
     }
+
+    fn repeat_until(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<()> {
+        // Halting has the same behavior as repeat_until
+        self.halt(facelets, generator).map(|_| ())
+    }
+
+    fn solve(&mut self) {
+        todo!()
+    }
 }
 
 fn init_mapping() {

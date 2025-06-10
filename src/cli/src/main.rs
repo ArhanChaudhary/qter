@@ -288,6 +288,20 @@ fn interpret_traced<P: PuzzleState>(
                 eprintln!("{}", "Panicked!".red());
                 halted = true;
             }
+            ActionPerformed::Solved(idx) => {
+                eprintln!("Solved {idx}");
+            }
+            ActionPerformed::RepeatedUntil {
+                puzzle_idx,
+                facelets: _,
+                alg,
+            } => {
+                eprint!("Repeated on {puzzle_idx}:");
+
+                for move_ in alg.move_seq_iter() {
+                    eprint!(" {move_}");
+                }
+            }
         }
 
         while let Some(interpreter_message) = interpreter.state_mut().messages().pop_front() {

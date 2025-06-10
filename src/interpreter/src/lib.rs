@@ -75,6 +75,14 @@ pub trait PuzzleState {
     fn halt(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<Int<U>> {
         self.print(facelets, generator)
     }
+
+    /// Repeat the algorithm until the given facelets are solved.
+    ///
+    /// Returns None if the facelets cannot be solved by repeating the algorithm.
+    fn repeat_until(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<()>;
+
+    /// Bring the puzzle to the solved state
+    fn solve(&mut self);
 }
 
 #[derive(Clone, Debug)]
@@ -117,6 +125,18 @@ impl PuzzleState for SimulatedPuzzle {
 
     fn print(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<Int<U>> {
         decode(&self.state, facelets, generator)
+    }
+
+    fn solve(&mut self) {
+        self.state = self.perm_group.identity();
+    }
+
+    fn repeat_until(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<()> {
+        let v = decode(&self.state, facelets, generator)?;
+        let mut generator = generator.to_owned();
+        generator.exponentiate(v.into());
+        self.compose_into(&generator);
+        Some(())
     }
 }
 
@@ -174,6 +194,12 @@ pub enum ActionPerformed<'s> {
         facelets: ByPuzzleType<'s, FaceletsByType>,
     },
     Added(ByPuzzleType<'s, AddAction>),
+    Solved(usize),
+    RepeatedUntil {
+        puzzle_idx: usize,
+        facelets: &'s Facelets,
+        alg: &'s Algorithm,
+    },
     Panicked,
 }
 
@@ -285,6 +311,19 @@ impl<P: PuzzleState> Interpreter<P> {
             Instruction::Halt(instr) => do_instr(instr, &mut self.state),
             Instruction::Print(instr) => do_instr(instr, &mut self.state),
             Instruction::PerformAlgorithm(instr) => do_instr(instr, &mut self.state),
+            Instruction::Solve(instr) => do_instr(instr, &mut self.state),
+            Instruction::RepeatUntil {
+                puzzle_idx,
+                facelets,
+                alg,
+            } => {
+                self.state.puzzle_states.puzzle_states[*puzzle_idx].repeat_until(&facelets.0, alg);
+                ActionPerformed::RepeatedUntil {
+                    puzzle_idx: *puzzle_idx,
+                    facelets,
+                    alg,
+                }
+            }
         }
     }
 
