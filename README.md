@@ -263,6 +263,31 @@ For other twisty puzzles, see [Other twisty puzzles](#other-twisty-puzzles).
 
 </ul>
 
+- `solve`
+
+<ul>
+
+Solve the puzzle using your favorite method. Logically, this instruction zeroes out all registers on the puzzle.
+
+</ul>
+
+- `repeat until <positions> solved <algorithm>`
+
+<ul>
+
+Repeat the given algorithm until the given positions contain their solved pieces. Logically, this is equivalent to
+
+```l
+N   | solved-goto N+3 <positions>
+N+1 | <algorithm>
+N+2 | goto N
+N+3 | ...
+```
+
+but is easier to read and understand. This pattern occurs enough in Q programs that it is worth defining an instruction for it.
+
+</ul>
+
 - `input <message> <algorithm> max-input <number>`
 
 <ul>
