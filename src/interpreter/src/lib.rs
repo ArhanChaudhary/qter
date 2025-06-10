@@ -1,22 +1,27 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::too_many_lines)]
 
+mod instructions;
+
 use std::{collections::VecDeque, mem, sync::Arc};
 
+use instructions::do_instr;
 use qter_core::{
-    Facelets, I, Instruction, Int, Program, RegisterGenerator, U,
+    ByPuzzleType, Facelets, I, Instruction, Int, Program, RegisterGenerator, SeparatesByPuzzleType,
+    U,
     architectures::{Algorithm, Permutation, PermutationGroup},
-    discrete_math::{decode, lcm},
+    discrete_math::decode,
 };
 
 /// If the interpreter is paused, this represents the reason why.
+#[derive(Debug)]
 pub enum PausedState {
     Halt {
-        maybe_puzzle_idx_and_register: Option<(usize, RegisterGenerator)>,
+        maybe_puzzle_idx_and_register: Option<(usize, ByPuzzleType<'static, RegisterGenerator>)>,
     },
     Input {
-        max_input: Int<I>,
-        register: RegisterGenerator,
+        max_input: Int<U>,
+        register: ByPuzzleType<'static, RegisterGenerator>,
         puzzle_idx: usize,
     },
     Panicked,
@@ -116,20 +121,40 @@ impl PuzzleState for SimulatedPuzzle {
 }
 
 /// A collection of the states of every puzzle and theoretical register
-///
-/// Factored out for borrow checker reasons
 struct PuzzleStates<P: PuzzleState> {
     theoretical_states: Vec<TheoreticalState>,
     puzzle_states: Vec<P>,
 }
 
-/// An interpreter for a qter program
-pub struct Interpreter<P: PuzzleState> {
+pub struct InterpreterState<P: PuzzleState> {
     puzzle_states: PuzzleStates<P>,
     program_counter: usize,
-    program: Program,
     messages: VecDeque<String>,
     execution_state: ExecutionState,
+}
+
+/// An interpreter for a qter program
+pub struct Interpreter<P: PuzzleState> {
+    state: InterpreterState<P>,
+    program: Program,
+}
+
+pub struct FaceletsByType;
+
+impl SeparatesByPuzzleType for FaceletsByType {
+    type Theoretical<'s> = ();
+
+    type Puzzle<'s> = &'s Facelets;
+}
+
+pub struct AddAction {
+    pub puzzle_idx: usize,
+}
+
+impl SeparatesByPuzzleType for AddAction {
+    type Theoretical<'s> = (Self, Int<U>);
+
+    type Puzzle<'s> = (Self, &'s Algorithm);
 }
 
 /// The action performed by the instruction that was just executed
@@ -141,85 +166,18 @@ pub enum ActionPerformed<'s> {
     },
     FailedSolvedGoto {
         puzzle_idx: usize,
-        facelets: &'s Facelets,
+        facelets: ByPuzzleType<'s, FaceletsByType>,
     },
     SucceededSolvedGoto {
         puzzle_idx: usize,
-        facelets: &'s Facelets,
         instruction_idx: usize,
+        facelets: ByPuzzleType<'s, FaceletsByType>,
     },
-    AddedToTheoretical {
-        puzzle_idx: usize,
-        amt: Int<U>,
-    },
-    ExecutedAlgorithm {
-        puzzle_idx: usize,
-        algorithm: &'s Algorithm,
-    },
+    Added(ByPuzzleType<'s, AddAction>),
     Panicked,
 }
 
 impl<P: PuzzleState> PuzzleStates<P> {
-    /// Check whether these facelets are solved
-    fn are_facelets_solved(&self, puzzle_idx: usize, facelets: &Facelets) -> bool {
-        match facelets {
-            Facelets::Theoretical => self.theoretical_states[puzzle_idx].value.is_zero(),
-            Facelets::Puzzle { facelets } => {
-                let puzzle = &self.puzzle_states[puzzle_idx];
-                puzzle.facelets_solved(facelets)
-            }
-        }
-    }
-
-    /// Decode a register
-    fn decode_register(
-        &mut self,
-        register_idx: usize,
-        which_reg: &RegisterGenerator,
-    ) -> Option<Int<U>> {
-        match which_reg {
-            RegisterGenerator::Theoretical => Some(self.theoretical_states[register_idx].value),
-            RegisterGenerator::Puzzle {
-                generator,
-                solved_goto_facelets,
-            } => {
-                let puzzle = &mut self.puzzle_states[register_idx];
-                puzzle.print(solved_goto_facelets, generator)
-            }
-        }
-    }
-
-    /// Decode a register
-    fn halt_with_register(
-        &mut self,
-        register_idx: usize,
-        which_reg: &RegisterGenerator,
-    ) -> Option<Int<U>> {
-        match which_reg {
-            RegisterGenerator::Theoretical => Some(self.theoretical_states[register_idx].value),
-            RegisterGenerator::Puzzle {
-                generator,
-                solved_goto_facelets,
-            } => {
-                let puzzle = &mut self.puzzle_states[register_idx];
-                puzzle.halt(solved_goto_facelets, generator)
-            }
-        }
-    }
-
-    fn register_order(&self, which_reg: &RegisterGenerator, register_idx: usize) -> Int<U> {
-        match which_reg {
-            RegisterGenerator::Theoretical => self.theoretical_states[register_idx].order,
-            RegisterGenerator::Puzzle {
-                generator,
-                solved_goto_facelets,
-            } => solved_goto_facelets
-                .iter()
-                .map(|facelet| generator.chromatic_orders_by_facelets()[*facelet])
-                .fold(Int::<U>::one(), lcm),
-        }
-    }
-
     /// Compose a permutation into a puzzle state
     fn compose_into(&mut self, puzzle_idx: usize, alg: &Algorithm) {
         // self.puzzle_states[puzzle_idx].state.compose(permutation);
@@ -227,7 +185,50 @@ impl<P: PuzzleState> PuzzleStates<P> {
     }
 }
 
+impl<P: PuzzleState> InterpreterState<P> {
+    /// Return the instruction index to be executed next
+    #[must_use]
+    pub fn program_counter(&self) -> usize {
+        self.program_counter
+    }
+
+    /// Get the current execution state of the interpreter
+    #[must_use]
+    pub fn execution_state(&self) -> &ExecutionState {
+        &self.execution_state
+    }
+
+    /// Get the message queue of the interpreter
+    pub fn messages(&mut self) -> &mut VecDeque<String> {
+        &mut self.messages
+    }
+
+    fn panic<'x>(&mut self, message: &str) -> ActionPerformed<'x> {
+        self.execution_state = ExecutionState::Paused(PausedState::Panicked);
+        self.messages.push_back(format!("Panicked: {message}"));
+        ActionPerformed::Panicked
+    }
+}
+
 impl<P: PuzzleState> Interpreter<P> {
+    /// Get the program currently being executed
+    #[must_use]
+    pub fn program(&self) -> &Program {
+        &self.program
+    }
+
+    /// Get the current state of the interpreter
+    #[must_use]
+    pub fn state(&self) -> &InterpreterState<P> {
+        &self.state
+    }
+
+    /// Get the current state of the interpreter mutably
+    #[must_use]
+    pub fn state_mut(&mut self) -> &mut InterpreterState<P> {
+        &mut self.state
+    }
+
     /// Create a new interpreter from a program and initial states for registers
     ///
     /// If an initial state isn't specified, it defaults to zero.
@@ -248,187 +249,42 @@ impl<P: PuzzleState> Interpreter<P> {
             .map(|perm_group| P::initialize(Arc::clone(perm_group)))
             .collect();
 
-        Interpreter {
+        let state = InterpreterState {
             puzzle_states: PuzzleStates {
                 theoretical_states,
                 puzzle_states,
             },
-            program,
             program_counter: 0,
             messages: VecDeque::new(),
             execution_state: ExecutionState::Running,
-        }
-    }
+        };
 
-    /// Return the instruction index to be executed next
-    #[must_use]
-    pub fn program_counter(&self) -> usize {
-        self.program_counter
-    }
-
-    /// The program currently being executed
-    #[must_use]
-    pub fn program(&self) -> &Program {
-        &self.program
-    }
-
-    /// Get the current execution state of the interpreter
-    #[must_use]
-    pub fn execution_state(&self) -> &ExecutionState {
-        &self.execution_state
-    }
-
-    /// Get the message queue of the interpreter
-    pub fn messages(&mut self) -> &mut VecDeque<String> {
-        &mut self.messages
+        Interpreter { state, program }
     }
 
     /// Execute one instruction
     pub fn step(&mut self) -> ActionPerformed<'_> {
-        // If there's a better DRY alternative feel free to change
-        macro_rules! interpreter_panic {
-            ($self:ident, $message:expr) => {{
-                $self.execution_state = ExecutionState::Paused(PausedState::Panicked);
-                $self.messages.push_back(format!("Panicked: {{$message}}"));
-                ActionPerformed::Panicked
-            }};
-        }
-
-        if let ExecutionState::Paused(_) = self.execution_state() {
+        if let ExecutionState::Paused(_) = self.state.execution_state() {
             return ActionPerformed::Paused;
         }
-        let Some(instruction) = self.program.instructions.get(self.program_counter) else {
-            return interpreter_panic!(
-                self,
+        let Some(instruction) = self.program.instructions.get(self.state.program_counter) else {
+            return self.state.panic(
                 "Execution fell through the end of the program without reaching a halt instruction!"
             );
         };
 
         match &**instruction {
             &Instruction::Goto { instruction_idx } => {
-                self.program_counter = instruction_idx;
-                self.execution_state = ExecutionState::Running;
+                self.state.program_counter = instruction_idx;
+                self.state.execution_state = ExecutionState::Running;
 
                 ActionPerformed::Goto { instruction_idx }
             }
-            &Instruction::SolvedGoto {
-                instruction_idx,
-                ref facelets,
-                puzzle_idx,
-            } => {
-                self.execution_state = ExecutionState::Running;
-                if self.puzzle_states.are_facelets_solved(puzzle_idx, facelets) {
-                    self.program_counter = instruction_idx;
-
-                    ActionPerformed::SucceededSolvedGoto {
-                        facelets,
-                        instruction_idx,
-                        puzzle_idx,
-                    }
-                } else {
-                    self.program_counter += 1;
-
-                    ActionPerformed::FailedSolvedGoto {
-                        facelets,
-                        puzzle_idx,
-                    }
-                }
-            }
-            &Instruction::Input {
-                ref message,
-                ref register,
-                puzzle_idx,
-            } => {
-                let max_input =
-                    self.puzzle_states.register_order(register, puzzle_idx) - Int::<I>::one();
-                self.execution_state = ExecutionState::Paused(PausedState::Input {
-                    max_input,
-                    // TODO: we should avoid the clone
-                    register: register.to_owned(),
-                    puzzle_idx,
-                });
-                self.messages
-                    .push_back(format!("{message} (max input {max_input})"));
-
-                ActionPerformed::Paused
-            }
-            Instruction::Halt {
-                message,
-                maybe_puzzle_idx_and_register,
-            } => {
-                self.execution_state = ExecutionState::Paused(PausedState::Halt {
-                    maybe_puzzle_idx_and_register: maybe_puzzle_idx_and_register
-                        .as_ref()
-                        .map(|&(puzzle_idx, ref register)| (puzzle_idx, register.to_owned())),
-                });
-                let full_message = match maybe_puzzle_idx_and_register.as_ref() {
-                    Some(&(puzzle_idx, ref register)) => {
-                        match self.puzzle_states.halt_with_register(puzzle_idx, register) {
-                            Some(v) => format!("{message} {v}"),
-                            None => {
-                                return interpreter_panic!(
-                                    self,
-                                    "The register specified is not decodable!"
-                                );
-                            }
-                        }
-                    }
-                    None => message.to_owned(),
-                };
-                self.messages.push_back(full_message);
-
-                ActionPerformed::Paused
-            }
-            Instruction::Print {
-                message,
-                maybe_puzzle_idx_and_register,
-            } => {
-                self.execution_state = ExecutionState::Running;
-                let full_message = match maybe_puzzle_idx_and_register.as_ref() {
-                    Some(&(puzzle_idx, ref register)) => {
-                        match self.puzzle_states.decode_register(puzzle_idx, register) {
-                            Some(v) => format!("{message} {v}"),
-                            None => {
-                                return interpreter_panic!(
-                                    self,
-                                    "The register specified is not decodable!"
-                                );
-                            }
-                        }
-                    }
-                    None => message.to_owned(),
-                };
-                self.messages.push_back(full_message);
-                self.program_counter += 1;
-
-                ActionPerformed::None
-            }
-            &Instruction::AddTheoretical { puzzle_idx, amount } => {
-                self.execution_state = ExecutionState::Running;
-
-                self.puzzle_states.theoretical_states[puzzle_idx].add_to(amount);
-
-                self.program_counter += 1;
-
-                ActionPerformed::AddedToTheoretical {
-                    puzzle_idx,
-                    amt: amount,
-                }
-            }
-            &Instruction::Algorithm {
-                ref algorithm,
-                puzzle_idx,
-            } => {
-                self.execution_state = ExecutionState::Running;
-                self.puzzle_states.compose_into(puzzle_idx, algorithm);
-
-                self.program_counter += 1;
-
-                ActionPerformed::ExecutedAlgorithm {
-                    puzzle_idx,
-                    algorithm,
-                }
-            }
+            Instruction::SolvedGoto(instr) => do_instr(instr, &mut self.state),
+            Instruction::Input(instr) => do_instr(instr, &mut self.state),
+            Instruction::Halt(instr) => do_instr(instr, &mut self.state),
+            Instruction::Print(instr) => do_instr(instr, &mut self.state),
+            Instruction::PerformAlgorithm(instr) => do_instr(instr, &mut self.state),
         }
     }
 
@@ -445,7 +301,7 @@ impl<P: PuzzleState> Interpreter<P> {
                 break;
             }
         }
-        match self.execution_state() {
+        match self.state.execution_state() {
             ExecutionState::Paused(v) => v,
             ExecutionState::Running => panic!("Cannot be halted while running"),
         }
@@ -465,7 +321,7 @@ impl<P: PuzzleState> Interpreter<P> {
             max_input,
             puzzle_idx: _,
             register: _,
-        }) = &self.execution_state
+        }) = &self.state.execution_state
         else {
             panic!("The interpreter isn't in an input state");
         };
@@ -483,32 +339,29 @@ impl<P: PuzzleState> Interpreter<P> {
             max_input: _,
             puzzle_idx,
             register,
-        }) = mem::replace(&mut self.execution_state, ExecutionState::Running)
+        }) = mem::replace(&mut self.state.execution_state, ExecutionState::Running)
         else {
             unreachable!("Checked before")
         };
 
         let exponentiated_alg = match register {
-            RegisterGenerator::Theoretical => {
-                self.puzzle_states.theoretical_states[puzzle_idx].add_to_i(value);
+            ByPuzzleType::Theoretical(()) => {
+                self.state.puzzle_states.theoretical_states[puzzle_idx].add_to_i(value);
 
                 None
             }
-            RegisterGenerator::Puzzle {
-                generator: mut algorithm,
-                solved_goto_facelets: _,
-            } => {
-                let puzzle = &mut self.puzzle_states.puzzle_states[puzzle_idx];
+            ByPuzzleType::Puzzle((mut algorithm, _)) => {
+                let puzzle = &mut self.state.puzzle_states.puzzle_states[puzzle_idx];
                 algorithm.exponentiate(value);
 
                 puzzle.compose_into(&algorithm);
 
-                Some(*algorithm)
+                Some(algorithm)
             }
         };
 
-        self.execution_state = ExecutionState::Running;
-        self.program_counter += 1;
+        self.state.execution_state = ExecutionState::Running;
+        self.state.program_counter += 1;
 
         Ok((puzzle_idx, exponentiated_alg))
     }
@@ -520,7 +373,7 @@ mod tests {
     use crate::{Interpreter, PausedState};
     use compiler::compile;
     use internment::ArcIntern;
-    use qter_core::{Int, RegisterGenerator, U, architectures::PuzzleDefinition};
+    use qter_core::{Int, U, architectures::PuzzleDefinition};
     use std::sync::Arc;
 
     #[test]
@@ -567,16 +420,16 @@ mod tests {
         for i in 1..=23 {
             cube.state.compose_into(b_permutation.permutation());
             assert_eq!(
-                cube.print(&b_facelets, &b_permutation).unwrap(),
+                cube.print(&b_facelets.0, &b_permutation).unwrap(),
                 Int::from(i)
             );
-            assert!(!cube.facelets_solved(&b_facelets));
+            assert!(!cube.facelets_solved(&b_facelets.0));
         }
 
         cube.state.compose_into(b_permutation.permutation());
-        assert!(cube.facelets_solved(&b_facelets));
+        assert!(cube.facelets_solved(&b_facelets.0));
         assert_eq!(
-            cube.print(&b_facelets, &b_permutation).unwrap(),
+            cube.print(&b_facelets.0, &b_permutation).unwrap(),
             Int::<U>::zero()
         );
 
@@ -584,11 +437,11 @@ mod tests {
             println!("{i}");
             for j in 0..210 {
                 assert_eq!(
-                    cube.print(&b_facelets, &b_permutation).unwrap(),
+                    cube.print(&b_facelets.0, &b_permutation).unwrap(),
                     Int::from(i)
                 );
                 assert_eq!(
-                    cube.print(&a_facelets, &a_permutation).unwrap(),
+                    cube.print(&a_facelets.0, &a_permutation).unwrap(),
                     Int::from(j)
                 );
 
@@ -636,11 +489,7 @@ mod tests {
         assert!(match interpreter.step_until_halt() {
             PausedState::Input {
                 max_input,
-                register:
-                    RegisterGenerator::Puzzle {
-                        generator: _,
-                        solved_goto_facelets: _,
-                    },
+                register: ByPuzzleType::Puzzle(_),
                 puzzle_idx: 0,
             } => *max_input == Int::from(209),
             _ => false,
@@ -651,13 +500,7 @@ mod tests {
         assert!(matches!(
             interpreter.step_until_halt(),
             PausedState::Halt {
-                maybe_puzzle_idx_and_register: Some((
-                    0,
-                    RegisterGenerator::Puzzle {
-                        generator: _,
-                        solved_goto_facelets: _,
-                    }
-                )),
+                maybe_puzzle_idx_and_register: Some((0, ByPuzzleType::Puzzle(_))),
             }
         ));
 
@@ -679,12 +522,17 @@ mod tests {
 
         assert_eq!(
             expected_output.len(),
-            interpreter.messages().len(),
+            interpreter.state_mut().messages().len(),
             "{:?}",
-            interpreter.messages()
+            interpreter.state_mut().messages()
         );
 
-        for (message, expected) in interpreter.messages.iter().zip(expected_output.iter()) {
+        for (message, expected) in interpreter
+            .state()
+            .messages
+            .iter()
+            .zip(expected_output.iter())
+        {
             assert_eq!(message, expected);
         }
     }
@@ -714,31 +562,25 @@ mod tests {
 
         let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(program);
 
-        assert!(match interpreter.step_until_halt() {
-            PausedState::Input {
-                max_input,
-                register:
-                    RegisterGenerator::Puzzle {
-                        generator: _,
-                        solved_goto_facelets: _,
-                    },
-                puzzle_idx: 0,
-            } => *max_input == Int::from(89),
-            _ => false,
-        });
+        let halted_state = interpreter.step_until_halt();
+        assert!(
+            match halted_state {
+                PausedState::Input {
+                    max_input,
+                    register: ByPuzzleType::Puzzle(_),
+                    puzzle_idx: 0,
+                } => *max_input == Int::from(89),
+                _ => false,
+            },
+            "{halted_state:?}"
+        );
 
         assert!(interpreter.give_input(Int::from(77_u64)).is_ok());
 
         assert!(matches!(
             interpreter.step_until_halt(),
             PausedState::Halt {
-                maybe_puzzle_idx_and_register: Some((
-                    0,
-                    RegisterGenerator::Puzzle {
-                        generator: _,
-                        solved_goto_facelets: _,
-                    }
-                )),
+                maybe_puzzle_idx_and_register: Some((0, ByPuzzleType::Puzzle(_))),
             }
         ));
 
@@ -755,12 +597,17 @@ mod tests {
 
         assert_eq!(
             expected_output.len(),
-            interpreter.messages().len(),
+            interpreter.state_mut().messages().len(),
             "{:?}",
-            interpreter.messages()
+            interpreter.state_mut().messages()
         );
 
-        for (message, expected) in interpreter.messages.iter().zip(expected_output.iter()) {
+        for (message, expected) in interpreter
+            .state()
+            .messages
+            .iter()
+            .zip(expected_output.iter())
+        {
             assert_eq!(message, expected);
         }
     }
@@ -833,11 +680,7 @@ mod tests {
         assert!(match interpreter.step_until_halt() {
             PausedState::Input {
                 max_input,
-                register:
-                    RegisterGenerator::Puzzle {
-                        generator: _,
-                        solved_goto_facelets: _,
-                    },
+                register: ByPuzzleType::Puzzle(_),
                 puzzle_idx: 0,
             } => *max_input == Int::from(8),
             _ => false,
@@ -848,13 +691,7 @@ mod tests {
         assert!(matches!(
             interpreter.step_until_halt(),
             PausedState::Halt {
-                maybe_puzzle_idx_and_register: Some((
-                    0,
-                    RegisterGenerator::Puzzle {
-                        generator: _,
-                        solved_goto_facelets: _,
-                    }
-                )),
+                maybe_puzzle_idx_and_register: Some((0, ByPuzzleType::Puzzle(_))),
             }
         ));
 
@@ -865,12 +702,17 @@ mod tests {
 
         assert_eq!(
             expected_output.len(),
-            interpreter.messages().len(),
+            interpreter.state_mut().messages().len(),
             "{:?}",
-            interpreter.messages()
+            interpreter.state_mut().messages()
         );
 
-        for (message, expected) in interpreter.messages.iter().zip(expected_output.iter()) {
+        for (message, expected) in interpreter
+            .state()
+            .messages
+            .iter()
+            .zip(expected_output.iter())
+        {
             assert_eq!(message, expected);
         }
     }

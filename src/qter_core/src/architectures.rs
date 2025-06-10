@@ -9,7 +9,7 @@ use internment::ArcIntern;
 use itertools::Itertools;
 
 use crate::{
-    I, Int, U,
+    Facelets, I, Int, U,
     discrete_math::{
         decode, lcm, lcm_iter, length_of_substring_that_this_string_is_n_repeated_copies_of,
     },
@@ -626,7 +626,7 @@ impl Debug for Algorithm {
             if i != 0 {
                 f.write_str(" ")?;
             }
-            f.write_str(&generator)?;
+            f.write_str(generator)?;
         }
 
         f.write_str(" — ")?;
@@ -672,7 +672,7 @@ impl CycleGenerator {
 
     /// Find a collection of facelets that allow decoding the register and that allow determining whether the register is solved
     #[allow(clippy::missing_panics_doc)]
-    pub fn signature_facelets(&self) -> Vec<usize> {
+    pub fn signature_facelets(&self) -> Facelets {
         // This will never fail when `remainder_mod` is the order.
         self.signature_facelets_mod(self.order()).unwrap()
     }
@@ -681,7 +681,7 @@ impl CycleGenerator {
     ///
     /// With some registers, you can decode cycles individually and pick out information about the register modulo some number. This will attempt to do so for a given remainder to target. It will return `None` if it's impossible to decode the given modulus from the register.
     #[allow(clippy::missing_panics_doc)]
-    pub fn signature_facelets_mod(&self, remainder_mod: Int<U>) -> Option<Vec<usize>> {
+    pub fn signature_facelets_mod(&self, remainder_mod: Int<U>) -> Option<Facelets> {
         let mut cycles_with_extras = vec![];
 
         // Create a list of all cycles
@@ -751,7 +751,7 @@ impl CycleGenerator {
             }
         }
 
-        Some(facelets)
+        Some(Facelets(facelets))
     }
 }
 
@@ -917,7 +917,7 @@ impl Architecture {
                 let maybe_decoded = registers_decoding_info
                     .iter()
                     .map(|(facelets, generators)| {
-                        decode(permutation.permutation(), facelets, generators)
+                        decode(permutation.permutation(), &facelets.0, generators)
                     })
                     .collect::<Option<Vec<_>>>();
 
