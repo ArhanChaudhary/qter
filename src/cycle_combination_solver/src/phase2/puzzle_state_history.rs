@@ -1,12 +1,12 @@
 use super::puzzle::{PuzzleDef, PuzzleState, cube3::Cube3};
 use std::{ops::Index, slice::SliceIndex};
 
-pub trait PuzzleStateHistoryInterface<P: PuzzleState> {
+pub trait PuzzleStateHistoryInterface<'id, P: PuzzleState<'id>> {
     type Buf: Index<usize, Output = (P, usize)> + AsMut<[(P, usize)]> + AsRef<[(P, usize)]>;
 
     /// Create an initial `Self::Buf`. It must initialize the stack with a first
     /// entry of the solved state and a move index of 0.
-    fn initialize(puzzle_def: &PuzzleDef<P>) -> Self::Buf;
+    fn initialize(puzzle_def: &PuzzleDef<'id, P>) -> Self::Buf;
 
     /// Resize the underlying buffer capacity if needed.
     fn resize_if_needed(buf: &mut Self::Buf, max_stack_pointer: usize);
@@ -23,7 +23,7 @@ pub trait PuzzleStateHistoryInterface<P: PuzzleState> {
         buf: &mut [(P, usize)],
         stack_pointer: usize,
         move_index: usize,
-        puzzle_def: &PuzzleDef<P>,
+        puzzle_def: &PuzzleDef<'id, P>,
     ) {
         debug_assert!(stack_pointer < buf.len());
         // SAFETY: move_index is guaranteed to be in bounds by the caller
@@ -36,28 +36,25 @@ pub trait PuzzleStateHistoryInterface<P: PuzzleState> {
         // SAFETY: We split_at_mut at stack_pointer + 1 which is nonzero, so
         // stack_pointer is a valid index.
         let last_entry_puzzle_state = unsafe { &left.get_unchecked(stack_pointer).0 };
-        // SAFETY: the arguments correspond to `sorted_orbit_defs`
-        unsafe {
-            next_entry.0.replace_compose(
-                last_entry_puzzle_state,
-                puzzle_state,
-                &puzzle_def.sorted_orbit_defs,
-            );
-        }
+        next_entry.0.replace_compose(
+            last_entry_puzzle_state,
+            puzzle_state,
+            &puzzle_def.sorted_orbit_defs,
+        );
         next_entry.1 = move_index;
     }
 }
 
-pub struct PuzzleStateHistory<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> {
+pub struct PuzzleStateHistory<'id, P: PuzzleState<'id>, H: PuzzleStateHistoryInterface<'id, P>> {
     stack: H::Buf,
     stack_pointer: usize,
     _marker: std::marker::PhantomData<P>,
 }
 
-impl<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> From<&PuzzleDef<P>>
-    for PuzzleStateHistory<P, H>
+impl<'id, P: PuzzleState<'id>, H: PuzzleStateHistoryInterface<'id, P>> From<&PuzzleDef<'id, P>>
+    for PuzzleStateHistory<'id, P, H>
 {
-    fn from(puzzle_def: &PuzzleDef<P>) -> Self {
+    fn from(puzzle_def: &PuzzleDef<'id, P>) -> Self {
         Self {
             stack: H::initialize(puzzle_def),
             stack_pointer: 0,
@@ -66,7 +63,9 @@ impl<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> From<&PuzzleDef<P>>
     }
 }
 
-impl<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> PuzzleStateHistory<P, H> {
+impl<'id, P: PuzzleState<'id>, H: PuzzleStateHistoryInterface<'id, P>>
+    PuzzleStateHistory<'id, P, H>
+{
     /// Push a new state onto the stack by composing the given move with the
     /// last state in the stack.
     ///
@@ -77,7 +76,11 @@ impl<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> PuzzleStateHistory<P, H>
     /// 2) `resize_if_needed` is called before exploring a new maximum stack
     ///    depth.
     /// 3) `move_index` is in bounds of `puzzle_def.moves`.
-    pub unsafe fn push_stack_unchecked(&mut self, move_index: usize, puzzle_def: &PuzzleDef<P>) {
+    pub unsafe fn push_stack_unchecked(
+        &mut self,
+        move_index: usize,
+        puzzle_def: &PuzzleDef<'id, P>,
+    ) {
         // SAFETY: 1) guarantees that stack_pointer is never negative and 2)
         // guarantees that stack_pointer is never too high. Therefore,
         // `stack_pointer` is always in bounds. `move_index` is likewise in
@@ -134,10 +137,10 @@ impl<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> PuzzleStateHistory<P, H>
     }
 }
 
-impl<P: PuzzleState> PuzzleStateHistoryInterface<P> for Vec<P> {
+impl<'id, P: PuzzleState<'id>> PuzzleStateHistoryInterface<'id, P> for Vec<P> {
     type Buf = Vec<(P, usize)>;
 
-    fn initialize(puzzle_def: &PuzzleDef<P>) -> Vec<(P, usize)> {
+    fn initialize(puzzle_def: &PuzzleDef<'id, P>) -> Vec<(P, usize)> {
         vec![(puzzle_def.new_solved_state(), 0)]
     }
 
@@ -151,24 +154,24 @@ impl<P: PuzzleState> PuzzleStateHistoryInterface<P> for Vec<P> {
 /// A marker trait that guarantees that the array buffer used for storing the
 /// puzzle state history is always in bounds. That is, the stack pointer is
 /// always less than the length of the buffer.
-pub unsafe trait PuzzleStateHistoryArrayBuf<P: PuzzleState> {}
+pub unsafe trait PuzzleStateHistoryArrayBuf<'id, P: PuzzleState<'id>> {}
 
 // SAFETY: God's number for the 3x3x3 is 20, so any sequence of moves that
 // finds an optimal path cannot be longer than 20 moves. 21 is used to account
 // for the solved state at the beginning of the stack.
-unsafe impl PuzzleStateHistoryArrayBuf<Cube3> for [Cube3; 21] {}
+unsafe impl PuzzleStateHistoryArrayBuf<'_, Cube3> for [Cube3; 21] {}
 /*
  * // SAFETY: God's number for the 2x2x2 is 11. See above.
- * unsafe impl PuzzleStateHistoryArrayBuf<Cube3> for [Cube2; 12] {}
+ * unsafe impl PuzzleStateHistoryArrayBuf<'_, Cube2> for [Cube2; 12] {}
  */
 
-impl<const N: usize, P: PuzzleState> PuzzleStateHistoryInterface<P> for [P; N]
+impl<'id, const N: usize, P: PuzzleState<'id>> PuzzleStateHistoryInterface<'id, P> for [P; N]
 where
-    [P; N]: PuzzleStateHistoryArrayBuf<P>,
+    [P; N]: PuzzleStateHistoryArrayBuf<'id, P>,
 {
     type Buf = [(P, usize); N];
 
-    fn initialize(puzzle_def: &PuzzleDef<P>) -> [(P, usize); N] {
+    fn initialize(puzzle_def: &PuzzleDef<'id, P>) -> [(P, usize); N] {
         let mut ret = core::array::from_fn(|_| (puzzle_def.new_solved_state(), usize::MAX));
         // it is important this is zero so `start` is zero when empty
         ret[0].1 = 0;
@@ -186,9 +189,13 @@ where
 mod tests {
     use super::*;
     use crate::phase2::puzzle::{Move, cube3::Cube3};
+    use generativity::{Guard, make_guard};
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
-    fn move_index<P: PuzzleState>(puzzle_def: &PuzzleDef<P>, move_: &Move<P>) -> usize {
+    fn move_index<'id, P: PuzzleState<'id>>(
+        puzzle_def: &PuzzleDef<'id, P>,
+        move_: &Move<'id, P>,
+    ) -> usize {
         puzzle_def
             .moves
             .iter()
@@ -196,8 +203,8 @@ mod tests {
             .unwrap()
     }
 
-    fn initialize<H: PuzzleStateHistoryInterface<Cube3>>() {
-        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+    fn initialize<'id, H: PuzzleStateHistoryInterface<'id, Cube3>>(guard: Guard<'id>) {
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let puzzle_state_history: PuzzleStateHistory<Cube3, H> = (&cube3_def).into();
 
         assert_eq!(puzzle_state_history.stack_pointer, 0);
@@ -210,12 +217,16 @@ mod tests {
 
     #[test]
     fn test_initialize() {
-        initialize::<Vec<Cube3>>();
-        initialize::<[Cube3; 21]>();
+        make_guard!(guard);
+        initialize::<Vec<Cube3>>(guard);
+        make_guard!(guard);
+        initialize::<[Cube3; 21]>(guard);
     }
 
-    fn puzzle_state_history_composition<H: PuzzleStateHistoryInterface<Cube3>>() {
-        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+    fn puzzle_state_history_composition<'id, H: PuzzleStateHistoryInterface<'id, Cube3>>(
+        guard: Guard<'id>,
+    ) {
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let r_move = cube3_def.find_move("R").unwrap();
         let r_move_index = move_index(&cube3_def, r_move);
 
@@ -237,12 +248,16 @@ mod tests {
 
     #[test]
     fn test_puzzle_state_history_composition() {
-        puzzle_state_history_composition::<Vec<Cube3>>();
-        puzzle_state_history_composition::<[Cube3; 21]>();
+        make_guard!(guard);
+        puzzle_state_history_composition::<Vec<Cube3>>(guard);
+        make_guard!(guard);
+        puzzle_state_history_composition::<[Cube3; 21]>(guard);
     }
 
-    fn puzzle_state_history_pop<H: PuzzleStateHistoryInterface<Cube3>>() {
-        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+    fn puzzle_state_history_pop<'id, H: PuzzleStateHistoryInterface<'id, Cube3>>(
+        guard: Guard<'id>,
+    ) {
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let r_move = cube3_def.find_move("R").unwrap();
         let r2_move = cube3_def.find_move("R2").unwrap();
@@ -264,13 +279,11 @@ mod tests {
 
         assert_eq!(puzzle_state_history.stack_pointer, 2);
         let mut r_prime_state = solved.clone();
-        unsafe {
-            r_prime_state.replace_compose(
-                &solved,
-                &r_prime_move.puzzle_state,
-                &cube3_def.sorted_orbit_defs,
-            );
-        }
+        r_prime_state.replace_compose(
+            &solved,
+            &r_prime_move.puzzle_state,
+            &cube3_def.sorted_orbit_defs,
+        );
         assert_eq!(&puzzle_state_history.stack[2].0, &r_prime_state);
         assert_eq!(puzzle_state_history.stack[2].1, r2_move_index);
 
@@ -278,9 +291,7 @@ mod tests {
 
         assert_eq!(puzzle_state_history.stack_pointer, 1);
         let mut r_state = solved.clone();
-        unsafe {
-            r_state.replace_compose(&solved, &r_move.puzzle_state, &cube3_def.sorted_orbit_defs);
-        }
+        r_state.replace_compose(&solved, &r_move.puzzle_state, &cube3_def.sorted_orbit_defs);
         assert_eq!(&puzzle_state_history.stack[1].0, &r_state);
 
         unsafe {
@@ -289,13 +300,11 @@ mod tests {
 
         assert_eq!(puzzle_state_history.stack_pointer, 2);
         let mut r_f2_state = solved.clone();
-        unsafe {
-            r_f2_state.replace_compose(
-                &r_state,
-                &f2_move.puzzle_state,
-                &cube3_def.sorted_orbit_defs,
-            );
-        }
+        r_f2_state.replace_compose(
+            &r_state,
+            &f2_move.puzzle_state,
+            &cube3_def.sorted_orbit_defs,
+        );
         assert_eq!(&puzzle_state_history.stack[2].0, &r_f2_state);
 
         unsafe {
@@ -313,7 +322,9 @@ mod tests {
 
     #[test]
     fn test_puzzle_state_history_pop() {
-        puzzle_state_history_pop::<Vec<Cube3>>();
-        puzzle_state_history_pop::<[Cube3; 21]>();
+        make_guard!(guard);
+        puzzle_state_history_pop::<Vec<Cube3>>(guard);
+        make_guard!(guard);
+        puzzle_state_history_pop::<[Cube3; 21]>(guard);
     }
 }

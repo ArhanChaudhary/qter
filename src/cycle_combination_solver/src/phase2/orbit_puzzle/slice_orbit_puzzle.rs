@@ -3,10 +3,11 @@
 
 use super::{OrbitPuzzleConstructors, OrbitPuzzleState};
 use crate::phase2::puzzle::{MultiBvInterface, OrbitDef, slice_puzzle::exact_hasher_orbit_bytes};
+use generativity::Id;
 use std::{cmp::Ordering, num::NonZeroU8};
 
 #[derive(Clone, PartialEq, Debug, Hash)]
-pub struct SliceOrbitPuzzle(Box<[u8]>);
+pub struct SliceOrbitPuzzle<'id>(Box<[u8]>, Id<'id>);
 
 pub struct SliceOrbitMultiBv(Box<[u8]>);
 pub struct SliceOrbitMultiBvRefMut<'a>(&'a mut [u8]);
@@ -19,10 +20,10 @@ impl MultiBvInterface for SliceOrbitMultiBv {
     }
 }
 
-impl OrbitPuzzleState for SliceOrbitPuzzle {
+impl OrbitPuzzleState for SliceOrbitPuzzle<'_> {
     type MultiBv = SliceOrbitMultiBv;
 
-    unsafe fn replace_compose(&mut self, a: &Self, b: &Self, orbit_def: OrbitDef) {
+    fn replace_compose(&mut self, a: &Self, b: &Self, orbit_def: OrbitDef) {
         unsafe { replace_compose_slice_orbit(&mut self.0, 0, &a.0, &b.0, orbit_def) };
     }
 
@@ -32,6 +33,7 @@ impl OrbitPuzzleState for SliceOrbitPuzzle {
         orbit_def: OrbitDef,
         multi_bv: SliceOrbitMultiBvRefMut<'_>,
     ) -> bool {
+        // TODO
         unsafe {
             induces_sorted_cycle_type_slice_orbit(
                 &self.0,
@@ -49,12 +51,16 @@ impl OrbitPuzzleState for SliceOrbitPuzzle {
     }
 
     fn exact_hasher(&self, orbit_def: OrbitDef) -> u64 {
-        let (perm, ori) = self.0.split_at(orbit_def.piece_count.get() as usize);
+        // TODO
+        let (perm, ori) = unsafe {
+            self.0
+                .split_at_unchecked(orbit_def.piece_count.get() as usize)
+        };
         exact_hasher_orbit_bytes(perm, ori, orbit_def)
     }
 }
 
-impl OrbitPuzzleConstructors for SliceOrbitPuzzle {
+impl<'id> OrbitPuzzleConstructors<'id> for SliceOrbitPuzzle<'id> {
     type MultiBv = SliceOrbitMultiBv;
 
     fn new_multi_bv(orbit_def: OrbitDef) -> SliceOrbitMultiBv {
@@ -67,20 +73,22 @@ impl OrbitPuzzleConstructors for SliceOrbitPuzzle {
         perm: B,
         ori: B,
         orbit_def: OrbitDef,
+        id: Id<'id>,
     ) -> Self {
-        let mut orbit_states = vec![0_u8; orbit_def.piece_count.get() as usize * 2];
+        let mut slice_orbit_states = vec![0_u8; orbit_def.piece_count.get() as usize * 2];
         let piece_count = orbit_def.piece_count.get();
         for i in 0..piece_count {
-            orbit_states[(piece_count + i) as usize] = ori.as_ref()[i as usize];
-            orbit_states[i as usize] = perm.as_ref()[i as usize];
+            slice_orbit_states[(piece_count + i) as usize] = ori.as_ref()[i as usize];
+            slice_orbit_states[i as usize] = perm.as_ref()[i as usize];
         }
-        SliceOrbitPuzzle(orbit_states.into_boxed_slice())
+        SliceOrbitPuzzle(slice_orbit_states.into_boxed_slice(), id)
     }
 }
 
+#[allow(clippy::missing_panics_doc)]
 #[inline]
 pub unsafe fn replace_compose_slice_orbit(
-    orbit_states_mut: &mut [u8],
+    slice_orbit_states_mut: &mut [u8],
     base: usize,
     a: &[u8],
     b: &[u8],
@@ -94,22 +102,27 @@ pub unsafe fn replace_compose_slice_orbit(
     if orbit_def.orientation_count == 1.try_into().unwrap() {
         for i in 0..piece_count {
             let base_i = base + i;
+            // SAFETY: the caller guarantees that everything is in bounds.
+            // Testing has shown this is sound.
             unsafe {
                 let pos = *a.get_unchecked(base + *b.get_unchecked(base_i) as usize);
-                *orbit_states_mut.get_unchecked_mut(base_i) = pos;
-                *orbit_states_mut.get_unchecked_mut(base_i + piece_count) = 0;
+                *slice_orbit_states_mut.get_unchecked_mut(base_i) = pos;
+                *slice_orbit_states_mut.get_unchecked_mut(base_i + piece_count) = 0;
             }
         }
     } else {
         for i in 0..piece_count {
             let base_i = base + i;
+            // SAFETY: the caller guarantees that everything is in bounds.
+            // Testing has shown this is sound.
             unsafe {
-                let pos = a.get_unchecked(base + *b.get_unchecked(base_i) as usize);
-                let a_ori = a.get_unchecked(base + *b.get_unchecked(base_i) as usize + piece_count);
-                let b_ori = b.get_unchecked(base_i + piece_count);
-                *orbit_states_mut.get_unchecked_mut(base_i) = *pos;
-                *orbit_states_mut.get_unchecked_mut(base_i + piece_count) = (*a_ori + *b_ori)
-                    .min((*a_ori + *b_ori).wrapping_sub(orbit_def.orientation_count.get()));
+                let pos = *a.get_unchecked(base + *b.get_unchecked(base_i) as usize);
+                let a_ori =
+                    *a.get_unchecked(base + *b.get_unchecked(base_i) as usize + piece_count);
+                let b_ori = *b.get_unchecked(base_i + piece_count);
+                *slice_orbit_states_mut.get_unchecked_mut(base_i) = pos;
+                *slice_orbit_states_mut.get_unchecked_mut(base_i + piece_count) = (a_ori + b_ori)
+                    .min((a_ori + b_ori).wrapping_sub(orbit_def.orientation_count.get()));
             }
         }
     }
@@ -117,7 +130,7 @@ pub unsafe fn replace_compose_slice_orbit(
 
 #[inline]
 pub unsafe fn induces_sorted_cycle_type_slice_orbit(
-    orbit_states: &[u8],
+    slice_orbit_state: &[u8],
     base: usize,
     sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
     orbit_def: OrbitDef,
@@ -140,11 +153,11 @@ pub unsafe fn induces_sorted_cycle_type_slice_orbit(
         let mut actual_cycle_length = 1;
         // SAFETY: sorted_orbit_defs guarantees that base (the orbit state
         // base pointer) + i (a permutation vector element) is valid
-        let mut piece = unsafe { *orbit_states.get_unchecked(base + i) } as usize;
+        let mut piece = unsafe { *slice_orbit_state.get_unchecked(base + i) } as usize;
         // SAFETY: sorted_orbit_defs guarantees that base (the orbit state
         // base pointer) + i + piece (an orientation vector element) is valid
         let mut orientation_sum =
-            unsafe { *orbit_states.get_unchecked(base + piece + piece_count) };
+            unsafe { *slice_orbit_state.get_unchecked(base + piece + piece_count) };
 
         while piece != i {
             actual_cycle_length += 1;
@@ -158,13 +171,13 @@ pub unsafe fn induces_sorted_cycle_type_slice_orbit(
             // state base pointer) + piece (a permutation vector element) is
             // valid
             unsafe {
-                piece = *orbit_states.get_unchecked(base + piece) as usize;
+                piece = *slice_orbit_state.get_unchecked(base + piece) as usize;
             }
             // SAFETY: sorted_orbit_defs guarantees that base (the orbit
             // state base pointer) + piece + piece_count (an orientation
             // vector element) is valid
             unsafe {
-                orientation_sum += *orbit_states.get_unchecked(base + piece + piece_count);
+                orientation_sum += *slice_orbit_state.get_unchecked(base + piece + piece_count);
             }
         }
 

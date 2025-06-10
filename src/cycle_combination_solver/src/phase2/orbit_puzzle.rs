@@ -2,6 +2,7 @@ use super::{
     FACT_UNTIL_19,
     puzzle::{MultiBvInterface, OrbitDef},
 };
+use generativity::Id;
 use std::{
     hash::Hash,
     num::NonZeroU8,
@@ -14,7 +15,7 @@ pub mod slice_orbit_puzzle;
 pub trait OrbitPuzzleState {
     type MultiBv: MultiBvInterface;
 
-    unsafe fn replace_compose(&mut self, a: &Self, b: &Self, orbit_def: OrbitDef);
+    fn replace_compose(&mut self, a: &Self, b: &Self, orbit_def: OrbitDef);
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
@@ -25,7 +26,7 @@ pub trait OrbitPuzzleState {
     fn exact_hasher(&self, orbit_def: OrbitDef) -> u64;
 }
 
-pub trait OrbitPuzzleConstructors {
+pub trait OrbitPuzzleConstructors<'id> {
     type MultiBv: MultiBvInterface;
 
     fn new_multi_bv(orbit_def: OrbitDef) -> Self::MultiBv;
@@ -33,6 +34,7 @@ pub trait OrbitPuzzleConstructors {
         perm: B,
         ori: B,
         orbit_def: OrbitDef,
+        id: Id<'id>,
     ) -> Self;
 }
 

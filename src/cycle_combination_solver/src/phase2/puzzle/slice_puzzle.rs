@@ -1,19 +1,23 @@
 //! The default, generic implementation for representing puzzle states.
 
-use super::{KSolveConversionError, MultiBvInterface, OrbitDef, OrientedPartition, PuzzleState};
+use super::{
+    KSolveConversionError, MultiBvInterface, OrbitDef, OrientedPartition, PuzzleState,
+    TransformationMeta,
+};
 use crate::phase2::{
     FACT_UNTIL_19,
     orbit_puzzle::slice_orbit_puzzle::{
         induces_sorted_cycle_type_slice_orbit, replace_compose_slice_orbit,
     },
 };
+use generativity::Id;
 use std::num::NonZeroU8;
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct StackPuzzle<const N: usize>([u8; N]);
+pub struct StackPuzzle<'id, const N: usize>([u8; N], Id<'id>);
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct HeapPuzzle(Box<[u8]>);
+pub struct HeapPuzzle<'id>(Box<[u8]>, Id<'id>);
 
 pub struct SliceMultiBv(Box<[u8]>);
 pub struct SliceMultiBvRefMut<'a>(&'a mut [u8]);
@@ -26,9 +30,12 @@ impl MultiBvInterface for SliceMultiBv {
     }
 }
 
-impl<const N: usize> PuzzleState for StackPuzzle<N> {
+impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
     type MultiBv = SliceMultiBv;
-    type OrbitBytesBuf<'a> = &'a [u8];
+    type OrbitBytesBuf<'a>
+        = &'a [u8]
+    where
+        Self: 'a;
 
     fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv {
         new_multi_bv_slice(sorted_orbit_defs)
@@ -37,13 +44,18 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
     fn try_from_transformation_meta(
         sorted_transformations: &[Vec<(u8, u8)>],
         sorted_orbit_defs: &[OrbitDef],
+        id: Id<'id>,
     ) -> Result<Self, KSolveConversionError> {
-        let mut orbit_states = [0_u8; N];
-        ksolve_move_to_slice(&mut orbit_states, sorted_transformations, sorted_orbit_defs)?;
-        Ok(StackPuzzle(orbit_states))
+        let mut slice_orbit_states = [0_u8; N];
+        ksolve_move_to_slice(
+            &mut slice_orbit_states,
+            sorted_transformations,
+            sorted_orbit_defs,
+        )?;
+        Ok(StackPuzzle(slice_orbit_states, id))
     }
 
-    unsafe fn replace_compose(
+    fn replace_compose(
         &mut self,
         a: &StackPuzzle<N>,
         b: &StackPuzzle<N>,
@@ -57,7 +69,7 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
     }
 
     fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]) {
-        replace_inverse_slice(&mut self.0, &a.0, sorted_orbit_defs);
+        unsafe { replace_inverse_slice(&mut self.0, &a.0, sorted_orbit_defs) };
     }
 
     fn induces_sorted_cycle_type(
@@ -88,9 +100,12 @@ impl<const N: usize> PuzzleState for StackPuzzle<N> {
     }
 }
 
-impl PuzzleState for HeapPuzzle {
+impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
     type MultiBv = SliceMultiBv;
-    type OrbitBytesBuf<'a> = &'a [u8];
+    type OrbitBytesBuf<'a>
+        = &'a [u8]
+    where
+        Self: 'a;
 
     fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv {
         new_multi_bv_slice(sorted_orbit_defs)
@@ -99,8 +114,9 @@ impl PuzzleState for HeapPuzzle {
     fn try_from_transformation_meta(
         sorted_transformations: &[Vec<(u8, u8)>],
         sorted_orbit_defs: &[OrbitDef],
+        id: Id<'id>,
     ) -> Result<Self, KSolveConversionError> {
-        let mut orbit_states = vec![
+        let mut slice_orbit_states = vec![
             0_u8;
             sorted_orbit_defs
                 .iter()
@@ -111,16 +127,16 @@ impl PuzzleState for HeapPuzzle {
         // No validation needed. from_sorted_transformations_unchecked creates
         // an orbit states buffer that is guaranteed to be the right size, and
         // there is no restriction on the expected orbit defs
-        ksolve_move_to_slice(&mut orbit_states, sorted_transformations, sorted_orbit_defs).unwrap();
-        Ok(HeapPuzzle(orbit_states))
+        ksolve_move_to_slice(
+            &mut slice_orbit_states,
+            sorted_transformations,
+            sorted_orbit_defs,
+        )
+        .unwrap();
+        Ok(HeapPuzzle(slice_orbit_states, id))
     }
 
-    unsafe fn replace_compose(
-        &mut self,
-        a: &HeapPuzzle,
-        b: &HeapPuzzle,
-        sorted_orbit_defs: &[OrbitDef],
-    ) {
+    fn replace_compose(&mut self, a: &HeapPuzzle, b: &HeapPuzzle, sorted_orbit_defs: &[OrbitDef]) {
         // SAFETY: the caller guarantees that all arguments correspond to the
         // same orbit defs
         unsafe {
@@ -129,7 +145,7 @@ impl PuzzleState for HeapPuzzle {
     }
 
     fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]) {
-        replace_inverse_slice(&mut self.0, &a.0, sorted_orbit_defs);
+        unsafe { replace_inverse_slice(&mut self.0, &a.0, sorted_orbit_defs) };
     }
 
     fn induces_sorted_cycle_type(
@@ -176,11 +192,11 @@ fn new_multi_bv_slice(sorted_orbit_defs: &[OrbitDef]) -> SliceMultiBv {
 }
 
 fn ksolve_move_to_slice(
-    orbit_states: &mut [u8],
+    slice_orbit_states: &mut [u8],
     sorted_transformations: &[Vec<(u8, u8)>],
     sorted_orbit_defs: &[OrbitDef],
 ) -> Result<(), KSolveConversionError> {
-    if orbit_states.len()
+    if slice_orbit_states.len()
         < sorted_orbit_defs
             .iter()
             .map(|orbit_def| orbit_def.piece_count.get() as usize * 2)
@@ -188,34 +204,35 @@ fn ksolve_move_to_slice(
     {
         return Err(KSolveConversionError::NotEnoughBufferSpace);
     }
-    let mut i = 0;
-    for (transformation, orbit_def) in sorted_transformations.iter().zip(sorted_orbit_defs.iter()) {
+    let mut base = 0;
+    for (transformation, &orbit_def) in sorted_transformations.iter().zip(sorted_orbit_defs.iter())
+    {
         let piece_count = orbit_def.piece_count.get();
         // TODO: make this more efficient:
         // - zero orientation mod optimization (change next_orbit_identifier_slice too)
         // - avoid the transformation for identities entirely
         if transformation.is_empty() {
-            for j in 0..piece_count {
-                orbit_states[(i + j + piece_count) as usize] = 0;
-                orbit_states[(i + j) as usize] = j;
+            for i in 0..piece_count {
+                slice_orbit_states[base + (i + piece_count) as usize] = 0;
+                slice_orbit_states[base + i as usize] = i;
             }
         } else {
-            for j in 0..piece_count {
-                let (perm, orientation_delta) = transformation[j as usize];
-                orbit_states[(i + j + piece_count) as usize] = orientation_delta;
-                orbit_states[(i + j) as usize] = perm;
+            for i in 0..piece_count {
+                let (perm, orientation_delta) = transformation[i as usize];
+                slice_orbit_states[base + (i + piece_count) as usize] = orientation_delta;
+                slice_orbit_states[base + i as usize] = perm;
             }
         }
-        i += piece_count * 2;
+        base += piece_count as usize * 2;
     }
     Ok(())
 }
 
 /// # SAFETY
 ///
-/// `orbit_states_mut`, `a`, and `b` must all correspond to `sorted_orbit_defs`.
+/// `slice_orbit_states_mut`, `a`, and `b` must all correspond to `sorted_orbit_defs`.
 unsafe fn replace_compose_slice(
-    orbit_states_mut: &mut [u8],
+    slice_orbit_states_mut: &mut [u8],
     a: &[u8],
     b: &[u8],
     sorted_orbit_defs: &[OrbitDef],
@@ -225,69 +242,70 @@ unsafe fn replace_compose_slice(
             .iter()
             .map(|orbit_def| orbit_def.piece_count.get() as usize * 2)
             .sum::<usize>(),
-        orbit_states_mut.len()
+        slice_orbit_states_mut.len()
     );
-    debug_assert_eq!(orbit_states_mut.len(), a.len());
+    debug_assert_eq!(slice_orbit_states_mut.len(), a.len());
     debug_assert_eq!(a.len(), b.len());
 
     let mut base = 0;
     for &orbit_def in sorted_orbit_defs {
         unsafe {
-            replace_compose_slice_orbit(orbit_states_mut, base, a, b, orbit_def);
+            replace_compose_slice_orbit(slice_orbit_states_mut, base, a, b, orbit_def);
         }
         base += orbit_def.piece_count.get() as usize * 2;
     }
 }
 
-fn replace_inverse_slice(orbit_states_mut: &mut [u8], a: &[u8], sorted_orbit_defs: &[OrbitDef]) {
+unsafe fn replace_inverse_slice(
+    slice_orbit_states_mut: &mut [u8],
+    a: &[u8],
+    sorted_orbit_defs: &[OrbitDef],
+) {
     debug_assert_eq!(
         sorted_orbit_defs
             .iter()
             .map(|orbit_def| (orbit_def.piece_count.get() as usize) * 2)
             .sum::<usize>(),
-        orbit_states_mut.len()
+        slice_orbit_states_mut.len()
     );
-    debug_assert_eq!(orbit_states_mut.len(), a.len());
+    debug_assert_eq!(slice_orbit_states_mut.len(), a.len());
 
     let mut base = 0;
-    for &OrbitDef {
-        piece_count,
-        orientation_count,
-    } in sorted_orbit_defs
-    {
-        let piece_count = piece_count.get();
+    for &orbit_def in sorted_orbit_defs {
+        let piece_count = orbit_def.piece_count.get();
         // SAFETY: Permutation vectors and orientation vectors are shuffled
         // around, based on code from twsearch [1]. Testing has shown this is
         // sound.
+        //
         // [1] https://github.com/cubing/twsearch
-        if orientation_count == 1.try_into().unwrap() {
+        if orbit_def.orientation_count == 1.try_into().unwrap() {
             for i in 0..piece_count {
-                let base_i = (base + i) as usize;
+                let base_i = base + i as usize;
                 unsafe {
-                    *orbit_states_mut.get_unchecked_mut((base + a[base_i]) as usize) = i;
-                    *orbit_states_mut
-                        .get_unchecked_mut((base + a[base_i] + piece_count) as usize) = 0;
+                    *slice_orbit_states_mut.get_unchecked_mut(base + a[base_i] as usize) = i;
+                    *slice_orbit_states_mut
+                        .get_unchecked_mut(base + (a[base_i] + piece_count) as usize) = 0;
                 }
             }
         } else {
             for i in 0..piece_count {
-                let base_i = (base + i) as usize;
+                let base_i = base + i as usize;
                 unsafe {
-                    *orbit_states_mut.get_unchecked_mut((base + a[base_i]) as usize) = i;
-                    *orbit_states_mut
-                        .get_unchecked_mut((base + a[base_i] + piece_count) as usize) =
-                        (orientation_count.get() - a[base_i + piece_count as usize])
+                    *slice_orbit_states_mut.get_unchecked_mut(base + (a[base_i]) as usize) = i;
+                    *slice_orbit_states_mut
+                        .get_unchecked_mut(base + (a[base_i] + piece_count) as usize) =
+                        (orbit_def.orientation_count.get() - a[base_i + piece_count as usize])
                             .min(a[base_i + piece_count as usize].wrapping_neg());
                 }
             }
         }
-        base += piece_count * 2;
+        base += piece_count as usize * 2;
     }
 }
 
 #[inline]
 fn induces_sorted_cycle_type_slice(
-    orbit_states: &[u8],
+    slice_orbit_states: &[u8],
     sorted_cycle_type: &[OrientedPartition],
     sorted_orbit_defs: &[OrbitDef],
     multi_bv: &mut [u8],
@@ -298,7 +316,7 @@ fn induces_sorted_cycle_type_slice(
     {
         unsafe {
             if !induces_sorted_cycle_type_slice_orbit(
-                orbit_states,
+                slice_orbit_states,
                 base,
                 sorted_cycle_type_orbit,
                 orbit_def,
@@ -370,7 +388,7 @@ pub(crate) fn exact_hasher_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def: Orbit
         + exact_ori_hash
 }
 
-impl HeapPuzzle {
+impl HeapPuzzle<'_> {
     /// Utility function for testing. Not optimized.
     ///
     /// # Panics
@@ -385,14 +403,10 @@ impl HeapPuzzle {
     ) -> Vec<OrientedPartition> {
         let mut cycle_type = vec![];
         let mut base = 0;
-        for &OrbitDef {
-            piece_count,
-            orientation_count,
-        } in sorted_orbit_defs
-        {
+        for &orbit_def in sorted_orbit_defs {
             let mut cycle_type_piece = vec![];
             multi_bv.0.fill(0);
-            let piece_count = piece_count.get() as usize;
+            let piece_count = orbit_def.piece_count.get() as usize;
             for i in 0..piece_count {
                 let (div, rem) = (i / 4, i % 4);
                 if multi_bv.0[div] & (1 << rem) != 0 {
@@ -412,7 +426,7 @@ impl HeapPuzzle {
                     orientation_sum += self.0[base + piece + piece_count];
                 }
 
-                let actual_orients = orientation_sum % orientation_count != 0;
+                let actual_orients = orientation_sum % orbit_def.orientation_count != 0;
                 if actual_cycle_length != 1 || actual_orients {
                     cycle_type_piece
                         .push((NonZeroU8::new(actual_cycle_length).unwrap(), actual_orients));

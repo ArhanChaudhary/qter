@@ -4,6 +4,8 @@
 pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
+    use generativity::Id;
+
     use crate::phase2::puzzle::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
     use std::hash::Hash;
     use std::{fmt::Debug, num::NonZeroU8};
@@ -46,12 +48,12 @@ mod common {
         },
     ];
 
-    impl<C: Cube3Interface> PuzzleState for C {
+    impl<'id, C: Cube3Interface> PuzzleState<'id> for C {
         type MultiBv = ();
         type OrbitBytesBuf<'a>
             = [u8; 16]
         where
-            Self: 'a;
+            Self: 'a + 'id;
 
         fn new_multi_bv(_sorted_orbit_defs: &[OrbitDef]) {
             // Induces cycle type for 3x3 cubes doesn't require auxilliary
@@ -61,6 +63,7 @@ mod common {
         fn try_from_transformation_meta(
             sorted_transformations: &[Vec<(u8, u8)>],
             sorted_orbit_defs: &[OrbitDef],
+            _id: Id<'id>,
         ) -> Result<C, KSolveConversionError> {
             if sorted_orbit_defs == CUBE_3_SORTED_ORBIT_DEFS {
                 Ok(Self::from_sorted_transformations(sorted_transformations))
@@ -72,7 +75,7 @@ mod common {
             }
         }
 
-        unsafe fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: &[OrbitDef]) {
+        fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: &[OrbitDef]) {
             self.replace_compose(a, b);
         }
 

@@ -1,5 +1,5 @@
+use generativity::{Guard, Id};
 use itertools::Itertools;
-use num_traits::PrimInt;
 use puzzle_geometry::ksolve::KSolve;
 use std::{fmt::Debug, hash::Hash, num::NonZeroU8};
 use thiserror::Error;
@@ -10,13 +10,13 @@ pub mod slice_puzzle;
 /// The puzzle state interface at the heart of the cycle combination solver.
 /// Users may either use the generic `HeapPuzzle` implementor for any `KSolve`
 /// definition or define fast puzzle-specific implementations, like Cube3.
-pub trait PuzzleState: Clone + PartialEq + Debug {
+pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
     /// A reusable multi bit vector type to hold temporary storage in
     /// `induces_sorted_cycle_type`.
     type MultiBv: MultiBvInterface;
     type OrbitBytesBuf<'a>: AsRef<[u8]>
     where
-        Self: 'a;
+        Self: 'a + 'id;
 
     /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
     fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv;
@@ -31,16 +31,13 @@ pub trait PuzzleState: Clone + PartialEq + Debug {
     fn try_from_transformation_meta(
         sorted_transformations: &[Vec<(u8, u8)>],
         sorted_orbit_defs: &[OrbitDef],
+        id: Id<'id>,
     ) -> Result<Self, KSolveConversionError>;
 
-    /// Compose two puzzle states in place
-    ///
-    /// # Safety
-    ///
-    /// `a` and `b` must both correspond to `sorted_orbit_defs`.
-    unsafe fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: &[OrbitDef]);
+    /// Compose two puzzle states in place.
+    fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: &[OrbitDef]);
 
-    /// Inverse of a puzzle state
+    /// Inverse of a puzzle state.
     fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]);
 
     /// The goal state for IDA* search
@@ -82,13 +79,14 @@ pub trait MultiBvInterface {
 }
 
 #[derive(Debug)]
-pub struct PuzzleDef<P: PuzzleState> {
-    pub moves: Box<[Move<P>]>,
+pub struct PuzzleDef<'id, P: PuzzleState<'id>> {
+    pub moves: Box<[Move<'id, P>]>,
     // indicies into moves
     pub move_classes: Box<[usize]>,
-    pub symmetries: Box<[Move<P>]>,
+    pub symmetries: Box<[Move<'id, P>]>,
     pub sorted_orbit_defs: Box<[OrbitDef]>,
     pub name: String,
+    id: Id<'id>,
 }
 
 #[derive(Error, Debug)]
@@ -111,10 +109,12 @@ pub enum KSolveConversionError {
 }
 
 #[derive(Debug, Clone)]
-pub struct Move<P: PuzzleState> {
+pub struct Move<'id, P: PuzzleState<'id>> {
     pub puzzle_state: P,
     pub move_class_index: usize,
     pub name: String,
+    #[allow(dead_code)]
+    id: Id<'id>,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -141,45 +141,27 @@ impl<'a> TransformationMeta<'a> {
     }
 }
 
-impl<P: PuzzleState> Move<P> {
+impl<'id, P: PuzzleState<'id>> Move<'id, P> {
     /// # Safety
     ///
     /// `self` and `other` must both correspond to `sorted_orbit_defs`.
-    pub unsafe fn commutes_with(
+    pub fn commutes_with(
         &self,
         other: &Self,
         result_1: &mut P,
         result_2: &mut P,
         sorted_orbit_defs: &[OrbitDef],
     ) -> bool {
-        // SAFETY: the caller guarantees that `self` and `other` correspond to
-        // `sorted_orbit_defs`
-        unsafe {
-            result_1.replace_compose(&self.puzzle_state, &other.puzzle_state, sorted_orbit_defs);
-            result_2.replace_compose(&other.puzzle_state, &self.puzzle_state, sorted_orbit_defs);
-        }
+        result_1.replace_compose(&self.puzzle_state, &other.puzzle_state, sorted_orbit_defs);
+        result_2.replace_compose(&other.puzzle_state, &self.puzzle_state, sorted_orbit_defs);
         result_1 == result_2
     }
 }
 
-impl<P: PuzzleState> PuzzleDef<P> {
-    #[must_use]
-    pub fn find_move(&self, name: &str) -> Option<&Move<P>> {
-        self.moves.iter().find(|move_| move_.name == name)
-    }
-
-    #[must_use]
-    pub fn find_symmetry(&self, name: &str) -> Option<&Move<P>> {
-        self.symmetries.iter().find(|move_| move_.name == name)
-    }
-
-    #[must_use]
-    pub fn new_solved_state(&self) -> P {
-        solved_state_from_sorted_orbit_defs(&self.sorted_orbit_defs)
-    }
-}
-
-fn solved_state_from_sorted_orbit_defs<P: PuzzleState>(sorted_orbit_defs: &[OrbitDef]) -> P {
+fn solved_state_from_sorted_orbit_defs<'id, P: PuzzleState<'id>>(
+    sorted_orbit_defs: &[OrbitDef],
+    id: Id<'id>,
+) -> P {
     let sorted_transformations = sorted_orbit_defs
         .iter()
         .map(|orbit_def| {
@@ -189,13 +171,32 @@ fn solved_state_from_sorted_orbit_defs<P: PuzzleState>(sorted_orbit_defs: &[Orbi
         })
         .collect_vec();
     // We can unwrap because try_from guarantees that the orbit defs are valid
-    P::try_from_transformation_meta(&sorted_transformations, sorted_orbit_defs).unwrap()
+    P::try_from_transformation_meta(&sorted_transformations, sorted_orbit_defs, id).unwrap()
 }
 
-impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
-    type Error = KSolveConversionError;
+impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
+    #[must_use]
+    pub fn find_move(&self, name: &str) -> Option<&Move<'id, P>> {
+        self.moves.iter().find(|move_| move_.name == name)
+    }
 
-    fn try_from(ksolve: &KSolve) -> Result<Self, Self::Error> {
+    #[must_use]
+    pub fn find_symmetry(&self, name: &str) -> Option<&Move<'id, P>> {
+        self.symmetries.iter().find(|move_| move_.name == name)
+    }
+
+    #[must_use]
+    pub fn new_solved_state(&self) -> P {
+        solved_state_from_sorted_orbit_defs(&self.sorted_orbit_defs, self.id)
+    }
+
+    #[must_use]
+    pub fn id(&self) -> Id<'id> {
+        self.id
+    }
+
+    pub fn new(ksolve: &KSolve, guard: Guard<'id>) -> Result<Self, KSolveConversionError> {
+        let id = guard.into();
         let mut sorted_orbit_defs: Vec<OrbitDef> = ksolve
             .sets()
             .iter()
@@ -251,13 +252,14 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                 .collect();
 
             let puzzle_state =
-                P::try_from_transformation_meta(&sorted_transformations, &sorted_orbit_defs)?;
+                P::try_from_transformation_meta(&sorted_transformations, &sorted_orbit_defs, id)?;
 
             if i >= ksolve.moves().len() {
                 let base_move = Move {
                     name: ksolve_move.name().to_owned(),
                     move_class_index: 0,
                     puzzle_state,
+                    id,
                 };
                 symmetries.push(base_move);
                 continue;
@@ -272,23 +274,17 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                 name: ksolve_move.name().to_owned(),
                 move_class_index,
                 puzzle_state,
+                id,
             };
 
-            let solved: P = solved_state_from_sorted_orbit_defs(&sorted_orbit_defs);
+            let solved: P = solved_state_from_sorted_orbit_defs(&sorted_orbit_defs, id);
 
             let base_name = base_move.name.clone();
             move_classes.push(move_class);
 
             let mut move_powers: Vec<P> = vec![];
             for _ in 0..MAX_MOVE_POWER {
-                // SAFETY: the arguments correspond to `sorted_orbit_defs`
-                unsafe {
-                    result_1.replace_compose(
-                        &result_2,
-                        &base_move.puzzle_state,
-                        &sorted_orbit_defs,
-                    );
-                }
+                result_1.replace_compose(&result_2, &base_move.puzzle_state, &sorted_orbit_defs);
                 if result_1 == solved {
                     break;
                 }
@@ -320,6 +316,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
                     puzzle_state: expanded_puzzle_state,
                     move_class_index,
                     name: expanded_name,
+                    id,
                 });
             }
         }
@@ -330,6 +327,7 @@ impl<P: PuzzleState> TryFrom<&KSolve> for PuzzleDef<P> {
             symmetries: symmetries.into_boxed_slice(),
             sorted_orbit_defs: sorted_orbit_defs.into_boxed_slice(),
             name: ksolve.name().to_owned(),
+            id,
         })
     }
 }
@@ -345,30 +343,47 @@ impl MultiBvInterface for () {
 /// # Panics
 ///
 /// Panics if the move sequence is invalid.
-pub fn apply_moves<P: PuzzleState + Clone>(
-    puzzle_def: &PuzzleDef<P>,
+pub fn apply_moves<'id, P: PuzzleState<'id>>(
+    puzzle_def: &PuzzleDef<'id, P>,
     puzzle_state: &P,
     moves: &str,
     repeat: u32,
 ) -> P {
     let mut result_1 = puzzle_state.clone();
     let mut result_2 = puzzle_state.clone();
-
     for _ in 0..repeat {
         for name in moves.split_whitespace() {
             let move_ = puzzle_def.find_move(name).unwrap();
-            // SAFETY: the arguments correspond to `sorted_orbit_defs`
-            unsafe {
-                result_2.replace_compose(
-                    &result_1,
-                    &move_.puzzle_state,
-                    &puzzle_def.sorted_orbit_defs,
-                );
-            }
+            result_2.replace_compose(
+                &result_1,
+                &move_.puzzle_state,
+                &puzzle_def.sorted_orbit_defs,
+            );
             std::mem::swap(&mut result_1, &mut result_2);
         }
     }
     result_1
+}
+
+/// Return a random 3x3 puzzle state
+#[allow(clippy::missing_panics_doc)]
+pub fn apply_random_moves<'id, P: PuzzleState<'id>>(
+    puzzle_def: &PuzzleDef<'id, P>,
+    solved: &P,
+    random_move_count: u32,
+) -> P {
+    let mut result_1 = solved.clone();
+    let mut result_2 = solved.clone();
+    for _ in 0..random_move_count {
+        let move_ = fastrand::choice(puzzle_def.moves.iter()).unwrap();
+        result_1.replace_compose(
+            &result_2,
+            &move_.puzzle_state,
+            &puzzle_def.sorted_orbit_defs,
+        );
+        std::mem::swap(&mut result_2, &mut result_1);
+    }
+    result_2
 }
 
 #[cfg(test)]
@@ -379,11 +394,11 @@ mod tests {
         slice_puzzle::{HeapPuzzle, StackPuzzle},
         *,
     };
-    use crate::phase2::orbit_puzzle::cube3::random_3x3_state;
+    use generativity::make_guard;
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
     use test::Bencher;
 
-    type StackCube3 = StackPuzzle<40>;
+    type StackCube3<'id> = StackPuzzle<'id, 40>;
 
     fn ct(sorted_cycle_type: &[(u8, bool)]) -> OrientedPartition {
         sorted_cycle_type
@@ -392,83 +407,91 @@ mod tests {
             .collect()
     }
 
-    fn commutes_with<P: PuzzleState>() {
-        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+    fn commutes_with<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let mut result_1 = cube3_def.new_solved_state();
         let mut result_2 = result_1.clone();
 
         let u_move = cube3_def.find_move("U").unwrap();
         let d2_move = cube3_def.find_move("D2").unwrap();
         let r_move = cube3_def.find_move("R").unwrap();
-        unsafe {
-            assert!(u_move.commutes_with(
-                u_move,
-                &mut result_1,
-                &mut result_2,
-                &cube3_def.sorted_orbit_defs
-            ));
-            assert!(d2_move.commutes_with(
-                d2_move,
-                &mut result_1,
-                &mut result_2,
-                &cube3_def.sorted_orbit_defs
-            ));
-            assert!(u_move.commutes_with(
-                d2_move,
-                &mut result_1,
-                &mut result_2,
-                &cube3_def.sorted_orbit_defs
-            ));
-            assert!(!u_move.commutes_with(
-                r_move,
-                &mut result_1,
-                &mut result_2,
-                &cube3_def.sorted_orbit_defs
-            ));
-            assert!(!d2_move.commutes_with(
-                r_move,
-                &mut result_1,
-                &mut result_2,
-                &cube3_def.sorted_orbit_defs
-            ));
-            assert!(!r_move.commutes_with(
-                u_move,
-                &mut result_1,
-                &mut result_2,
-                &cube3_def.sorted_orbit_defs
-            ));
-            assert!(!r_move.commutes_with(
-                d2_move,
-                &mut result_1,
-                &mut result_2,
-                &cube3_def.sorted_orbit_defs
-            ));
-        }
+
+        assert!(u_move.commutes_with(
+            u_move,
+            &mut result_1,
+            &mut result_2,
+            &cube3_def.sorted_orbit_defs,
+        ));
+        assert!(d2_move.commutes_with(
+            d2_move,
+            &mut result_1,
+            &mut result_2,
+            &cube3_def.sorted_orbit_defs,
+        ));
+        assert!(u_move.commutes_with(
+            d2_move,
+            &mut result_1,
+            &mut result_2,
+            &cube3_def.sorted_orbit_defs,
+        ));
+        assert!(!u_move.commutes_with(
+            r_move,
+            &mut result_1,
+            &mut result_2,
+            &cube3_def.sorted_orbit_defs,
+        ));
+        assert!(!d2_move.commutes_with(
+            r_move,
+            &mut result_1,
+            &mut result_2,
+            &cube3_def.sorted_orbit_defs,
+        ));
+        assert!(!r_move.commutes_with(
+            u_move,
+            &mut result_1,
+            &mut result_2,
+            &cube3_def.sorted_orbit_defs,
+        ));
+        assert!(!r_move.commutes_with(
+            d2_move,
+            &mut result_1,
+            &mut result_2,
+            &cube3_def.sorted_orbit_defs,
+        ));
     }
 
     #[test]
     fn test_commutes_with() {
-        commutes_with::<StackCube3>();
-        commutes_with::<HeapPuzzle>();
+        make_guard!(guard);
+        commutes_with::<StackCube3>(guard);
+        make_guard!(guard);
+        commutes_with::<HeapPuzzle>(guard);
         #[cfg(simd8and16)]
-        commutes_with::<cube3::simd8and16::Cube3>();
-        #[cfg(simd8and16)]
-        commutes_with::<cube3::simd8and16::UncompressedCube3>();
+        {
+            make_guard!(guard);
+            commutes_with::<cube3::simd8and16::Cube3>(guard);
+            make_guard!(guard);
+            commutes_with::<cube3::simd8and16::UncompressedCube3>(guard);
+        }
         #[cfg(avx2)]
-        commutes_with::<cube3::avx2::Cube3>();
+        {
+            make_guard!(guard);
+            commutes_with::<cube3::avx2::Cube3>(guard);
+        }
     }
 
     #[test]
     fn test_not_enough_buffer_space() {
-        let cube3_def = PuzzleDef::<StackPuzzle<39>>::try_from(&*KPUZZLE_3X3);
+        make_guard!(guard);
+        let try_cube3_def = PuzzleDef::<StackPuzzle<39>>::new(&KPUZZLE_3X3, guard);
         assert!(matches!(
-            cube3_def,
+            try_cube3_def,
             Err(KSolveConversionError::NotEnoughBufferSpace)
         ));
     }
 
-    pub fn many_compositions<P: PuzzleState>() {
-        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+    pub fn many_compositions<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let also_solved = apply_moves(&cube3_def, &solved, "R F", 105);
         assert_eq!(also_solved, solved);
@@ -476,31 +499,37 @@ mod tests {
 
     #[test]
     fn test_many_compositions() {
-        many_compositions::<StackCube3>();
-        many_compositions::<HeapPuzzle>();
+        make_guard!(guard);
+        many_compositions::<StackCube3>(guard);
+        make_guard!(guard);
+        many_compositions::<HeapPuzzle>(guard);
         #[cfg(simd8and16)]
-        many_compositions::<cube3::simd8and16::Cube3>();
-        #[cfg(simd8and16)]
-        many_compositions::<cube3::simd8and16::UncompressedCube3>();
+        {
+            make_guard!(guard);
+            many_compositions::<cube3::simd8and16::Cube3>(guard);
+            make_guard!(guard);
+            many_compositions::<cube3::simd8and16::UncompressedCube3>(guard);
+        }
         #[cfg(avx2)]
-        many_compositions::<cube3::avx2::Cube3>();
+        {
+            make_guard!(guard);
+            many_compositions::<cube3::avx2::Cube3>(guard);
+        }
     }
 
-    pub fn s_u4_symmetry<P: PuzzleState>() {
-        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+    pub fn s_u4_symmetry<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let s_u4_symmetry = cube3_def.find_symmetry("S_U4").unwrap();
         let solved = cube3_def.new_solved_state();
 
         let mut result_1 = solved.clone();
         let mut result_2 = solved.clone();
         for _ in 0..4 {
-            unsafe {
-                result_2.replace_compose(
-                    &result_1,
-                    &s_u4_symmetry.puzzle_state,
-                    &cube3_def.sorted_orbit_defs,
-                );
-            }
+            result_2.replace_compose(
+                &result_1,
+                &s_u4_symmetry.puzzle_state,
+                &cube3_def.sorted_orbit_defs,
+            );
             std::mem::swap(&mut result_1, &mut result_2);
         }
 
@@ -509,18 +538,26 @@ mod tests {
 
     #[test]
     fn test_s_u4_symmetry() {
-        s_u4_symmetry::<StackCube3>();
-        s_u4_symmetry::<HeapPuzzle>();
+        make_guard!(guard);
+        s_u4_symmetry::<StackCube3>(guard);
+        make_guard!(guard);
+        s_u4_symmetry::<HeapPuzzle>(guard);
         #[cfg(simd8and16)]
-        s_u4_symmetry::<cube3::simd8and16::Cube3>();
-        #[cfg(simd8and16)]
-        s_u4_symmetry::<cube3::simd8and16::UncompressedCube3>();
+        {
+            make_guard!(guard);
+            s_u4_symmetry::<cube3::simd8and16::Cube3>(guard);
+            make_guard!(guard);
+            s_u4_symmetry::<cube3::simd8and16::UncompressedCube3>(guard);
+        }
         #[cfg(avx2)]
-        s_u4_symmetry::<cube3::avx2::Cube3>();
+        {
+            make_guard!(guard);
+            s_u4_symmetry::<cube3::avx2::Cube3>(guard);
+        }
     }
 
-    pub fn expanded_move<P: PuzzleState>() {
-        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+    pub fn expanded_move<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let actual_solved = cube3_def.new_solved_state();
         let expected_solved = apply_moves(
             &cube3_def,
@@ -533,18 +570,26 @@ mod tests {
 
     #[test]
     fn test_expanded_move() {
-        expanded_move::<StackCube3>();
-        expanded_move::<HeapPuzzle>();
+        make_guard!(guard);
+        expanded_move::<StackCube3>(guard);
+        make_guard!(guard);
+        expanded_move::<HeapPuzzle>(guard);
         #[cfg(simd8and16)]
-        expanded_move::<cube3::simd8and16::Cube3>();
-        #[cfg(simd8and16)]
-        expanded_move::<cube3::simd8and16::UncompressedCube3>();
+        {
+            make_guard!(guard);
+            expanded_move::<cube3::simd8and16::Cube3>(guard);
+            make_guard!(guard);
+            expanded_move::<cube3::simd8and16::UncompressedCube3>(guard);
+        }
         #[cfg(avx2)]
-        expanded_move::<cube3::avx2::Cube3>();
+        {
+            make_guard!(guard);
+            expanded_move::<cube3::avx2::Cube3>(guard);
+        }
     }
 
-    pub fn inversion<P: PuzzleState>() {
-        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+    pub fn inversion<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
 
@@ -571,28 +616,34 @@ mod tests {
 
     #[test]
     fn test_inversion() {
-        inversion::<StackCube3>();
-        inversion::<HeapPuzzle>();
+        make_guard!(guard);
+        inversion::<StackCube3>(guard);
+        make_guard!(guard);
+        inversion::<HeapPuzzle>(guard);
         #[cfg(simd8and16)]
-        inversion::<cube3::simd8and16::Cube3>();
-        #[cfg(simd8and16)]
-        inversion::<cube3::simd8and16::UncompressedCube3>();
+        {
+            make_guard!(guard);
+            inversion::<cube3::simd8and16::Cube3>(guard);
+            make_guard!(guard);
+            inversion::<cube3::simd8and16::UncompressedCube3>(guard);
+        }
         #[cfg(avx2)]
-        inversion::<cube3::avx2::Cube3>();
+        {
+            make_guard!(guard);
+            inversion::<cube3::avx2::Cube3>(guard);
+        }
     }
 
-    pub fn random_inversion<P: PuzzleState>() {
-        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+    pub fn random_inversion<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
 
         for _ in 0..50 {
-            let random_state = random_3x3_state(&cube3_def, &solved);
+            let random_state = apply_random_moves(&cube3_def, &solved, 20);
             let mut result_1 = solved.clone();
             let mut result_2 = solved.clone();
             result_1.replace_inverse(&random_state, &cube3_def.sorted_orbit_defs);
-            unsafe {
-                result_2.replace_compose(&result_1, &random_state, &cube3_def.sorted_orbit_defs);
-            }
+            result_2.replace_compose(&result_1, &random_state, &cube3_def.sorted_orbit_defs);
 
             assert_eq!(result_2, solved);
         }
@@ -600,18 +651,26 @@ mod tests {
 
     #[test]
     fn test_random_inversion() {
-        random_inversion::<StackCube3>();
-        random_inversion::<HeapPuzzle>();
+        make_guard!(guard);
+        random_inversion::<StackCube3>(guard);
+        make_guard!(guard);
+        random_inversion::<HeapPuzzle>(guard);
         #[cfg(simd8and16)]
-        random_inversion::<cube3::simd8and16::Cube3>();
-        #[cfg(simd8and16)]
-        random_inversion::<cube3::simd8and16::UncompressedCube3>();
+        {
+            make_guard!(guard);
+            random_inversion::<cube3::simd8and16::Cube3>(guard);
+            make_guard!(guard);
+            random_inversion::<cube3::simd8and16::UncompressedCube3>(guard);
+        }
         #[cfg(avx2)]
-        random_inversion::<cube3::avx2::Cube3>();
+        {
+            make_guard!(guard);
+            random_inversion::<cube3::avx2::Cube3>(guard);
+        }
     }
 
-    pub fn induces_sorted_cycle_type_within_cycle<P: PuzzleState>() {
-        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+    pub fn induces_sorted_cycle_type_within_cycle<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
 
@@ -636,18 +695,26 @@ mod tests {
 
     #[test]
     fn test_induces_sorted_cycle_type_within_cycle() {
-        induces_sorted_cycle_type_within_cycle::<StackCube3>();
-        induces_sorted_cycle_type_within_cycle::<HeapPuzzle>();
+        make_guard!(guard);
+        induces_sorted_cycle_type_within_cycle::<StackCube3>(guard);
+        make_guard!(guard);
+        induces_sorted_cycle_type_within_cycle::<HeapPuzzle>(guard);
         #[cfg(simd8and16)]
-        induces_sorted_cycle_type_within_cycle::<cube3::simd8and16::Cube3>();
-        #[cfg(simd8and16)]
-        induces_sorted_cycle_type_within_cycle::<cube3::simd8and16::UncompressedCube3>();
+        {
+            make_guard!(guard);
+            induces_sorted_cycle_type_within_cycle::<cube3::simd8and16::Cube3>(guard);
+            make_guard!(guard);
+            induces_sorted_cycle_type_within_cycle::<cube3::simd8and16::UncompressedCube3>(guard);
+        }
         #[cfg(avx2)]
-        induces_sorted_cycle_type_within_cycle::<cube3::avx2::Cube3>();
+        {
+            make_guard!(guard);
+            induces_sorted_cycle_type_within_cycle::<cube3::avx2::Cube3>(guard);
+        }
     }
 
-    pub fn induces_sorted_cycle_type_many<P: PuzzleState>() {
-        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+    pub fn induces_sorted_cycle_type_many<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
 
@@ -758,18 +825,26 @@ mod tests {
 
     #[test]
     fn test_induces_sorted_cycle_type_many() {
-        induces_sorted_cycle_type_many::<StackCube3>();
-        induces_sorted_cycle_type_many::<HeapPuzzle>();
+        make_guard!(guard);
+        induces_sorted_cycle_type_many::<StackCube3>(guard);
+        make_guard!(guard);
+        induces_sorted_cycle_type_many::<HeapPuzzle>(guard);
         #[cfg(simd8and16)]
-        induces_sorted_cycle_type_many::<cube3::simd8and16::Cube3>();
-        #[cfg(simd8and16)]
-        induces_sorted_cycle_type_many::<cube3::simd8and16::UncompressedCube3>();
+        {
+            make_guard!(guard);
+            induces_sorted_cycle_type_many::<cube3::simd8and16::Cube3>(guard);
+            make_guard!(guard);
+            induces_sorted_cycle_type_many::<cube3::simd8and16::UncompressedCube3>(guard);
+        }
         #[cfg(avx2)]
-        induces_sorted_cycle_type_many::<cube3::avx2::Cube3>();
+        {
+            make_guard!(guard);
+            induces_sorted_cycle_type_many::<cube3::avx2::Cube3>(guard);
+        }
     }
 
-    fn exact_hasher_orbit<P: PuzzleState>() {
-        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+    fn exact_hasher_orbit<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
 
         for (test_state, exp_hashes) in [
@@ -820,22 +895,30 @@ mod tests {
 
     #[test]
     fn test_exact_hasher_orbit() {
-        exact_hasher_orbit::<StackCube3>();
-        exact_hasher_orbit::<HeapPuzzle>();
+        make_guard!(guard);
+        exact_hasher_orbit::<StackCube3>(guard);
+        make_guard!(guard);
+        exact_hasher_orbit::<HeapPuzzle>(guard);
         #[cfg(simd8and16)]
-        many_compositions::<cube3::simd8and16::Cube3>();
-        #[cfg(simd8and16)]
-        exact_hasher_orbit::<cube3::simd8and16::UncompressedCube3>();
+        {
+            make_guard!(guard);
+            many_compositions::<cube3::simd8and16::Cube3>(guard);
+            make_guard!(guard);
+            exact_hasher_orbit::<cube3::simd8and16::UncompressedCube3>(guard);
+        }
         #[cfg(avx2)]
-        exact_hasher_orbit::<cube3::avx2::Cube3>();
+        {
+            make_guard!(guard);
+            exact_hasher_orbit::<cube3::avx2::Cube3>(guard);
+        }
     }
 
-    pub fn bench_compose_helper<P: PuzzleState>(b: &mut Bencher) {
-        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+    pub fn bench_compose_helper<'id, P: PuzzleState<'id>>(guard: Guard<'id>, b: &mut Bencher) {
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let mut solved = cube3_def.new_solved_state();
         let r_move = cube3_def.find_move("R").unwrap();
         let f_move = cube3_def.find_move("F").unwrap();
-        b.iter(|| unsafe {
+        b.iter(|| {
             test::black_box(&mut solved).replace_compose(
                 test::black_box(&r_move.puzzle_state),
                 test::black_box(&f_move.puzzle_state),
@@ -844,8 +927,8 @@ mod tests {
         });
     }
 
-    pub fn bench_inverse_helper<P: PuzzleState>(b: &mut Bencher) {
-        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+    pub fn bench_inverse_helper<'id, P: PuzzleState<'id>>(guard: Guard<'id>, b: &mut Bencher) {
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 100);
@@ -855,8 +938,11 @@ mod tests {
         });
     }
 
-    pub fn bench_induces_sorted_cycle_type_worst_helper<P: PuzzleState>(b: &mut Bencher) {
-        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+    pub fn bench_induces_sorted_cycle_type_worst_helper<'id, P: PuzzleState<'id>>(
+        guard: Guard<'id>,
+        b: &mut Bencher,
+    ) {
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let sorted_cycle_type = [
             ct(&[(3, true), (5, true)]),
             ct(&[(2, false), (2, true), (7, true)]),
@@ -872,8 +958,11 @@ mod tests {
         });
     }
 
-    pub fn bench_induces_sorted_cycle_type_average_helper<P: PuzzleState>(b: &mut Bencher) {
-        let cube3_def: PuzzleDef<P> = (&*KPUZZLE_3X3).try_into().unwrap();
+    pub fn bench_induces_sorted_cycle_type_average_helper<'id, P: PuzzleState<'id>>(
+        guard: Guard<'id>,
+        b: &mut Bencher,
+    ) {
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
 
         let sorted_cycle_types = [
@@ -898,7 +987,7 @@ mod tests {
         let mut sorted_cycle_type_iter = sorted_cycle_types.iter().cycle();
 
         let random_1000: Vec<P> = (0..1000)
-            .map(|_| random_3x3_state(&cube3_def, &solved))
+            .map(|_| apply_random_moves(&cube3_def, &solved, 20))
             .collect();
         let mut random_iter = random_1000.iter().cycle();
 
@@ -917,22 +1006,26 @@ mod tests {
 
     #[bench]
     fn bench_compose_cube3_heap(b: &mut Bencher) {
-        bench_compose_helper::<HeapPuzzle>(b);
+        make_guard!(guard);
+        bench_compose_helper::<HeapPuzzle>(guard, b);
     }
 
     #[bench]
     fn bench_inverse_cube3_heap(b: &mut Bencher) {
-        bench_inverse_helper::<HeapPuzzle>(b);
+        make_guard!(guard);
+        bench_inverse_helper::<HeapPuzzle>(guard, b);
     }
 
     #[bench]
     fn bench_induces_sorted_cycle_type_cube3_heap_worst(b: &mut Bencher) {
-        bench_induces_sorted_cycle_type_worst_helper::<HeapPuzzle>(b);
+        make_guard!(guard);
+        bench_induces_sorted_cycle_type_worst_helper::<HeapPuzzle>(guard, b);
     }
 
     #[bench]
     fn bench_induces_sorted_cycle_type_cube3_heap_average(b: &mut Bencher) {
-        bench_induces_sorted_cycle_type_average_helper::<HeapPuzzle>(b);
+        make_guard!(guard);
+        bench_induces_sorted_cycle_type_average_helper::<HeapPuzzle>(guard, b);
     }
 
     // --- simd8and16::UncompressedCube3 benchmarks ---
@@ -940,25 +1033,33 @@ mod tests {
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_compose_uncompressed_cube3_simd8and16(b: &mut Bencher) {
-        bench_compose_helper::<cube3::simd8and16::UncompressedCube3>(b);
+        make_guard!(guard);
+        bench_compose_helper::<cube3::simd8and16::UncompressedCube3>(guard, b);
     }
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_inverse_uncompressed_cube3_simd8and16(b: &mut Bencher) {
-        bench_inverse_helper::<cube3::simd8and16::UncompressedCube3>(b);
+        make_guard!(guard);
+        bench_inverse_helper::<cube3::simd8and16::UncompressedCube3>(guard, b);
     }
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_induces_sorted_cycle_type_uncompressed_cube3_simd8and16_worst(b: &mut Bencher) {
-        bench_induces_sorted_cycle_type_worst_helper::<cube3::simd8and16::UncompressedCube3>(b);
+        make_guard!(guard);
+        bench_induces_sorted_cycle_type_worst_helper::<cube3::simd8and16::UncompressedCube3>(
+            guard, b,
+        );
     }
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_induces_sorted_cycle_type_uncompressed_cube3_simd8and16_average(b: &mut Bencher) {
-        bench_induces_sorted_cycle_type_average_helper::<cube3::simd8and16::UncompressedCube3>(b);
+        make_guard!(guard);
+        bench_induces_sorted_cycle_type_average_helper::<cube3::simd8and16::UncompressedCube3>(
+            guard, b,
+        );
     }
 
     // --- simd8and16::Cube3 benchmarks ---
@@ -966,25 +1067,29 @@ mod tests {
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_compose_cube3_simd8and16(b: &mut Bencher) {
-        bench_compose_helper::<cube3::simd8and16::Cube3>(b);
+        make_guard!(guard);
+        bench_compose_helper::<cube3::simd8and16::Cube3>(guard, b);
     }
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_inverse_cube3_simd8and16(b: &mut Bencher) {
-        bench_inverse_helper::<cube3::simd8and16::Cube3>(b);
+        make_guard!(guard);
+        bench_inverse_helper::<cube3::simd8and16::Cube3>(guard, b);
     }
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_induces_sorted_cycle_type_cube3_simd8and16_worst(b: &mut Bencher) {
-        bench_induces_sorted_cycle_type_worst_helper::<cube3::simd8and16::Cube3>(b);
+        make_guard!(guard);
+        bench_induces_sorted_cycle_type_worst_helper::<cube3::simd8and16::Cube3>(guard, b);
     }
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_induces_sorted_cycle_type_cube3_simd8and16_average(b: &mut Bencher) {
-        bench_induces_sorted_cycle_type_average_helper::<cube3::simd8and16::Cube3>(b);
+        make_guard!(guard);
+        bench_induces_sorted_cycle_type_average_helper::<cube3::simd8and16::Cube3>(guard, b);
     }
 
     // --- avx2::Cube3 benchmarks ---
@@ -992,24 +1097,28 @@ mod tests {
     #[bench]
     #[cfg_attr(not(avx2), ignore)]
     fn bench_compose_cube3_avx2(b: &mut Bencher) {
-        bench_compose_helper::<cube3::avx2::Cube3>(b);
+        make_guard!(guard);
+        bench_compose_helper::<cube3::avx2::Cube3>(guard, b);
     }
 
     #[bench]
     #[cfg_attr(not(avx2), ignore)]
     fn bench_inverse_cube3_avx2(b: &mut Bencher) {
-        bench_inverse_helper::<cube3::avx2::Cube3>(b);
+        make_guard!(guard);
+        bench_inverse_helper::<cube3::avx2::Cube3>(guard, b);
     }
 
     #[bench]
     #[cfg_attr(not(avx2), ignore)]
     fn bench_induces_sorted_cycle_type_cube3_avx2_worst(b: &mut Bencher) {
-        bench_induces_sorted_cycle_type_worst_helper::<cube3::avx2::Cube3>(b);
+        make_guard!(guard);
+        bench_induces_sorted_cycle_type_worst_helper::<cube3::avx2::Cube3>(guard, b);
     }
 
     #[bench]
     #[cfg_attr(not(avx2), ignore)]
     fn bench_induces_sorted_cycle_type_cube3_avx2_average(b: &mut Bencher) {
-        bench_induces_sorted_cycle_type_average_helper::<cube3::avx2::Cube3>(b);
+        make_guard!(guard);
+        bench_induces_sorted_cycle_type_average_helper::<cube3::avx2::Cube3>(guard, b);
     }
 }

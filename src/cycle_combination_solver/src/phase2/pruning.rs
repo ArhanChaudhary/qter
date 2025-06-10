@@ -19,14 +19,16 @@ use crate::phase2::{
     permutator::pandita2,
     puzzle::MultiBvInterface,
 };
+use generativity::Id;
 use itertools::Itertools;
 use std::num::{NonZeroU8, NonZeroUsize};
 use thiserror::Error;
 
-pub trait PruningTables<P: PuzzleState> {
+pub trait PruningTables<'id, P: PuzzleState<'id>> {
     type GenerateMetas<'a>
     where
-        P: 'a;
+        P: 'a,
+        'id: 'a;
     type GenerateError;
 
     /// Generate pruning tables for a puzzle
@@ -77,15 +79,15 @@ pub trait StorageBackend<const EXACT: bool> {
 }
 
 /// A pruning table acting on a single orbit.
-trait OrbitPruningTable<P: PuzzleState> {
+trait OrbitPruningTable<'id, P: PuzzleState<'id>> {
     /// Generate a pruning table for a target orbit.
-    fn try_generate(
-        generate_meta: OrbitPruningTableGenerationMeta<P>,
+    fn try_generate<'a>(
+        generate_meta: OrbitPruningTableGenerationMeta<'id, 'a, P>,
     ) -> Result<
         (Self, usize),
         (
             OrbitPruningTableGenerationError,
-            OrbitPruningTableGenerationMeta<P>,
+            OrbitPruningTableGenerationMeta<'id, 'a, P>,
         ),
     >
     where
@@ -103,21 +105,21 @@ pub trait UsedSizeBytes {
     fn used_size_bytes(&self) -> usize;
 }
 
-pub struct OrbitPruningTables<P: PuzzleState> {
-    orbit_pruning_tables: Box<[Box<dyn OrbitPruningTable<P>>]>,
+pub struct OrbitPruningTables<'id, P: PuzzleState<'id>> {
+    orbit_pruning_tables: Box<[Box<dyn OrbitPruningTable<'id, P>>]>,
 }
 
 #[derive(Debug)]
-struct OrbitPruningTableGenerationMeta<'a, P: PuzzleState> {
-    puzzle_def: &'a PuzzleDef<P>,
+struct OrbitPruningTableGenerationMeta<'id, 'a, P: PuzzleState<'id>> {
+    puzzle_def: &'a PuzzleDef<'id, P>,
     sorted_cycle_type_orbit: &'a [(NonZeroU8, bool)],
     orbit_def: OrbitDef,
     orbit_identifier: usize,
     max_size_bytes: usize,
 }
 
-pub struct OrbitPruningTablesGenerateMeta<'a, P: PuzzleState> {
-    puzzle_def: &'a PuzzleDef<P>,
+pub struct OrbitPruningTablesGenerateMeta<'id, 'a, P: PuzzleState<'id>> {
+    puzzle_def: &'a PuzzleDef<'id, P>,
     sorted_cycle_type: &'a [OrientedPartition],
     max_size_bytes: usize,
     maybe_table_types: Option<Vec<(TableTy, StorageBackendTy)>>,
@@ -213,7 +215,7 @@ pub enum StorageBackendTy {
     Dynamic,
 }
 
-pub struct ZeroTable<P: PuzzleState>(std::marker::PhantomData<P>);
+pub struct ZeroTable<'id, P: PuzzleState<'id>>(std::marker::PhantomData<&'id P>);
 
 use private::OrbitPruneHeuristic;
 mod private {
@@ -257,14 +259,14 @@ impl UsedSizeBytes for TANSDistributionEstimation {
     }
 }
 
-impl<'a, P: PuzzleState> OrbitPruningTablesGenerateMeta<'a, P> {
+impl<'id, 'a, P: PuzzleState<'id>> OrbitPruningTablesGenerateMeta<'id, 'a, P> {
     /// Create a new `OrbitPruningTablesGenerateMeta` with the given parameters.
     ///
     /// # Errors
     ///
     /// Returns an error if the length of `sorted_cycle_type` does not match
     pub fn new(
-        puzzle_def: &'a PuzzleDef<P>,
+        puzzle_def: &'a PuzzleDef<'id, P>,
         sorted_cycle_type: &'a [OrientedPartition],
         max_size_bytes: usize,
     ) -> Result<Self, TableTypeInstantiationError> {
@@ -288,7 +290,7 @@ impl<'a, P: PuzzleState> OrbitPruningTablesGenerateMeta<'a, P> {
     ///
     /// Returns an error if the length of `sorted_cycle_type` does not match
     pub fn new_with_table_types(
-        puzzle_def: &'a PuzzleDef<P>,
+        puzzle_def: &'a PuzzleDef<'id, P>,
         sorted_cycle_type: &'a [OrientedPartition],
         table_types: Vec<(TableTy, StorageBackendTy)>,
         max_size_bytes: usize,
@@ -314,16 +316,17 @@ impl<'a, P: PuzzleState> OrbitPruningTablesGenerateMeta<'a, P> {
     }
 }
 
-impl<P: PuzzleState> PruningTables<P> for OrbitPruningTables<P> {
+impl<'id, P: PuzzleState<'id> + 'id> PruningTables<'id, P> for OrbitPruningTables<'id, P> {
     type GenerateMetas<'a>
-        = OrbitPruningTablesGenerateMeta<'a, P>
+        = OrbitPruningTablesGenerateMeta<'id, 'a, P>
     where
-        P: 'a;
+        P: 'a,
+        'id: 'a;
     type GenerateError = OrbitPruningTableGenerationError;
 
     fn try_generate(
-        generate_metas: OrbitPruningTablesGenerateMeta<P>,
-    ) -> Result<OrbitPruningTables<P>, OrbitPruningTableGenerationError> {
+        generate_metas: OrbitPruningTablesGenerateMeta<'id, '_, P>,
+    ) -> Result<OrbitPruningTables<'id, P>, OrbitPruningTableGenerationError> {
         let mut orbit_pruning_tables =
             Vec::with_capacity(generate_metas.puzzle_def.sorted_orbit_defs.len());
         let mut remaining_size_bytes = generate_metas.max_size_bytes;
@@ -419,13 +422,13 @@ impl<P: PuzzleState> PruningTables<P> for OrbitPruningTables<P> {
 
 macro_rules! table_fn {
     ($fn_name:ident, $table:ident, $storage:ident, $exact:ident) => {
-        fn $fn_name<P: PuzzleState>(
-            generate_meta: OrbitPruningTableGenerationMeta<P>,
+        fn $fn_name<'id, 'a, P: PuzzleState<'id> + 'id>(
+            generate_meta: OrbitPruningTableGenerationMeta<'id, 'a, P>,
         ) -> Result<
-            (Box<dyn OrbitPruningTable<P>>, usize),
+            (Box<dyn OrbitPruningTable<'id, P>>, usize),
             (
                 OrbitPruningTableGenerationError,
-                OrbitPruningTableGenerationMeta<P>,
+                OrbitPruningTableGenerationMeta<'id, 'a, P>,
             ),
         > {
             let (table, used_size_bytes) =
@@ -434,13 +437,13 @@ macro_rules! table_fn {
         }
     };
     ($fn_name:ident, $table:ident) => {
-        fn $fn_name<P: PuzzleState>(
-            generate_meta: OrbitPruningTableGenerationMeta<P>,
+        fn $fn_name<'id, 'a, P: PuzzleState<'id>>(
+            generate_meta: OrbitPruningTableGenerationMeta<'id, 'a, P>,
         ) -> Result<
-            (Box<dyn OrbitPruningTable<P>>, usize),
+            (Box<dyn OrbitPruningTable<'id, P>>, usize),
             (
                 OrbitPruningTableGenerationError,
-                OrbitPruningTableGenerationMeta<P>,
+                OrbitPruningTableGenerationMeta<'id, 'a, P>,
             ),
         > {
             let (table, used_size_bytes) = $table::try_generate(generate_meta)?;
@@ -458,10 +461,10 @@ table_fn! { try_generate_exact_tans_orbit_table,               ExactOrbitPruning
 table_fn! { try_generate_cycle_type_uncompressed_orbit_table,  CycleTypeOrbitPruningTable                                      }
 table_fn! { try_generate_zero_orbit_table,                     ZeroOrbitTable                                                  }
 
-fn try_generate_orbit_pruning_table_with_table_type<P: PuzzleState>(
-    generate_meta: OrbitPruningTableGenerationMeta<P>,
+fn try_generate_orbit_pruning_table_with_table_type<'id, P: PuzzleState<'id> + 'id>(
+    generate_meta: OrbitPruningTableGenerationMeta<'id, '_, P>,
     table_type: (TableTy, StorageBackendTy),
-) -> Result<(Box<dyn OrbitPruningTable<P>>, usize), OrbitPruningTableGenerationError> {
+) -> Result<(Box<dyn OrbitPruningTable<'id, P>>, usize), OrbitPruningTableGenerationError> {
     match table_type {
         (TableTy::Exact, StorageBackendTy::Uncompressed) => {
             try_generate_exact_uncompressed_orbit_table(generate_meta).map_err(|(err, _)| err)
@@ -484,8 +487,10 @@ fn try_generate_orbit_pruning_table_with_table_type<P: PuzzleState>(
         (TableTy::CycleType, StorageBackendTy::Uncompressed) => {
             try_generate_cycle_type_uncompressed_orbit_table(generate_meta).map_err(|(err, _)| err)
         }
-        (TableTy::CycleType, storage_backend_ty)  => {
-            panic!("CycleType orbit tables are not supported for storage backend type {storage_backend_ty:?}")
+        (TableTy::CycleType, storage_backend_ty) => {
+            panic!(
+                "CycleType orbit tables are not supported for storage backend type {storage_backend_ty:?}"
+            )
         }
         (TableTy::Zero, _) | (_, StorageBackendTy::Zero) => {
             Ok(try_generate_zero_orbit_table(generate_meta).unwrap())
@@ -496,9 +501,9 @@ fn try_generate_orbit_pruning_table_with_table_type<P: PuzzleState>(
     }
 }
 
-fn generate_orbit_pruning_table<P: PuzzleState>(
-    mut generate_meta: OrbitPruningTableGenerationMeta<P>,
-) -> (Box<dyn OrbitPruningTable<P>>, usize) {
+fn generate_orbit_pruning_table<'id, P: PuzzleState<'id> + 'id>(
+    mut generate_meta: OrbitPruningTableGenerationMeta<'id, '_, P>,
+) -> (Box<dyn OrbitPruningTable<'id, P>>, usize) {
     for try_table_fn in [
         try_generate_exact_uncompressed_orbit_table,
         try_generate_exact_tans_orbit_table,
@@ -588,7 +593,7 @@ impl<const EXACT: bool> StorageBackend<EXACT> for NxoptStorageBackend<EXACT> {
 
     fn initialize_from_meta(initialization_meta: MaxSizeBytes) -> Self {
         let used_size_bytes = initialization_meta.used_size_bytes();
-        let mut data = vec![0; used_size_bytes].into_boxed_slice();
+        let data = vec![0; used_size_bytes].into_boxed_slice();
         todo!();
     }
 
@@ -626,7 +631,7 @@ impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend<EXACT> {
 
     fn initialize_from_meta(initialization_meta: TANSDistributionEstimation) -> Self {
         let used_size_bytes = initialization_meta.used_size_bytes();
-        let mut data = vec![0; used_size_bytes].into_boxed_slice();
+        let data = vec![0; used_size_bytes].into_boxed_slice();
         todo!();
     }
 
@@ -662,16 +667,16 @@ impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend<EXACT> {
     }
 }
 
-impl<P: PuzzleState, S: StorageBackend<false>> OrbitPruningTable<P>
+impl<'id, P: PuzzleState<'id>, S: StorageBackend<false>> OrbitPruningTable<'id, P>
     for ApproximateOrbitPruningTable<S>
 {
-    fn try_generate(
-        generate_meta: OrbitPruningTableGenerationMeta<P>,
+    fn try_generate<'a>(
+        generate_meta: OrbitPruningTableGenerationMeta<'id, 'a, P>,
     ) -> Result<
         (ApproximateOrbitPruningTable<S>, usize),
         (
             OrbitPruningTableGenerationError,
-            OrbitPruningTableGenerationMeta<P>,
+            OrbitPruningTableGenerationMeta<'id, 'a, P>,
         ),
     > {
         // Decide on a load factor to return an err
@@ -709,18 +714,20 @@ unsafe fn knuthm(ori: &mut [u8], orientation_count: NonZeroU8) {
     *last = (*last + 2) % orientation_count.get();
 }
 
-impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbitPruningTable<S> {
-    fn try_generate(
-        generate_meta: OrbitPruningTableGenerationMeta<P>,
+impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<'id, P>
+    for ExactOrbitPruningTable<S>
+{
+    fn try_generate<'a>(
+        generate_meta: OrbitPruningTableGenerationMeta<'id, 'a, P>,
     ) -> Result<
         (ExactOrbitPruningTable<S>, usize),
         (
             OrbitPruningTableGenerationError,
-            OrbitPruningTableGenerationMeta<P>,
+            OrbitPruningTableGenerationMeta<'id, 'a, P>,
         ),
     > {
         // TODO: properly pick an orbit puzzle type
-        type O = SliceOrbitPuzzle;
+        type O<'id> = SliceOrbitPuzzle<'id>;
         let OrbitPruningTableGenerationMeta {
             puzzle_def,
             sorted_cycle_type_orbit,
@@ -728,6 +735,7 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
             orbit_identifier,
             max_size_bytes,
         } = generate_meta;
+        let id: Id<'id> = puzzle_def.id();
 
         // TODO: make this common for all pruning tables
         let piece_count = orbit_def.piece_count.get();
@@ -754,7 +762,7 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
 
         let puzzle_solved = puzzle_def.new_solved_state();
         let (perm, ori) = puzzle_solved.orbit_bytes(orbit_identifier, orbit_def);
-        let orbit_solved = O::from_orbit_transformation_unchecked(perm, ori, orbit_def);
+        let orbit_solved = O::from_orbit_transformation_unchecked(perm, ori, orbit_def, id);
 
         let orbit_move_class_indicies = puzzle_def
             .move_classes
@@ -765,7 +773,8 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
                 let (perm, ori) = puzzle_def.moves[move_class]
                     .puzzle_state
                     .orbit_bytes(orbit_identifier, orbit_def);
-                if O::from_orbit_transformation_unchecked(perm, ori, orbit_def) == orbit_solved {
+                if O::from_orbit_transformation_unchecked(perm, ori, orbit_def, id) == orbit_solved
+                {
                     None
                 } else {
                     Some(i)
@@ -779,7 +788,9 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
             .filter_map(|move_| {
                 if orbit_move_class_indicies.contains(&move_.move_class_index) {
                     let (perm, ori) = move_.puzzle_state.orbit_bytes(orbit_identifier, orbit_def);
-                    Some(O::from_orbit_transformation_unchecked(perm, ori, orbit_def))
+                    Some(O::from_orbit_transformation_unchecked(
+                        perm, ori, orbit_def, id,
+                    ))
                 } else {
                     None
                 }
@@ -827,7 +838,8 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
                         continue;
                     }
 
-                    let curr_state = O::from_orbit_transformation_unchecked(&perm, &ori, orbit_def);
+                    let curr_state =
+                        O::from_orbit_transformation_unchecked(&perm, &ori, orbit_def, id);
                     if depth == 0 {
                         if curr_state.induces_sorted_cycle_type(
                             sorted_cycle_type_orbit,
@@ -844,7 +856,7 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
                     }
 
                     for move_ in &orbit_moves {
-                        unsafe { orbit_result.replace_compose(&curr_state, move_, orbit_def) };
+                        orbit_result.replace_compose(&curr_state, move_, orbit_def);
                         let new_hash = orbit_result.exact_hasher(orbit_def);
                         if table.storage_backend.heuristic_hash(new_hash).is_vacant() {
                             table
@@ -876,14 +888,14 @@ impl<P: PuzzleState, S: StorageBackend<true>> OrbitPruningTable<P> for ExactOrbi
     }
 }
 
-impl<P: PuzzleState> OrbitPruningTable<P> for CycleTypeOrbitPruningTable {
-    fn try_generate(
-        generate_meta: OrbitPruningTableGenerationMeta<P>,
+impl<'id, P: PuzzleState<'id>> OrbitPruningTable<'id, P> for CycleTypeOrbitPruningTable {
+    fn try_generate<'a>(
+        generate_meta: OrbitPruningTableGenerationMeta<'id, 'a, P>,
     ) -> Result<
         (CycleTypeOrbitPruningTable, usize),
         (
             OrbitPruningTableGenerationError,
-            OrbitPruningTableGenerationMeta<P>,
+            OrbitPruningTableGenerationMeta<'id, 'a, P>,
         ),
     > {
         todo!();
@@ -894,14 +906,14 @@ impl<P: PuzzleState> OrbitPruningTable<P> for CycleTypeOrbitPruningTable {
     }
 }
 
-impl<P: PuzzleState> OrbitPruningTable<P> for ZeroOrbitTable {
-    fn try_generate(
-        _generate_meta: OrbitPruningTableGenerationMeta<P>,
+impl<'id, P: PuzzleState<'id>> OrbitPruningTable<'id, P> for ZeroOrbitTable {
+    fn try_generate<'a>(
+        _generate_meta: OrbitPruningTableGenerationMeta<'id, 'a, P>,
     ) -> Result<
         (ZeroOrbitTable, usize),
         (
             OrbitPruningTableGenerationError,
-            OrbitPruningTableGenerationMeta<P>,
+            OrbitPruningTableGenerationMeta<'id, 'a, P>,
         ),
     > {
         Ok((ZeroOrbitTable, 0))
@@ -912,14 +924,15 @@ impl<P: PuzzleState> OrbitPruningTable<P> for ZeroOrbitTable {
     }
 }
 
-impl<P: PuzzleState> PruningTables<P> for ZeroTable<P> {
+impl<'id, P: PuzzleState<'id>> PruningTables<'id, P> for ZeroTable<'id, P> {
     type GenerateMetas<'a>
         = ()
     where
-        P: 'a;
+        P: 'a,
+        'id: 'a;
     type GenerateError = ();
 
-    fn try_generate((): ()) -> Result<ZeroTable<P>, ()> {
+    fn try_generate((): ()) -> Result<ZeroTable<'id, P>, ()> {
         Ok(ZeroTable(std::marker::PhantomData))
     }
 
@@ -931,7 +944,8 @@ impl<P: PuzzleState> PruningTables<P> for ZeroTable<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::phase2::{orbit_puzzle::cube3::random_3x3_state, puzzle::cube3::Cube3};
+    use crate::phase2::puzzle::{apply_random_moves, cube3::Cube3};
+    use generativity::make_guard;
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
     #[test]
@@ -976,7 +990,8 @@ mod tests {
 
     #[test]
     fn test_zero_orbit_tables() {
-        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        make_guard!(guard);
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let u_move = cube3_def.find_move("U").unwrap();
         let identity_cycle_type = [vec![], vec![]];
@@ -1013,16 +1028,18 @@ mod tests {
 
     #[test]
     fn test_zero_table() {
-        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        make_guard!(guard);
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let zero_table = ZeroTable::try_generate(()).unwrap();
 
-        let random_state = random_3x3_state(&cube3_def, &cube3_def.new_solved_state());
+        let random_state = apply_random_moves(&cube3_def, &cube3_def.new_solved_state(), 20);
         assert_eq!(zero_table.permissible_heuristic(&random_state), 0);
     }
 
     #[test]
     fn test_not_supported_table_type() {
-        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        make_guard!(guard);
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let identity_cycle_type = [vec![], vec![]];
         let generate_metas = OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
@@ -1060,7 +1077,8 @@ mod tests {
 
     #[test]
     fn test_new_orbit_generation_meta() {
-        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        make_guard!(guard);
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let identity_cycle_type = [vec![], vec![]];
         let generate_metas =
             OrbitPruningTablesGenerateMeta::new(&cube3_def, &identity_cycle_type, 1000).unwrap();
@@ -1091,7 +1109,8 @@ mod tests {
 
     #[test]
     fn test_max_bytes_cannot_be_generated() {
-        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        make_guard!(guard);
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let identity_cycle_type = [vec![], vec![]];
         let generate_metas = OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
@@ -1154,7 +1173,8 @@ mod tests {
     #[test]
     fn test_wip() {
         return;
-        let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        make_guard!(guard);
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let identity_cycle_type = [vec![], vec![]];
         let generate_metas = OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
@@ -1196,7 +1216,7 @@ mod tests {
     }
     // #[test]
     // fn test_exact_orbit_hasher_only_hashes_orbit() {
-    //     let cube3_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+    //     let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
     //     let solved = cube3_def.new_solved_state();
     //     let mut result_1 = solved.clone();
     //     let mut result_2 = solved.clone();

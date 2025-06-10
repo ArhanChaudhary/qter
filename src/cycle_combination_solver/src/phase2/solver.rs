@@ -5,35 +5,35 @@ use super::{
     puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryInterface},
 };
 
-pub struct CycleTypeSolver<'a, P: PuzzleState, T: PruningTables<P>> {
-    puzzle_def: &'a PuzzleDef<P>,
+pub struct CycleTypeSolver<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> {
+    puzzle_def: &'a PuzzleDef<'id, P>,
     sorted_cycle_type: Vec<OrientedPartition>,
     pruning_tables: T,
-    canonical_fsm: PuzzleCanonicalFSM<P>,
+    canonical_fsm: PuzzleCanonicalFSM<'id, P>,
     search_strategy: SearchStrategy,
 }
 
 #[derive(PartialEq)]
 pub enum SearchStrategy {
     FirstSolution,
-    BestSolution,
+    AllSolutions,
 }
 
-struct CycleTypeSolverMutable<P: PuzzleState, H: PuzzleStateHistoryInterface<P>> {
-    puzzle_state_history: PuzzleStateHistory<P, H>,
+struct CycleTypeSolverMutable<'id, P: PuzzleState<'id>, H: PuzzleStateHistoryInterface<'id, P>> {
+    puzzle_state_history: PuzzleStateHistory<'id, P, H>,
     multi_bv: P::MultiBv,
     solutions: Vec<Vec<usize>>,
     first_move_class_index: usize,
 }
 
-pub struct SolutionsIntoIter<'a, P: PuzzleState> {
-    puzzle_def: &'a PuzzleDef<P>,
+pub struct SolutionsIntoIter<'id, 'a, P: PuzzleState<'id>> {
+    puzzle_def: &'a PuzzleDef<'id, P>,
     solutions: std::vec::IntoIter<Vec<usize>>,
 }
 
-impl<'a, P: PuzzleState, T: PruningTables<P>> CycleTypeSolver<'a, P, T> {
+impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, 'a, P, T> {
     pub fn new(
-        puzzle_def: &'a PuzzleDef<P>,
+        puzzle_def: &'a PuzzleDef<'id, P>,
         sorted_cycle_type: Vec<OrientedPartition>,
         pruning_tables: T,
         search_strategy: SearchStrategy,
@@ -52,9 +52,9 @@ impl<'a, P: PuzzleState, T: PruningTables<P>> CycleTypeSolver<'a, P, T> {
         self.sorted_cycle_type = sorted_cycle_type;
     }
 
-    fn search_for_solution<H: PuzzleStateHistoryInterface<P>>(
+    fn search_for_solution<H: PuzzleStateHistoryInterface<'id, P>>(
         &self,
-        mutable: &mut CycleTypeSolverMutable<P, H>,
+        mutable: &mut CycleTypeSolverMutable<'id, P, H>,
         current_fsm_state: CanonicalFSMState,
         entry_index: usize,
         root: bool,
@@ -157,7 +157,7 @@ impl<'a, P: PuzzleState, T: PruningTables<P>> CycleTypeSolver<'a, P, T> {
         false
     }
 
-    pub fn solve<H: PuzzleStateHistoryInterface<P>>(&self) -> SolutionsIntoIter<P> {
+    pub fn solve<H: PuzzleStateHistoryInterface<'id, P>>(&self) -> SolutionsIntoIter<'id, 'a, P> {
         let mut mutable: CycleTypeSolverMutable<P, H> = CycleTypeSolverMutable {
             puzzle_state_history: self.puzzle_def.into(),
             multi_bv: P::new_multi_bv(&self.puzzle_def.sorted_orbit_defs),
@@ -188,8 +188,8 @@ impl<'a, P: PuzzleState, T: PruningTables<P>> CycleTypeSolver<'a, P, T> {
     }
 }
 
-impl<'a, P: PuzzleState> Iterator for SolutionsIntoIter<'a, P> {
-    type Item = Vec<&'a Move<P>>;
+impl<'id, 'a, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, 'a, P> {
+    type Item = Vec<&'a Move<'id, P>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.solutions.next().map(|solution| {
@@ -211,18 +211,20 @@ mod tests {
         },
         puzzle::{cube3::Cube3, slice_puzzle::HeapPuzzle},
     };
+    use generativity::make_guard;
     use itertools::Itertools;
     use puzzle_geometry::ksolve::{KPUZZLE_3X3, KPUZZLE_4X4};
     use std::time::Instant;
 
     #[test]
     fn test_identity_cycle_type() {
-        let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        make_guard!(guard);
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            &puzzle_def,
+            &cube3_def,
             vec![vec![], vec![]],
             ZeroTable::try_generate(()).unwrap(),
-            SearchStrategy::BestSolution,
+            SearchStrategy::AllSolutions,
         );
         let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
         assert_eq!(solutions.len(), 1);
@@ -231,7 +233,7 @@ mod tests {
         let identity_cycle_type = vec![vec![], vec![]];
         let pruning_tables = OrbitPruningTables::try_generate(
             OrbitPruningTablesGenerateMeta::new_with_table_types(
-                &puzzle_def,
+                &cube3_def,
                 &identity_cycle_type,
                 vec![
                     (TableTy::Exact, StorageBackendTy::Zero),
@@ -243,10 +245,10 @@ mod tests {
         )
         .unwrap();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            &puzzle_def,
+            &cube3_def,
             identity_cycle_type,
             pruning_tables,
-            SearchStrategy::BestSolution,
+            SearchStrategy::AllSolutions,
         );
         let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
         assert_eq!(solutions.len(), 1);
@@ -255,15 +257,16 @@ mod tests {
 
     #[test]
     fn test_single_quarter_turn() {
-        let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        make_guard!(guard);
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            &puzzle_def,
+            &cube3_def,
             vec![
                 vec![(4.try_into().unwrap(), false)],
                 vec![(4.try_into().unwrap(), false)],
             ],
             ZeroTable::try_generate(()).unwrap(),
-            SearchStrategy::BestSolution,
+            SearchStrategy::AllSolutions,
         );
         let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
         assert_eq!(solutions.len(), 12);
@@ -272,9 +275,10 @@ mod tests {
 
     #[test]
     fn test_single_half_turn() {
-        let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        make_guard!(guard);
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            &puzzle_def,
+            &cube3_def,
             vec![
                 vec![
                     (2.try_into().unwrap(), false),
@@ -286,7 +290,7 @@ mod tests {
                 ],
             ],
             ZeroTable::try_generate(()).unwrap(),
-            SearchStrategy::BestSolution,
+            SearchStrategy::AllSolutions,
         );
         let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
         assert_eq!(solutions.len(), 6);
@@ -295,11 +299,12 @@ mod tests {
 
     #[test]
     fn test_optimal_subgroup_cycle() {
-        let puzzle_def: PuzzleDef<Cube3> = (&KPUZZLE_3X3.clone().with_moves(&["F", "R", "U"]))
-            .try_into()
-            .unwrap();
+        make_guard!(guard);
+        let cube3_def =
+            PuzzleDef::<Cube3>::new(&KPUZZLE_3X3.clone().with_moves(&["F", "R", "U"]), guard)
+                .unwrap();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            &puzzle_def,
+            &cube3_def,
             vec![
                 vec![
                     (3.try_into().unwrap(), false),
@@ -308,7 +313,7 @@ mod tests {
                 vec![(1.try_into().unwrap(), true), (8.try_into().unwrap(), true)],
             ],
             ZeroTable::try_generate(()).unwrap(),
-            SearchStrategy::BestSolution,
+            SearchStrategy::AllSolutions,
         );
         let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
         // for solution in &solutions {
@@ -324,16 +329,15 @@ mod tests {
     #[test]
     fn test_control_optimal_cycle() {
         return;
-        use std::time::Instant;
-
+        make_guard!(guard);
         let prune_start = Instant::now();
-        let puzzle_def: PuzzleDef<Cube3> = (&*KPUZZLE_3X3).try_into().unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let sorted_cycle_type = vec![
             vec![(1.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
             vec![(1.try_into().unwrap(), true), (7.try_into().unwrap(), true)],
         ];
         let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
-            &puzzle_def,
+            &cube3_def,
             &sorted_cycle_type,
             vec![
                 (TableTy::Exact, StorageBackendTy::Uncompressed),
@@ -344,10 +348,10 @@ mod tests {
         .unwrap();
         let pruning_tables = OrbitPruningTables::try_generate(generate_meta).unwrap();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-            &puzzle_def,
+            &cube3_def,
             sorted_cycle_type,
             pruning_tables,
-            SearchStrategy::BestSolution,
+            SearchStrategy::AllSolutions,
         );
 
         let duration = prune_start.elapsed();
@@ -375,13 +379,14 @@ mod tests {
 
     #[test]
     fn test_many_optimal_cycles() {
-        let cube3_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_3X3).try_into().unwrap();
+        make_guard!(guard);
+        let cube3_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_3X3, guard).unwrap();
 
         let mut solver: CycleTypeSolver<HeapPuzzle, _> = CycleTypeSolver::new(
             &cube3_def,
             Vec::default(),
             ZeroTable::try_generate(()).unwrap(),
-            SearchStrategy::BestSolution,
+            SearchStrategy::AllSolutions,
         );
 
         // Test cases taken from Michael Gottlieb's order table
@@ -638,14 +643,11 @@ mod tests {
             let mut move_count = 0;
             for name in optimal_cycle_test.moves_str.split_whitespace() {
                 let move_ = cube3_def.find_move(name).unwrap();
-                // SAFETY: the arguments correspond to `sorted_orbit_defs`
-                unsafe {
-                    result_2.replace_compose(
-                        &result_1,
-                        &move_.puzzle_state,
-                        &cube3_def.sorted_orbit_defs,
-                    );
-                }
+                result_2.replace_compose(
+                    &result_1,
+                    &move_.puzzle_state,
+                    &cube3_def.sorted_orbit_defs,
+                );
                 std::mem::swap(&mut result_1, &mut result_2);
                 move_count += 1;
             }
@@ -666,13 +668,14 @@ mod tests {
 
     #[test]
     fn test_big_cube_optimal_cycle() {
-        let cube4_def: PuzzleDef<HeapPuzzle> = (&*KPUZZLE_4X4).try_into().unwrap();
+        make_guard!(guard);
+        let cube4_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_4X4, guard).unwrap();
 
         let mut solver: CycleTypeSolver<HeapPuzzle, _> = CycleTypeSolver::new(
             &cube4_def,
             Vec::default(),
             ZeroTable::try_generate(()).unwrap(),
-            SearchStrategy::BestSolution,
+            SearchStrategy::AllSolutions,
         );
 
         // Test cases taken from Michael Gottlieb's order table
@@ -1008,13 +1011,11 @@ mod tests {
             let mut move_count = 0;
             for name in optimal_cycle_test.moves_str.split_whitespace() {
                 let move_ = cube4_def.find_move(name).unwrap();
-                unsafe {
-                    result_2.replace_compose(
-                        &result_1,
-                        &move_.puzzle_state,
-                        &cube4_def.sorted_orbit_defs,
-                    );
-                }
+                result_2.replace_compose(
+                    &result_1,
+                    &move_.puzzle_state,
+                    &cube4_def.sorted_orbit_defs,
+                );
                 std::mem::swap(&mut result_1, &mut result_2);
                 move_count += 1;
             }

@@ -316,6 +316,7 @@ dependencies = [
  "cfg_aliases",
  "fastrand",
  "fxhash",
+ "generativity",
  "integer-partitions",
  "itertools 0.14.0",
  "memoize",
@@ -401,6 +402,12 @@ checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
 dependencies = [
  "byteorder",
 ]
+
+[[package]]
+name = "generativity"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5881e4c3c2433fe4905bb19cfd2b5d49d4248274862b68c27c33d9ba4e13f9ec"
 
 [[package]]
 name = "generic-array"

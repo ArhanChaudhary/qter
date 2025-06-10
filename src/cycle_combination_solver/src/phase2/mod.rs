@@ -5,6 +5,7 @@ pub mod pruning;
 pub mod puzzle;
 pub mod puzzle_state_history;
 pub mod solver;
+pub use generativity;
 
 // We can do one more however it will overflow when adding more to it which is
 // common in context
