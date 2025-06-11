@@ -9,7 +9,7 @@ use std::{
     time::Instant,
 };
 
-use interpreter::PuzzleState;
+use interpreter::puzzle_states::PuzzleState;
 use itertools::Itertools;
 use qter_core::{
     Int, U,
@@ -441,7 +441,7 @@ impl Cube3Robot {
 mod tests {
     use super::*;
     use internment::ArcIntern;
-    use interpreter::SimulatedPuzzle;
+    use interpreter::puzzle_states::SimulatedPuzzle;
     use qter_core::architectures::PuzzleDefinition;
 
     #[test]

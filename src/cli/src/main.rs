@@ -11,12 +11,12 @@ use color_eyre::{
 use compiler::compile;
 use internment::ArcIntern;
 use interpreter::{
-    ActionPerformed, ExecutionState, Interpreter, PausedState, PuzzleState, SimulatedPuzzle,
+    ActionPerformed, ExecutionState, InputRet, Interpreter, PausedState,
+    puzzle_states::{PuzzleState, SimulatedPuzzle},
 };
 use itertools::Itertools;
 use qter_core::{
     ByPuzzleType, I, Int,
-    architectures::Algorithm,
     table_encoding::{decode_table, encode_table},
 };
 use robot::Cube3Robot;
@@ -169,8 +169,7 @@ fn interpret<P: PuzzleState>(
             paused_state,
             PausedState::Input {
                 max_input: _,
-                puzzle_idx: _,
-                register: _
+                data: _,
             }
         );
 
@@ -188,14 +187,14 @@ fn interpret<P: PuzzleState>(
 
 fn give_number_input<P: PuzzleState>(
     interpreter: &mut Interpreter<P>,
-) -> color_eyre::Result<(usize, Option<Algorithm>)> {
+) -> color_eyre::Result<ByPuzzleType<'static, InputRet>> {
     loop {
         let mut number = String::new();
         io::stdin().read_line(&mut number)?;
         match number.parse::<Int<I>>() {
             Ok(value) => match interpreter.give_input(value) {
-                Ok((puzzle_idx, exponentiated_alg)) => {
-                    break Ok((puzzle_idx, exponentiated_alg));
+                Ok(input_ret) => {
+                    break Ok(input_ret);
                 }
                 Err(e) => println!("{e}"),
             },
@@ -231,8 +230,7 @@ fn interpret_traced<P: PuzzleState>(
                     interpreter.state().execution_state(),
                     ExecutionState::Paused(PausedState::Input {
                         max_input: _,
-                        puzzle_idx: _,
-                        register: _
+                        data: _
                     })
                 );
 
@@ -255,28 +253,31 @@ fn interpret_traced<P: PuzzleState>(
                     eprintln!("Jumping");
                 }
             }
-            ActionPerformed::FailedSolvedGoto {
-                puzzle_idx,
-                facelets: _,
-            } => {
+            ActionPerformed::FailedSolvedGoto(ByPuzzleType::Theoretical(idx)) => {
                 if trace_level >= 2 {
-                    eprintln!("Inspect puzzle {puzzle_idx} - {}", "NOT TAKEN".red());
+                    eprintln!("Inspect theoretical {} - {}", idx.0, "NOT TAKEN".red());
                 }
             }
-            ActionPerformed::SucceededSolvedGoto {
-                puzzle_idx,
-                facelets: _,
-                instruction_idx: _,
-            } => {
+            ActionPerformed::FailedSolvedGoto(ByPuzzleType::Puzzle((idx, _))) => {
                 if trace_level >= 2 {
-                    eprintln!("Inspect puzzle {puzzle_idx} - {}", "TAKEN".green());
+                    eprintln!("Inspect puzzle {} - {}", idx.0, "NOT TAKEN".red());
                 }
             }
-            ActionPerformed::Added(ByPuzzleType::Theoretical((action, amt))) => {
-                eprintln!("Theoretical {} += {amt}", action.puzzle_idx);
+            ActionPerformed::SucceededSolvedGoto(ByPuzzleType::Theoretical((_, idx))) => {
+                if trace_level >= 2 {
+                    eprintln!("Inspect theoretical {} - {}", idx.0, "TAKEN".green());
+                }
             }
-            ActionPerformed::Added(ByPuzzleType::Puzzle((action, alg))) => {
-                eprint!("Puzzle {}:", action.puzzle_idx);
+            ActionPerformed::SucceededSolvedGoto(ByPuzzleType::Puzzle((_, idx, _))) => {
+                if trace_level >= 2 {
+                    eprintln!("Inspect puzzle {} - {}", idx.0, "TAKEN".green());
+                }
+            }
+            ActionPerformed::Added(ByPuzzleType::Theoretical((idx, amt))) => {
+                eprintln!("Theoretical {} += {amt}", idx.0);
+            }
+            ActionPerformed::Added(ByPuzzleType::Puzzle((idx, alg))) => {
+                eprint!("Puzzle {}:", idx.0);
 
                 for move_ in alg.move_seq_iter() {
                     eprint!(" {move_}");
@@ -289,14 +290,20 @@ fn interpret_traced<P: PuzzleState>(
                 halted = true;
             }
             ActionPerformed::Solved(idx) => {
-                eprintln!("Solved {idx}");
+                eprintln!(
+                    "Solved {}",
+                    match idx {
+                        ByPuzzleType::Theoretical(idx) => idx.0,
+                        ByPuzzleType::Puzzle(idx) => idx.0,
+                    }
+                );
             }
             ActionPerformed::RepeatedUntil {
                 puzzle_idx,
                 facelets: _,
                 alg,
             } => {
-                eprint!("Repeated on {puzzle_idx}:");
+                eprint!("Repeated on puzzle {}:", puzzle_idx.0);
 
                 for move_ in alg.move_seq_iter() {
                     eprint!(" {move_}");
@@ -313,19 +320,20 @@ fn interpret_traced<P: PuzzleState>(
         }
 
         if should_give_input {
-            let (puzzle_idx, exponentiated_alg) = give_number_input(&mut interpreter)?;
+            let input_ret = give_number_input(&mut interpreter)?;
 
-            let Some(exponentiated_puzzle_alg) = exponentiated_alg else {
-                continue;
-            };
+            match input_ret {
+                ByPuzzleType::Theoretical(_) => {}
+                ByPuzzleType::Puzzle((idx, alg)) => {
+                    eprint!("Puzzle {}:", idx.0);
 
-            eprint!("Puzzle {puzzle_idx}:");
+                    for move_ in alg.move_seq_iter() {
+                        eprint!(" {move_}");
+                    }
 
-            for move_ in exponentiated_puzzle_alg.move_seq_iter() {
-                eprint!(" {move_}");
+                    eprintln!();
+                }
             }
-
-            eprintln!();
         }
     }
 }

@@ -1,10 +1,11 @@
 use qter_core::{
-    ByPuzzleType, Halt, Input, Int, PerformAlgorithm, Print, RegisterGenerator,
-    SeparatesByPuzzleType, Solve, SolvedGoto, U, discrete_math::lcm,
+    ByPuzzleType, Halt, Input, Int, PerformAlgorithm, Print, SeparatesByPuzzleType, Solve,
+    SolvedGoto, U, discrete_math::lcm,
 };
 
 use crate::{
-    ActionPerformed, AddAction, ExecutionState, InterpreterState, PausedState, PuzzleState,
+    ActionPerformed, ExecutionState, InterpreterState, PausedState, PuzzleAndRegister, PuzzleState,
+    SucceededSolvedGoto,
 };
 
 pub fn do_instr<'a, Instr: PuzzleInstructionImpl, P: PuzzleState>(
@@ -34,21 +35,19 @@ impl PuzzleInstructionImpl for SolvedGoto {
         instr: &'a Self::Theoretical<'static>,
         state: &mut InterpreterState<P>,
     ) -> ActionPerformed<'a> {
-        if Int::is_zero(&state.puzzle_states.theoretical_states[instr.puzzle_idx].value) {
-            state.program_counter = instr.instruction_idx;
+        if Int::is_zero(&state.puzzle_states.theoretical_state(instr.1).value()) {
+            state.program_counter = instr.0.instruction_idx;
 
-            ActionPerformed::SucceededSolvedGoto {
-                facelets: ByPuzzleType::Theoretical(()),
-                instruction_idx: instr.instruction_idx,
-                puzzle_idx: instr.puzzle_idx,
-            }
+            ActionPerformed::SucceededSolvedGoto(ByPuzzleType::Theoretical((
+                SucceededSolvedGoto {
+                    jumped_to: instr.0.instruction_idx,
+                },
+                instr.1,
+            )))
         } else {
             state.program_counter += 1;
 
-            ActionPerformed::FailedSolvedGoto {
-                facelets: ByPuzzleType::Theoretical(()),
-                puzzle_idx: instr.puzzle_idx,
-            }
+            ActionPerformed::FailedSolvedGoto(ByPuzzleType::Theoretical(instr.1))
         }
     }
 
@@ -56,42 +55,37 @@ impl PuzzleInstructionImpl for SolvedGoto {
         instr: &'a Self::Puzzle<'static>,
         state: &mut InterpreterState<P>,
     ) -> ActionPerformed<'a> {
-        let puzzle = &state.puzzle_states.puzzle_states[instr.0.puzzle_idx];
+        let puzzle = &state.puzzle_states.puzzle_state(instr.1);
 
-        if puzzle.facelets_solved(&instr.1.0) {
+        if puzzle.facelets_solved(&instr.2.0) {
             state.program_counter = instr.0.instruction_idx;
 
-            ActionPerformed::SucceededSolvedGoto {
-                facelets: ByPuzzleType::Puzzle(&instr.1),
-                instruction_idx: instr.0.instruction_idx,
-                puzzle_idx: instr.0.puzzle_idx,
-            }
+            ActionPerformed::SucceededSolvedGoto(ByPuzzleType::Puzzle((
+                SucceededSolvedGoto {
+                    jumped_to: instr.0.instruction_idx,
+                },
+                instr.1,
+                &instr.2,
+            )))
         } else {
             state.program_counter += 1;
 
-            ActionPerformed::FailedSolvedGoto {
-                facelets: ByPuzzleType::Puzzle(&instr.1),
-                puzzle_idx: instr.0.puzzle_idx,
-            }
+            ActionPerformed::FailedSolvedGoto(ByPuzzleType::Puzzle((instr.1, &instr.2)))
         }
     }
 }
 
 fn input_impl<'a, P: PuzzleState>(
     order: Int<U>,
-    input: &'a Input,
-    register: ByPuzzleType<'static, RegisterGenerator>,
+    message: &'a str,
+    data: ByPuzzleType<'static, PuzzleAndRegister>,
     state: &mut InterpreterState<P>,
 ) -> ActionPerformed<'a> {
     let max_input = order - Int::<U>::one();
-    state.execution_state = ExecutionState::Paused(PausedState::Input {
-        max_input,
-        register,
-        puzzle_idx: input.puzzle_idx,
-    });
+    state.execution_state = ExecutionState::Paused(PausedState::Input { max_input, data });
     state
         .messages
-        .push_back(format!("{} (max input {max_input})", input.message));
+        .push_back(format!("{message} (max input {max_input})"));
 
     ActionPerformed::Paused
 }
@@ -101,8 +95,13 @@ impl PuzzleInstructionImpl for Input {
         instr: &'a Self::Theoretical<'static>,
         state: &mut InterpreterState<P>,
     ) -> ActionPerformed<'a> {
-        let order = state.puzzle_states.theoretical_states[instr.puzzle_idx].order;
-        input_impl(order, instr, ByPuzzleType::Theoretical(()), state)
+        let order = state.puzzle_states.theoretical_state(instr.1).order();
+        input_impl(
+            order,
+            &instr.0.message,
+            ByPuzzleType::Theoretical(instr.1),
+            state,
+        )
     }
 
     fn perform_puzzle<'a, P: PuzzleState>(
@@ -110,24 +109,24 @@ impl PuzzleInstructionImpl for Input {
         state: &mut InterpreterState<P>,
     ) -> ActionPerformed<'a> {
         let order = instr
-            .2
+            .3
             .0
             .iter()
-            .map(|facelet| instr.1.chromatic_orders_by_facelets()[*facelet])
+            .map(|facelet| instr.2.chromatic_orders_by_facelets()[*facelet])
             .fold(Int::<U>::one(), lcm);
 
         input_impl(
             order,
-            &instr.0,
+            &instr.0.message,
             // TODO: we should avoid the clone
-            ByPuzzleType::Puzzle((instr.1.clone(), instr.2.clone())),
+            ByPuzzleType::Puzzle((instr.1, instr.2.clone(), instr.3.clone())),
             state,
         )
     }
 }
 
 fn perform_halt<'a, P: PuzzleState>(
-    maybe_decoded: Option<(Int<U>, (usize, ByPuzzleType<'static, RegisterGenerator>))>,
+    maybe_decoded: Option<(Int<U>, ByPuzzleType<'static, PuzzleAndRegister>)>,
     instr: &'a Halt,
     state: &mut InterpreterState<P>,
 ) -> ActionPerformed<'a> {
@@ -157,8 +156,8 @@ impl PuzzleInstructionImpl for Halt {
         perform_halt(
             match instr.1 {
                 Some(idx) => Some((
-                    state.puzzle_states.theoretical_states[idx].value,
-                    (idx, ByPuzzleType::Theoretical(())),
+                    state.puzzle_states.theoretical_state(idx).value(),
+                    ByPuzzleType::Theoretical(idx),
                 )),
                 None => None,
             },
@@ -174,14 +173,11 @@ impl PuzzleInstructionImpl for Halt {
         perform_halt(
             match &instr.1 {
                 Some((idx, algorithm, facelets)) => {
-                    let puzzle = &mut state.puzzle_states.puzzle_states[*idx];
+                    let puzzle = state.puzzle_states.puzzle_state_mut(*idx);
                     match puzzle.halt(&facelets.0, algorithm) {
                         Some(v) => Some((
                             v,
-                            (
-                                *idx,
-                                ByPuzzleType::Puzzle((algorithm.to_owned(), facelets.to_owned())),
-                            ),
+                            ByPuzzleType::Puzzle((*idx, algorithm.to_owned(), facelets.to_owned())),
                         )),
                         None => {
                             return state.panic("The register specified is not decodable!");
@@ -222,7 +218,7 @@ impl PuzzleInstructionImpl for Print {
     ) -> ActionPerformed<'a> {
         perform_print(
             match instr.1 {
-                Some(idx) => Some(state.puzzle_states.theoretical_states[idx].value),
+                Some(idx) => Some(state.puzzle_states.theoretical_state(idx).value()),
                 None => None,
             },
             &instr.0,
@@ -237,7 +233,7 @@ impl PuzzleInstructionImpl for Print {
         perform_print(
             match &instr.1 {
                 Some((idx, algorithm, facelets)) => {
-                    let puzzle = &mut state.puzzle_states.puzzle_states[*idx];
+                    let puzzle = state.puzzle_states.puzzle_state_mut(*idx);
                     match puzzle.halt(&facelets.0, algorithm) {
                         Some(v) => Some(v),
                         None => {
@@ -260,16 +256,14 @@ impl PuzzleInstructionImpl for PerformAlgorithm {
     ) -> ActionPerformed<'a> {
         state.execution_state = ExecutionState::Running;
 
-        state.puzzle_states.theoretical_states[instr.0.puzzle_idx].add_to(instr.1);
+        state
+            .puzzle_states
+            .theoretical_state_mut(instr.0)
+            .add_to(instr.1);
 
         state.program_counter += 1;
 
-        ActionPerformed::Added(ByPuzzleType::Theoretical((
-            AddAction {
-                puzzle_idx: instr.0.puzzle_idx,
-            },
-            instr.1,
-        )))
+        ActionPerformed::Added(ByPuzzleType::Theoretical((instr.0, instr.1)))
     }
 
     fn perform_puzzle<'a, P: PuzzleState>(
@@ -279,16 +273,12 @@ impl PuzzleInstructionImpl for PerformAlgorithm {
         state.execution_state = ExecutionState::Running;
         state
             .puzzle_states
-            .compose_into(instr.0.puzzle_idx, &instr.1);
+            .puzzle_state_mut(instr.0)
+            .compose_into(&instr.1);
 
         state.program_counter += 1;
 
-        ActionPerformed::Added(ByPuzzleType::Puzzle((
-            AddAction {
-                puzzle_idx: instr.0.puzzle_idx,
-            },
-            &instr.1,
-        )))
+        ActionPerformed::Added(ByPuzzleType::Puzzle((instr.0, &instr.1)))
     }
 }
 
@@ -297,17 +287,17 @@ impl PuzzleInstructionImpl for Solve {
         instr: &'a Self::Theoretical<'static>,
         state: &mut InterpreterState<P>,
     ) -> ActionPerformed<'a> {
-        state.puzzle_states.theoretical_states[instr.puzzle_idx].value = Int::zero();
+        state.puzzle_states.theoretical_state_mut(*instr).zero_out();
 
-        ActionPerformed::Solved(instr.puzzle_idx)
+        ActionPerformed::Solved(ByPuzzleType::Theoretical(*instr))
     }
 
     fn perform_puzzle<'a, P: PuzzleState>(
         instr: &'a Self::Puzzle<'static>,
         state: &mut InterpreterState<P>,
     ) -> ActionPerformed<'a> {
-        state.puzzle_states.puzzle_states[instr.puzzle_idx].solve();
+        state.puzzle_states.puzzle_state_mut(*instr).solve();
 
-        ActionPerformed::Solved(instr.puzzle_idx)
+        ActionPerformed::Solved(ByPuzzleType::Puzzle(*instr))
     }
 }

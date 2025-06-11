@@ -22,6 +22,20 @@ pub trait SeparatesByPuzzleType {
     type Puzzle<'s>;
 }
 
+pub struct StateIdx;
+
+impl SeparatesByPuzzleType for StateIdx {
+    type Theoretical<'s> = TheoreticalIdx;
+
+    type Puzzle<'s> = PuzzleIdx;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct TheoreticalIdx(pub usize);
+
+#[derive(Clone, Copy, Debug)]
+pub struct PuzzleIdx(pub usize);
+
 #[derive(Clone)]
 pub enum ByPuzzleType<'a, T: SeparatesByPuzzleType> {
     Theoretical(T::Theoretical<'a>),
@@ -56,7 +70,7 @@ pub enum Instruction {
     PerformAlgorithm(ByPuzzleType<'static, PerformAlgorithm>),
     Solve(ByPuzzleType<'static, Solve>),
     RepeatUntil {
-        puzzle_idx: usize,
+        puzzle_idx: PuzzleIdx,
         facelets: Facelets,
         alg: Algorithm,
     },
@@ -65,25 +79,23 @@ pub enum Instruction {
 #[derive(Clone, Debug)]
 pub struct SolvedGoto {
     pub instruction_idx: usize,
-    pub puzzle_idx: usize,
 }
 
 impl SeparatesByPuzzleType for SolvedGoto {
-    type Theoretical<'s> = Self;
+    type Theoretical<'s> = (Self, TheoreticalIdx);
 
-    type Puzzle<'s> = (Self, Facelets);
+    type Puzzle<'s> = (Self, PuzzleIdx, Facelets);
 }
 
 #[derive(Clone, Debug)]
 pub struct Input {
     pub message: String,
-    pub puzzle_idx: usize,
 }
 
 impl SeparatesByPuzzleType for Input {
-    type Theoretical<'s> = Self;
+    type Theoretical<'s> = (Self, TheoreticalIdx);
 
-    type Puzzle<'s> = (Self, Algorithm, Facelets);
+    type Puzzle<'s> = (Self, PuzzleIdx, Algorithm, Facelets);
 }
 
 #[derive(Clone, Debug)]
@@ -92,9 +104,9 @@ pub struct Halt {
 }
 
 impl SeparatesByPuzzleType for Halt {
-    type Theoretical<'s> = (Self, Option<usize>);
+    type Theoretical<'s> = (Self, Option<TheoreticalIdx>);
 
-    type Puzzle<'s> = (Self, Option<(usize, Algorithm, Facelets)>);
+    type Puzzle<'s> = (Self, Option<(PuzzleIdx, Algorithm, Facelets)>);
 }
 
 #[derive(Clone, Debug)]
@@ -103,31 +115,25 @@ pub struct Print {
 }
 
 impl SeparatesByPuzzleType for Print {
-    type Theoretical<'s> = (Self, Option<usize>);
+    type Theoretical<'s> = (Self, Option<TheoreticalIdx>);
 
-    type Puzzle<'s> = (Self, Option<(usize, Algorithm, Facelets)>);
+    type Puzzle<'s> = (Self, Option<(PuzzleIdx, Algorithm, Facelets)>);
 }
 
-#[derive(Clone, Debug)]
-pub struct PerformAlgorithm {
-    pub puzzle_idx: usize,
-}
+pub struct PerformAlgorithm;
 
 impl SeparatesByPuzzleType for PerformAlgorithm {
-    type Theoretical<'s> = (Self, Int<U>);
+    type Theoretical<'s> = (TheoreticalIdx, Int<U>);
 
-    type Puzzle<'s> = (Self, Algorithm);
+    type Puzzle<'s> = (PuzzleIdx, Algorithm);
 }
 
-#[derive(Clone, Debug)]
-pub struct Solve {
-    pub puzzle_idx: usize,
-}
+pub struct Solve;
 
 impl SeparatesByPuzzleType for Solve {
-    type Theoretical<'s> = Self;
+    type Theoretical<'s> = TheoreticalIdx;
 
-    type Puzzle<'s> = Self;
+    type Puzzle<'s> = PuzzleIdx;
 }
 
 /// A qter program

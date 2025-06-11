@@ -4,7 +4,10 @@ use internment::ArcIntern;
 use itertools::Itertools;
 use pest::error::Error;
 use qter_core::{
-    architectures::{Algorithm, Architecture, CycleGeneratorSubcycle, PermutationGroup}, mk_error, Halt, Input, Instruction, Int, PerformAlgorithm, Print, Program, ByPuzzleType, RegisterGenerator, WithSpan, U
+    ByPuzzleType, Halt, Input, Instruction, Int, Print, Program, PuzzleIdx, RegisterGenerator,
+    TheoreticalIdx, U, WithSpan,
+    architectures::{Algorithm, Architecture, CycleGeneratorSubcycle, PermutationGroup},
+    mk_error,
 };
 
 use crate::{
@@ -30,11 +33,8 @@ impl RegisterIdx {
                 idx,
                 ref arch,
                 modulus: _,
-            } => ByPuzzleType::Puzzle ((
-                Algorithm::new_from_effect(
-                    arch,
-                    vec![(idx, Int::<U>::one())],
-                ),
+            } => ByPuzzleType::Puzzle((
+                Algorithm::new_from_effect(arch, vec![(idx, Int::<U>::one())]),
                 arch.registers()[idx].signature_facelets(),
             )),
         }
@@ -79,7 +79,7 @@ fn coalesce_adds<V: Iterator<Item = WithSpan<ExpandedCodeComponent>>>(
                 WithSpan::new(
                     match &adds[0].0 {
                         RegisterIdx::Theoretical => CoalescedAdds::AddTheoretical(
-                            puzzle_idx,
+                            TheoreticalIdx(puzzle_idx),
                             adds.iter().map(|(_, amt)| **amt).sum::<Int<U>>(),
                         ),
                         RegisterIdx::Real {
@@ -87,7 +87,7 @@ fn coalesce_adds<V: Iterator<Item = WithSpan<ExpandedCodeComponent>>>(
                             arch,
                             modulus: _,
                         } => CoalescedAdds::AddPuzzle(
-                            puzzle_idx,
+                            PuzzleIdx(puzzle_idx),
                             Algorithm::new_from_effect(
                                 arch,
                                 adds.iter()
@@ -118,14 +118,14 @@ fn coalesce_adds<V: Iterator<Item = WithSpan<ExpandedCodeComponent>>>(
 // all usize here is puzzle index
 
 enum CoalescedAdds {
-    AddPuzzle(usize, Algorithm),
-    AddTheoretical(usize, Int<U>),
+    AddPuzzle(PuzzleIdx, Algorithm),
+    AddTheoretical(TheoreticalIdx, Int<U>),
     Instruction(ExpandedCodeComponent),
 }
 
 enum CoalescedAddsRemovedLabels {
-    AddPuzzle(usize, Algorithm),
-    AddTheoretical(usize, Int<U>),
+    AddPuzzle(PuzzleIdx, Algorithm),
+    AddTheoretical(TheoreticalIdx, Int<U>),
     Instruction(Primitive),
 }
 
@@ -258,13 +258,13 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>
             let prim = match fully_simplified.into_inner() {
                 CoalescedAddsRemovedLabels::AddPuzzle(puzzle_idx, alg) => {
                     return Ok(WithSpan::new(
-                        Instruction::PerformAlgorithm(ByPuzzleType::Puzzle((PerformAlgorithm { puzzle_idx }, alg))),
+                        Instruction::PerformAlgorithm(ByPuzzleType::Puzzle((puzzle_idx, alg))),
                         span,
                     ));
                 }
                 CoalescedAddsRemovedLabels::AddTheoretical(puzzle_idx, amt) => {
                     return Ok(WithSpan::new(
-                        Instruction::PerformAlgorithm(ByPuzzleType::Theoretical((PerformAlgorithm { puzzle_idx }, amt))),
+                        Instruction::PerformAlgorithm(ByPuzzleType::Theoretical(( puzzle_idx , amt))),
                         span,
                     ));
                 }
@@ -294,68 +294,69 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>
 
                     let (reg_idx, puzzle_idx) = global_regs.get_reg(&register);
 
-                    let solved_goto = qter_core::SolvedGoto { instruction_idx: *label_locations.get(&label).unwrap(), puzzle_idx };
+                    let solved_goto = qter_core::SolvedGoto { instruction_idx: *label_locations.get(&label).unwrap() };
 
                     Instruction::SolvedGoto(match reg_idx {
-                        RegisterIdx::Theoretical => ByPuzzleType::Theoretical(solved_goto),
+                        RegisterIdx::Theoretical => ByPuzzleType::Theoretical((solved_goto, TheoreticalIdx(puzzle_idx))),
                         RegisterIdx::Real { idx, arch, modulus } => {
-let facelets = match modulus {
-                    Some(modulus) => if let Some(v) = arch.registers()[idx].signature_facelets_mod(modulus) { v } else {
-                        let cycles = arch.registers()[idx]
-                            .unshared_cycles()
-                            .iter()
-                            .map(CycleGeneratorSubcycle::chromatic_order)
-                            .sorted()
-                            .dedup()
-                            .collect_vec();return Err(mk_error(format!("Could not find a set of pieces for solved-goto that encode the given modulus. The available moduli are the LCM of any combination of the following piece subcycles: {}", cycles.into_iter().join(", ")), register.reg_name.span()))
-                    },
-                    None => {
-                        arch.registers()[idx].signature_facelets()
-                    },
-                };
+                            let facelets = match modulus {
+                                Some(modulus) => if let Some(v) = arch.registers()[idx].signature_facelets_mod(modulus) { v } else {
+                                    let cycles = arch.registers()[idx]
+                                        .unshared_cycles()
+                                        .iter()
+                                        .map(CycleGeneratorSubcycle::chromatic_order)
+                                        .sorted()
+                                        .dedup()
+                                        .collect_vec();
 
-                ByPuzzleType::Puzzle((solved_goto, facelets))
-                            
+                                    return Err(mk_error(format!("Could not find a set of pieces for solved-goto that encode the given modulus. The available moduli are the LCM of any combination of the following piece subcycles: {}", cycles.into_iter().join(", ")), register.reg_name.span()))
+                                },
+                                None => {
+                                    arch.registers()[idx].signature_facelets()
+                                },
+                            };
+
+                            ByPuzzleType::Puzzle((solved_goto, PuzzleIdx(puzzle_idx), facelets))
                         },
                     })
                 }
                 Primitive::Input { message, register } => {
                     let (reg_idx, puzzle_idx) = global_regs.get_reg(&register);
 
-                    let input = Input { message: message.into_inner(), puzzle_idx };
+                    let input = Input { message: message.into_inner() };
 
                     Instruction::Input(match reg_idx.generator() {
-                        ByPuzzleType::Theoretical(()) => ByPuzzleType::Theoretical(input),
-                        ByPuzzleType::Puzzle ( (generator, solved_goto_facelets) ) => ByPuzzleType::Puzzle((input, generator, solved_goto_facelets)),
+                        ByPuzzleType::Theoretical(()) => ByPuzzleType::Theoretical((input,TheoreticalIdx(puzzle_idx))),
+                        ByPuzzleType::Puzzle ( (generator, solved_goto_facelets) ) => ByPuzzleType::Puzzle((input, PuzzleIdx(puzzle_idx), generator, solved_goto_facelets)),
                     })
                 }
                 Primitive::Halt { message, register } => {
                     let halt = Halt { message: message.into_inner() };
                     Instruction::Halt(match register {
-                                    Some(register) => {
-                                        let (reg_idx, puzzle_idx) = global_regs.get_reg(&register);
+                        Some(register) => {
+                            let (reg_idx, puzzle_idx) = global_regs.get_reg(&register);
 
-                                        match reg_idx.generator() {
-                                            ByPuzzleType::Theoretical(()) => ByPuzzleType::Theoretical((halt, Some(puzzle_idx))),
-                                            ByPuzzleType::Puzzle ( (generator, solved_goto_facelets) ) => ByPuzzleType::Puzzle((halt, Some((puzzle_idx, generator, solved_goto_facelets)))),
-                                        }
-                                    }
-                                    None => ByPuzzleType::Puzzle((halt, None)),
-                                })
+                            match reg_idx.generator() {
+                                ByPuzzleType::Theoretical(()) => ByPuzzleType::Theoretical((halt, Some(TheoreticalIdx(puzzle_idx)))),
+                                ByPuzzleType::Puzzle ( (generator, solved_goto_facelets) ) => ByPuzzleType::Puzzle((halt, Some((PuzzleIdx(puzzle_idx), generator, solved_goto_facelets)))),
+                            }
+                        }
+                        None => ByPuzzleType::Puzzle((halt, None)),
+                    })
                 },
                 Primitive::Print { message, register } => {
                     let print = Print { message: message.into_inner() };
                     Instruction::Print(match register {
-                                    Some(register) => {
-                                        let (reg_idx, puzzle_idx) = global_regs.get_reg(&register);
+                        Some(register) => {
+                            let (reg_idx, puzzle_idx) = global_regs.get_reg(&register);
 
-                                        match reg_idx.generator() {
-                                            ByPuzzleType::Theoretical(()) => ByPuzzleType::Theoretical((print, Some(puzzle_idx))),
-                                            ByPuzzleType::Puzzle (( generator, solved_goto_facelets )) => ByPuzzleType::Puzzle((print, Some((puzzle_idx, generator, solved_goto_facelets)))),
-                                        }
-                                    }
-                                    None => ByPuzzleType::Puzzle((print, None)),
-                                })
+                            match reg_idx.generator() {
+                                ByPuzzleType::Theoretical(()) => ByPuzzleType::Theoretical((print, Some(TheoreticalIdx(puzzle_idx)))),
+                                ByPuzzleType::Puzzle (( generator, solved_goto_facelets )) => ByPuzzleType::Puzzle((print, Some((PuzzleIdx(puzzle_idx), generator, solved_goto_facelets)))),
+                            }
+                        }
+                        None => ByPuzzleType::Puzzle((print, None)),
+                    })
                 },
             };
 
