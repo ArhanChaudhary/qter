@@ -17,7 +17,7 @@ use crate::phase2::{
         OrbitPuzzleConstructors, OrbitPuzzleState, slice_orbit_puzzle::SliceOrbitPuzzle,
     },
     permutator::pandita2,
-    puzzle::MultiBvInterface,
+    puzzle::{MultiBvInterface, OrbitIdentifierInterface},
 };
 use generativity::Id;
 use itertools::Itertools;
@@ -114,7 +114,7 @@ struct OrbitPruningTableGenerationMeta<'id, 'a, P: PuzzleState<'id>> {
     puzzle_def: &'a PuzzleDef<'id, P>,
     sorted_cycle_type_orbit: &'a [(NonZeroU8, bool)],
     orbit_def: OrbitDef,
-    orbit_identifier: usize,
+    orbit_identifier: P::OrbitIdentifier,
     max_size_bytes: usize,
 }
 
@@ -153,22 +153,22 @@ pub struct TANSDistributionEstimation {
     // distribution stuff
 }
 
-pub struct ApproximateOrbitPruningTable<S: StorageBackend<false>> {
+pub struct ApproximateOrbitPruningTable<S: StorageBackend<false>, O: OrbitIdentifierInterface> {
     storage_backend: S,
     orbit_def: OrbitDef,
-    orbit_identifier: usize,
+    orbit_identifier: O,
 }
 
-pub struct ExactOrbitPruningTable<S: StorageBackend<true>> {
+pub struct ExactOrbitPruningTable<S: StorageBackend<true>, O: OrbitIdentifierInterface> {
     storage_backend: S,
     orbit_def: OrbitDef,
-    orbit_identifier: usize,
+    orbit_identifier: O,
 }
 
-pub struct CycleTypeOrbitPruningTable {
+pub struct CycleTypeOrbitPruningTable<O: OrbitIdentifierInterface> {
     data: Box<[OrbitPruneHeuristic]>,
     orbit_def: OrbitDef,
-    orbit_identifier: usize,
+    orbit_identifier: O,
 }
 
 /// This type isn't actually entirely useless; I will use it for tables that
@@ -334,7 +334,7 @@ impl<'id, P: PuzzleState<'id> + 'id> PruningTables<'id, P> for OrbitPruningTable
         // smallest to largest which makes this work. This essentially populates
         // the smallest pruning tables while dynamically updating how much space
         // is reserved for the remaining orbit tables.
-        let mut orbit_identifier = 0;
+        let mut orbit_identifier = P::OrbitIdentifier::default();
         for (orbit_index, &orbit_def) in generate_metas
             .puzzle_def
             .sorted_orbit_defs
@@ -402,8 +402,10 @@ impl<'id, P: PuzzleState<'id> + 'id> PruningTables<'id, P> for OrbitPruningTable
             };
 
             remaining_size_bytes -= used_size_bytes;
-            orbit_identifier = P::next_orbit_identifer(orbit_identifier, orbit_def);
             orbit_pruning_tables.push(orbit_pruning_table);
+            if orbit_index != generate_metas.puzzle_def.sorted_orbit_defs.len() - 1 {
+                orbit_identifier = orbit_identifier.next_orbit_identifier(orbit_def);
+            }
         }
 
         Ok(OrbitPruningTables {
@@ -432,7 +434,7 @@ macro_rules! table_fn {
             ),
         > {
             let (table, used_size_bytes) =
-                $table::<$storage<{ $exact }>>::try_generate(generate_meta)?;
+                $table::<$storage<{ $exact }>, P::OrbitIdentifier>::try_generate(generate_meta)?;
             Ok((Box::new(table), used_size_bytes))
         }
     };
@@ -668,12 +670,12 @@ impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend<EXACT> {
 }
 
 impl<'id, P: PuzzleState<'id>, S: StorageBackend<false>> OrbitPruningTable<'id, P>
-    for ApproximateOrbitPruningTable<S>
+    for ApproximateOrbitPruningTable<S, P::OrbitIdentifier>
 {
     fn try_generate<'a>(
         generate_meta: OrbitPruningTableGenerationMeta<'id, 'a, P>,
     ) -> Result<
-        (ApproximateOrbitPruningTable<S>, usize),
+        (ApproximateOrbitPruningTable<S, P::OrbitIdentifier>, usize),
         (
             OrbitPruningTableGenerationError,
             OrbitPruningTableGenerationMeta<'id, 'a, P>,
@@ -692,7 +694,7 @@ impl<'id, P: PuzzleState<'id>, S: StorageBackend<false>> OrbitPruningTable<'id, 
 }
 
 /// Use Knuth's algorithm M to generate the next orientation vector
-/// lexicographically. From:
+/// lexicographically. From: <https://charlesreid1.github.io/lets-generate-permutations.html>
 ///
 /// # Safety
 ///
@@ -715,12 +717,12 @@ unsafe fn knuthm(ori: &mut [u8], orientation_count: NonZeroU8) {
 }
 
 impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<'id, P>
-    for ExactOrbitPruningTable<S>
+    for ExactOrbitPruningTable<S, P::OrbitIdentifier>
 {
     fn try_generate<'a>(
         generate_meta: OrbitPruningTableGenerationMeta<'id, 'a, P>,
     ) -> Result<
-        (ExactOrbitPruningTable<S>, usize),
+        (ExactOrbitPruningTable<S, P::OrbitIdentifier>, usize),
         (
             OrbitPruningTableGenerationError,
             OrbitPruningTableGenerationMeta<'id, 'a, P>,
@@ -888,11 +890,13 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
     }
 }
 
-impl<'id, P: PuzzleState<'id>> OrbitPruningTable<'id, P> for CycleTypeOrbitPruningTable {
+impl<'id, P: PuzzleState<'id>> OrbitPruningTable<'id, P>
+    for CycleTypeOrbitPruningTable<P::OrbitIdentifier>
+{
     fn try_generate<'a>(
         generate_meta: OrbitPruningTableGenerationMeta<'id, 'a, P>,
     ) -> Result<
-        (CycleTypeOrbitPruningTable, usize),
+        (CycleTypeOrbitPruningTable<P::OrbitIdentifier>, usize),
         (
             OrbitPruningTableGenerationError,
             OrbitPruningTableGenerationMeta<'id, 'a, P>,
@@ -1000,7 +1004,7 @@ mod tests {
             puzzle_def: &cube3_def,
             sorted_cycle_type_orbit: &[],
             orbit_def: cube3_def.sorted_orbit_defs[0],
-            orbit_identifier: 0,
+            orbit_identifier: <Cube3 as PuzzleState>::OrbitIdentifier::default(),
             max_size_bytes: 0,
         };
         let (zero_orbit_table, _) = ZeroOrbitTable::try_generate(generate_meta).unwrap();

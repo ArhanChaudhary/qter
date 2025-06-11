@@ -4,16 +4,75 @@
 pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
+    use crate::phase2::puzzle::{
+        KSolveConversionError, OrbitDef, OrbitIdentifierInterface, OrientedPartition, PuzzleState,
+    };
     use generativity::Id;
-
-    use crate::phase2::puzzle::{KSolveConversionError, OrbitDef, OrientedPartition, PuzzleState};
     use std::hash::Hash;
     use std::{fmt::Debug, num::NonZeroU8};
 
+    /// An orbit identifier for 3x3 cubes.
+    #[derive(Default, Debug, Copy, Clone)]
+    pub enum Cube3OrbitType {
+        /// The corners orbit.
+        #[default]
+        Corners,
+        /// The edges orbit.
+        Edges,
+    }
+
+    pub use private::*;
+    mod private {
+        //! Private module to disallow explicit instantiation of
+        //! `CornersTransformation` and `EdgesTransformation`.
+
+        /// A valid transformation for the corners and edges of a 3x3 cube.
+        pub struct CornersTransformation<'a>(&'a [(u8, u8); 8]);
+
+        /// A valid transformation for the edges of a 3x3 cube.
+        pub struct EdgesTransformation<'a>(&'a [(u8, u8); 12]);
+
+        impl<'a> CornersTransformation<'a> {
+            /// Create a new `CornersTransformation`
+            ///
+            /// # Safety
+            ///
+            /// The caller must ensure that `corners_transformation` is from a
+            /// `TransformationMeta`
+            pub unsafe fn new_unchecked(corners_transformation: &'a [(u8, u8); 8]) -> Self {
+                Self(corners_transformation)
+            }
+
+            /// Get the corners transformation as a slice.
+            pub fn get(&self) -> &'a [(u8, u8); 8] {
+                self.0
+            }
+        }
+
+        impl<'a> EdgesTransformation<'a> {
+            /// Create a new `EdgesTransformation`
+            ///
+            /// # Safety
+            ///
+            /// The caller must ensure that `edges_transformation` is from a
+            /// `TransformationMeta`
+            pub unsafe fn new_unchecked(edges_transformation: &'a [(u8, u8); 12]) -> Self {
+                Self(edges_transformation)
+            }
+
+            /// Get the edges transformation as a slice.
+            pub fn get(&self) -> &'a [(u8, u8); 12] {
+                self.0
+            }
+        }
+    }
+
     /// The interface for a 3x3 cube puzzle state
     pub trait Cube3Interface: Clone + PartialEq + Debug {
-        /// Create a Cube3 state from a sorted list of move transformations.
-        fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self;
+        fn from_corner_and_edge_transformations(
+            corners_transformation: CornersTransformation<'_>,
+            edges_transformation: EdgesTransformation<'_>,
+        ) -> Self;
 
         /// Compose a and b into self.
         fn replace_compose(&mut self, a: &Self, b: &Self);
@@ -27,14 +86,14 @@ mod common {
         /// Convert an orbit of the cube state into a pair of (perm, ori) bytes.
         /// For implementation reasons that should ideally be abstracted away,
         /// we have to make the arrays length 16.
-        fn orbit_bytes(&self, orbit_index: usize) -> ([u8; 16], [u8; 16]);
+        fn orbit_bytes(&self, orbit_type: Cube3OrbitType) -> ([u8; 16], [u8; 16]);
 
         /// Exact hasher for an orbit. Note that this is different from a
         /// "hash", which in Rust terminology is something that implements Hash
-        fn exact_hasher_orbit(&self, orbit_index: usize) -> u64;
+        fn exact_hasher_orbit(&self, orbit_type: Cube3OrbitType) -> u64;
 
         /// Approximate hash for an orbit
-        fn approximate_hash_orbit(&self, orbit_index: usize) -> impl Hash;
+        fn approximate_hash_orbit(&self, orbit_type: Cube3OrbitType) -> impl Hash;
     }
 
     pub const CUBE_3_SORTED_ORBIT_DEFS: [OrbitDef; 2] = [
@@ -48,12 +107,22 @@ mod common {
         },
     ];
 
+    impl OrbitIdentifierInterface for Cube3OrbitType {
+        fn next_orbit_identifier(self, _orbit_def: OrbitDef) -> Self {
+            match self {
+                Cube3OrbitType::Corners => Cube3OrbitType::Edges,
+                Cube3OrbitType::Edges => panic!("No next orbit identifier for Cube3"),
+            }
+        }
+    }
+
     impl<'id, C: Cube3Interface> PuzzleState<'id> for C {
         type MultiBv = ();
         type OrbitBytesBuf<'a>
             = [u8; 16]
         where
-            Self: 'a + 'id;
+            C: 'a + 'id;
+        type OrbitIdentifier = Cube3OrbitType;
 
         fn new_multi_bv(_sorted_orbit_defs: &[OrbitDef]) {
             // Induces cycle type for 3x3 cubes doesn't require auxilliary
@@ -66,7 +135,37 @@ mod common {
             _id: Id<'id>,
         ) -> Result<C, KSolveConversionError> {
             if sorted_orbit_defs == CUBE_3_SORTED_ORBIT_DEFS {
-                Ok(Self::from_sorted_transformations(sorted_transformations))
+                // SAFETY: `TransformationMeta` guarantees that the sorted
+                // transformations have the same length as its sorted orbit
+                // definitions, which we just proved to be 2.
+                let sorted_transformations: &[Vec<(u8, u8)>; 2] =
+                    unsafe { sorted_transformations.try_into().unwrap_unchecked() };
+                // SAFETY: `TransformationMeta` guarantees that the first orbit
+                // corresponds to the first sorted orbit definition, which we
+                // have just proven to be the corners orbit.
+                let corners_transformation = unsafe {
+                    sorted_transformations[0]
+                        .as_slice()
+                        .try_into()
+                        .unwrap_unchecked()
+                };
+                // SAFETY: `TransformationMeta` guarantees that the first orbit
+                // corresponds to the first sorted orbit definition, which we
+                // have just proven to be the corners orbit.
+                let edges_transformation = unsafe {
+                    sorted_transformations[1]
+                        .as_slice()
+                        .try_into()
+                        .unwrap_unchecked()
+                };
+                Ok(Self::from_corner_and_edge_transformations(
+                    // SAFETY: `corner_transformation` is from a
+                    // `TransformationMeta`
+                    unsafe { CornersTransformation::new_unchecked(corners_transformation) },
+                    // SAFETY: `edges_transformation` is from a
+                    // `TransformationMeta`
+                    unsafe { EdgesTransformation::new_unchecked(edges_transformation) },
+                ))
             } else {
                 Err(KSolveConversionError::InvalidOrbitDefs {
                     expected: CUBE_3_SORTED_ORBIT_DEFS.to_vec(),
@@ -97,19 +196,19 @@ mod common {
             })
         }
 
-        fn next_orbit_identifer(orbit_identifier: usize, _orbit_def: OrbitDef) -> usize {
-            orbit_identifier + 1
-        }
-
         fn orbit_bytes(
             &self,
-            orbit_identifier: usize,
+            orbit_identifier: Cube3OrbitType,
             _orbit_def: OrbitDef,
         ) -> ([u8; 16], [u8; 16]) {
             self.orbit_bytes(orbit_identifier)
         }
 
-        fn exact_hasher_orbit(&self, orbit_identifier: usize, _orbit_def: OrbitDef) -> u64 {
+        fn exact_hasher_orbit(
+            &self,
+            orbit_identifier: Cube3OrbitType,
+            _orbit_def: OrbitDef,
+        ) -> u64 {
             // TODO: ghostcell trick to avoid the index check
             // TODO: make orbit_index an enum
             self.exact_hasher_orbit(orbit_identifier)
@@ -117,7 +216,7 @@ mod common {
 
         fn approximate_hash_orbit(
             &self,
-            orbit_identifier: usize,
+            orbit_identifier: Cube3OrbitType,
             _orbit_def: OrbitDef,
         ) -> impl Hash {
             self.approximate_hash_orbit(orbit_identifier)

@@ -2,7 +2,9 @@
 //! generation.
 
 use super::{OrbitPuzzleConstructors, OrbitPuzzleState};
-use crate::phase2::puzzle::{MultiBvInterface, OrbitDef, slice_puzzle::exact_hasher_orbit_bytes};
+use crate::phase2::puzzle::{
+    slice_puzzle::{exact_hasher_orbit_bytes, slice_orbit_size}, MultiBvInterface, OrbitDef
+};
 use generativity::Id;
 use std::{cmp::Ordering, num::NonZeroU8};
 
@@ -75,7 +77,7 @@ impl<'id> OrbitPuzzleConstructors<'id> for SliceOrbitPuzzle<'id> {
         orbit_def: OrbitDef,
         id: Id<'id>,
     ) -> Self {
-        let mut slice_orbit_states = vec![0_u8; orbit_def.piece_count.get() as usize * 2];
+        let mut slice_orbit_states = vec![0_u8; slice_orbit_size(orbit_def)];
         let piece_count = orbit_def.piece_count.get();
         for i in 0..piece_count {
             slice_orbit_states[(piece_count + i) as usize] = ori.as_ref()[i as usize];

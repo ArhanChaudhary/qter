@@ -2,7 +2,7 @@
 
 #![cfg_attr(not(avx2), allow(dead_code, unused_variables))]
 
-use super::common::Cube3Interface;
+use super::common::{CornersTransformation, Cube3Interface, Cube3OrbitType, EdgesTransformation};
 use crate::phase2::{
     orbit_puzzle::exact_hasher_orbit,
     puzzle::{OrientedPartition, cube3::common::CUBE_3_SORTED_ORBIT_DEFS},
@@ -178,10 +178,12 @@ impl fmt::Debug for Cube3 {
 }
 
 impl Cube3Interface for Cube3 {
-    fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self {
-        let corners_transformation = &sorted_transformations[0];
-        let edges_transformation = &sorted_transformations[1];
-
+    fn from_corner_and_edge_transformations(
+        corners_transformation: CornersTransformation,
+        edges_transformation: EdgesTransformation,
+    ) -> Self {
+        let corners_transformation = corners_transformation.get();
+        let edges_transformation = edges_transformation.get();
         let mut cube = BLANK;
 
         for i in 0..12 {
@@ -536,21 +538,20 @@ impl Cube3Interface for Cube3 {
             && edge_cycle_type_pointer == sorted_cycle_type[1].len().wrapping_sub(1)
     }
 
-    fn orbit_bytes(&self, orbit_index: usize) -> ([u8; 16], [u8; 16]) {
+    fn orbit_bytes(&self, orbit_type: Cube3OrbitType) -> ([u8; 16], [u8; 16]) {
         // TODO: is using an enum faster?
-        let orbit = match orbit_index {
-            0 => self.0.extract::<CORNER_START, 16>(),
-            1 => self.0.extract::<EDGE_START, 16>(),
-            _ => panic!("Invalid orbit index"),
+        let orbit = match orbit_type {
+            Cube3OrbitType::Corners => self.0.extract::<CORNER_START, 16>(),
+            Cube3OrbitType::Edges => self.0.extract::<EDGE_START, 16>(),
         };
         let perm = orbit & PERM_MASK_2;
         let ori = orbit >> 4;
         (perm.to_array(), ori.to_array())
     }
 
-    fn exact_hasher_orbit(&self, orbit_index: usize) -> u64 {
-        match orbit_index {
-            0 => {
+    fn exact_hasher_orbit(&self, orbit_type: Cube3OrbitType) -> u64 {
+        match orbit_type {
+            Cube3OrbitType::Corners => {
                 const PIECE_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[0].piece_count.get() as u16;
                 const ORI_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[0].orientation_count.get() as u16;
                 const LEN: usize = PIECE_COUNT.next_power_of_two() as usize;
@@ -560,7 +561,7 @@ impl Cube3Interface for Cube3 {
                 let ori = corners >> 4;
                 exact_hasher_orbit::<PIECE_COUNT, ORI_COUNT, LEN>(perm, ori)
             }
-            1 => {
+            Cube3OrbitType::Edges => {
                 const PIECE_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[1].piece_count.get() as u16;
                 const ORI_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[1].orientation_count.get() as u16;
                 const LEN: usize = PIECE_COUNT.next_power_of_two() as usize;
@@ -570,17 +571,15 @@ impl Cube3Interface for Cube3 {
                 let ori = edges >> 4;
                 exact_hasher_orbit::<PIECE_COUNT, ORI_COUNT, LEN>(perm, ori)
             }
-            _ => panic!("Invalid orbit index"),
         }
     }
 
     #[allow(refining_impl_trait_reachable)]
-    fn approximate_hash_orbit(&self, orbit_index: usize) -> u8x16 {
+    fn approximate_hash_orbit(&self, orbit_type: Cube3OrbitType) -> u8x16 {
         // TODO: is it faster to use an enum?
-        match orbit_index {
-            0 => self.0.extract::<CORNER_START, 16>(),
-            1 => self.0.extract::<EDGE_START, 16>(),
-            _ => panic!("Invalid orbit index"),
+        match orbit_type {
+            Cube3OrbitType::Corners => self.0.extract::<CORNER_START, 16>(),
+            Cube3OrbitType::Edges => self.0.extract::<EDGE_START, 16>(),
         }
     }
 }

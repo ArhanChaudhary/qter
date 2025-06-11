@@ -17,6 +17,7 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
     type OrbitBytesBuf<'a>: AsRef<[u8]>
     where
         Self: 'a + 'id;
+    type OrbitIdentifier: OrbitIdentifierInterface + Copy + Debug + 'static;
 
     /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
     fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv;
@@ -48,26 +49,28 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
         multi_bv: <Self::MultiBv as MultiBvInterface>::ReusableRef<'_>,
     ) -> bool;
 
-    /// Get a usize that "identifies" an orbit. This is implementor-specific.
-    /// For slice puzzles, the identifier is the starting index of the orbit data
-    /// in the puzzle state buffer. For specific puzzles the identifier is the
-    /// index of the orbit in the orbit definition.
-    fn next_orbit_identifer(orbit_identifier: usize, orbit_def: OrbitDef) -> usize;
-
     /// Get the bytes of the specified orbit index in the form (permutation
     /// vector, orientation vector).
     fn orbit_bytes(
         &self,
-        orbit_identifier: usize,
+        orbit_identifier: Self::OrbitIdentifier,
         orbit_def: OrbitDef,
     ) -> (Self::OrbitBytesBuf<'_>, Self::OrbitBytesBuf<'_>);
 
     /// Return an integer that corresponds to a bijective mapping of the orbit
     /// identifier's states.
-    fn exact_hasher_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> u64;
+    fn exact_hasher_orbit(
+        &self,
+        orbit_identifier: Self::OrbitIdentifier,
+        orbit_def: OrbitDef,
+    ) -> u64;
 
     /// Return a representation of the puzzle state that can be soundly hashed.
-    fn approximate_hash_orbit(&self, orbit_identifier: usize, orbit_def: OrbitDef) -> impl Hash;
+    fn approximate_hash_orbit(
+        &self,
+        orbit_identifier: Self::OrbitIdentifier,
+        orbit_def: OrbitDef,
+    ) -> impl Hash;
 }
 
 pub trait MultiBvInterface {
@@ -78,6 +81,18 @@ pub trait MultiBvInterface {
     fn reusable_ref(&mut self) -> Self::ReusableRef<'_>;
 }
 
+// /// Get a usize that "identifies" an orbit. This is implementor-specific.
+// /// For slice puzzles, the identifier is the starting index of the orbit data
+// /// in the puzzle state buffer. For specific puzzles the identifier is the
+// /// index of the orbit in the orbit definition.
+// fn next_orbit_identifer(orbit_identifier: Self::OrbitIdentifier, orbit_def: OrbitDef) -> usize;
+
+pub trait OrbitIdentifierInterface: Default {
+    #[must_use]
+    fn next_orbit_identifier(self, orbit_def: OrbitDef) -> Self;
+}
+
+// TODO: dont make everything public
 #[derive(Debug)]
 pub struct PuzzleDef<'id, P: PuzzleState<'id>> {
     pub moves: Box<[Move<'id, P>]>,
@@ -884,11 +899,13 @@ mod tests {
                 [79_925_404, 38_328_854_695],
             ),
         ] {
-            let mut orbit_identifier = 0;
+            let mut orbit_identifier = P::OrbitIdentifier::default();
             for (i, &orbit_def) in cube3_def.sorted_orbit_defs.iter().enumerate() {
                 let hash = test_state.exact_hasher_orbit(orbit_identifier, orbit_def);
                 assert_eq!(hash, exp_hashes[i]);
-                orbit_identifier = P::next_orbit_identifer(orbit_identifier, orbit_def);
+                if i != cube3_def.sorted_orbit_defs.len() - 1 {
+                    orbit_identifier = orbit_identifier.next_orbit_identifier(orbit_def);
+                }
             }
         }
     }

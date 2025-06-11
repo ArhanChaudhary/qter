@@ -4,7 +4,10 @@
 
 #![cfg_attr(any(avx2, not(simd8and16)), allow(dead_code, unused_variables))]
 
-use super::common::{CUBE_3_SORTED_ORBIT_DEFS, Cube3Interface};
+use super::common::{
+    CUBE_3_SORTED_ORBIT_DEFS, CornersTransformation, Cube3Interface, Cube3OrbitType,
+    EdgesTransformation,
+};
 use crate::phase2::{orbit_puzzle::exact_hasher_orbit, puzzle::OrientedPartition};
 use std::{
     fmt,
@@ -20,7 +23,7 @@ use std::{
 /// An uncompressed 3x3 cube representation. This is a combination of
 /// (edge permutation, edge orientation, corner permutation, corner orientation)
 /// which uniquely identifies any cube state
-#[derive(Clone, Debug, PartialEq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Hash)]
 pub struct UncompressedCube3 {
     ep: u8x16,
     eo: u8x16,
@@ -57,9 +60,12 @@ const CORNER_PERM_MASK: u8x8 = u8x8::splat(0b0000_0111);
 const BLANK_EP: u8x16 = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15]);
 
 impl Cube3Interface for UncompressedCube3 {
-    fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self {
-        let corners_transformation = &sorted_transformations[0];
-        let edges_transformation = &sorted_transformations[1];
+    fn from_corner_and_edge_transformations(
+        corners_transformation: CornersTransformation,
+        edges_transformation: EdgesTransformation,
+    ) -> Self {
+        let corners_transformation = corners_transformation.get();
+        let edges_transformation = edges_transformation.get();
 
         let mut ep = u8x16::splat(0);
         let mut eo = u8x16::splat(0);
@@ -184,26 +190,25 @@ impl Cube3Interface for UncompressedCube3 {
 
     fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
         // Benchmarked on a 2025 Mac M4: 14.88 (worst case) 3.79ns (average)
-        induces_sorted_cycle_type(sorted_cycle_type, self.cp, self.co, self.ep, self.eo)
+        induces_sorted_cycle_type(sorted_cycle_type, *self)
     }
 
-    fn orbit_bytes(&self, orbit_index: usize) -> ([u8; 16], [u8; 16]) {
-        match orbit_index {
-            0 => {
+    fn orbit_bytes(&self, orbit_type: Cube3OrbitType) -> ([u8; 16], [u8; 16]) {
+        match orbit_type {
+            Cube3OrbitType::Corners => {
                 let mut perm = [0; 16];
                 let mut ori = [0; 16];
                 self.cp.copy_to_slice(&mut perm);
                 self.co.copy_to_slice(&mut ori);
                 (perm, ori)
             }
-            1 => (self.ep.to_array(), self.eo.to_array()),
-            _ => panic!("Invalid orbit index"),
+            Cube3OrbitType::Edges => (self.ep.to_array(), self.eo.to_array()),
         }
     }
 
-    fn exact_hasher_orbit(&self, orbit_index: usize) -> u64 {
-        match orbit_index {
-            0 => {
+    fn exact_hasher_orbit(&self, orbit_type: Cube3OrbitType) -> u64 {
+        match orbit_type {
+            Cube3OrbitType::Corners => {
                 const PIECE_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[0].piece_count.get() as u16;
                 const ORI_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[0].orientation_count.get() as u16;
 
@@ -213,7 +218,7 @@ impl Cube3Interface for UncompressedCube3 {
                     { PIECE_COUNT.next_power_of_two() as usize },
                 >(self.cp, self.co)
             }
-            1 => {
+            Cube3OrbitType::Edges => {
                 const PIECE_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[1].piece_count.get() as u16;
                 const ORI_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[1].orientation_count.get() as u16;
 
@@ -223,17 +228,15 @@ impl Cube3Interface for UncompressedCube3 {
                     { PIECE_COUNT.next_power_of_two() as usize },
                 >(self.ep, self.eo)
             }
-            _ => panic!("Invalid orbit index"),
         }
     }
 
     #[allow(refining_impl_trait_reachable)]
-    fn approximate_hash_orbit(&self, orbit_index: usize) -> UncompressedCube3Orbit {
+    fn approximate_hash_orbit(&self, orbit_type: Cube3OrbitType) -> UncompressedCube3Orbit {
         // TODO: using an enum works, but is this slow? same with compressedcube3
-        match orbit_index {
-            0 => UncompressedCube3Orbit::Corners((self.cp, self.co)),
-            1 => UncompressedCube3Orbit::Edges((self.ep, self.eo)),
-            _ => panic!("Invalid orbit index"),
+        match orbit_type {
+            Cube3OrbitType::Corners => UncompressedCube3Orbit::Corners((self.cp, self.co)),
+            Cube3OrbitType::Edges => UncompressedCube3Orbit::Edges((self.ep, self.eo)),
         }
     }
 }
@@ -323,9 +326,12 @@ impl fmt::Debug for Cube3 {
 }
 
 impl Cube3Interface for Cube3 {
-    fn from_sorted_transformations(sorted_transformations: &[Vec<(u8, u8)>]) -> Self {
-        let corners_transformation = &sorted_transformations[0];
-        let edges_transformation = &sorted_transformations[1];
+    fn from_corner_and_edge_transformations(
+        corners_transformation: CornersTransformation,
+        edges_transformation: EdgesTransformation,
+    ) -> Self {
+        let corners_transformation = corners_transformation.get();
+        let edges_transformation = edges_transformation.get();
 
         let mut edges = BLANK_EP;
         let mut corners = u8x8::splat(0);
@@ -421,12 +427,12 @@ impl Cube3Interface for Cube3 {
         let co = self.corners >> 3;
         let ep = self.edges & EDGE_PERM_MASK;
         let eo = self.edges >> 4;
-        induces_sorted_cycle_type(sorted_cycle_type, cp, co, ep, eo)
+        induces_sorted_cycle_type(sorted_cycle_type, UncompressedCube3 { ep, eo, cp, co })
     }
 
-    fn orbit_bytes(&self, orbit_index: usize) -> ([u8; 16], [u8; 16]) {
-        match orbit_index {
-            0 => {
+    fn orbit_bytes(&self, orbit_type: Cube3OrbitType) -> ([u8; 16], [u8; 16]) {
+        match orbit_type {
+            Cube3OrbitType::Corners => {
                 let perm = self.corners & CORNER_PERM_MASK;
                 let ori = self.corners >> 3;
                 let mut perm_arr = [0; 16];
@@ -435,18 +441,17 @@ impl Cube3Interface for Cube3 {
                 ori.copy_to_slice(&mut ori_arr);
                 (perm_arr, ori_arr)
             }
-            1 => {
+            Cube3OrbitType::Edges => {
                 let perm = self.edges & EDGE_PERM_MASK;
                 let ori = self.edges >> 4;
                 (perm.to_array(), ori.to_array())
             }
-            _ => panic!("Invalid orbit index"),
         }
     }
 
-    fn exact_hasher_orbit(&self, orbit_index: usize) -> u64 {
-        match orbit_index {
-            0 => {
+    fn exact_hasher_orbit(&self, orbit_type: Cube3OrbitType) -> u64 {
+        match orbit_type {
+            Cube3OrbitType::Corners => {
                 const PIECE_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[0].piece_count.get() as u16;
                 const ORI_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[0].orientation_count.get() as u16;
 
@@ -458,7 +463,7 @@ impl Cube3Interface for Cube3 {
                     { PIECE_COUNT.next_power_of_two() as usize },
                 >(perm, ori)
             }
-            1 => {
+            Cube3OrbitType::Edges => {
                 const PIECE_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[1].piece_count.get() as u16;
                 const ORI_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[1].orientation_count.get() as u16;
 
@@ -470,27 +475,24 @@ impl Cube3Interface for Cube3 {
                     { PIECE_COUNT.next_power_of_two() as usize },
                 >(perm, ori)
             }
-            _ => panic!("Invalid orbit index"),
         }
     }
 
     #[allow(refining_impl_trait_reachable)]
-    fn approximate_hash_orbit(&self, orbit_index: usize) -> Cube3Orbit {
-        match orbit_index {
-            0 => Cube3Orbit::Corners(self.corners),
-            1 => Cube3Orbit::Edges(self.edges),
-            _ => panic!("Invalid orbit index"),
+    fn approximate_hash_orbit(&self, orbit_type: Cube3OrbitType) -> Cube3Orbit {
+        match orbit_type {
+            Cube3OrbitType::Corners => Cube3Orbit::Corners(self.corners),
+            Cube3OrbitType::Edges => Cube3Orbit::Edges(self.edges),
         }
     }
 }
 
+/// Check if the `UncompressedCube3` induces the given sorted cycle type.
 fn induces_sorted_cycle_type(
     sorted_cycle_type: &[OrientedPartition; 2],
-    cp: u8x8,
-    co: u8x8,
-    ep: u8x16,
-    eo: u8x16,
+    uncompressed_cube3: UncompressedCube3,
 ) -> bool {
+    let UncompressedCube3 { cp, co, ep, eo } = uncompressed_cube3;
     // Explanation in `induces_sorted_cycle_type` in avx2.rs
     let mut seen_cp = cp.simd_eq(CP_IDENTITY);
     let oriented_one_cycle_corner_mask = seen_cp & co.simd_ne(u8x8::splat(0));
@@ -809,7 +811,7 @@ mod tests {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<UncompressedCube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
-        let mut result = solved.clone();
+        let mut result = solved;
 
         let state_r2_b_prime = apply_moves(&cube3_def, &solved, "R2 B'", 1);
         result.replace_inverse_brute(&state_r2_b_prime);
@@ -831,8 +833,8 @@ mod tests {
         }
 
         for _ in 0..100 {
-            let mut result_1 = solved.clone();
-            let mut result_2 = solved.clone();
+            let mut result_1 = solved;
+            let mut result_2 = solved;
             for _ in 0..20 {
                 let move_index = fastrand::choice(0_u8..18).unwrap();
                 let move_ = &cube3_def.moves[move_index as usize];
@@ -893,7 +895,7 @@ mod tests {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<UncompressedCube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
-        let mut result = solved.clone();
+        let mut result = solved;
 
         let state_r2_b_prime = apply_moves(&cube3_def, &solved, "R2 B'", 1);
         result.replace_inverse_raw(&state_r2_b_prime);
@@ -915,8 +917,8 @@ mod tests {
         }
 
         for _ in 0..100 {
-            let mut result_1 = solved.clone();
-            let mut result_2 = solved.clone();
+            let mut result_1 = solved;
+            let mut result_2 = solved;
             for _ in 0..20 {
                 let move_index = fastrand::choice(0_u8..18).unwrap();
                 let move_ = &cube3_def.moves[move_index as usize];
@@ -977,7 +979,7 @@ mod tests {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<UncompressedCube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
-        let mut result = solved.clone();
+        let mut result = solved;
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 100);
         b.iter(|| {
             test::black_box(&mut result).replace_inverse_brute(test::black_box(&order_1260));
@@ -990,7 +992,7 @@ mod tests {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<UncompressedCube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
-        let mut result = solved.clone();
+        let mut result = solved;
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 100);
         b.iter(|| {
             test::black_box(&mut result).replace_inverse_raw(test::black_box(&order_1260));
