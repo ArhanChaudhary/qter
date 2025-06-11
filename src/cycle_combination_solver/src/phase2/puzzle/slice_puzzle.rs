@@ -1,8 +1,8 @@
 //! The default, generic implementation for representing puzzle states.
 
 use super::{
-    KSolveConversionError, MultiBvInterface, OrbitDef, OrbitIdentifierInterface, OrientedPartition,
-    PuzzleState,
+    MultiBvInterface, OrbitDef, OrbitIdentifierInterface, OrientedPartition, PuzzleState,
+    TransformationsMeta, TransformationsMetaError,
 };
 use crate::phase2::{
     FACT_UNTIL_19,
@@ -106,17 +106,12 @@ impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
         new_multi_bv_slice(sorted_orbit_defs)
     }
 
-    fn try_from_transformation_meta(
-        sorted_transformations: &[Vec<(u8, u8)>],
-        sorted_orbit_defs: &[OrbitDef],
+    fn try_from_transformations_meta(
+        transformations_meta: TransformationsMeta<'_>,
         id: Id<'id>,
-    ) -> Result<Self, KSolveConversionError> {
+    ) -> Result<Self, TransformationsMetaError> {
         let mut slice_orbit_states = [0_u8; N];
-        ksolve_move_to_slice(
-            &mut slice_orbit_states,
-            sorted_transformations,
-            sorted_orbit_defs,
-        )?;
+        ksolve_move_to_slice(&mut slice_orbit_states, &transformations_meta)?;
         Ok(StackPuzzle(slice_orbit_states, id))
     }
 
@@ -126,8 +121,6 @@ impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
         b: &StackPuzzle<N>,
         sorted_orbit_defs: &[OrbitDef],
     ) {
-        // SAFETY: the caller guarantees that all arguments correspond to the
-        // same orbit defs
         unsafe {
             replace_compose_slice(&mut self.0, &a.0, &b.0, sorted_orbit_defs);
         }
@@ -177,11 +170,11 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
         new_multi_bv_slice(sorted_orbit_defs)
     }
 
-    fn try_from_transformation_meta(
-        sorted_transformations: &[Vec<(u8, u8)>],
-        sorted_orbit_defs: &[OrbitDef],
+    fn try_from_transformations_meta(
+        transformations_meta: TransformationsMeta<'_>,
         id: Id<'id>,
-    ) -> Result<Self, KSolveConversionError> {
+    ) -> Result<Self, TransformationsMetaError> {
+        let sorted_orbit_defs = transformations_meta.sorted_orbit_defs();
         let mut slice_orbit_states = vec![
             0_u8;
             sorted_orbit_defs
@@ -194,12 +187,7 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
         // No validation needed. from_sorted_transformations_unchecked creates
         // an orbit states buffer that is guaranteed to be the right size, and
         // there is no restriction on the expected orbit defs
-        ksolve_move_to_slice(
-            &mut slice_orbit_states,
-            sorted_transformations,
-            sorted_orbit_defs,
-        )
-        .unwrap();
+        ksolve_move_to_slice(&mut slice_orbit_states, &transformations_meta).unwrap();
         Ok(HeapPuzzle(slice_orbit_states, id))
     }
 
@@ -260,9 +248,10 @@ fn new_multi_bv_slice(sorted_orbit_defs: &[OrbitDef]) -> SliceMultiBv {
 
 fn ksolve_move_to_slice(
     slice_orbit_states: &mut [u8],
-    sorted_transformations: &[Vec<(u8, u8)>],
-    sorted_orbit_defs: &[OrbitDef],
-) -> Result<(), KSolveConversionError> {
+    transformations_meta: &TransformationsMeta<'_>,
+) -> Result<(), TransformationsMetaError> {
+    let sorted_orbit_defs = transformations_meta.sorted_orbit_defs();
+
     if slice_orbit_states.len()
         < sorted_orbit_defs
             .iter()
@@ -270,8 +259,9 @@ fn ksolve_move_to_slice(
             .map(slice_orbit_size)
             .sum()
     {
-        return Err(KSolveConversionError::NotEnoughBufferSpace);
+        return Err(TransformationsMetaError::NotEnoughBufferSpace);
     }
+    let sorted_transformations = transformations_meta.sorted_transformations();
     let mut base = 0;
     for (transformation, &orbit_def) in sorted_transformations.iter().zip(sorted_orbit_defs.iter())
     {
@@ -279,17 +269,10 @@ fn ksolve_move_to_slice(
         // TODO: make this more efficient:
         // - zero orientation mod optimization (change next_orbit_identifier_slice too)
         // - avoid the transformation for identities entirely
-        if transformation.is_empty() {
-            for i in 0..piece_count {
-                slice_orbit_states[base + (i + piece_count) as usize] = 0;
-                slice_orbit_states[base + i as usize] = i;
-            }
-        } else {
-            for i in 0..piece_count {
-                let (perm, orientation_delta) = transformation[i as usize];
-                slice_orbit_states[base + (i + piece_count) as usize] = orientation_delta;
-                slice_orbit_states[base + i as usize] = perm;
-            }
+        for i in 0..piece_count {
+            let (perm, orientation_delta) = transformation[i as usize];
+            slice_orbit_states[base + (i + piece_count) as usize] = orientation_delta;
+            slice_orbit_states[base + i as usize] = perm;
         }
         base += slice_orbit_size(orbit_def);
     }

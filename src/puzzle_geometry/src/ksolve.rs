@@ -221,14 +221,6 @@ impl TryFrom<KSolveFields> for KSolve {
             }
         }
 
-        // TODO: (important for phase 2!) figure out a total ordering for KSolve
-        // sets. A user could pass in a KSolve definition with edges as the first
-        // set, yet specific puzzle state implementations expect the sets to
-        // have a total ordering. This might seem easy at first by just sorting
-        // sets by piece count, but what if two sets have the same piece count?
-        // The idea is to use the euclidean distance from the center plus the
-        // number of facelets per piece.
-
         Ok(KSolve {
             name: ksolve_fields.name,
             sets: ksolve_fields.sets,

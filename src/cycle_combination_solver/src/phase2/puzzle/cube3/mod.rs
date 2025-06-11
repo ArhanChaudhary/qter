@@ -5,7 +5,8 @@ pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
     use crate::phase2::puzzle::{
-        KSolveConversionError, OrbitDef, OrbitIdentifierInterface, OrientedPartition, PuzzleState,
+        OrbitDef, OrbitIdentifierInterface, OrientedPartition, PuzzleState, TransformationsMeta,
+        TransformationsMetaError,
     };
     use generativity::Id;
     use std::hash::Hash;
@@ -129,12 +130,13 @@ mod common {
             // memory
         }
 
-        fn try_from_transformation_meta(
-            sorted_transformations: &[Vec<(u8, u8)>],
-            sorted_orbit_defs: &[OrbitDef],
+        fn try_from_transformations_meta(
+            transformations_meta: TransformationsMeta<'_>,
             _id: Id<'id>,
-        ) -> Result<C, KSolveConversionError> {
+        ) -> Result<C, TransformationsMetaError> {
+            let sorted_orbit_defs = transformations_meta.sorted_orbit_defs();
             if sorted_orbit_defs == CUBE_3_SORTED_ORBIT_DEFS {
+                let sorted_transformations = transformations_meta.sorted_transformations();
                 // SAFETY: `TransformationMeta` guarantees that the sorted
                 // transformations have the same length as its sorted orbit
                 // definitions, which we just proved to be 2.
@@ -167,7 +169,7 @@ mod common {
                     unsafe { EdgesTransformation::new_unchecked(edges_transformation) },
                 ))
             } else {
-                Err(KSolveConversionError::InvalidOrbitDefs {
+                Err(TransformationsMetaError::InvalidOrbitDefs {
                     expected: CUBE_3_SORTED_ORBIT_DEFS.to_vec(),
                     actual: sorted_orbit_defs.to_vec(),
                 })

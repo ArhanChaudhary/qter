@@ -29,11 +29,10 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
     /// # Errors
     ///
     /// If a puzzle state cannot be created from the orbit
-    fn try_from_transformation_meta(
-        sorted_transformations: &[Vec<(u8, u8)>],
-        sorted_orbit_defs: &[OrbitDef],
+    fn try_from_transformations_meta(
+        transformations_meta: TransformationsMeta<'_>,
         id: Id<'id>,
-    ) -> Result<Self, KSolveConversionError>;
+    ) -> Result<Self, TransformationsMetaError>;
 
     /// Compose two puzzle states in place.
     fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: &[OrbitDef]);
@@ -110,17 +109,12 @@ pub enum KSolveConversionError {
         "Phase 2 does not currently support puzzles with set sizes larger than 255, but it will in the future"
     )]
     SetSizeTooBig,
-    #[error("Not enough buffer space to convert move")]
-    NotEnoughBufferSpace,
     #[error("Could not expand move set, order of a move too high")]
     MoveOrderTooHigh,
     #[error("Too many move classes")]
     TooManyMoveClasses,
-    #[error("Invalid KSolve orbit definitions. Expected: {expected:?}\nActual: {actual:?}")]
-    InvalidOrbitDefs {
-        expected: Vec<OrbitDef>,
-        actual: Vec<OrbitDef>,
-    },
+    #[error("Invalid transformation while processing the KSolve definition: {0}")]
+    TransformsMetaError(#[from] TransformationsMetaError),
 }
 
 #[derive(Debug, Clone)]
@@ -138,21 +132,111 @@ pub struct OrbitDef {
     pub orientation_count: NonZeroU8,
 }
 
+// TODO: make this a type
 pub type OrientedPartition = Vec<(NonZeroU8, bool)>;
 
-#[non_exhaustive]
-pub struct TransformationMeta<'a> {
-    pub sorted_transformation: Vec<(u8, u8)>,
-    pub sorted_orbit_defs: &'a [OrbitDef],
+pub struct TransformationsMeta<'a> {
+    sorted_transformations: &'a [Vec<(u8, u8)>],
+    sorted_orbit_defs: &'a [OrbitDef],
 }
 
-impl<'a> TransformationMeta<'a> {
-    #[must_use]
-    pub fn new(sorted_transformation: Vec<(u8, u8)>, sorted_orbit_defs: &'a [OrbitDef]) -> Self {
-        Self {
-            sorted_transformation,
-            sorted_orbit_defs,
+#[derive(Error, Debug)]
+pub enum TransformationsMetaError {
+    #[error("Invalid KSolve orbit definitions. Expected: {expected:?}\nActual: {actual:?}")]
+    InvalidOrbitDefs {
+        expected: Vec<OrbitDef>,
+        actual: Vec<OrbitDef>,
+    },
+    #[error("Not enough buffer space to convert move")]
+    NotEnoughBufferSpace,
+    #[error("Invalid set count, expected {0} sets but got {1}")]
+    InvalidSetCount(usize, usize),
+    #[error("Invalid piece count, expected {0} pieces but got {1}")]
+    InvalidPieceCount(u8, usize),
+    #[error("Invalid orientation delta, expected a value between 0 and {0} but got {1}")]
+    InvalidOrientationDelta(u8, u8),
+    #[error("Permutation out of range, expected a value between 1 and {0} but got {1}")]
+    PermutationOutOfRange(u8, u8),
+    #[error("Move is invalid: {0:?}")]
+    InvalidTransformation(Vec<Vec<(u8, u8)>>),
+}
+
+impl<'a> TransformationsMeta<'a> {
+    /// Create a `TransformationMeta` from `sorted_transformations` and
+    /// `sorted_orbit_defs`.
+    ///
+    /// # Errors
+    ///
+    /// If the fields of the arguments are not valid. See
+    /// `TransformationMetaError`.
+    pub fn new(
+        sorted_transformations: &'a [Vec<(u8, u8)>],
+        sorted_orbit_defs: &'a [OrbitDef],
+    ) -> Result<Self, TransformationsMetaError> {
+        let actual_set_count = sorted_transformations.len();
+        let expected_set_count = sorted_orbit_defs.len();
+
+        if sorted_transformations.len() != sorted_orbit_defs.len() {
+            return Err(TransformationsMetaError::InvalidSetCount(
+                expected_set_count,
+                actual_set_count,
+            ));
         }
+
+        for (transformation, &orbit_def) in sorted_transformations.iter().zip(sorted_orbit_defs) {
+            let expected_piece_count = orbit_def.piece_count.get();
+            let actual_piece_count = transformation.len();
+
+            if actual_piece_count != expected_piece_count as usize {
+                return Err(TransformationsMetaError::InvalidPieceCount(
+                    expected_piece_count,
+                    actual_piece_count,
+                ));
+            }
+
+            let max_orientation_delta = orbit_def.orientation_count.get() - 1;
+            let mut covered_perms = vec![false; expected_piece_count as usize];
+
+            for &(perm, orientation_delta) in transformation {
+                if orientation_delta > max_orientation_delta {
+                    return Err(TransformationsMetaError::InvalidOrientationDelta(
+                        max_orientation_delta,
+                        orientation_delta,
+                    ));
+                }
+
+                match covered_perms.get_mut(perm as usize) {
+                    Some(i) => *i = true,
+                    None => {
+                        return Err(TransformationsMetaError::PermutationOutOfRange(
+                            expected_piece_count,
+                            perm,
+                        ));
+                    }
+                }
+            }
+
+            if covered_perms.iter().any(|&x| !x) {
+                return Err(TransformationsMetaError::InvalidTransformation(
+                    sorted_transformations.to_vec(),
+                ));
+            }
+        }
+
+        Ok(Self {
+            sorted_transformations,
+            sorted_orbit_defs,
+        })
+    }
+
+    #[must_use]
+    pub fn sorted_transformations(&self) -> &'a [Vec<(u8, u8)>] {
+        self.sorted_transformations
+    }
+
+    #[must_use]
+    pub fn sorted_orbit_defs(&self) -> &'a [OrbitDef] {
+        self.sorted_orbit_defs
     }
 }
 
@@ -185,8 +269,10 @@ fn solved_state_from_sorted_orbit_defs<'id, P: PuzzleState<'id>>(
                 .collect_vec()
         })
         .collect_vec();
+    let transformations_meta =
+        TransformationsMeta::new(&sorted_transformations, sorted_orbit_defs).unwrap();
     // We can unwrap because try_from guarantees that the orbit defs are valid
-    P::try_from_transformation_meta(&sorted_transformations, sorted_orbit_defs, id).unwrap()
+    P::try_from_transformations_meta(transformations_meta, id).unwrap()
 }
 
 impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
@@ -210,9 +296,16 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
         self.id
     }
 
+    /// Create a new `PuzzleDef` from a `KSolve` definition and a generativity
+    /// `Guard`.
+    ///
+    /// # Errors
+    ///
+    /// The `KSolve` definition could not be converted to a `PuzzleDef`. See
+    /// `KSolveConversionError`.
     pub fn new(ksolve: &KSolve, guard: Guard<'id>) -> Result<Self, KSolveConversionError> {
         let id = guard.into();
-        let mut sorted_orbit_defs: Vec<OrbitDef> = ksolve
+        let ksolve_orbit_defs: Vec<OrbitDef> = ksolve
             .sets()
             .iter()
             .map(|ksolve_set| {
@@ -226,15 +319,18 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
             })
             .collect::<Result<_, KSolveConversionError>>()?;
 
-        let mut arg_indicies = (0..sorted_orbit_defs.len()).collect_vec();
+        let mut arg_indicies = (0..ksolve_orbit_defs.len()).collect_vec();
         arg_indicies.sort_by_key(|&i| {
             (
-                sorted_orbit_defs[i].piece_count.get(),
-                sorted_orbit_defs[i].orientation_count.get(),
+                ksolve_orbit_defs[i].piece_count.get(),
+                ksolve_orbit_defs[i].orientation_count.get(),
             )
         });
 
-        sorted_orbit_defs = arg_indicies.iter().map(|&i| sorted_orbit_defs[i]).collect();
+        let sorted_orbit_defs = arg_indicies
+            .iter()
+            .map(|&i| ksolve_orbit_defs[i])
+            .collect_vec();
 
         let mut moves = Vec::with_capacity(ksolve.moves().len());
         let mut move_classes = vec![];
@@ -251,23 +347,36 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
             let mut sorted_transformations = ksolve_move
                 .transformation()
                 .iter()
-                .map(|perm_and_ori| {
-                    perm_and_ori
-                        .iter()
-                        .map(|&(perm, orientation)| {
-                            // we can unwrap because sorted_orbit_defs exists
-                            ((perm.get() - 1).try_into().unwrap(), orientation)
-                        })
-                        .collect_vec()
+                .enumerate()
+                .map(|(i, perm_and_ori)| {
+                    if perm_and_ori.is_empty() {
+                        (0..ksolve_orbit_defs[i].piece_count.get())
+                            .map(|j| Ok((j, 0)))
+                            .collect::<Result<Vec<_>, KSolveConversionError>>()
+                    } else {
+                        perm_and_ori
+                            .iter()
+                            .map(|&(perm, orientation)| {
+                                // we can unwrap because sorted_orbit_defs exists
+                                Ok((
+                                    (perm.get() - 1)
+                                        .try_into()
+                                        .map_err(|_| KSolveConversionError::SetSizeTooBig)?,
+                                    orientation,
+                                ))
+                            })
+                            .collect::<Result<Vec<_>, KSolveConversionError>>()
+                    }
                 })
-                .collect_vec();
+                .collect::<Result<Vec<Vec<_>>, KSolveConversionError>>()?;
             sorted_transformations = arg_indicies
                 .iter()
                 .map(|&i| sorted_transformations[i].clone())
                 .collect();
+            let transformations_meta =
+                TransformationsMeta::new(&sorted_transformations, &sorted_orbit_defs)?;
 
-            let puzzle_state =
-                P::try_from_transformation_meta(&sorted_transformations, &sorted_orbit_defs, id)?;
+            let puzzle_state = P::try_from_transformations_meta(transformations_meta, id)?;
 
             if i >= ksolve.moves().len() {
                 let base_move = Move {
@@ -313,10 +422,12 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
             }
 
             // MAX_MOVE_POWER is way less than isize::MAX
-            let order = isize::try_from(move_powers.len()).unwrap() + 2;
+            #[allow(clippy::cast_possible_wrap)]
+            let order = move_powers.len() as isize + 2;
             for (j, expanded_puzzle_state) in move_powers.into_iter().enumerate() {
                 // see above
-                let mut twist = isize::try_from(j).unwrap() + 2;
+                #[allow(clippy::cast_possible_wrap)]
+                let mut twist = j as isize + 2;
                 if order - twist < twist {
                     twist -= order;
                 }
@@ -501,7 +612,9 @@ mod tests {
         let try_cube3_def = PuzzleDef::<StackPuzzle<39>>::new(&KPUZZLE_3X3, guard);
         assert!(matches!(
             try_cube3_def,
-            Err(KSolveConversionError::NotEnoughBufferSpace)
+            Err(KSolveConversionError::TransformsMetaError(
+                TransformationsMetaError::NotEnoughBufferSpace
+            ))
         ));
     }
 
