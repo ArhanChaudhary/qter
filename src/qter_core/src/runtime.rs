@@ -1,5 +1,6 @@
 use crate::architectures::{Algorithm, PermutationGroup};
 use crate::{Int, U, WithSpan};
+use std::convert::Infallible;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -60,20 +61,14 @@ where
 /// A qter instruction
 #[derive(Debug)]
 pub enum Instruction {
-    Goto {
-        instruction_idx: usize,
-    },
+    Goto { instruction_idx: usize },
     SolvedGoto(ByPuzzleType<'static, SolvedGoto>),
     Input(ByPuzzleType<'static, Input>),
     Halt(ByPuzzleType<'static, Halt>),
     Print(ByPuzzleType<'static, Print>),
     PerformAlgorithm(ByPuzzleType<'static, PerformAlgorithm>),
     Solve(ByPuzzleType<'static, Solve>),
-    RepeatUntil {
-        puzzle_idx: PuzzleIdx,
-        facelets: Facelets,
-        alg: Algorithm,
-    },
+    RepeatUntil(ByPuzzleType<'static, RepeatUntil>),
 }
 
 #[derive(Clone, Debug)]
@@ -134,6 +129,19 @@ impl SeparatesByPuzzleType for Solve {
     type Theoretical<'s> = TheoreticalIdx;
 
     type Puzzle<'s> = PuzzleIdx;
+}
+
+#[derive(Clone, Debug)]
+pub struct RepeatUntil {
+    pub puzzle_idx: PuzzleIdx,
+    pub facelets: Facelets,
+    pub alg: Algorithm,
+}
+
+impl SeparatesByPuzzleType for RepeatUntil {
+    type Theoretical<'s> = Infallible;
+
+    type Puzzle<'s> = Self;
 }
 
 /// A qter program

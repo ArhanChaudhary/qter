@@ -189,21 +189,7 @@ impl<P: PuzzleState> Interpreter<P> {
             Instruction::Print(instr) => do_instr(instr, &mut self.state),
             Instruction::PerformAlgorithm(instr) => do_instr(instr, &mut self.state),
             Instruction::Solve(instr) => do_instr(instr, &mut self.state),
-            Instruction::RepeatUntil {
-                puzzle_idx,
-                facelets,
-                alg,
-            } => {
-                self.state
-                    .puzzle_states
-                    .puzzle_state_mut(*puzzle_idx)
-                    .repeat_until(&facelets.0, alg);
-                ActionPerformed::RepeatedUntil {
-                    puzzle_idx: *puzzle_idx,
-                    facelets,
-                    alg,
-                }
-            }
+            Instruction::RepeatUntil(instr) => do_instr(instr, &mut self.state),
         }
     }
 

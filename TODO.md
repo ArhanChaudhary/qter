@@ -70,6 +70,7 @@
 - ⭐Parse Q
 - ⭐"[repeat|print|halt] until _ solved" syntax
 - ⭐optimize out immediate gotos after a label
+- ⭐Comments with parentheses
 - ⭐Asher's repeated move post process optimization: R U R repeated = R then U R2 repeated then R'
 - ⭐force conditional blocks that end with "halt" to codegen at the end of the instruction memory, optimizing a goto
 

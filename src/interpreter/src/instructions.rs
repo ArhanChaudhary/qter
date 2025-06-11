@@ -1,6 +1,6 @@
 use qter_core::{
-    ByPuzzleType, Halt, Input, Int, PerformAlgorithm, Print, SeparatesByPuzzleType, Solve,
-    SolvedGoto, U, discrete_math::lcm,
+    ByPuzzleType, Halt, Input, Int, PerformAlgorithm, Print, RepeatUntil, SeparatesByPuzzleType,
+    Solve, SolvedGoto, U, discrete_math::lcm,
 };
 
 use crate::{
@@ -299,5 +299,29 @@ impl PuzzleInstructionImpl for Solve {
         state.puzzle_states.puzzle_state_mut(*instr).solve();
 
         ActionPerformed::Solved(ByPuzzleType::Puzzle(*instr))
+    }
+}
+
+impl PuzzleInstructionImpl for RepeatUntil {
+    fn perform_theoretical<'a, P: PuzzleState>(
+        _: &'a Self::Theoretical<'static>,
+        _: &mut InterpreterState<P>,
+    ) -> ActionPerformed<'a> {
+        unreachable!()
+    }
+
+    fn perform_puzzle<'a, P: PuzzleState>(
+        instr: &'a Self::Puzzle<'static>,
+        state: &mut InterpreterState<P>,
+    ) -> ActionPerformed<'a> {
+        state
+            .puzzle_states
+            .puzzle_state_mut(instr.puzzle_idx)
+            .repeat_until(&instr.facelets.0, &instr.alg);
+        ActionPerformed::RepeatedUntil {
+            puzzle_idx: instr.puzzle_idx,
+            facelets: &instr.facelets,
+            alg: &instr.alg,
+        }
     }
 }
