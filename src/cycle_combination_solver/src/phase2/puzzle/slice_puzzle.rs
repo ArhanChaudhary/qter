@@ -1,8 +1,8 @@
 //! The default, generic implementation for representing puzzle states.
 
 use super::{
-    BrandedOrbitDef, MultiBvInterface, OrbitDef, OrbitIdentifierInterface, OrientedPartition,
-    PuzzleState, SortedOrbitDefsBrandedRef, TransformationsMeta, TransformationsMetaError,
+    BrandedOrbitDef, MultiBvInterface, OrbitDef, OrbitIdentifier, OrientedPartition, PuzzleState,
+    SortedOrbitDefsBrandedRef, TransformationsMeta, TransformationsMetaError,
 };
 use crate::phase2::{
     FACT_UNTIL_19,
@@ -34,7 +34,7 @@ pub use private::*;
 mod private {
     //! Private module to disallow explicit instantiation of `OrbitBaseSlice`.
 
-    use super::{BrandedOrbitDef, OrbitIdentifierInterface};
+    use super::{BrandedOrbitDef, OrbitIdentifier};
     use crate::phase2::puzzle::OrbitDef;
     use std::slice;
 
@@ -46,7 +46,7 @@ mod private {
         branded_orbit_def: BrandedOrbitDef<'id>,
     }
 
-    impl<'id> OrbitIdentifierInterface<'id> for SliceOrbitIdentifier<'id> {
+    impl<'id> OrbitIdentifier<'id> for SliceOrbitIdentifier<'id> {
         fn first_orbit_identifier(branded_orbit_def: BrandedOrbitDef<'id>) -> Self {
             SliceOrbitIdentifier {
                 base_index: 0,

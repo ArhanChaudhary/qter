@@ -5,7 +5,7 @@ pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
     use crate::phase2::puzzle::{
-        BrandedOrbitDef, OrbitDef, OrbitIdentifierInterface, OrientedPartition, PuzzleState,
+        BrandedOrbitDef, OrbitDef, OrbitIdentifier, OrientedPartition, PuzzleState,
         SortedOrbitDefsBrandedRef, TransformationsMeta, TransformationsMetaError,
     };
     use generativity::Id;
@@ -108,7 +108,7 @@ mod common {
         },
     ];
 
-    impl OrbitIdentifierInterface<'_> for Cube3OrbitType {
+    impl OrbitIdentifier<'_> for Cube3OrbitType {
         fn first_orbit_identifier(_branded_orbit_def: BrandedOrbitDef) -> Self {
             Cube3OrbitType::Corners
         }

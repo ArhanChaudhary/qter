@@ -17,7 +17,7 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
     type OrbitBytesBuf<'a>: AsRef<[u8]>
     where
         Self: 'a + 'id;
-    type OrbitIdentifier: OrbitIdentifierInterface<'id> + Copy + Debug;
+    type OrbitIdentifier: OrbitIdentifier<'id> + Copy + Debug;
 
     /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
     fn new_multi_bv(sorted_orbit_defs: SortedOrbitDefsBrandedRef) -> Self::MultiBv;
@@ -43,7 +43,8 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
     /// The goal state for IDA* search.
     fn induces_sorted_cycle_type(
         &self,
-        sorted_cycle_type: &[OrientedPartition],
+        sorted_cycle_type_orbit: &[OrientedPartition],
+        // sorted_cycle_type: SortedCycleType,
         sorted_orbit_defs: SortedOrbitDefsBrandedRef,
         multi_bv: <Self::MultiBv as MultiBvInterface>::ReusableRef<'_>,
     ) -> bool;
@@ -77,7 +78,7 @@ pub trait MultiBvInterface {
 // /// index of the orbit in the orbit definition.
 // fn next_orbit_identifer(orbit_identifier: Self::OrbitIdentifier, orbit_def: BrandedOrbitDef) -> usize;
 
-pub trait OrbitIdentifierInterface<'id> {
+pub trait OrbitIdentifier<'id> {
     fn first_orbit_identifier(branded_orbit_def: BrandedOrbitDef<'id>) -> Self;
 
     #[must_use]
@@ -138,6 +139,8 @@ pub struct SortedOrbitDefsBrandedRef<'id, 'a> {
     pub inner: &'a [OrbitDef],
     id: Id<'id>,
 }
+
+pub struct SortedCycleType {}
 
 // TODO: make this a type
 pub type OrientedPartition = Vec<(NonZeroU8, bool)>;
@@ -263,7 +266,8 @@ impl<'id> SortedOrbitDefsBrandedRef<'id, '_> {
     pub fn branded_copied_iter(&self) -> impl Iterator<Item = BrandedOrbitDef<'id>> {
         self.inner
             .iter()
-            .map(|&orbit_def| BrandedOrbitDef::new(orbit_def, self.id))
+            .copied()
+            .map(|orbit_def| BrandedOrbitDef::new(orbit_def, self.id))
     }
 }
 
@@ -1076,8 +1080,8 @@ mod tests {
                     P::OrbitIdentifier::first_orbit_identifier(branded_orbit_def)
                 } else {
                     maybe_orbit_identifier
-                    .unwrap()
-                    .next_orbit_identifier(branded_orbit_def)
+                        .unwrap()
+                        .next_orbit_identifier(branded_orbit_def)
                 });
                 let orbit_identifier = maybe_orbit_identifier.unwrap();
                 let hash = test_state.exact_hasher_orbit(orbit_identifier);

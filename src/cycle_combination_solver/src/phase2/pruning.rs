@@ -17,7 +17,7 @@ use crate::phase2::{
         OrbitPuzzleConstructors, OrbitPuzzleState, slice_orbit_puzzle::SliceOrbitPuzzle,
     },
     permutator::pandita2,
-    puzzle::{BrandedOrbitDef, MultiBvInterface, OrbitIdentifierInterface},
+    puzzle::{BrandedOrbitDef, MultiBvInterface, OrbitIdentifier},
 };
 use generativity::Id;
 use itertools::Itertools;
@@ -154,23 +154,19 @@ pub struct TANSDistributionEstimation {
     // distribution stuff
 }
 
-pub struct ApproximateOrbitPruningTable<
-    'id,
-    S: StorageBackend<false>,
-    O: OrbitIdentifierInterface<'id>,
-> {
+pub struct ApproximateOrbitPruningTable<'id, S: StorageBackend<false>, O: OrbitIdentifier<'id>> {
     storage_backend: S,
     orbit_identifier: O,
     _id: Id<'id>,
 }
 
-pub struct ExactOrbitPruningTable<'id, S: StorageBackend<true>, O: OrbitIdentifierInterface<'id>> {
+pub struct ExactOrbitPruningTable<'id, S: StorageBackend<true>, O: OrbitIdentifier<'id>> {
     storage_backend: S,
     orbit_identifier: O,
     _id: Id<'id>,
 }
 
-pub struct CycleTypeOrbitPruningTable<'id, O: OrbitIdentifierInterface<'id>> {
+pub struct CycleTypeOrbitPruningTable<'id, O: OrbitIdentifier<'id>> {
     data: Box<[OrbitPruneHeuristic]>,
     orbit_identifier: O,
     _id: Id<'id>,
@@ -368,12 +364,15 @@ impl<'id, P: PuzzleState<'id> + 'id> PruningTables<'id, P> for OrbitPruningTable
             let sorted_cycle_type_orbit = &generate_metas.sorted_cycle_type[orbit_index];
 
             let unprocessed_orbits_count = NonZeroUsize::new(
-                generate_metas.puzzle_def.sorted_orbit_defs.len()
-                    - orbit_index
-                    - generate_metas
-                        .maybe_table_types
-                        .as_ref()
-                        .map_or(0, |table_types| {
+                generate_metas
+                    .puzzle_def
+                    .sorted_orbit_defs
+                    .len()
+                    .checked_sub(orbit_index)
+                    .unwrap()
+                    .checked_sub(generate_metas.maybe_table_types.as_ref().map_or(
+                        0,
+                        |table_types| {
                             table_types
                                 .iter()
                                 .skip(orbit_index)
@@ -385,7 +384,9 @@ impl<'id, P: PuzzleState<'id> + 'id> PruningTables<'id, P> for OrbitPruningTable
                                     )
                                 })
                                 .count()
-                        }),
+                        },
+                    ))
+                    .unwrap(),
             )
             .unwrap_or_else(|| {
                 assert!(matches!(
@@ -394,9 +395,6 @@ impl<'id, P: PuzzleState<'id> + 'id> PruningTables<'id, P> for OrbitPruningTable
                 ));
                 NonZeroUsize::new(1).unwrap()
             });
-            assert!(
-                unprocessed_orbits_count.get() <= generate_metas.puzzle_def.sorted_orbit_defs.len()
-            );
 
             let max_size_bytes = remaining_size_bytes / unprocessed_orbits_count;
 
