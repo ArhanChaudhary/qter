@@ -74,7 +74,7 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
         if togo == 0 {
             if last_puzzle_state.induces_sorted_cycle_type(
                 &self.sorted_cycle_type,
-                self.puzzle_def.sorted_orbit_defs_branded_ref(),
+                self.puzzle_def.sorted_orbit_defs_ref(),
                 mutable.multi_bv.reusable_ref(),
             ) {
                 mutable
@@ -163,7 +163,7 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
     pub fn solve<H: PuzzleStateHistoryInterface<'id, P>>(&self) -> SolutionsIntoIter<'id, 'a, P> {
         let mut mutable: CycleTypeSolverMutable<P, H> = CycleTypeSolverMutable {
             puzzle_state_history: self.puzzle_def.into(),
-            multi_bv: P::new_multi_bv(self.puzzle_def.sorted_orbit_defs_branded_ref()),
+            multi_bv: P::new_multi_bv(self.puzzle_def.sorted_orbit_defs_ref()),
             solutions: vec![],
             first_move_class_index: usize::default(),
         };
@@ -641,7 +641,7 @@ mod tests {
         ];
 
         let solved = cube3_def.new_solved_state();
-        let mut multi_bv = HeapPuzzle::new_multi_bv(cube3_def.sorted_orbit_defs_branded_ref());
+        let mut multi_bv = HeapPuzzle::new_multi_bv(cube3_def.sorted_orbit_defs_ref());
 
         for optimal_cycle_test in optimal_cycle_type_tests {
             let mut result_1 = solved.clone();
@@ -652,16 +652,14 @@ mod tests {
                 result_2.replace_compose(
                     &result_1,
                     &move_.puzzle_state,
-                    cube3_def.sorted_orbit_defs_branded_ref(),
+                    cube3_def.sorted_orbit_defs_ref(),
                 );
                 std::mem::swap(&mut result_1, &mut result_2);
                 move_count += 1;
             }
 
-            let cycle_type = result_1.cycle_type(
-                cube3_def.sorted_orbit_defs_branded_ref(),
-                multi_bv.reusable_ref(),
-            );
+            let cycle_type =
+                result_1.cycle_type(cube3_def.sorted_orbit_defs_ref(), multi_bv.reusable_ref());
             solver.set_sorted_cycle_type(cycle_type);
 
             let solutions = solver.solve::<Vec<_>>().collect_vec();
@@ -1011,7 +1009,7 @@ mod tests {
         let optimal_cycle_type_tests = &optimal_cycle_type_tests[0..5];
 
         let solved = cube4_def.new_solved_state();
-        let mut multi_bv = HeapPuzzle::new_multi_bv(cube4_def.sorted_orbit_defs_branded_ref());
+        let mut multi_bv = HeapPuzzle::new_multi_bv(cube4_def.sorted_orbit_defs_ref());
 
         for optimal_cycle_test in optimal_cycle_type_tests {
             let mut result_1 = solved.clone();
@@ -1022,16 +1020,14 @@ mod tests {
                 result_2.replace_compose(
                     &result_1,
                     &move_.puzzle_state,
-                    cube4_def.sorted_orbit_defs_branded_ref(),
+                    cube4_def.sorted_orbit_defs_ref(),
                 );
                 std::mem::swap(&mut result_1, &mut result_2);
                 move_count += 1;
             }
 
-            let cycle_type = result_1.cycle_type(
-                cube4_def.sorted_orbit_defs_branded_ref(),
-                multi_bv.reusable_ref(),
-            );
+            let cycle_type =
+                result_1.cycle_type(cube4_def.sorted_orbit_defs_ref(), multi_bv.reusable_ref());
             solver.set_sorted_cycle_type(cycle_type);
 
             let solutions = solver.solve::<Vec<_>>().collect_vec();

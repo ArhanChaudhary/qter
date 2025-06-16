@@ -62,7 +62,7 @@ impl<'id, P: PuzzleState<'id>> From<&PuzzleDef<'id, P>> for PuzzleCanonicalFSM<'
                     &puzzle_def.moves[move_class_2_index],
                     &mut result_1,
                     &mut result_2,
-                    puzzle_def.sorted_orbit_defs_branded_ref(),
+                    puzzle_def.sorted_orbit_defs_ref(),
                 ) {
                     commutes[i][j] = false;
                     commutes[j][i] = false;
@@ -220,7 +220,7 @@ mod tests {
                     move_2,
                     &mut result_1,
                     &mut result_2,
-                    cube3_def.sorted_orbit_defs_branded_ref(),
+                    cube3_def.sorted_orbit_defs_ref(),
                 ) {
                     continue;
                 }
@@ -278,7 +278,7 @@ mod tests {
                     &cube4_def.moves[other_move_class],
                     &mut result_1,
                     &mut result_2,
-                    cube4_def.sorted_orbit_defs_branded_ref(),
+                    cube4_def.sorted_orbit_defs_ref(),
                 ) {
                     commute.push(other_move_class_index);
                 }

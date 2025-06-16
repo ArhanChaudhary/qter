@@ -6,7 +6,7 @@ pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 mod common {
     use crate::phase2::puzzle::{
         BrandedOrbitDef, OrbitDef, OrbitIdentifier, OrientedPartition, PuzzleState,
-        SortedOrbitDefsBrandedRef, TransformationsMeta, TransformationsMetaError,
+        SortedOrbitDefsRef, TransformationsMeta, TransformationsMetaError,
     };
     use generativity::Id;
     use std::hash::Hash;
@@ -136,16 +136,16 @@ mod common {
             C: 'a + 'id;
         type OrbitIdentifier = Cube3OrbitType;
 
-        fn new_multi_bv(_sorted_orbit_defs: SortedOrbitDefsBrandedRef) {
+        fn new_multi_bv(_sorted_orbit_defs: SortedOrbitDefsRef) {
             // Induces cycle type for 3x3 cubes doesn't require auxilliary
             // memory
         }
 
         fn try_from_transformations_meta(
-            transformations_meta: TransformationsMeta<'_>,
+            transformations_meta: TransformationsMeta<'id, '_>,
             _id: Id<'id>,
         ) -> Result<C, TransformationsMetaError> {
-            let sorted_orbit_defs = transformations_meta.sorted_orbit_defs();
+            let sorted_orbit_defs = transformations_meta.sorted_orbit_defs().inner;
             if sorted_orbit_defs == CUBE_3_SORTED_ORBIT_DEFS {
                 let sorted_transformations = transformations_meta.sorted_transformations();
                 // SAFETY: `TransformationMeta` guarantees that the sorted
@@ -162,9 +162,9 @@ mod common {
                         .try_into()
                         .unwrap_unchecked()
                 };
-                // SAFETY: `TransformationMeta` guarantees that the first orbit
-                // corresponds to the first sorted orbit definition, which we
-                // have just proven to be the corners orbit.
+                // SAFETY: `TransformationMeta` guarantees that the second orbit
+                // corresponds to the second sorted orbit definition, which we
+                // have just proven to be the edges orbit.
                 let edges_transformation = unsafe {
                     sorted_transformations[1]
                         .as_slice()
@@ -187,23 +187,18 @@ mod common {
             }
         }
 
-        fn replace_compose(
-            &mut self,
-            a: &Self,
-            b: &Self,
-            _sorted_orbit_defs: SortedOrbitDefsBrandedRef,
-        ) {
+        fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: SortedOrbitDefsRef) {
             self.replace_compose(a, b);
         }
 
-        fn replace_inverse(&mut self, a: &Self, _sorted_orbit_defs: SortedOrbitDefsBrandedRef) {
+        fn replace_inverse(&mut self, a: &Self, _sorted_orbit_defs: SortedOrbitDefsRef) {
             self.replace_inverse(a);
         }
 
         fn induces_sorted_cycle_type(
             &self,
             sorted_cycle_type: &[OrientedPartition],
-            _sorted_orbit_defs: SortedOrbitDefsBrandedRef,
+            _sorted_orbit_defs: SortedOrbitDefsRef,
             _multi_bv: (),
         ) -> bool {
             // SAFETY: `try_from_transformation_meta`, the only constructor,
