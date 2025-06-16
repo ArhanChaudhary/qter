@@ -17,10 +17,10 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
     type OrbitBytesBuf<'a>: AsRef<[u8]>
     where
         Self: 'a + 'id;
-    type OrbitIdentifier: OrbitIdentifierInterface + Copy + Debug + 'static;
+    type OrbitIdentifier: OrbitIdentifierInterface<'id> + Copy + Debug;
 
     /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
-    fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv;
+    fn new_multi_bv(sorted_orbit_defs: SortedOrbitDefsBrandedRef) -> Self::MultiBv;
 
     /// Create a puzzle state from a sorted transformation and sorted
     /// orbit defs. `sorted_transformations` must to correspond to
@@ -35,16 +35,16 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
     ) -> Result<Self, TransformationsMetaError>;
 
     /// Compose two puzzle states in place.
-    fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: &[OrbitDef]);
+    fn replace_compose(&mut self, a: &Self, b: &Self, sorted_orbit_defs: SortedOrbitDefsBrandedRef);
 
     /// Inverse of a puzzle state.
-    fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]);
+    fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: SortedOrbitDefsBrandedRef);
 
-    /// The goal state for IDA* search
+    /// The goal state for IDA* search.
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type: &[OrientedPartition],
-        sorted_orbit_defs: &[OrbitDef],
+        sorted_orbit_defs: SortedOrbitDefsBrandedRef,
         multi_bv: <Self::MultiBv as MultiBvInterface>::ReusableRef<'_>,
     ) -> bool;
 
@@ -53,23 +53,14 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
     fn orbit_bytes(
         &self,
         orbit_identifier: Self::OrbitIdentifier,
-        orbit_def: OrbitDef,
     ) -> (Self::OrbitBytesBuf<'_>, Self::OrbitBytesBuf<'_>);
 
     /// Return an integer that corresponds to a bijective mapping of the orbit
     /// identifier's states.
-    fn exact_hasher_orbit(
-        &self,
-        orbit_identifier: Self::OrbitIdentifier,
-        orbit_def: OrbitDef,
-    ) -> u64;
+    fn exact_hasher_orbit(&self, orbit_identifier: Self::OrbitIdentifier) -> u64;
 
     /// Return a representation of the puzzle state that can be soundly hashed.
-    fn approximate_hash_orbit(
-        &self,
-        orbit_identifier: Self::OrbitIdentifier,
-        orbit_def: OrbitDef,
-    ) -> impl Hash;
+    fn approximate_hash_orbit(&self, orbit_identifier: Self::OrbitIdentifier) -> impl Hash;
 }
 
 pub trait MultiBvInterface {
@@ -84,11 +75,15 @@ pub trait MultiBvInterface {
 // /// For slice puzzles, the identifier is the starting index of the orbit data
 // /// in the puzzle state buffer. For specific puzzles the identifier is the
 // /// index of the orbit in the orbit definition.
-// fn next_orbit_identifer(orbit_identifier: Self::OrbitIdentifier, orbit_def: OrbitDef) -> usize;
+// fn next_orbit_identifer(orbit_identifier: Self::OrbitIdentifier, orbit_def: BrandedOrbitDef) -> usize;
 
-pub trait OrbitIdentifierInterface: Default {
+pub trait OrbitIdentifierInterface<'id> {
+    fn first_orbit_identifier(branded_orbit_def: BrandedOrbitDef<'id>) -> Self;
+
     #[must_use]
-    fn next_orbit_identifier(self, orbit_def: OrbitDef) -> Self;
+    fn next_orbit_identifier(self, branded_orbit_def: BrandedOrbitDef<'id>) -> Self;
+
+    fn orbit_def(&self) -> OrbitDef;
 }
 
 // TODO: dont make everything public
@@ -132,11 +127,24 @@ pub struct OrbitDef {
     pub orientation_count: NonZeroU8,
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct BrandedOrbitDef<'id> {
+    pub inner: OrbitDef,
+    _id: Id<'id>,
+}
+
+#[derive(Clone, Copy)]
+pub struct SortedOrbitDefsBrandedRef<'id, 'a> {
+    pub inner: &'a [OrbitDef],
+    id: Id<'id>,
+}
+
 // TODO: make this a type
 pub type OrientedPartition = Vec<(NonZeroU8, bool)>;
 
 pub struct TransformationsMeta<'a> {
     sorted_transformations: &'a [Vec<(u8, u8)>],
+    // TODO: make this SortedOrbitDefsBrandedRef
     sorted_orbit_defs: &'a [OrbitDef],
 }
 
@@ -240,6 +248,25 @@ impl<'a> TransformationsMeta<'a> {
     }
 }
 
+impl<'id> BrandedOrbitDef<'id> {
+    // TODO: make guard
+    #[must_use]
+    pub fn new(orbit_def: OrbitDef, id: Id<'id>) -> Self {
+        Self {
+            inner: orbit_def,
+            _id: id,
+        }
+    }
+}
+
+impl<'id> SortedOrbitDefsBrandedRef<'id, '_> {
+    pub fn branded_copied_iter(&self) -> impl Iterator<Item = BrandedOrbitDef<'id>> {
+        self.inner
+            .iter()
+            .map(|&orbit_def| BrandedOrbitDef::new(orbit_def, self.id))
+    }
+}
+
 impl<'id, P: PuzzleState<'id>> Move<'id, P> {
     /// # Safety
     ///
@@ -249,7 +276,7 @@ impl<'id, P: PuzzleState<'id>> Move<'id, P> {
         other: &Self,
         result_1: &mut P,
         result_2: &mut P,
-        sorted_orbit_defs: &[OrbitDef],
+        sorted_orbit_defs: SortedOrbitDefsBrandedRef<'id, '_>,
     ) -> bool {
         result_1.replace_compose(&self.puzzle_state, &other.puzzle_state, sorted_orbit_defs);
         result_2.replace_compose(&other.puzzle_state, &self.puzzle_state, sorted_orbit_defs);
@@ -263,6 +290,7 @@ fn solved_state_from_sorted_orbit_defs<'id, P: PuzzleState<'id>>(
 ) -> P {
     let sorted_transformations = sorted_orbit_defs
         .iter()
+        .copied()
         .map(|orbit_def| {
             (0..orbit_def.piece_count.get())
                 .map(|i| (i, 0))
@@ -292,9 +320,16 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
     }
 
     #[must_use]
-    pub fn id(&self) -> Id<'id> {
-        self.id
+    pub fn sorted_orbit_defs_branded_ref(&self) -> SortedOrbitDefsBrandedRef<'id, '_> {
+        SortedOrbitDefsBrandedRef {
+            inner: &self.sorted_orbit_defs,
+            id: self.id,
+        }
     }
+
+    // pub fn brand_orbit_def(&self, orbit_def: OrbitDef) -> BrandedOrbitDef<'id> {
+    //     BrandedOrbitDef::new(orbit_def, self.id)
+    // }
 
     /// Create a new `PuzzleDef` from a `KSolve` definition and a generativity
     /// `Guard`.
@@ -303,7 +338,10 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
     ///
     /// The `KSolve` definition could not be converted to a `PuzzleDef`. See
     /// `KSolveConversionError`.
-    pub fn new(ksolve: &KSolve, guard: Guard<'id>) -> Result<Self, KSolveConversionError> {
+    pub fn new(
+        ksolve: &KSolve,
+        guard: Guard<'id>,
+    ) -> Result<(Self, Id<'id>), KSolveConversionError> {
         let id = guard.into();
         let ksolve_orbit_defs: Vec<OrbitDef> = ksolve
             .sets()
@@ -331,6 +369,11 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
             .iter()
             .map(|&i| ksolve_orbit_defs[i])
             .collect_vec();
+
+        let sorted_orbit_defs_branded_ref = SortedOrbitDefsBrandedRef {
+            inner: &sorted_orbit_defs,
+            id,
+        };
 
         let mut moves = Vec::with_capacity(ksolve.moves().len());
         let mut move_classes = vec![];
@@ -408,7 +451,11 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
 
             let mut move_powers: Vec<P> = vec![];
             for _ in 0..MAX_MOVE_POWER {
-                result_1.replace_compose(&result_2, &base_move.puzzle_state, &sorted_orbit_defs);
+                result_1.replace_compose(
+                    &result_2,
+                    &base_move.puzzle_state,
+                    sorted_orbit_defs_branded_ref,
+                );
                 if result_1 == solved {
                     break;
                 }
@@ -447,14 +494,17 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
             }
         }
 
-        Ok(PuzzleDef {
-            moves: moves.into_boxed_slice(),
-            move_classes: move_classes.into_boxed_slice(),
-            symmetries: symmetries.into_boxed_slice(),
-            sorted_orbit_defs: sorted_orbit_defs.into_boxed_slice(),
-            name: ksolve.name().to_owned(),
+        Ok((
+            PuzzleDef {
+                moves: moves.into_boxed_slice(),
+                move_classes: move_classes.into_boxed_slice(),
+                symmetries: symmetries.into_boxed_slice(),
+                sorted_orbit_defs: sorted_orbit_defs.into_boxed_slice(),
+                name: ksolve.name().to_owned(),
+                id,
+            },
             id,
-        })
+        ))
     }
 }
 
@@ -483,7 +533,7 @@ pub fn apply_moves<'id, P: PuzzleState<'id>>(
             result_2.replace_compose(
                 &result_1,
                 &move_.puzzle_state,
-                &puzzle_def.sorted_orbit_defs,
+                puzzle_def.sorted_orbit_defs_branded_ref(),
             );
             std::mem::swap(&mut result_1, &mut result_2);
         }
@@ -505,7 +555,7 @@ pub fn apply_random_moves<'id, P: PuzzleState<'id>>(
         result_1.replace_compose(
             &result_2,
             &move_.puzzle_state,
-            &puzzle_def.sorted_orbit_defs,
+            puzzle_def.sorted_orbit_defs_branded_ref(),
         );
         std::mem::swap(&mut result_2, &mut result_1);
     }
@@ -534,7 +584,7 @@ mod tests {
     }
 
     fn commutes_with<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let mut result_1 = cube3_def.new_solved_state();
         let mut result_2 = result_1.clone();
 
@@ -546,43 +596,43 @@ mod tests {
             u_move,
             &mut result_1,
             &mut result_2,
-            &cube3_def.sorted_orbit_defs,
+            cube3_def.sorted_orbit_defs_branded_ref()
         ));
         assert!(d2_move.commutes_with(
             d2_move,
             &mut result_1,
             &mut result_2,
-            &cube3_def.sorted_orbit_defs,
+            cube3_def.sorted_orbit_defs_branded_ref()
         ));
         assert!(u_move.commutes_with(
             d2_move,
             &mut result_1,
             &mut result_2,
-            &cube3_def.sorted_orbit_defs,
+            cube3_def.sorted_orbit_defs_branded_ref()
         ));
         assert!(!u_move.commutes_with(
             r_move,
             &mut result_1,
             &mut result_2,
-            &cube3_def.sorted_orbit_defs,
+            cube3_def.sorted_orbit_defs_branded_ref()
         ));
         assert!(!d2_move.commutes_with(
             r_move,
             &mut result_1,
             &mut result_2,
-            &cube3_def.sorted_orbit_defs,
+            cube3_def.sorted_orbit_defs_branded_ref()
         ));
         assert!(!r_move.commutes_with(
             u_move,
             &mut result_1,
             &mut result_2,
-            &cube3_def.sorted_orbit_defs,
+            cube3_def.sorted_orbit_defs_branded_ref()
         ));
         assert!(!r_move.commutes_with(
             d2_move,
             &mut result_1,
             &mut result_2,
-            &cube3_def.sorted_orbit_defs,
+            cube3_def.sorted_orbit_defs_branded_ref()
         ));
     }
 
@@ -619,7 +669,7 @@ mod tests {
     }
 
     pub fn many_compositions<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solved = cube3_def.new_solved_state();
         let also_solved = apply_moves(&cube3_def, &solved, "R F", 105);
         assert_eq!(also_solved, solved);
@@ -646,7 +696,7 @@ mod tests {
     }
 
     pub fn s_u4_symmetry<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let s_u4_symmetry = cube3_def.find_symmetry("S_U4").unwrap();
         let solved = cube3_def.new_solved_state();
 
@@ -656,7 +706,7 @@ mod tests {
             result_2.replace_compose(
                 &result_1,
                 &s_u4_symmetry.puzzle_state,
-                &cube3_def.sorted_orbit_defs,
+                cube3_def.sorted_orbit_defs_branded_ref(),
             );
             std::mem::swap(&mut result_1, &mut result_2);
         }
@@ -685,7 +735,7 @@ mod tests {
     }
 
     pub fn expanded_move<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let actual_solved = cube3_def.new_solved_state();
         let expected_solved = apply_moves(
             &cube3_def,
@@ -717,25 +767,25 @@ mod tests {
     }
 
     pub fn inversion<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
 
         let state_r2_b_prime = apply_moves(&cube3_def, &solved, "R2 B'", 1);
-        result.replace_inverse(&state_r2_b_prime, &cube3_def.sorted_orbit_defs);
+        result.replace_inverse(&state_r2_b_prime, cube3_def.sorted_orbit_defs_branded_ref());
 
         let state_b_r2 = apply_moves(&cube3_def, &solved, "B R2", 1);
         assert_eq!(result, state_b_r2);
 
         let in_r_f_cycle = apply_moves(&cube3_def, &solved, "R F", 40);
-        result.replace_inverse(&in_r_f_cycle, &cube3_def.sorted_orbit_defs);
+        result.replace_inverse(&in_r_f_cycle, cube3_def.sorted_orbit_defs_branded_ref());
 
         let remaining_r_f_cycle = apply_moves(&cube3_def, &solved, "R F", 65);
         assert_eq!(result, remaining_r_f_cycle);
 
         for i in 1..=5 {
             let state = apply_moves(&cube3_def, &solved, "L F L' F'", i);
-            result.replace_inverse(&state, &cube3_def.sorted_orbit_defs);
+            result.replace_inverse(&state, cube3_def.sorted_orbit_defs_branded_ref());
             let remaining_state = apply_moves(&cube3_def, &solved, "L F L' F'", 6 - i);
             println!("{result:?}\n{remaining_state:?}\n\n");
             assert_eq!(result, remaining_state);
@@ -763,15 +813,19 @@ mod tests {
     }
 
     pub fn random_inversion<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solved = cube3_def.new_solved_state();
 
         for _ in 0..50 {
             let random_state = apply_random_moves(&cube3_def, &solved, 20);
             let mut result_1 = solved.clone();
             let mut result_2 = solved.clone();
-            result_1.replace_inverse(&random_state, &cube3_def.sorted_orbit_defs);
-            result_2.replace_compose(&result_1, &random_state, &cube3_def.sorted_orbit_defs);
+            result_1.replace_inverse(&random_state, cube3_def.sorted_orbit_defs_branded_ref());
+            result_2.replace_compose(
+                &result_1,
+                &random_state,
+                cube3_def.sorted_orbit_defs_branded_ref(),
+            );
 
             assert_eq!(result_2, solved);
         }
@@ -798,9 +852,9 @@ mod tests {
     }
 
     pub fn induces_sorted_cycle_type_within_cycle<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solved = cube3_def.new_solved_state();
-        let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
+        let mut multi_bv = P::new_multi_bv(cube3_def.sorted_orbit_defs_branded_ref());
 
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 1);
         let sorted_cycle_type = [
@@ -809,14 +863,14 @@ mod tests {
         ];
         assert!(order_1260.induces_sorted_cycle_type(
             &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
+            cube3_def.sorted_orbit_defs_branded_ref(),
             multi_bv.reusable_ref(),
         ));
 
         let order_1260_in_cycle = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 209);
         assert!(order_1260_in_cycle.induces_sorted_cycle_type(
             &sorted_cycle_type,
-            &cube3_def.sorted_orbit_defs,
+            cube3_def.sorted_orbit_defs_branded_ref(),
             multi_bv.reusable_ref(),
         ));
     }
@@ -842,13 +896,13 @@ mod tests {
     }
 
     pub fn induces_sorted_cycle_type_many<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solved = cube3_def.new_solved_state();
-        let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
+        let mut multi_bv = P::new_multi_bv(cube3_def.sorted_orbit_defs_branded_ref());
 
         assert!(solved.induces_sorted_cycle_type(
             &[vec![], vec![]],
-            &cube3_def.sorted_orbit_defs,
+            cube3_def.sorted_orbit_defs_branded_ref(),
             multi_bv.reusable_ref(),
         ));
 
@@ -927,13 +981,13 @@ mod tests {
 
             assert!(random_state.induces_sorted_cycle_type(
                 expected_cts,
-                &cube3_def.sorted_orbit_defs,
+                cube3_def.sorted_orbit_defs_branded_ref(),
                 multi_bv.reusable_ref(),
             ));
 
             assert!(!solved.induces_sorted_cycle_type(
                 expected_cts,
-                &cube3_def.sorted_orbit_defs,
+                cube3_def.sorted_orbit_defs_branded_ref(),
                 multi_bv.reusable_ref(),
             ));
 
@@ -944,7 +998,7 @@ mod tests {
                 let other_state = apply_moves(&cube3_def, &solved, other_moves, 1);
                 assert!(!other_state.induces_sorted_cycle_type(
                     expected_cts,
-                    &cube3_def.sorted_orbit_defs,
+                    cube3_def.sorted_orbit_defs_branded_ref(),
                     multi_bv.reusable_ref()
                 ));
             }
@@ -972,7 +1026,7 @@ mod tests {
     }
 
     fn exact_hasher_orbit<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solved = cube3_def.new_solved_state();
 
         for (test_state, exp_hashes) in [
@@ -1012,13 +1066,22 @@ mod tests {
                 [79_925_404, 38_328_854_695],
             ),
         ] {
-            let mut orbit_identifier = P::OrbitIdentifier::default();
-            for (i, &orbit_def) in cube3_def.sorted_orbit_defs.iter().enumerate() {
-                let hash = test_state.exact_hasher_orbit(orbit_identifier, orbit_def);
+            let mut maybe_orbit_identifier: Option<P::OrbitIdentifier> = None;
+            for (i, branded_orbit_def) in cube3_def
+                .sorted_orbit_defs_branded_ref()
+                .branded_copied_iter()
+                .enumerate()
+            {
+                maybe_orbit_identifier = Some(if i == 0 {
+                    P::OrbitIdentifier::first_orbit_identifier(branded_orbit_def)
+                } else {
+                    maybe_orbit_identifier
+                    .unwrap()
+                    .next_orbit_identifier(branded_orbit_def)
+                });
+                let orbit_identifier = maybe_orbit_identifier.unwrap();
+                let hash = test_state.exact_hasher_orbit(orbit_identifier);
                 assert_eq!(hash, exp_hashes[i]);
-                if i != cube3_def.sorted_orbit_defs.len() - 1 {
-                    orbit_identifier = orbit_identifier.next_orbit_identifier(orbit_def);
-                }
             }
         }
     }
@@ -1044,7 +1107,7 @@ mod tests {
     }
 
     pub fn bench_compose_helper<'id, P: PuzzleState<'id>>(guard: Guard<'id>, b: &mut Bencher) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let mut solved = cube3_def.new_solved_state();
         let r_move = cube3_def.find_move("R").unwrap();
         let f_move = cube3_def.find_move("F").unwrap();
@@ -1052,19 +1115,21 @@ mod tests {
             test::black_box(&mut solved).replace_compose(
                 test::black_box(&r_move.puzzle_state),
                 test::black_box(&f_move.puzzle_state),
-                &cube3_def.sorted_orbit_defs,
+                cube3_def.sorted_orbit_defs_branded_ref(),
             );
         });
     }
 
     pub fn bench_inverse_helper<'id, P: PuzzleState<'id>>(guard: Guard<'id>, b: &mut Bencher) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 100);
         b.iter(|| {
-            test::black_box(&mut result)
-                .replace_inverse(test::black_box(&order_1260), &cube3_def.sorted_orbit_defs);
+            test::black_box(&mut result).replace_inverse(
+                test::black_box(&order_1260),
+                cube3_def.sorted_orbit_defs_branded_ref(),
+            );
         });
     }
 
@@ -1072,17 +1137,17 @@ mod tests {
         guard: Guard<'id>,
         b: &mut Bencher,
     ) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let sorted_cycle_type = [
             ct(&[(3, true), (5, true)]),
             ct(&[(2, false), (2, true), (7, true)]),
         ];
         let order_1260 = apply_moves(&cube3_def, &cube3_def.new_solved_state(), "R U2 D' B D'", 1);
-        let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
+        let mut multi_bv = P::new_multi_bv(cube3_def.sorted_orbit_defs_branded_ref());
         b.iter(|| {
             test::black_box(&order_1260).induces_sorted_cycle_type(
                 test::black_box(&sorted_cycle_type),
-                &cube3_def.sorted_orbit_defs,
+                cube3_def.sorted_orbit_defs_branded_ref(),
                 multi_bv.reusable_ref(),
             );
         });
@@ -1092,7 +1157,7 @@ mod tests {
         guard: Guard<'id>,
         b: &mut Bencher,
     ) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solved = cube3_def.new_solved_state();
 
         let sorted_cycle_types = [
@@ -1121,12 +1186,12 @@ mod tests {
             .collect();
         let mut random_iter = random_1000.iter().cycle();
 
-        let mut multi_bv = P::new_multi_bv(&cube3_def.sorted_orbit_defs);
+        let mut multi_bv = P::new_multi_bv(cube3_def.sorted_orbit_defs_branded_ref());
         b.iter(|| {
             test::black_box(unsafe { random_iter.next().unwrap_unchecked() })
                 .induces_sorted_cycle_type(
                     test::black_box(unsafe { sorted_cycle_type_iter.next().unwrap_unchecked() }),
-                    &cube3_def.sorted_orbit_defs,
+                    cube3_def.sorted_orbit_defs_branded_ref(),
                     multi_bv.reusable_ref(),
                 );
         });

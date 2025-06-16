@@ -74,7 +74,7 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
         if togo == 0 {
             if last_puzzle_state.induces_sorted_cycle_type(
                 &self.sorted_cycle_type,
-                &self.puzzle_def.sorted_orbit_defs,
+                self.puzzle_def.sorted_orbit_defs_branded_ref(),
                 mutable.multi_bv.reusable_ref(),
             ) {
                 mutable
@@ -108,6 +108,9 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
             .enumerate()
             .skip(move_index_prune_lt)
         {
+            // if self.search_strategy == SearchStrategy::FirstSolution && move_index == 2 && root {
+            //     return false;
+            // }
             let move_class_index = move_.move_class_index;
             // branches should have high predictability
             if root {
@@ -160,7 +163,7 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
     pub fn solve<H: PuzzleStateHistoryInterface<'id, P>>(&self) -> SolutionsIntoIter<'id, 'a, P> {
         let mut mutable: CycleTypeSolverMutable<P, H> = CycleTypeSolverMutable {
             puzzle_state_history: self.puzzle_def.into(),
-            multi_bv: P::new_multi_bv(&self.puzzle_def.sorted_orbit_defs),
+            multi_bv: P::new_multi_bv(self.puzzle_def.sorted_orbit_defs_branded_ref()),
             solutions: vec![],
             first_move_class_index: usize::default(),
         };
@@ -219,7 +222,7 @@ mod tests {
     #[test]
     fn test_identity_cycle_type() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             &cube3_def,
             vec![vec![], vec![]],
@@ -240,6 +243,7 @@ mod tests {
                     (TableTy::Exact, StorageBackendTy::Zero),
                 ],
                 0,
+                id,
             )
             .unwrap(),
         )
@@ -258,7 +262,7 @@ mod tests {
     #[test]
     fn test_single_quarter_turn() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             &cube3_def,
             vec![
@@ -276,7 +280,7 @@ mod tests {
     #[test]
     fn test_single_half_turn() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             &cube3_def,
             vec![
@@ -302,7 +306,8 @@ mod tests {
         make_guard!(guard);
         let cube3_def =
             PuzzleDef::<Cube3>::new(&KPUZZLE_3X3.clone().with_moves(&["F", "R", "U"]), guard)
-                .unwrap();
+                .unwrap()
+                .0;
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             &cube3_def,
             vec![
@@ -331,7 +336,7 @@ mod tests {
         return;
         make_guard!(guard);
         let prune_start = Instant::now();
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let sorted_cycle_type = vec![
             vec![(1.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
             vec![(1.try_into().unwrap(), true), (7.try_into().unwrap(), true)],
@@ -344,6 +349,7 @@ mod tests {
                 (TableTy::Zero, StorageBackendTy::Zero),
             ],
             88_179_840,
+            id,
         )
         .unwrap();
         let pruning_tables = OrbitPruningTables::try_generate(generate_meta).unwrap();
@@ -380,7 +386,7 @@ mod tests {
     #[test]
     fn test_many_optimal_cycles() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_3X3, guard).unwrap().0;
 
         let mut solver: CycleTypeSolver<HeapPuzzle, _> = CycleTypeSolver::new(
             &cube3_def,
@@ -635,7 +641,7 @@ mod tests {
         ];
 
         let solved = cube3_def.new_solved_state();
-        let mut multi_bv = HeapPuzzle::new_multi_bv(&cube3_def.sorted_orbit_defs);
+        let mut multi_bv = HeapPuzzle::new_multi_bv(cube3_def.sorted_orbit_defs_branded_ref());
 
         for optimal_cycle_test in optimal_cycle_type_tests {
             let mut result_1 = solved.clone();
@@ -646,14 +652,16 @@ mod tests {
                 result_2.replace_compose(
                     &result_1,
                     &move_.puzzle_state,
-                    &cube3_def.sorted_orbit_defs,
+                    cube3_def.sorted_orbit_defs_branded_ref(),
                 );
                 std::mem::swap(&mut result_1, &mut result_2);
                 move_count += 1;
             }
 
-            let cycle_type =
-                result_1.cycle_type(&cube3_def.sorted_orbit_defs, multi_bv.reusable_ref());
+            let cycle_type = result_1.cycle_type(
+                cube3_def.sorted_orbit_defs_branded_ref(),
+                multi_bv.reusable_ref(),
+            );
             solver.set_sorted_cycle_type(cycle_type);
 
             let solutions = solver.solve::<Vec<_>>().collect_vec();
@@ -669,7 +677,7 @@ mod tests {
     #[test]
     fn test_big_cube_optimal_cycle() {
         make_guard!(guard);
-        let cube4_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_4X4, guard).unwrap();
+        let cube4_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_4X4, guard).unwrap().0;
 
         let mut solver: CycleTypeSolver<HeapPuzzle, _> = CycleTypeSolver::new(
             &cube4_def,
@@ -1003,7 +1011,7 @@ mod tests {
         let optimal_cycle_type_tests = &optimal_cycle_type_tests[0..5];
 
         let solved = cube4_def.new_solved_state();
-        let mut multi_bv = HeapPuzzle::new_multi_bv(&cube4_def.sorted_orbit_defs);
+        let mut multi_bv = HeapPuzzle::new_multi_bv(cube4_def.sorted_orbit_defs_branded_ref());
 
         for optimal_cycle_test in optimal_cycle_type_tests {
             let mut result_1 = solved.clone();
@@ -1014,14 +1022,16 @@ mod tests {
                 result_2.replace_compose(
                     &result_1,
                     &move_.puzzle_state,
-                    &cube4_def.sorted_orbit_defs,
+                    cube4_def.sorted_orbit_defs_branded_ref(),
                 );
                 std::mem::swap(&mut result_1, &mut result_2);
                 move_count += 1;
             }
 
-            let cycle_type =
-                result_1.cycle_type(&cube4_def.sorted_orbit_defs, multi_bv.reusable_ref());
+            let cycle_type = result_1.cycle_type(
+                cube4_def.sorted_orbit_defs_branded_ref(),
+                multi_bv.reusable_ref(),
+            );
             solver.set_sorted_cycle_type(cycle_type);
 
             let solutions = solver.solve::<Vec<_>>().collect_vec();
@@ -1033,27 +1043,4 @@ mod tests {
             );
         }
     }
-
-    //     let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-    //         puzzle_def,
-    //         canonical_fsm,
-    //         vec![
-    //             vec![(1.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
-    //             vec![(1.try_into().unwrap(), true), (1.try_into().unwrap(), true)],
-    //         ],
-    //         ZeroTable,
-    //     );
-
-    //     let start = Instant::now();
-    //     let solutions = solver.solve::<[Cube3; 21]>();
-    //     let duration = start.elapsed();
-    //     eprintln!("Time to find 30-cycle: {:?}", duration);
-    //     for solution in solutions.iter() {
-    //         for move_ in solution.iter() {
-    //             print!("{} ", &move_.name);
-    //         }
-    //         println!();
-    //     }
-    //     assert_eq!(solutions.len(), 0);
-    // }
 }

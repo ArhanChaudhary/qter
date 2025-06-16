@@ -5,18 +5,17 @@ pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
     use crate::phase2::puzzle::{
-        OrbitDef, OrbitIdentifierInterface, OrientedPartition, PuzzleState, TransformationsMeta,
-        TransformationsMetaError,
+        BrandedOrbitDef, OrbitDef, OrbitIdentifierInterface, OrientedPartition, PuzzleState,
+        SortedOrbitDefsBrandedRef, TransformationsMeta, TransformationsMetaError,
     };
     use generativity::Id;
     use std::hash::Hash;
     use std::{fmt::Debug, num::NonZeroU8};
 
     /// An orbit identifier for 3x3 cubes.
-    #[derive(Default, Debug, Copy, Clone)]
+    #[derive(Debug, Copy, Clone)]
     pub enum Cube3OrbitType {
         /// The corners orbit.
-        #[default]
         Corners,
         /// The edges orbit.
         Edges,
@@ -39,7 +38,7 @@ mod common {
             /// # Safety
             ///
             /// The caller must ensure that `corners_transformation` is from a
-            /// `TransformationMeta`
+            /// `TransformationMeta`,
             pub unsafe fn new_unchecked(corners_transformation: &'a [(u8, u8); 8]) -> Self {
                 Self(corners_transformation)
             }
@@ -56,7 +55,7 @@ mod common {
             /// # Safety
             ///
             /// The caller must ensure that `edges_transformation` is from a
-            /// `TransformationMeta`
+            /// `TransformationMeta`.
             pub unsafe fn new_unchecked(edges_transformation: &'a [(u8, u8); 12]) -> Self {
                 Self(edges_transformation)
             }
@@ -75,10 +74,10 @@ mod common {
             edges_transformation: EdgesTransformation<'_>,
         ) -> Self;
 
-        /// Compose a and b into self.
+        /// Compose `a` and `b` into self.
         fn replace_compose(&mut self, a: &Self, b: &Self);
 
-        /// Inverse a into self.
+        /// Inverse `a` into self.
         fn replace_inverse(&mut self, a: &Self);
 
         /// Check if the cube induces a sorted cycle type.
@@ -97,6 +96,7 @@ mod common {
         fn approximate_hash_orbit(&self, orbit_type: Cube3OrbitType) -> impl Hash;
     }
 
+    /// The expected sorted orbit definition for 3x3 puzzles.
     pub const CUBE_3_SORTED_ORBIT_DEFS: [OrbitDef; 2] = [
         OrbitDef {
             piece_count: NonZeroU8::new(8).unwrap(),
@@ -108,11 +108,22 @@ mod common {
         },
     ];
 
-    impl OrbitIdentifierInterface for Cube3OrbitType {
-        fn next_orbit_identifier(self, _orbit_def: OrbitDef) -> Self {
+    impl OrbitIdentifierInterface<'_> for Cube3OrbitType {
+        fn first_orbit_identifier(_branded_orbit_def: BrandedOrbitDef) -> Self {
+            Cube3OrbitType::Corners
+        }
+
+        fn next_orbit_identifier(self, _branded_orbit_def: BrandedOrbitDef) -> Self {
             match self {
                 Cube3OrbitType::Corners => Cube3OrbitType::Edges,
                 Cube3OrbitType::Edges => panic!("No next orbit identifier for Cube3"),
+            }
+        }
+
+        fn orbit_def(&self) -> OrbitDef {
+            match self {
+                Cube3OrbitType::Corners => CUBE_3_SORTED_ORBIT_DEFS[0],
+                Cube3OrbitType::Edges => CUBE_3_SORTED_ORBIT_DEFS[1],
             }
         }
     }
@@ -125,7 +136,7 @@ mod common {
             C: 'a + 'id;
         type OrbitIdentifier = Cube3OrbitType;
 
-        fn new_multi_bv(_sorted_orbit_defs: &[OrbitDef]) {
+        fn new_multi_bv(_sorted_orbit_defs: SortedOrbitDefsBrandedRef) {
             // Induces cycle type for 3x3 cubes doesn't require auxilliary
             // memory
         }
@@ -176,18 +187,23 @@ mod common {
             }
         }
 
-        fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: &[OrbitDef]) {
+        fn replace_compose(
+            &mut self,
+            a: &Self,
+            b: &Self,
+            _sorted_orbit_defs: SortedOrbitDefsBrandedRef,
+        ) {
             self.replace_compose(a, b);
         }
 
-        fn replace_inverse(&mut self, a: &Self, _sorted_orbit_defs: &[OrbitDef]) {
+        fn replace_inverse(&mut self, a: &Self, _sorted_orbit_defs: SortedOrbitDefsBrandedRef) {
             self.replace_inverse(a);
         }
 
         fn induces_sorted_cycle_type(
             &self,
             sorted_cycle_type: &[OrientedPartition],
-            _sorted_orbit_defs: &[OrbitDef],
+            _sorted_orbit_defs: SortedOrbitDefsBrandedRef,
             _multi_bv: (),
         ) -> bool {
             // SAFETY: `try_from_transformation_meta`, the only constructor,
@@ -198,29 +214,15 @@ mod common {
             })
         }
 
-        fn orbit_bytes(
-            &self,
-            orbit_identifier: Cube3OrbitType,
-            _orbit_def: OrbitDef,
-        ) -> ([u8; 16], [u8; 16]) {
+        fn orbit_bytes(&self, orbit_identifier: Cube3OrbitType) -> ([u8; 16], [u8; 16]) {
             self.orbit_bytes(orbit_identifier)
         }
 
-        fn exact_hasher_orbit(
-            &self,
-            orbit_identifier: Cube3OrbitType,
-            _orbit_def: OrbitDef,
-        ) -> u64 {
-            // TODO: ghostcell trick to avoid the index check
-            // TODO: make orbit_index an enum
+        fn exact_hasher_orbit(&self, orbit_identifier: Cube3OrbitType) -> u64 {
             self.exact_hasher_orbit(orbit_identifier)
         }
 
-        fn approximate_hash_orbit(
-            &self,
-            orbit_identifier: Cube3OrbitType,
-            _orbit_def: OrbitDef,
-        ) -> impl Hash {
+        fn approximate_hash_orbit(&self, orbit_identifier: Self::OrbitIdentifier) -> impl Hash {
             self.approximate_hash_orbit(orbit_identifier)
         }
     }

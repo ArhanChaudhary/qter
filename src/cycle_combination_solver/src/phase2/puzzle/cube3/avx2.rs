@@ -539,7 +539,6 @@ impl Cube3Interface for Cube3 {
     }
 
     fn orbit_bytes(&self, orbit_type: Cube3OrbitType) -> ([u8; 16], [u8; 16]) {
-        // TODO: is using an enum faster?
         let orbit = match orbit_type {
             Cube3OrbitType::Corners => self.0.extract::<CORNER_START, 16>(),
             Cube3OrbitType::Edges => self.0.extract::<EDGE_START, 16>(),
@@ -687,7 +686,7 @@ mod tests {
     #[cfg_attr(not(avx2), ignore)]
     fn test_brute_force_inversion() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
 
@@ -729,7 +728,7 @@ mod tests {
     #[cfg_attr(not(avx2), ignore)]
     fn test_raw_inversion() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
 
@@ -771,7 +770,7 @@ mod tests {
     #[cfg_attr(not(avx2), ignore)]
     fn bench_brute_force_inversion(b: &mut test::Bencher) {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 100);
@@ -784,7 +783,7 @@ mod tests {
     #[cfg_attr(not(avx2), ignore)]
     fn bench_raw_inversion(b: &mut test::Bencher) {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 100);

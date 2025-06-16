@@ -1,8 +1,8 @@
 //! The default, generic implementation for representing puzzle states.
 
 use super::{
-    MultiBvInterface, OrbitDef, OrbitIdentifierInterface, OrientedPartition, PuzzleState,
-    TransformationsMeta, TransformationsMetaError,
+    BrandedOrbitDef, MultiBvInterface, OrbitDef, OrbitIdentifierInterface, OrientedPartition,
+    PuzzleState, SortedOrbitDefsBrandedRef, TransformationsMeta, TransformationsMetaError,
 };
 use crate::phase2::{
     FACT_UNTIL_19,
@@ -34,64 +34,84 @@ pub use private::*;
 mod private {
     //! Private module to disallow explicit instantiation of `OrbitBaseSlice`.
 
-    use core::slice;
-
-    use super::{OrbitDef, OrbitIdentifierInterface};
+    use super::{BrandedOrbitDef, OrbitIdentifierInterface};
+    use crate::phase2::puzzle::OrbitDef;
+    use std::slice;
 
     /// A newtyped index into the start of an orbit in a `StackPuzzle` or
     /// `HeapPuzzle`.
-    #[derive(Default, Clone, Copy, Debug)]
-    pub struct SliceOrbitBase(usize);
+    #[derive(Clone, Copy, Debug)]
+    pub struct SliceOrbitIdentifier<'id> {
+        base_index: usize,
+        branded_orbit_def: BrandedOrbitDef<'id>,
+    }
 
-    impl OrbitIdentifierInterface for SliceOrbitBase {
-        fn next_orbit_identifier(self, orbit_def: OrbitDef) -> SliceOrbitBase {
+    impl<'id> OrbitIdentifierInterface<'id> for SliceOrbitIdentifier<'id> {
+        fn first_orbit_identifier(branded_orbit_def: BrandedOrbitDef<'id>) -> Self {
+            SliceOrbitIdentifier {
+                base_index: 0,
+                branded_orbit_def,
+            }
+        }
+
+        fn next_orbit_identifier(self, branded_orbit_def: BrandedOrbitDef) -> SliceOrbitIdentifier {
             // TODO: panic if out of bounds
-            SliceOrbitBase(self.0 + orbit_def.piece_count.get() as usize * 2)
+            SliceOrbitIdentifier {
+                base_index: self.base_index
+                    + self.branded_orbit_def.inner.piece_count.get() as usize * 2,
+                branded_orbit_def,
+            }
+        }
+
+        fn orbit_def(&self) -> OrbitDef {
+            self.branded_orbit_def.inner
         }
     }
 
-    impl SliceOrbitBase {
+    // TODO: should this be unsafe
+    impl SliceOrbitIdentifier<'_> {
         #[must_use]
-        pub fn get(self) -> usize {
-            self.0
+        pub fn base_index(self) -> usize {
+            self.base_index
         }
 
         #[must_use]
-        pub fn perm_slice(self, slice_orbit_states: &[u8], orbit_def: OrbitDef) -> &[u8] {
-            let start = self.0;
+        pub fn perm_slice(self, slice_orbit_states: &[u8]) -> &[u8] {
             unsafe {
                 slice::from_raw_parts(
-                    slice_orbit_states.as_ptr().add(start),
-                    orbit_def.piece_count.get() as usize,
+                    slice_orbit_states.as_ptr().add(self.base_index),
+                    self.branded_orbit_def.inner.piece_count.get() as usize,
                 )
             }
         }
 
         #[must_use]
-        pub fn ori_slice(self, slice_orbit_states: &[u8], orbit_def: OrbitDef) -> &[u8] {
-            let start = self.0 + orbit_def.piece_count.get() as usize;
+        pub fn ori_slice(self, slice_orbit_states: &[u8]) -> &[u8] {
+            let start = self.base_index + self.branded_orbit_def.inner.piece_count.get() as usize;
             unsafe {
                 slice::from_raw_parts(
                     slice_orbit_states.as_ptr().add(start),
-                    orbit_def.piece_count.get() as usize,
+                    self.branded_orbit_def.inner.piece_count.get() as usize,
                 )
             }
         }
 
         #[must_use]
-        pub fn orbit_slice(self, slice_orbit_states: &[u8], orbit_def: OrbitDef) -> &[u8] {
-            let start = self.0;
-            let end = self.next_orbit_identifier(orbit_def).get();
+        pub fn orbit_slice(self, slice_orbit_states: &[u8]) -> &[u8] {
+            let start = self.base_index;
+            let end = self
+                .next_orbit_identifier(self.branded_orbit_def)
+                .base_index();
             unsafe { slice::from_raw_parts(slice_orbit_states.as_ptr().add(start), end - start) }
         }
     }
 }
 
 #[must_use]
-pub fn slice_orbit_size(orbit_def: OrbitDef) -> usize {
-    SliceOrbitBase::default()
-        .next_orbit_identifier(orbit_def)
-        .get()
+pub fn slice_orbit_size(branded_orbit_def: BrandedOrbitDef) -> usize {
+    SliceOrbitIdentifier::first_orbit_identifier(branded_orbit_def)
+        .next_orbit_identifier(branded_orbit_def)
+        .base_index()
 }
 
 impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
@@ -100,9 +120,9 @@ impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
         = &'a [u8]
     where
         Self: 'a;
-    type OrbitIdentifier = SliceOrbitBase;
+    type OrbitIdentifier = SliceOrbitIdentifier<'id>;
 
-    fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv {
+    fn new_multi_bv(sorted_orbit_defs: SortedOrbitDefsBrandedRef) -> Self::MultiBv {
         new_multi_bv_slice(sorted_orbit_defs)
     }
 
@@ -111,7 +131,7 @@ impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
         id: Id<'id>,
     ) -> Result<Self, TransformationsMetaError> {
         let mut slice_orbit_states = [0_u8; N];
-        ksolve_move_to_slice(&mut slice_orbit_states, &transformations_meta)?;
+        ksolve_move_to_slice(&mut slice_orbit_states, &transformations_meta, id)?;
         Ok(StackPuzzle(slice_orbit_states, id))
     }
 
@@ -119,42 +139,38 @@ impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
         &mut self,
         a: &StackPuzzle<N>,
         b: &StackPuzzle<N>,
-        sorted_orbit_defs: &[OrbitDef],
+        sorted_orbit_defs: SortedOrbitDefsBrandedRef,
     ) {
         unsafe {
             replace_compose_slice(&mut self.0, &a.0, &b.0, sorted_orbit_defs);
         }
     }
 
-    fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]) {
+    fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: SortedOrbitDefsBrandedRef) {
         unsafe { replace_inverse_slice(&mut self.0, &a.0, sorted_orbit_defs) };
     }
 
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type: &[OrientedPartition],
-        sorted_orbit_defs: &[OrbitDef],
+        sorted_orbit_defs: SortedOrbitDefsBrandedRef,
         multi_bv: SliceMultiBvRefMut<'_>,
     ) -> bool {
         induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv.0)
     }
 
-    fn orbit_bytes(&self, orbit_identifier: SliceOrbitBase, orbit_def: OrbitDef) -> (&[u8], &[u8]) {
-        orbit_bytes_slice(&self.0, orbit_identifier, orbit_def)
+    fn orbit_bytes(&self, orbit_identifier: SliceOrbitIdentifier<'id>) -> (&[u8], &[u8]) {
+        orbit_bytes_slice(&self.0, orbit_identifier)
     }
 
     #[allow(refining_impl_trait_reachable)]
-    fn approximate_hash_orbit(
-        &self,
-        orbit_identifier: SliceOrbitBase,
-        orbit_def: OrbitDef,
-    ) -> &[u8] {
-        approximate_hash_orbit_slice(&self.0, orbit_identifier, orbit_def)
+    fn approximate_hash_orbit(&self, orbit_identifier: SliceOrbitIdentifier<'id>) -> &[u8] {
+        approximate_hash_orbit_slice(&self.0, orbit_identifier)
     }
 
-    fn exact_hasher_orbit(&self, orbit_identifier: SliceOrbitBase, orbit_def: OrbitDef) -> u64 {
-        let (perm, ori) = self.orbit_bytes(orbit_identifier, orbit_def);
-        exact_hasher_orbit_bytes(perm, ori, orbit_def)
+    fn exact_hasher_orbit(&self, orbit_identifier: SliceOrbitIdentifier<'id>) -> u64 {
+        let (perm, ori) = self.orbit_bytes(orbit_identifier);
+        exact_hasher_orbit_bytes(perm, ori, orbit_identifier.orbit_def())
     }
 }
 
@@ -164,9 +180,9 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
         = &'a [u8]
     where
         Self: 'a;
-    type OrbitIdentifier = SliceOrbitBase;
+    type OrbitIdentifier = SliceOrbitIdentifier<'id>;
 
-    fn new_multi_bv(sorted_orbit_defs: &[OrbitDef]) -> Self::MultiBv {
+    fn new_multi_bv(sorted_orbit_defs: SortedOrbitDefsBrandedRef) -> Self::MultiBv {
         new_multi_bv_slice(sorted_orbit_defs)
     }
 
@@ -180,18 +196,23 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
             sorted_orbit_defs
                 .iter()
                 .copied()
-                .map(slice_orbit_size)
+                .map(|orbit_def| slice_orbit_size(BrandedOrbitDef::new(orbit_def, id)))
                 .sum()
         ]
         .into_boxed_slice();
         // No validation needed. from_sorted_transformations_unchecked creates
         // an orbit states buffer that is guaranteed to be the right size, and
         // there is no restriction on the expected orbit defs
-        ksolve_move_to_slice(&mut slice_orbit_states, &transformations_meta).unwrap();
+        ksolve_move_to_slice(&mut slice_orbit_states, &transformations_meta, id).unwrap();
         Ok(HeapPuzzle(slice_orbit_states, id))
     }
 
-    fn replace_compose(&mut self, a: &HeapPuzzle, b: &HeapPuzzle, sorted_orbit_defs: &[OrbitDef]) {
+    fn replace_compose(
+        &mut self,
+        a: &HeapPuzzle,
+        b: &HeapPuzzle,
+        sorted_orbit_defs: SortedOrbitDefsBrandedRef,
+    ) {
         // SAFETY: the caller guarantees that all arguments correspond to the
         // same orbit defs
         unsafe {
@@ -199,43 +220,42 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
         }
     }
 
-    fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: &[OrbitDef]) {
+    fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: SortedOrbitDefsBrandedRef) {
         unsafe { replace_inverse_slice(&mut self.0, &a.0, sorted_orbit_defs) };
     }
 
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type: &[OrientedPartition],
-        sorted_orbit_defs: &[OrbitDef],
+        sorted_orbit_defs: SortedOrbitDefsBrandedRef,
         multi_bv: SliceMultiBvRefMut<'_>,
     ) -> bool {
         induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv.0)
     }
 
-    fn orbit_bytes(&self, orbit_identifier: SliceOrbitBase, orbit_def: OrbitDef) -> (&[u8], &[u8]) {
-        orbit_bytes_slice(&self.0, orbit_identifier, orbit_def)
+    fn orbit_bytes(&self, orbit_identifier: SliceOrbitIdentifier) -> (&[u8], &[u8]) {
+        orbit_bytes_slice(&self.0, orbit_identifier)
     }
 
     #[allow(refining_impl_trait_reachable)]
-    fn approximate_hash_orbit(
-        &self,
-        orbit_identifier: SliceOrbitBase,
-        orbit_def: OrbitDef,
-    ) -> &[u8] {
-        approximate_hash_orbit_slice(&self.0, orbit_identifier, orbit_def)
+    fn approximate_hash_orbit(&self, orbit_identifier: SliceOrbitIdentifier) -> &[u8] {
+        approximate_hash_orbit_slice(&self.0, orbit_identifier)
     }
 
-    fn exact_hasher_orbit(&self, orbit_identifier: SliceOrbitBase, orbit_def: OrbitDef) -> u64 {
-        let (perm, ori) = self.orbit_bytes(orbit_identifier, orbit_def);
-        exact_hasher_orbit_bytes(perm, ori, orbit_def)
+    fn exact_hasher_orbit(&self, orbit_identifier: SliceOrbitIdentifier<'id>) -> u64 {
+        let (perm, ori) = self.orbit_bytes(orbit_identifier);
+        exact_hasher_orbit_bytes(perm, ori, orbit_identifier.orbit_def())
     }
 }
 
-fn new_multi_bv_slice(sorted_orbit_defs: &[OrbitDef]) -> SliceMultiBv {
+/// Create a new multi-bit vector for slice puzzles in
+/// `induces_sorted_cycle_type`.
+fn new_multi_bv_slice(sorted_orbit_defs: SortedOrbitDefsBrandedRef) -> SliceMultiBv {
     SliceMultiBv(
         vec![
             0;
             sorted_orbit_defs
+                .inner
                 .last()
                 .unwrap()
                 .piece_count
@@ -246,9 +266,11 @@ fn new_multi_bv_slice(sorted_orbit_defs: &[OrbitDef]) -> SliceMultiBv {
     )
 }
 
+/// Populate `slice_orbit_states` with `transformation_metas`.
 fn ksolve_move_to_slice(
     slice_orbit_states: &mut [u8],
     transformations_meta: &TransformationsMeta<'_>,
+    id: Id<'_>,
 ) -> Result<(), TransformationsMetaError> {
     let sorted_orbit_defs = transformations_meta.sorted_orbit_defs();
 
@@ -256,7 +278,7 @@ fn ksolve_move_to_slice(
         < sorted_orbit_defs
             .iter()
             .copied()
-            .map(slice_orbit_size)
+            .map(|orbit_def| slice_orbit_size(BrandedOrbitDef::new(orbit_def, id)))
             .sum()
     {
         return Err(TransformationsMetaError::NotEnoughBufferSpace);
@@ -274,7 +296,7 @@ fn ksolve_move_to_slice(
             slice_orbit_states[base + (i + piece_count) as usize] = orientation_delta;
             slice_orbit_states[base + i as usize] = perm;
         }
-        base += slice_orbit_size(orbit_def);
+        base += slice_orbit_size(BrandedOrbitDef::new(orbit_def, id));
     }
     Ok(())
 }
@@ -286,12 +308,11 @@ unsafe fn replace_compose_slice(
     slice_orbit_states_mut: &mut [u8],
     a: &[u8],
     b: &[u8],
-    sorted_orbit_defs: &[OrbitDef],
+    sorted_orbit_defs: SortedOrbitDefsBrandedRef,
 ) {
     debug_assert_eq!(
         sorted_orbit_defs
-            .iter()
-            .copied()
+            .branded_copied_iter()
             .map(slice_orbit_size)
             .sum::<usize>(),
         slice_orbit_states_mut.len()
@@ -300,23 +321,22 @@ unsafe fn replace_compose_slice(
     debug_assert_eq!(a.len(), b.len());
 
     let mut base = 0;
-    for &orbit_def in sorted_orbit_defs {
+    for branded_orbit_def in sorted_orbit_defs.branded_copied_iter() {
         unsafe {
-            replace_compose_slice_orbit(slice_orbit_states_mut, base, a, b, orbit_def);
+            replace_compose_slice_orbit(slice_orbit_states_mut, base, a, b, branded_orbit_def);
         }
-        base += slice_orbit_size(orbit_def);
+        base += slice_orbit_size(branded_orbit_def);
     }
 }
 
 unsafe fn replace_inverse_slice(
     slice_orbit_states_mut: &mut [u8],
     a: &[u8],
-    sorted_orbit_defs: &[OrbitDef],
+    sorted_orbit_defs: SortedOrbitDefsBrandedRef,
 ) {
     debug_assert_eq!(
         sorted_orbit_defs
-            .iter()
-            .copied()
+            .branded_copied_iter()
             .map(slice_orbit_size)
             .sum::<usize>(),
         slice_orbit_states_mut.len()
@@ -324,14 +344,15 @@ unsafe fn replace_inverse_slice(
     debug_assert_eq!(slice_orbit_states_mut.len(), a.len());
 
     let mut base = 0;
-    for &orbit_def in sorted_orbit_defs {
-        let piece_count = orbit_def.piece_count.get();
+    for branded_orbit_def in sorted_orbit_defs.branded_copied_iter() {
+        let piece_count = branded_orbit_def.inner.piece_count.get();
+        let orientation_count = branded_orbit_def.inner.orientation_count.get();
         // SAFETY: Permutation vectors and orientation vectors are shuffled
         // around, based on code from twsearch [1]. Testing has shown this is
         // sound.
         //
         // [1] https://github.com/cubing/twsearch
-        if orbit_def.orientation_count == 1.try_into().unwrap() {
+        if orientation_count == 1 {
             for i in 0..piece_count {
                 let base_i = base + i as usize;
                 unsafe {
@@ -347,12 +368,12 @@ unsafe fn replace_inverse_slice(
                     *slice_orbit_states_mut.get_unchecked_mut(base + (a[base_i]) as usize) = i;
                     *slice_orbit_states_mut
                         .get_unchecked_mut(base + (a[base_i] + piece_count) as usize) =
-                        (orbit_def.orientation_count.get() - a[base_i + piece_count as usize])
+                        (orientation_count - a[base_i + piece_count as usize])
                             .min(a[base_i + piece_count as usize].wrapping_neg());
                 }
             }
         }
-        base += slice_orbit_size(orbit_def);
+        base += slice_orbit_size(branded_orbit_def);
     }
 }
 
@@ -360,12 +381,13 @@ unsafe fn replace_inverse_slice(
 fn induces_sorted_cycle_type_slice(
     slice_orbit_states: &[u8],
     sorted_cycle_type: &[OrientedPartition],
-    sorted_orbit_defs: &[OrbitDef],
+    sorted_orbit_defs: SortedOrbitDefsBrandedRef,
     multi_bv: &mut [u8],
 ) -> bool {
     let mut base = 0;
-    for (&orbit_def, sorted_cycle_type_orbit) in
-        sorted_orbit_defs.iter().zip(sorted_cycle_type.iter())
+    for (orbit_def, sorted_cycle_type_orbit) in sorted_orbit_defs
+        .branded_copied_iter()
+        .zip(sorted_cycle_type.iter())
     {
         unsafe {
             if !induces_sorted_cycle_type_slice_orbit(
@@ -383,23 +405,21 @@ fn induces_sorted_cycle_type_slice(
     true
 }
 
-fn orbit_bytes_slice(
-    slice_orbit_states: &[u8],
-    slice_orbit_base: SliceOrbitBase,
-    orbit_def: OrbitDef,
-) -> (&[u8], &[u8]) {
+fn orbit_bytes_slice<'a>(
+    slice_orbit_states: &'a [u8],
+    slice_orbit_identifier: SliceOrbitIdentifier,
+) -> (&'a [u8], &'a [u8]) {
     (
-        slice_orbit_base.perm_slice(slice_orbit_states, orbit_def),
-        slice_orbit_base.ori_slice(slice_orbit_states, orbit_def),
+        slice_orbit_identifier.perm_slice(slice_orbit_states),
+        slice_orbit_identifier.ori_slice(slice_orbit_states),
     )
 }
 
-fn approximate_hash_orbit_slice(
-    slice_orbit_states: &[u8],
-    slice_orbit_base: SliceOrbitBase,
-    orbit_def: OrbitDef,
-) -> &[u8] {
-    slice_orbit_base.orbit_slice(slice_orbit_states, orbit_def)
+fn approximate_hash_orbit_slice<'a>(
+    slice_orbit_states: &'a [u8],
+    slice_orbit_identifier: SliceOrbitIdentifier,
+) -> &'a [u8] {
+    slice_orbit_identifier.orbit_slice(slice_orbit_states)
 }
 
 // TODO: https://stackoverflow.com/a/24689277 https://freedium.cfd/https://medium.com/@benjamin.botto/sequentially-indexing-permutations-a-linear-algorithm-for-computing-lexicographic-rank-a22220ffd6e3 https://stackoverflow.com/questions/1506078/fast-permutation-number-permutation-mapping-algorithms/1506337#1506337
@@ -445,15 +465,15 @@ impl HeapPuzzle<'_> {
     #[must_use]
     pub fn cycle_type(
         &self,
-        sorted_orbit_defs: &[OrbitDef],
+        sorted_orbit_defs: SortedOrbitDefsBrandedRef,
         multi_bv: SliceMultiBvRefMut<'_>,
     ) -> Vec<OrientedPartition> {
         let mut cycle_type = vec![];
         let mut base = 0;
-        for &orbit_def in sorted_orbit_defs {
+        for branded_orbit_def in sorted_orbit_defs.branded_copied_iter() {
             let mut cycle_type_piece = vec![];
             multi_bv.0.fill(0);
-            let piece_count = orbit_def.piece_count.get() as usize;
+            let piece_count = branded_orbit_def.inner.piece_count.get() as usize;
             for i in 0..piece_count {
                 let (div, rem) = (i / 4, i % 4);
                 if multi_bv.0[div] & (1 << rem) != 0 {
@@ -473,13 +493,14 @@ impl HeapPuzzle<'_> {
                     orientation_sum += self.0[base + piece + piece_count];
                 }
 
-                let actual_orients = orientation_sum % orbit_def.orientation_count != 0;
+                let actual_orients =
+                    orientation_sum % branded_orbit_def.inner.orientation_count != 0;
                 if actual_cycle_length != 1 || actual_orients {
                     cycle_type_piece
                         .push((NonZeroU8::new(actual_cycle_length).unwrap(), actual_orients));
                 }
             }
-            base += slice_orbit_size(orbit_def);
+            base += slice_orbit_size(branded_orbit_def);
             cycle_type_piece.sort();
             cycle_type.push(cycle_type_piece);
         }

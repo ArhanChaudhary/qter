@@ -62,7 +62,7 @@ impl<'id, P: PuzzleState<'id>> From<&PuzzleDef<'id, P>> for PuzzleCanonicalFSM<'
                     &puzzle_def.moves[move_class_2_index],
                     &mut result_1,
                     &mut result_2,
-                    &puzzle_def.sorted_orbit_defs,
+                    puzzle_def.sorted_orbit_defs_branded_ref(),
                 ) {
                     commutes[i][j] = false;
                     commutes[j][i] = false;
@@ -168,7 +168,7 @@ mod tests {
     #[test]
     fn test_canonical_fsm_puzzle_initially_all_legal() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let canonical_fsm: PuzzleCanonicalFSM<Cube3> = (&cube3_def).into();
 
         for move_class_index in 0..cube3_def.move_classes.len() {
@@ -183,7 +183,7 @@ mod tests {
     #[test]
     fn test_canonical_fsm_puzzle_prevents_self() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let canonical_fsm: PuzzleCanonicalFSM<Cube3> = (&cube3_def).into();
         for move_class_index in 0..cube3_def.move_classes.len() {
             assert!(
@@ -204,7 +204,7 @@ mod tests {
     #[test]
     fn test_canonical_fsm_puzzle_prevents_self_and_antipode() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let canonical_fsm: PuzzleCanonicalFSM<Cube3> = (&cube3_def).into();
 
         let mut result_1 = cube3_def.new_solved_state();
@@ -220,7 +220,7 @@ mod tests {
                     move_2,
                     &mut result_1,
                     &mut result_2,
-                    &cube3_def.sorted_orbit_defs,
+                    cube3_def.sorted_orbit_defs_branded_ref(),
                 ) {
                     continue;
                 }
@@ -263,7 +263,7 @@ mod tests {
     #[test]
     fn test_big_cube_prevents_move_class() {
         make_guard!(guard);
-        let cube4_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_4X4, guard).unwrap();
+        let cube4_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_4X4, guard).unwrap().0;
         let canonical_fsm: PuzzleCanonicalFSM<HeapPuzzle> = (&cube4_def).into();
 
         let mut result_1 = cube4_def.new_solved_state();
@@ -278,7 +278,7 @@ mod tests {
                     &cube4_def.moves[other_move_class],
                     &mut result_1,
                     &mut result_2,
-                    &cube4_def.sorted_orbit_defs,
+                    cube4_def.sorted_orbit_defs_branded_ref(),
                 ) {
                     commute.push(other_move_class_index);
                 }
@@ -321,7 +321,7 @@ mod tests {
     #[test]
     fn test_big_cube_optimization() {
         make_guard!(guard);
-        let cube4_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_4X4, guard).unwrap();
+        let cube4_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_4X4, guard).unwrap().0;
         let canonical_fsm: PuzzleCanonicalFSM<HeapPuzzle> = (&cube4_def).into();
 
         // - 1 to discount the initial FSM state

@@ -39,7 +39,7 @@ pub trait PuzzleStateHistoryInterface<'id, P: PuzzleState<'id>> {
         next_entry.0.replace_compose(
             last_entry_puzzle_state,
             puzzle_state,
-            &puzzle_def.sorted_orbit_defs,
+            puzzle_def.sorted_orbit_defs_branded_ref(),
         );
         next_entry.1 = move_index;
     }
@@ -204,7 +204,7 @@ mod tests {
     }
 
     fn initialize<'id, H: PuzzleStateHistoryInterface<'id, Cube3>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let puzzle_state_history: PuzzleStateHistory<Cube3, H> = (&cube3_def).into();
 
         assert_eq!(puzzle_state_history.stack_pointer, 0);
@@ -226,7 +226,7 @@ mod tests {
     fn puzzle_state_history_composition<'id, H: PuzzleStateHistoryInterface<'id, Cube3>>(
         guard: Guard<'id>,
     ) {
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let r_move = cube3_def.find_move("R").unwrap();
         let r_move_index = move_index(&cube3_def, r_move);
 
@@ -257,7 +257,7 @@ mod tests {
     fn puzzle_state_history_pop<'id, H: PuzzleStateHistoryInterface<'id, Cube3>>(
         guard: Guard<'id>,
     ) {
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solved = cube3_def.new_solved_state();
         let r_move = cube3_def.find_move("R").unwrap();
         let r2_move = cube3_def.find_move("R2").unwrap();
@@ -282,7 +282,7 @@ mod tests {
         r_prime_state.replace_compose(
             &solved,
             &r_prime_move.puzzle_state,
-            &cube3_def.sorted_orbit_defs,
+            cube3_def.sorted_orbit_defs_branded_ref(),
         );
         assert_eq!(&puzzle_state_history.stack[2].0, &r_prime_state);
         assert_eq!(puzzle_state_history.stack[2].1, r2_move_index);
@@ -291,7 +291,11 @@ mod tests {
 
         assert_eq!(puzzle_state_history.stack_pointer, 1);
         let mut r_state = solved.clone();
-        r_state.replace_compose(&solved, &r_move.puzzle_state, &cube3_def.sorted_orbit_defs);
+        r_state.replace_compose(
+            &solved,
+            &r_move.puzzle_state,
+            cube3_def.sorted_orbit_defs_branded_ref(),
+        );
         assert_eq!(&puzzle_state_history.stack[1].0, &r_state);
 
         unsafe {
@@ -303,7 +307,7 @@ mod tests {
         r_f2_state.replace_compose(
             &r_state,
             &f2_move.puzzle_state,
-            &cube3_def.sorted_orbit_defs,
+            cube3_def.sorted_orbit_defs_branded_ref(),
         );
         assert_eq!(&puzzle_state_history.stack[2].0, &r_f2_state);
 
