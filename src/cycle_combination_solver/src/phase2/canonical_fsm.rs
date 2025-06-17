@@ -3,7 +3,7 @@
 //! <https://github.com/cubing/twsearch/blob/main/src/rs/_internal/canonical_fsm/canonical_fsm.rs>
 
 use super::puzzle::{PuzzleDef, PuzzleState};
-use std::{collections::HashMap, num::NonZeroUsize};
+use std::{collections::HashMap, marker::PhantomData, num::NonZeroUsize};
 
 pub trait CanonicalFSM {
     fn next_state_lookup(&self) -> &[Vec<CanonicalFSMState>];
@@ -20,6 +20,7 @@ pub trait CanonicalFSM {
             Some(state) => state.get(),
             None => 0,
         };
+        // TODO: make this unsafe and brand it maybe
         self.next_state_lookup()[i][move_class_index]
     }
 }
@@ -36,7 +37,7 @@ struct StateToMask(Vec<MoveClassMask>);
 #[derive(Debug)]
 pub struct PuzzleCanonicalFSM<'id, P: PuzzleState<'id>> {
     next_state_lookup: Vec<Vec<CanonicalFSMState>>,
-    _marker: std::marker::PhantomData<&'id P>,
+    _marker: PhantomData<&'id P>,
 }
 
 pub struct OrbitCanonicalFSM {
@@ -139,7 +140,7 @@ impl<'id, P: PuzzleState<'id>> From<&PuzzleDef<'id, P>> for PuzzleCanonicalFSM<'
 
         Self {
             next_state_lookup,
-            _marker: std::marker::PhantomData,
+            _marker: PhantomData,
         }
     }
 }

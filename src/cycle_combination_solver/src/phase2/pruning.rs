@@ -21,7 +21,10 @@ use crate::phase2::{
 };
 use generativity::Id;
 use itertools::Itertools;
-use std::num::{NonZeroU8, NonZeroUsize};
+use std::{
+    marker::PhantomData,
+    num::{NonZeroU8, NonZeroUsize},
+};
 use thiserror::Error;
 
 pub trait PruningTables<'id, P: PuzzleState<'id>> {
@@ -216,7 +219,7 @@ pub enum StorageBackendTy {
     Dynamic,
 }
 
-pub struct ZeroTable<'id, P: PuzzleState<'id>>(std::marker::PhantomData<&'id P>);
+pub struct ZeroTable<'id, P: PuzzleState<'id>>(PhantomData<&'id P>);
 
 use private::OrbitPruneHeuristic;
 mod private {
@@ -955,7 +958,7 @@ impl<'id, P: PuzzleState<'id>> PruningTables<'id, P> for ZeroTable<'id, P> {
     type GenerateError = ();
 
     fn try_generate((): ()) -> Result<ZeroTable<'id, P>, ()> {
-        Ok(ZeroTable(std::marker::PhantomData))
+        Ok(ZeroTable(PhantomData))
     }
 
     fn permissible_heuristic(&self, _puzzle_state: &P) -> u8 {

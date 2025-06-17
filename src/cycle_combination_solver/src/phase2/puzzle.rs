@@ -388,6 +388,8 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
                         .piece_count()
                         .try_into()
                         .map_err(|_| KSolveConversionError::SetSizeTooBig)?,
+                    // TODO: limit ori to 128 because of vectorized SlicePuzzle
+                    // logic
                     orientation_count: ksolve_set.orientation_count(),
                 })
             })

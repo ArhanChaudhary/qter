@@ -1,5 +1,5 @@
 use super::puzzle::{PuzzleDef, PuzzleState, cube3::Cube3};
-use std::{ops::Index, slice::SliceIndex};
+use std::{marker::PhantomData, ops::Index, slice::SliceIndex};
 
 pub trait PuzzleStateHistoryInterface<'id, P: PuzzleState<'id>> {
     type Buf: Index<usize, Output = (P, usize)> + AsMut<[(P, usize)]> + AsRef<[(P, usize)]>;
@@ -48,7 +48,7 @@ pub trait PuzzleStateHistoryInterface<'id, P: PuzzleState<'id>> {
 pub struct PuzzleStateHistory<'id, P: PuzzleState<'id>, H: PuzzleStateHistoryInterface<'id, P>> {
     stack: H::Buf,
     stack_pointer: usize,
-    _marker: std::marker::PhantomData<P>,
+    _marker: PhantomData<P>,
 }
 
 impl<'id, P: PuzzleState<'id>, H: PuzzleStateHistoryInterface<'id, P>> From<&PuzzleDef<'id, P>>
@@ -58,7 +58,7 @@ impl<'id, P: PuzzleState<'id>, H: PuzzleStateHistoryInterface<'id, P>> From<&Puz
         Self {
             stack: H::initialize(puzzle_def),
             stack_pointer: 0,
-            _marker: std::marker::PhantomData,
+            _marker: PhantomData,
         }
     }
 }
