@@ -10,14 +10,14 @@
 
 use super::{
     FACT_UNTIL_19,
-    puzzle::{OrientedPartition, PuzzleDef, PuzzleState},
+    puzzle::{PuzzleDef, PuzzleState},
 };
 use crate::phase2::{
     orbit_puzzle::{
         OrbitPuzzleConstructors, OrbitPuzzleState, slice_orbit_puzzle::SliceOrbitPuzzle,
     },
     permutator::pandita2,
-    puzzle::{BrandedOrbitDef, MultiBvInterface, OrbitIdentifier},
+    puzzle::{BrandedOrbitDef, MultiBvInterface, OrbitIdentifier, SortedCycleType},
 };
 use generativity::Id;
 use itertools::Itertools;
@@ -120,7 +120,7 @@ struct OrbitPruningTableGenerationMeta<'id, 'a, P: PuzzleState<'id>> {
 
 pub struct OrbitPruningTablesGenerateMeta<'id, 'a, P: PuzzleState<'id>> {
     puzzle_def: &'a PuzzleDef<'id, P>,
-    sorted_cycle_type: &'a [OrientedPartition],
+    sorted_cycle_type: &'a SortedCycleType<'id>,
     max_size_bytes: usize,
     maybe_table_types: Option<Vec<(TableTy, StorageBackendTy)>>,
     id: Id<'id>,
@@ -268,14 +268,14 @@ impl<'id, 'a, P: PuzzleState<'id>> OrbitPruningTablesGenerateMeta<'id, 'a, P> {
     /// Returns an error if the length of `sorted_cycle_type` does not match
     pub fn new(
         puzzle_def: &'a PuzzleDef<'id, P>,
-        sorted_cycle_type: &'a [OrientedPartition],
+        sorted_cycle_type: &'a SortedCycleType<'id>,
         max_size_bytes: usize,
         id: Id<'id>,
     ) -> Result<Self, TableTypeInstantiationError> {
-        if sorted_cycle_type.len() != puzzle_def.sorted_orbit_defs.len() {
+        if sorted_cycle_type.inner.len() != puzzle_def.sorted_orbit_defs.len() {
             return Err(TableTypeInstantiationError::InvalidSortedCycleTypeLength {
                 expected: puzzle_def.sorted_orbit_defs.len(),
-                actual: sorted_cycle_type.len(),
+                actual: sorted_cycle_type.inner.len(),
             });
         }
         Ok(OrbitPruningTablesGenerateMeta {
@@ -294,7 +294,7 @@ impl<'id, 'a, P: PuzzleState<'id>> OrbitPruningTablesGenerateMeta<'id, 'a, P> {
     /// Returns an error if the length of `sorted_cycle_type` does not match
     pub fn new_with_table_types(
         puzzle_def: &'a PuzzleDef<'id, P>,
-        sorted_cycle_type: &'a [OrientedPartition],
+        sorted_cycle_type: &'a SortedCycleType<'id>,
         table_types: Vec<(TableTy, StorageBackendTy)>,
         max_size_bytes: usize,
         id: Id<'id>,
@@ -361,7 +361,7 @@ impl<'id, P: PuzzleState<'id> + 'id> PruningTables<'id, P> for OrbitPruningTable
                 .as_ref()
                 .map(|table_types| table_types[orbit_index]);
 
-            let sorted_cycle_type_orbit = &generate_metas.sorted_cycle_type[orbit_index];
+            let sorted_cycle_type_orbit = &generate_metas.sorted_cycle_type.inner[orbit_index];
 
             let unprocessed_orbits_count = NonZeroUsize::new(
                 generate_metas
@@ -1016,7 +1016,8 @@ mod tests {
         let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let u_move = cube3_def.find_move("U").unwrap();
-        let identity_cycle_type = [vec![], vec![]];
+        let identity_cycle_type =
+            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref());
 
         let generate_meta = OrbitPruningTableGenerationMeta {
             puzzle_def: &cube3_def,
@@ -1065,7 +1066,8 @@ mod tests {
     fn test_not_supported_table_type() {
         make_guard!(guard);
         let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
-        let identity_cycle_type = [vec![], vec![]];
+        let identity_cycle_type =
+            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref());
         let generate_metas = OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
             &identity_cycle_type,
@@ -1105,7 +1107,8 @@ mod tests {
     fn test_new_orbit_generation_meta() {
         make_guard!(guard);
         let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
-        let identity_cycle_type = [vec![], vec![]];
+        let identity_cycle_type =
+            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref());
         let generate_metas =
             OrbitPruningTablesGenerateMeta::new(&cube3_def, &identity_cycle_type, 1000, id)
                 .unwrap();
@@ -1140,7 +1143,8 @@ mod tests {
     fn test_max_bytes_cannot_be_generated() {
         make_guard!(guard);
         let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
-        let identity_cycle_type = [vec![], vec![]];
+        let identity_cycle_type =
+            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref());
         let generate_metas = OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
             &identity_cycle_type,
@@ -1205,7 +1209,8 @@ mod tests {
         return;
         make_guard!(guard);
         let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
-        let identity_cycle_type = [vec![], vec![]];
+        let identity_cycle_type =
+            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref());
         let generate_metas = OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
             &identity_cycle_type,

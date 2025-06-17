@@ -5,7 +5,7 @@
 use super::common::{CornersTransformation, Cube3Interface, Cube3OrbitType, EdgesTransformation};
 use crate::phase2::{
     orbit_puzzle::exact_hasher_orbit,
-    puzzle::{OrientedPartition, cube3::common::CUBE_3_SORTED_ORBIT_DEFS},
+    puzzle::{SortedCycleType, cube3::common::CUBE_3_SORTED_ORBIT_DEFS},
 };
 use std::{
     fmt,
@@ -297,7 +297,7 @@ impl Cube3Interface for Cube3 {
         replace_inverse_vectorcall(self, a);
     }
 
-    fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
+    fn induces_sorted_cycle_type(&self, sorted_cycle_type: &SortedCycleType) -> bool {
         // Benchmarked on a 2x Intel Xeon E5-2667 v3: 36.47ns (worst) 7.33ns (average)
         //
         // The cycle type of a state is a sorted list of (int: cycle_length,
@@ -334,6 +334,9 @@ impl Cube3Interface for Cube3 {
         // Helps avoid bound checks in codegen
         #![allow(clippy::int_plus_one)]
 
+        let sorted_corners_cycle_type = unsafe { sorted_cycle_type.inner.get_unchecked(0) };
+        let sorted_edges_cycle_type = unsafe { sorted_cycle_type.inner.get_unchecked(1) };
+
         // The orientation to add every composition repetition
         let compose_ori = self.0 & ORI_MASK;
         // A rolling mask of the pieces that have been seen. Once there are
@@ -367,7 +370,7 @@ impl Cube3Interface for Cube3 {
         if corner_cycle_type_pointer == usize::MAX {
             // If the state has no (1, true) cycle types, then get the first
             // cycle of the specified sorted cycle type
-            if let Some(&first_cycle) = sorted_cycle_type[0].first() {
+            if let Some(&first_cycle) = sorted_corners_cycle_type.first() {
                 // If sorted cycle type has a first cycle, it must not be
                 // (1, true) because this branch only runs when the state has
                 // no (1, true) cycle types
@@ -379,10 +382,10 @@ impl Cube3Interface for Cube3 {
         } else if
         // If the corner cycle type pointer is out of range then something
         // is wrong
-        corner_cycle_type_pointer >= sorted_cycle_type[0].len()
+        corner_cycle_type_pointer >= sorted_corners_cycle_type.len()
             // If the corner cycle type is in range, but it doesn't point to
             // (1, true) then the cycle type is mismatched
-            || sorted_cycle_type[0][corner_cycle_type_pointer] != (1.try_into().unwrap(), true)
+            || sorted_corners_cycle_type[corner_cycle_type_pointer] != (1.try_into().unwrap(), true)
         {
             // In both cases short circuit
             return false;
@@ -395,13 +398,13 @@ impl Cube3Interface for Cube3 {
         edge_cycle_type_pointer = edge_cycle_type_pointer.wrapping_sub(1);
 
         if edge_cycle_type_pointer == usize::MAX {
-            if let Some(&first_cycle) = sorted_cycle_type[1].first() {
+            if let Some(&first_cycle) = sorted_edges_cycle_type.first() {
                 if first_cycle == (1.try_into().unwrap(), true) {
                     return false;
                 }
             }
-        } else if edge_cycle_type_pointer >= sorted_cycle_type[1].len()
-            || sorted_cycle_type[1][edge_cycle_type_pointer] != (1.try_into().unwrap(), true)
+        } else if edge_cycle_type_pointer >= sorted_edges_cycle_type.len()
+            || sorted_edges_cycle_type[edge_cycle_type_pointer] != (1.try_into().unwrap(), true)
         {
             return false;
         }
@@ -468,8 +471,8 @@ impl Cube3Interface for Cube3 {
                             / u32::from(reps.get())) as usize,
                     );
                     // Same error checking as before
-                    if corner_cycle_type_pointer >= sorted_cycle_type[0].len()
-                        || sorted_cycle_type[0][corner_cycle_type_pointer] != (reps, false)
+                    if corner_cycle_type_pointer >= sorted_corners_cycle_type.len()
+                        || sorted_corners_cycle_type[corner_cycle_type_pointer] != (reps, false)
                     {
                         return false;
                     }
@@ -480,8 +483,8 @@ impl Cube3Interface for Cube3 {
                     corner_cycle_type_pointer = corner_cycle_type_pointer.wrapping_add(
                         (reps_oriented_corner_cycle_count / u32::from(reps.get())) as usize,
                     );
-                    if corner_cycle_type_pointer >= sorted_cycle_type[0].len()
-                        || sorted_cycle_type[0][corner_cycle_type_pointer] != (reps, true)
+                    if corner_cycle_type_pointer >= sorted_corners_cycle_type.len()
+                        || sorted_corners_cycle_type[corner_cycle_type_pointer] != (reps, true)
                     {
                         return false;
                     }
@@ -509,8 +512,8 @@ impl Cube3Interface for Cube3 {
                         ((reps_edge_cycle_count - reps_oriented_edge_cycle_count)
                             / u32::from(reps.get())) as usize,
                     );
-                    if edge_cycle_type_pointer >= sorted_cycle_type[1].len()
-                        || sorted_cycle_type[1][edge_cycle_type_pointer] != (reps, false)
+                    if edge_cycle_type_pointer >= sorted_edges_cycle_type.len()
+                        || sorted_edges_cycle_type[edge_cycle_type_pointer] != (reps, false)
                     {
                         return false;
                     }
@@ -520,8 +523,8 @@ impl Cube3Interface for Cube3 {
                     edge_cycle_type_pointer = edge_cycle_type_pointer.wrapping_add(
                         (reps_oriented_edge_cycle_count / u32::from(reps.get())) as usize,
                     );
-                    if edge_cycle_type_pointer >= sorted_cycle_type[1].len()
-                        || sorted_cycle_type[1][edge_cycle_type_pointer] != (reps, true)
+                    if edge_cycle_type_pointer >= sorted_edges_cycle_type.len()
+                        || sorted_edges_cycle_type[edge_cycle_type_pointer] != (reps, true)
                     {
                         return false;
                     }
@@ -534,8 +537,8 @@ impl Cube3Interface for Cube3 {
 
         // Finally, confirm that the cycle type pointers have visited every
         // cycle type in the sorted cycle type list. If so, then return true
-        corner_cycle_type_pointer == sorted_cycle_type[0].len().wrapping_sub(1)
-            && edge_cycle_type_pointer == sorted_cycle_type[1].len().wrapping_sub(1)
+        corner_cycle_type_pointer == sorted_corners_cycle_type.len().wrapping_sub(1)
+            && edge_cycle_type_pointer == sorted_edges_cycle_type.len().wrapping_sub(1)
     }
 
     fn orbit_bytes(&self, orbit_type: Cube3OrbitType) -> ([u8; 16], [u8; 16]) {

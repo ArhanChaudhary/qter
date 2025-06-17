@@ -43,8 +43,7 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
     /// The goal state for IDA* search.
     fn induces_sorted_cycle_type(
         &self,
-        sorted_cycle_type_orbit: &[OrientedPartition],
-        // sorted_cycle_type: SortedCycleType,
+        sorted_cycle_type: &SortedCycleType,
         sorted_orbit_defs: SortedOrbitDefsRef,
         multi_bv: <Self::MultiBv as MultiBvInterface>::ReusableRef<'_>,
     ) -> bool;
@@ -140,11 +139,13 @@ pub struct SortedOrbitDefsRef<'id, 'a> {
     id: Id<'id>,
 }
 
-pub struct SortedCycleType {}
+#[derive(Clone)]
+pub struct SortedCycleType<'id> {
+    pub inner: Vec<Vec<(NonZeroU8, bool)>>,
+    _id: Id<'id>,
+}
 
-// TODO: make this a type
-pub type OrientedPartition = Vec<(NonZeroU8, bool)>;
-
+#[derive(Clone, Copy)]
 pub struct TransformationsMeta<'id, 'a> {
     sorted_transformations: &'a [Vec<(u8, u8)>],
     sorted_orbit_defs: SortedOrbitDefsRef<'id, 'a>,
@@ -259,6 +260,32 @@ impl<'id> BrandedOrbitDef<'id> {
         Self {
             inner: orbit_def,
             _id: id,
+        }
+    }
+}
+
+impl<'id> SortedCycleType<'id> {
+    #[must_use]
+    // TODO: return result
+    // TODO: silenly remove (1, false)
+    pub fn new<'a>(
+        sorted_cycle_type: Vec<Vec<(u8, bool)>>,
+        sorted_orbit_defs: SortedOrbitDefsRef<'id, 'a>,
+    ) -> Self {
+        let sorted_cycle_type = sorted_cycle_type
+            .iter()
+            .map(|cycle_type| {
+                let mut cycle_type = cycle_type
+                    .iter()
+                    .map(|&(length, oriented)| (length.try_into().unwrap(), oriented))
+                    .collect_vec();
+                cycle_type.sort_unstable();
+                cycle_type
+            })
+            .collect_vec();
+        Self {
+            inner: sorted_cycle_type,
+            _id: sorted_orbit_defs.id,
         }
     }
 }
@@ -581,13 +608,6 @@ mod tests {
 
     type StackCube3<'id> = StackPuzzle<'id, 40>;
 
-    fn ct(sorted_cycle_type: &[(u8, bool)]) -> OrientedPartition {
-        sorted_cycle_type
-            .iter()
-            .map(|&(length, oriented)| (length.try_into().unwrap(), oriented))
-            .collect()
-    }
-
     fn commutes_with<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
         let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let mut result_1 = cube3_def.new_solved_state();
@@ -858,10 +878,13 @@ mod tests {
         let mut multi_bv = P::new_multi_bv(cube3_def.sorted_orbit_defs_ref());
 
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 1);
-        let sorted_cycle_type = [
-            ct(&[(3, true), (5, true)]),
-            ct(&[(2, false), (2, true), (7, true)]),
-        ];
+        let sorted_cycle_type = SortedCycleType::new(
+            vec![
+                vec![(3, true), (5, true)],
+                vec![(2, false), (2, true), (7, true)],
+            ],
+            cube3_def.sorted_orbit_defs_ref(),
+        );
         assert!(order_1260.induces_sorted_cycle_type(
             &sorted_cycle_type,
             cube3_def.sorted_orbit_defs_ref(),
@@ -901,8 +924,10 @@ mod tests {
         let solved = cube3_def.new_solved_state();
         let mut multi_bv = P::new_multi_bv(cube3_def.sorted_orbit_defs_ref());
 
+        let sorted_cycle_type =
+            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref());
         assert!(solved.induces_sorted_cycle_type(
-            &[vec![], vec![]],
+            &sorted_cycle_type,
             cube3_def.sorted_orbit_defs_ref(),
             multi_bv.reusable_ref(),
         ));
@@ -910,74 +935,112 @@ mod tests {
         let tests = [
             (
                 "F2 L' U2 F U F U L' B U' F' U D2 L F2 B'",
-                &[ct(&[(1, true), (3, true)]), ct(&[(1, true), (5, true)])],
+                SortedCycleType::new(
+                    vec![vec![(1, true), (3, true)], vec![(1, true), (5, true)]],
+                    cube3_def.sorted_orbit_defs_ref(),
+                ),
             ),
             (
                 "U2 L B L2 F U2 B' U2 R U' F R' F' R F' L' U2",
-                &[ct(&[(1, true), (5, true)]), ct(&[(1, true), (7, true)])],
+                SortedCycleType::new(
+                    vec![vec![(1, true), (5, true)], vec![(1, true), (7, true)]],
+                    cube3_def.sorted_orbit_defs_ref(),
+                ),
             ),
             (
                 "R' U2 R' U2 F' D' L F L2 F U2 F2 D' L' D2 F R2",
-                &[ct(&[(1, true), (3, true)]), ct(&[(1, true), (7, true)])],
+                SortedCycleType::new(
+                    vec![vec![(1, true), (3, true)], vec![(1, true), (7, true)]],
+                    cube3_def.sorted_orbit_defs_ref(),
+                ),
             ),
             (
                 "B2 U' B' D B' L' D' B U' R2 B2 R U B2 R B' R U",
-                &[
-                    ct(&[(1, true), (1, true), (3, true)]),
-                    ct(&[(1, true), (7, true)]),
-                ],
+                SortedCycleType::new(
+                    vec![
+                        vec![(1, true), (1, true), (3, true)],
+                        vec![(1, true), (7, true)],
+                    ],
+                    cube3_def.sorted_orbit_defs_ref(),
+                ),
             ),
             (
                 "R2 L2 D' B L2 D' B L' B D2 R2 B2 R' D' B2 L2 U'",
-                &[ct(&[(2, true), (3, true)]), ct(&[(4, true), (5, true)])],
+                SortedCycleType::new(
+                    vec![vec![(2, true), (3, true)], vec![(4, true), (5, true)]],
+                    cube3_def.sorted_orbit_defs_ref(),
+                ),
             ),
             (
                 "F' B2 R L U2 B U2 L2 F2 U R L B' L' D' R' D' B'",
-                &[
-                    ct(&[(1, true), (2, true), (3, true)]),
-                    ct(&[(4, true), (5, true)]),
-                ],
+                SortedCycleType::new(
+                    vec![
+                        vec![(1, true), (2, true), (3, true)],
+                        vec![(4, true), (5, true)],
+                    ],
+                    cube3_def.sorted_orbit_defs_ref(),
+                ),
             ),
             (
                 "L' D2 F B2 U F' L2 B R F2 D R' L F R' F' D",
-                &[
-                    ct(&[(2, true), (3, true)]),
-                    ct(&[(1, true), (4, true), (5, false)]),
-                ],
+                SortedCycleType::new(
+                    vec![
+                        vec![(2, true), (3, true)],
+                        vec![(1, true), (4, true), (5, false)],
+                    ],
+                    cube3_def.sorted_orbit_defs_ref(),
+                ),
             ),
             (
                 "B' L' F2 R U' R2 F' L2 F R' L B L' U' F2 U' D2 L",
-                &[
-                    ct(&[(1, true), (2, true), (3, true)]),
-                    ct(&[(1, true), (4, true), (5, false)]),
-                ],
+                SortedCycleType::new(
+                    vec![
+                        vec![(1, true), (2, true), (3, true)],
+                        vec![(1, true), (4, true), (5, false)],
+                    ],
+                    cube3_def.sorted_orbit_defs_ref(),
+                ),
             ),
             (
                 "F2 D2 L' F D R2 F2 U2 L2 F R' B2 D2 R2 U R2 U",
-                &[
-                    ct(&[(1, true), (2, false), (3, true)]),
-                    ct(&[(4, true), (5, true)]),
-                ],
+                SortedCycleType::new(
+                    vec![
+                        vec![(1, true), (2, false), (3, true)],
+                        vec![(4, true), (5, true)],
+                    ],
+                    cube3_def.sorted_orbit_defs_ref(),
+                ),
             ),
             (
                 "F2 B' R' F' L' D B' U' F U B' U2 D L' F' L' B R2",
-                &[
-                    ct(&[(1, true), (2, false), (3, true)]),
-                    ct(&[(1, true), (4, true), (5, false)]),
-                ],
+                SortedCycleType::new(
+                    vec![
+                        vec![(1, true), (2, false), (3, true)],
+                        vec![(1, true), (4, true), (5, false)],
+                    ],
+                    cube3_def.sorted_orbit_defs_ref(),
+                ),
             ),
             (
                 "U L U L2 U2 B2",
-                &[
-                    ct(&[(1, true), (2, false), (3, true)]),
-                    ct(&[(2, false), (3, false), (3, false)]),
-                ],
+                SortedCycleType::new(
+                    vec![
+                        vec![(1, true), (2, false), (3, true)],
+                        vec![(2, false), (3, false), (3, false)],
+                    ],
+                    cube3_def.sorted_orbit_defs_ref(),
+                ),
             ),
-            ("U", &[ct(&[(4, false)]), ct(&[(4, false)])]),
+            (
+                "U",
+                SortedCycleType::new(
+                    vec![vec![(4, false)], vec![(4, false)]],
+                    cube3_def.sorted_orbit_defs_ref(),
+                ),
+            ),
         ];
 
-        // for (moves_str, expected_cts) in tests {
-        for (i, &(moves_str, expected_cts)) in tests.iter().enumerate() {
+        for (i, (moves_str, expected_cts)) in tests.iter().enumerate() {
             let random_state = apply_moves(&cube3_def, &solved, moves_str, 1);
 
             assert!(random_state.induces_sorted_cycle_type(
@@ -998,7 +1061,7 @@ mod tests {
                 }
                 let other_state = apply_moves(&cube3_def, &solved, other_moves, 1);
                 assert!(!other_state.induces_sorted_cycle_type(
-                    expected_cts,
+                    &expected_cts,
                     cube3_def.sorted_orbit_defs_ref(),
                     multi_bv.reusable_ref()
                 ));
@@ -1139,10 +1202,13 @@ mod tests {
         b: &mut Bencher,
     ) {
         let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
-        let sorted_cycle_type = [
-            ct(&[(3, true), (5, true)]),
-            ct(&[(2, false), (2, true), (7, true)]),
-        ];
+        let sorted_cycle_type = SortedCycleType::new(
+            vec![
+                vec![(3, true), (5, true)],
+                vec![(2, false), (2, true), (7, true)],
+            ],
+            cube3_def.sorted_orbit_defs_ref(),
+        );
         let order_1260 = apply_moves(&cube3_def, &cube3_def.new_solved_state(), "R U2 D' B D'", 1);
         let mut multi_bv = P::new_multi_bv(cube3_def.sorted_orbit_defs_ref());
         b.iter(|| {
@@ -1161,22 +1227,57 @@ mod tests {
         let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solved = cube3_def.new_solved_state();
 
+        // let sorted_cycle_types = [
+        //     [
+        //         ct(&[(3, true), (5, true)]),
+        //         ct(&[(2, false), (2, true), (7, true)]),
+        //     ],
+        //     [ct(&[(1, true), (3, true)]), ct(&[(1, true), (5, true)])],
+        //     [ct(&[(2, true), (3, true)]), ct(&[(4, true), (5, true)])],
+        //     [
+        //         ct(&[(1, true), (2, true), (3, true)]),
+        //         ct(&[(4, true), (5, true)]),
+        //     ],
+        //     [
+        //         ct(&[(2, true), (3, true)]),
+        //         ct(&[(1, true), (4, true), (5, false)]),
+        //     ],
+        //     [ct(&[(4, false)]), ct(&[(4, false)])],
+        // ];
         let sorted_cycle_types = [
-            [
-                ct(&[(3, true), (5, true)]),
-                ct(&[(2, false), (2, true), (7, true)]),
-            ],
-            [ct(&[(1, true), (3, true)]), ct(&[(1, true), (5, true)])],
-            [ct(&[(2, true), (3, true)]), ct(&[(4, true), (5, true)])],
-            [
-                ct(&[(1, true), (2, true), (3, true)]),
-                ct(&[(4, true), (5, true)]),
-            ],
-            [
-                ct(&[(2, true), (3, true)]),
-                ct(&[(1, true), (4, true), (5, false)]),
-            ],
-            [ct(&[(4, false)]), ct(&[(4, false)])],
+            SortedCycleType::new(
+                vec![
+                    vec![(3, true), (5, true)],
+                    vec![(2, false), (2, true), (7, true)],
+                ],
+                cube3_def.sorted_orbit_defs_ref(),
+            ),
+            SortedCycleType::new(
+                vec![vec![(1, true), (3, true)], vec![(1, true), (5, true)]],
+                cube3_def.sorted_orbit_defs_ref(),
+            ),
+            SortedCycleType::new(
+                vec![vec![(2, true), (3, true)], vec![(4, true), (5, true)]],
+                cube3_def.sorted_orbit_defs_ref(),
+            ),
+            SortedCycleType::new(
+                vec![
+                    vec![(1, true), (2, true), (3, true)],
+                    vec![(4, true), (5, true)],
+                ],
+                cube3_def.sorted_orbit_defs_ref(),
+            ),
+            SortedCycleType::new(
+                vec![
+                    vec![(2, true), (3, true)],
+                    vec![(1, true), (4, true), (5, false)],
+                ],
+                cube3_def.sorted_orbit_defs_ref(),
+            ),
+            SortedCycleType::new(
+                vec![vec![(4, false)], vec![(4, false)]],
+                cube3_def.sorted_orbit_defs_ref(),
+            ),
         ];
         let sorted_cycle_types: Vec<_> =
             sorted_cycle_types.into_iter().cycle().take(1000).collect();

@@ -8,7 +8,7 @@ use super::common::{
     CUBE_3_SORTED_ORBIT_DEFS, CornersTransformation, Cube3Interface, Cube3OrbitType,
     EdgesTransformation,
 };
-use crate::phase2::{orbit_puzzle::exact_hasher_orbit, puzzle::OrientedPartition};
+use crate::phase2::{orbit_puzzle::exact_hasher_orbit, puzzle::SortedCycleType};
 use std::{
     fmt,
     hash::Hash,
@@ -188,7 +188,7 @@ impl Cube3Interface for UncompressedCube3 {
             CO_INV_SWIZZLE.swizzle_dyn(a.co).swizzle_dyn(self.cp);
     }
 
-    fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
+    fn induces_sorted_cycle_type(&self, sorted_cycle_type: &SortedCycleType) -> bool {
         // Benchmarked on a 2025 Mac M4: 14.88 (worst case) 3.79ns (average)
         induces_sorted_cycle_type(sorted_cycle_type, *self)
     }
@@ -421,7 +421,7 @@ impl Cube3Interface for Cube3 {
         self.corners = inverse_co | inverse_cp;
     }
 
-    fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool {
+    fn induces_sorted_cycle_type(&self, sorted_cycle_type: &SortedCycleType) -> bool {
         // Benchmarked on a 2025 Mac M4: 15.13 (worst case) 3.74ns (average)
         let cp = self.corners & CORNER_PERM_MASK;
         let co = self.corners >> 3;
@@ -489,10 +489,12 @@ impl Cube3Interface for Cube3 {
 
 /// Check if the `UncompressedCube3` induces the given sorted cycle type.
 fn induces_sorted_cycle_type(
-    sorted_cycle_type: &[OrientedPartition; 2],
+    sorted_cycle_type: &SortedCycleType,
     uncompressed_cube3: UncompressedCube3,
 ) -> bool {
     let UncompressedCube3 { cp, co, ep, eo } = uncompressed_cube3;
+    let sorted_corners_cycle_type = unsafe { sorted_cycle_type.inner.get_unchecked(0) };
+    let sorted_edges_cycle_type = unsafe { sorted_cycle_type.inner.get_unchecked(1) };
     // Explanation in `induces_sorted_cycle_type` in avx2.rs
     let mut seen_cp = cp.simd_eq(CP_IDENTITY);
     let oriented_one_cycle_corner_mask = seen_cp & co.simd_ne(u8x8::splat(0));
@@ -500,13 +502,13 @@ fn induces_sorted_cycle_type(
         (oriented_one_cycle_corner_mask.to_bitmask().count_ones() as usize).wrapping_sub(1);
     // Check oriented one cycles
     if cycle_type_pointer == usize::MAX {
-        if let Some(&first_cycle) = sorted_cycle_type[0].first() {
+        if let Some(&first_cycle) = sorted_corners_cycle_type.first() {
             if first_cycle == (1.try_into().unwrap(), true) {
                 return false;
             }
         }
-    } else if cycle_type_pointer >= sorted_cycle_type[0].len()
-        || sorted_cycle_type[0][cycle_type_pointer] != (1.try_into().unwrap(), true)
+    } else if cycle_type_pointer >= sorted_corners_cycle_type.len()
+        || sorted_corners_cycle_type[cycle_type_pointer] != (1.try_into().unwrap(), true)
     {
         return false;
     }
@@ -536,8 +538,8 @@ fn induces_sorted_cycle_type(
                     ((reps_corner_cycle_count - reps_oriented_corner_cycle_count)
                         / u32::from(reps.get())) as usize,
                 );
-                if cycle_type_pointer >= sorted_cycle_type[0].len()
-                    || sorted_cycle_type[0][cycle_type_pointer] != (reps, false)
+                if cycle_type_pointer >= sorted_corners_cycle_type.len()
+                    || sorted_corners_cycle_type[cycle_type_pointer] != (reps, false)
                 {
                     return false;
                 }
@@ -548,8 +550,8 @@ fn induces_sorted_cycle_type(
                 cycle_type_pointer = cycle_type_pointer.wrapping_add(
                     (reps_oriented_corner_cycle_count / u32::from(reps.get())) as usize,
                 );
-                if cycle_type_pointer >= sorted_cycle_type[0].len()
-                    || sorted_cycle_type[0][cycle_type_pointer] != (reps, true)
+                if cycle_type_pointer >= sorted_corners_cycle_type.len()
+                    || sorted_corners_cycle_type[cycle_type_pointer] != (reps, true)
                 {
                     return false;
                 }
@@ -560,7 +562,7 @@ fn induces_sorted_cycle_type(
         reps = unsafe { NonZeroU8::new_unchecked(reps.get() + 1) };
     }
 
-    if cycle_type_pointer != sorted_cycle_type[0].len().wrapping_sub(1) {
+    if cycle_type_pointer != sorted_corners_cycle_type.len().wrapping_sub(1) {
         return false;
     }
 
@@ -570,13 +572,13 @@ fn induces_sorted_cycle_type(
         (oriented_one_cycle_edge_mask.to_bitmask().count_ones() as usize).wrapping_sub(1);
     // Check oriented one cycles
     if cycle_type_pointer == usize::MAX {
-        if let Some(&first_cycle) = sorted_cycle_type[1].first() {
+        if let Some(&first_cycle) = sorted_edges_cycle_type.first() {
             if first_cycle == (1.try_into().unwrap(), true) {
                 return false;
             }
         }
-    } else if cycle_type_pointer >= sorted_cycle_type[1].len()
-        || sorted_cycle_type[1][cycle_type_pointer] != (1.try_into().unwrap(), true)
+    } else if cycle_type_pointer >= sorted_edges_cycle_type.len()
+        || sorted_edges_cycle_type[cycle_type_pointer] != (1.try_into().unwrap(), true)
     {
         return false;
     }
@@ -605,8 +607,8 @@ fn induces_sorted_cycle_type(
                     ((reps_edge_cycle_count - reps_oriented_edge_cycle_count)
                         / u32::from(reps.get())) as usize,
                 );
-                if cycle_type_pointer >= sorted_cycle_type[1].len()
-                    || sorted_cycle_type[1][cycle_type_pointer] != (reps, false)
+                if cycle_type_pointer >= sorted_edges_cycle_type.len()
+                    || sorted_edges_cycle_type[cycle_type_pointer] != (reps, false)
                 {
                     return false;
                 }
@@ -617,8 +619,8 @@ fn induces_sorted_cycle_type(
                 cycle_type_pointer = cycle_type_pointer.wrapping_add(
                     (reps_oriented_edge_cycle_count / u32::from(reps.get())) as usize,
                 );
-                if cycle_type_pointer >= sorted_cycle_type[1].len()
-                    || sorted_cycle_type[1][cycle_type_pointer] != (reps, true)
+                if cycle_type_pointer >= sorted_edges_cycle_type.len()
+                    || sorted_edges_cycle_type[cycle_type_pointer] != (reps, true)
                 {
                     return false;
                 }
@@ -629,7 +631,7 @@ fn induces_sorted_cycle_type(
         reps = unsafe { NonZeroU8::new_unchecked(reps.get() + 1) };
     }
 
-    cycle_type_pointer == sorted_cycle_type[1].len().wrapping_sub(1)
+    cycle_type_pointer == sorted_edges_cycle_type.len().wrapping_sub(1)
 }
 
 #[allow(dead_code)]

@@ -1,13 +1,15 @@
 use super::{
     canonical_fsm::{CanonicalFSM, CanonicalFSMState, PuzzleCanonicalFSM},
     pruning::PruningTables,
-    puzzle::{Move, MultiBvInterface, OrientedPartition, PuzzleDef, PuzzleState},
+    puzzle::{Move, MultiBvInterface, PuzzleDef, PuzzleState},
     puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryInterface},
 };
+use crate::phase2::puzzle::SortedCycleType;
+use std::vec::IntoIter;
 
 pub struct CycleTypeSolver<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> {
     puzzle_def: &'a PuzzleDef<'id, P>,
-    sorted_cycle_type: Vec<OrientedPartition>,
+    sorted_cycle_type: SortedCycleType<'id>,
     pruning_tables: T,
     canonical_fsm: PuzzleCanonicalFSM<'id, P>,
     search_strategy: SearchStrategy,
@@ -28,13 +30,13 @@ struct CycleTypeSolverMutable<'id, P: PuzzleState<'id>, H: PuzzleStateHistoryInt
 
 pub struct SolutionsIntoIter<'id, 'a, P: PuzzleState<'id>> {
     puzzle_def: &'a PuzzleDef<'id, P>,
-    solutions: std::vec::IntoIter<Vec<usize>>,
+    solutions: IntoIter<Vec<usize>>,
 }
 
 impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, 'a, P, T> {
     pub fn new(
         puzzle_def: &'a PuzzleDef<'id, P>,
-        sorted_cycle_type: Vec<OrientedPartition>,
+        sorted_cycle_type: SortedCycleType<'id>,
         pruning_tables: T,
         search_strategy: SearchStrategy,
     ) -> Self {
@@ -48,7 +50,7 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
         }
     }
 
-    pub fn set_sorted_cycle_type(&mut self, sorted_cycle_type: Vec<OrientedPartition>) {
+    pub fn set_sorted_cycle_type(&mut self, sorted_cycle_type: SortedCycleType<'id>) {
         self.sorted_cycle_type = sorted_cycle_type;
     }
 
@@ -223,9 +225,12 @@ mod tests {
     fn test_identity_cycle_type() {
         make_guard!(guard);
         let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let identity_cycle_type =
+            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref());
+
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             &cube3_def,
-            vec![vec![], vec![]],
+            identity_cycle_type.clone(),
             ZeroTable::try_generate(()).unwrap(),
             SearchStrategy::AllSolutions,
         );
@@ -233,7 +238,6 @@ mod tests {
         assert_eq!(solutions.len(), 1);
         assert_eq!(solutions[0].len(), 0);
 
-        let identity_cycle_type = vec![vec![], vec![]];
         let pruning_tables = OrbitPruningTables::try_generate(
             OrbitPruningTablesGenerateMeta::new_with_table_types(
                 &cube3_def,
@@ -265,10 +269,10 @@ mod tests {
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             &cube3_def,
-            vec![
-                vec![(4.try_into().unwrap(), false)],
-                vec![(4.try_into().unwrap(), false)],
-            ],
+            SortedCycleType::new(
+                vec![vec![(4, false)], vec![(4, false)]],
+                cube3_def.sorted_orbit_defs_ref(),
+            ),
             ZeroTable::try_generate(()).unwrap(),
             SearchStrategy::AllSolutions,
         );
@@ -283,16 +287,10 @@ mod tests {
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             &cube3_def,
-            vec![
-                vec![
-                    (2.try_into().unwrap(), false),
-                    (2.try_into().unwrap(), false),
-                ],
-                vec![
-                    (2.try_into().unwrap(), false),
-                    (2.try_into().unwrap(), false),
-                ],
-            ],
+            SortedCycleType::new(
+                vec![vec![(2, false), (2, false)], vec![(2, false), (2, false)]],
+                cube3_def.sorted_orbit_defs_ref(),
+            ),
             ZeroTable::try_generate(()).unwrap(),
             SearchStrategy::AllSolutions,
         );
@@ -310,13 +308,10 @@ mod tests {
                 .0;
         let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
             &cube3_def,
-            vec![
-                vec![
-                    (3.try_into().unwrap(), false),
-                    (4.try_into().unwrap(), false),
-                ],
-                vec![(1.try_into().unwrap(), true), (8.try_into().unwrap(), true)],
-            ],
+            SortedCycleType::new(
+                vec![vec![(3, false), (4, false)], vec![(1, true), (8, true)]],
+                cube3_def.sorted_orbit_defs_ref(),
+            ),
             ZeroTable::try_generate(()).unwrap(),
             SearchStrategy::AllSolutions,
         );
@@ -337,10 +332,10 @@ mod tests {
         make_guard!(guard);
         let prune_start = Instant::now();
         let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
-        let sorted_cycle_type = vec![
-            vec![(1.try_into().unwrap(), true), (5.try_into().unwrap(), true)],
-            vec![(1.try_into().unwrap(), true), (7.try_into().unwrap(), true)],
-        ];
+        let sorted_cycle_type = SortedCycleType::new(
+            vec![vec![(1, true), (5, true)], vec![(1, true), (7, true)]],
+            cube3_def.sorted_orbit_defs_ref(),
+        );
         let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
             &sorted_cycle_type,
@@ -388,9 +383,10 @@ mod tests {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_3X3, guard).unwrap().0;
 
+        // let sorted_cycle
         let mut solver: CycleTypeSolver<HeapPuzzle, _> = CycleTypeSolver::new(
             &cube3_def,
-            Vec::default(),
+            SortedCycleType::new(Vec::default(), cube3_def.sorted_orbit_defs_ref()),
             ZeroTable::try_generate(()).unwrap(),
             SearchStrategy::AllSolutions,
         );
@@ -679,7 +675,7 @@ mod tests {
 
         let mut solver: CycleTypeSolver<HeapPuzzle, _> = CycleTypeSolver::new(
             &cube4_def,
-            Vec::default(),
+            SortedCycleType::new(Vec::default(), cube4_def.sorted_orbit_defs_ref()),
             ZeroTable::try_generate(()).unwrap(),
             SearchStrategy::AllSolutions,
         );

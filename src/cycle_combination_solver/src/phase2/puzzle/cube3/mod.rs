@@ -5,7 +5,7 @@ pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
     use crate::phase2::puzzle::{
-        BrandedOrbitDef, OrbitDef, OrbitIdentifier, OrientedPartition, PuzzleState,
+        BrandedOrbitDef, OrbitDef, OrbitIdentifier, PuzzleState, SortedCycleType,
         SortedOrbitDefsRef, TransformationsMeta, TransformationsMetaError,
     };
     use generativity::Id;
@@ -81,7 +81,7 @@ mod common {
         fn replace_inverse(&mut self, a: &Self);
 
         /// Check if the cube induces a sorted cycle type.
-        fn induces_sorted_cycle_type(&self, sorted_cycle_type: &[OrientedPartition; 2]) -> bool;
+        fn induces_sorted_cycle_type(&self, sorted_cycle_type: &SortedCycleType) -> bool;
 
         /// Convert an orbit of the cube state into a pair of (perm, ori) bytes.
         /// For implementation reasons that should ideally be abstracted away,
@@ -195,18 +195,14 @@ mod common {
             self.replace_inverse(a);
         }
 
+        // TODO: validate sorted cycle type is sound
         fn induces_sorted_cycle_type(
             &self,
-            sorted_cycle_type: &[OrientedPartition],
+            sorted_cycle_type: &SortedCycleType,
             _sorted_orbit_defs: SortedOrbitDefsRef,
             _multi_bv: (),
         ) -> bool {
-            // SAFETY: `try_from_transformation_meta`, the only constructor,
-            // guarantees that this will always be length 2.
-            // TODO: make sorted_cycle_type an actual type
-            self.induces_sorted_cycle_type(unsafe {
-                sorted_cycle_type.try_into().unwrap_unchecked()
-            })
+            self.induces_sorted_cycle_type(sorted_cycle_type)
         }
 
         fn orbit_bytes(&self, orbit_identifier: Cube3OrbitType) -> ([u8; 16], [u8; 16]) {
