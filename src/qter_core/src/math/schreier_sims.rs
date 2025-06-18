@@ -74,7 +74,11 @@ impl Stabilizer {
     fn is_member(&self, mut permutation: Permutation) -> bool {
         // println!("{} — {}", self.stabilizes, permutation);
         loop {
-            let rep = permutation.mapping()[self.stabilizes];
+            let rep = permutation
+                .mapping()
+                .get(self.stabilizes)
+                .copied()
+                .unwrap_or(self.stabilizes);
 
             if rep == self.stabilizes {
                 break;
@@ -123,9 +127,10 @@ impl Stabilizer {
         // TODO: Some kind of SSSP thing to make these coset reps as short as possible
         let mut newly_in_orbit = VecDeque::new();
 
-        #[expect(clippy::needless_range_loop)] // false positive
         for i in 0..self.coset_reps.len() {
-            if self.coset_reps[i].is_some() && self.coset_reps[mapping[i]].is_none() {
+            if self.coset_reps[i].is_some()
+                && self.coset_reps[mapping.get(i).copied().unwrap_or(i)].is_none()
+            {
                 self.coset_reps[mapping[i]] = Some(inv.clone());
                 newly_in_orbit.push_back(mapping[i]);
             }
@@ -133,7 +138,7 @@ impl Stabilizer {
 
         while let Some(spot) = newly_in_orbit.pop_front() {
             for perm in &self.generating_set {
-                let goes_to = perm.mapping()[spot];
+                let goes_to = perm.mapping().get(spot).copied().unwrap_or(spot);
                 if self.coset_reps[goes_to].is_none() {
                     let mut inv_alg = perm.clone();
                     inv_alg.exponentiate(-Int::<I>::one());
@@ -174,7 +179,7 @@ mod tests {
 
     use crate::{
         Int, U,
-        architectures::{Algorithm, Permutation, PermutationGroup, PuzzleDefinition},
+        architectures::{Algorithm, Permutation, PermutationGroup, puzzle_by_name},
     };
 
     use super::StabilizerChain;
@@ -208,9 +213,7 @@ mod tests {
 
     #[test]
     fn three_by_three() {
-        let cube_def = PuzzleDefinition::parse(include_str!("../../puzzles/3x3.txt"))
-            .unwrap()
-            .perm_group;
+        let cube_def = puzzle_by_name("3x3").unwrap().perm_group;
 
         let method = StabilizerChain::new(&cube_def);
 

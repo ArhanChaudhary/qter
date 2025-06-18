@@ -183,7 +183,7 @@ mod tests {
 
     use crate::{
         Int, U,
-        architectures::{Algorithm, PuzzleDefinition},
+        architectures::{Algorithm, puzzle_by_name},
         discrete_math::{
             decode, extended_euclid, gcd, lcm,
             length_of_substring_that_this_string_is_n_repeated_copies_of,
@@ -264,9 +264,7 @@ mod tests {
 
     #[test]
     fn test_decode() {
-        let cube_def = Arc::new(
-            PuzzleDefinition::parse(include_str!("../../../qter_core/puzzles/3x3.txt")).unwrap(),
-        );
+        let cube_def = puzzle_by_name("3x3").unwrap();
 
         let mut cube = cube_def.perm_group.identity();
 

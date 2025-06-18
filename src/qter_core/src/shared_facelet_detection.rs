@@ -119,55 +119,87 @@ pub fn algorithms_to_cycle_generators(
 
 #[cfg(test)]
 mod tests {
+    use std::{collections::HashMap, sync::Arc};
+
+    use internment::ArcIntern;
+
     use crate::{
         Int,
-        architectures::{CycleGeneratorSubcycle, PuzzleDefinition},
+        architectures::{Architecture, CycleGeneratorSubcycle, Permutation, PermutationGroup},
     };
 
     #[test]
     fn simple() {
-        let PuzzleDefinition {
-            perm_group: _,
-            presets,
-        } = PuzzleDefinition::parse(
-            "
-                COLORS
+        let mut generators = HashMap::new();
 
-                A -> 1
-                B -> 2
-                C -> 3
-                D -> 4
-                E -> 5
-                F -> 6
-                G -> 7
-                H -> 8
-                I -> 9
-                J -> 10
-                K -> 11, 12, 13
+        generators.insert(
+            ArcIntern::from("A"),
+            Permutation::from_cycles(vec![vec![0, 1, 2]]),
+        );
+        generators.insert(
+            ArcIntern::from("B"),
+            Permutation::from_cycles(vec![vec![3, 4, 5]]),
+        );
+        generators.insert(
+            ArcIntern::from("C"),
+            Permutation::from_cycles(vec![vec![5, 6, 7]]),
+        );
+        generators.insert(
+            ArcIntern::from("D"),
+            Permutation::from_cycles(vec![vec![8, 9]]),
+        );
+        generators.insert(
+            ArcIntern::from("E"),
+            Permutation::from_cycles(vec![vec![10, 11, 12]]),
+        );
+        generators.insert(
+            ArcIntern::from("A'"),
+            Permutation::from_cycles(vec![vec![2, 1, 0]]),
+        );
+        generators.insert(
+            ArcIntern::from("B'"),
+            Permutation::from_cycles(vec![vec![5, 4, 3]]),
+        );
+        generators.insert(
+            ArcIntern::from("C'"),
+            Permutation::from_cycles(vec![vec![7, 6, 5]]),
+        );
+        generators.insert(
+            ArcIntern::from("E'"),
+            Permutation::from_cycles(vec![vec![12, 11, 10]]),
+        );
 
-                GENERATORS
+        let perm_group = Arc::new(PermutationGroup::new(
+            vec![
+                ArcIntern::from("A"),
+                ArcIntern::from("B"),
+                ArcIntern::from("C"),
+                ArcIntern::from("D"),
+                ArcIntern::from("E"),
+                ArcIntern::from("F"),
+                ArcIntern::from("G"),
+                ArcIntern::from("H"),
+                ArcIntern::from("I"),
+                ArcIntern::from("J"),
+                ArcIntern::from("K"),
+                ArcIntern::from("K"),
+                ArcIntern::from("K"),
+            ],
+            generators,
+        ));
 
-                A = (1, 2, 3)
-                B = (4, 5, 6)
-                C = (6, 7, 8)
-                D = (9, 10)
-                E = (11, 12, 13)
-
-                A' = (3, 2, 1)
-                B' = (6, 5, 4)
-                C' = (8, 7, 6)
-                E' = (13, 12, 11)
-
-                DERIVED
-
-                PRESETS
-
-                (3, 2) A B / C D E
-            ",
+        let preset = Architecture::new(
+            perm_group,
+            &[
+                vec![ArcIntern::from("A"), ArcIntern::from("B")],
+                vec![
+                    ArcIntern::from("C"),
+                    ArcIntern::from("D"),
+                    ArcIntern::from("E"),
+                ],
+            ],
         )
         .unwrap();
-
-        let preset = &presets[0];
 
         for i in 3..=7 {
             assert!(preset.shared_facelets().contains(&i));

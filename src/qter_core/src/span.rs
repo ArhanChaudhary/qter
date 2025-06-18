@@ -4,54 +4,6 @@ use std::{
 };
 
 use internment::ArcIntern;
-use pest::{Position, RuleType};
-
-pub fn mk_error<Rule: RuleType>(
-    message: impl Into<String>,
-    loc: impl AsPestLoc,
-) -> Box<pest::error::Error<Rule>> {
-    let err = pest::error::ErrorVariant::CustomError {
-        message: message.into(),
-    };
-
-    Box::new(match loc.as_pest_loc() {
-        SpanOrPos::Span(span) => pest::error::Error::new_from_span(err, span),
-        SpanOrPos::Pos(pos) => pest::error::Error::new_from_pos(err, pos),
-    })
-}
-
-pub enum SpanOrPos<'a> {
-    Span(pest::Span<'a>),
-    Pos(pest::Position<'a>),
-}
-
-pub trait AsPestLoc {
-    fn as_pest_loc(&self) -> SpanOrPos<'_>;
-}
-
-impl AsPestLoc for pest::Span<'_> {
-    fn as_pest_loc(&self) -> SpanOrPos<'_> {
-        SpanOrPos::Span(self.to_owned())
-    }
-}
-
-impl AsPestLoc for Span {
-    fn as_pest_loc(&self) -> SpanOrPos<'_> {
-        SpanOrPos::Span(self.pest())
-    }
-}
-
-impl AsPestLoc for Position<'_> {
-    fn as_pest_loc(&self) -> SpanOrPos<'_> {
-        SpanOrPos::Pos(self.to_owned())
-    }
-}
-
-impl<T: AsPestLoc> AsPestLoc for &T {
-    fn as_pest_loc(&self) -> SpanOrPos<'_> {
-        (*self).as_pest_loc()
-    }
-}
 
 /// A slice of the original source code; to be attached to pieces of data for error reporting
 #[derive(Clone)]
@@ -63,11 +15,6 @@ pub struct Span {
 }
 
 impl Span {
-    #[must_use]
-    pub fn from_span(span: pest::Span) -> Span {
-        Span::new(ArcIntern::from(span.get_input()), span.start(), span.end())
-    }
-
     /// Creates a new `Span` from the given source and start/end positions
     ///
     /// # Panics
@@ -123,10 +70,6 @@ impl Span {
         self
     }
 
-    pub fn source(&self) -> ArcIntern<str> {
-        ArcIntern::clone(&self.source)
-    }
-
     /// Merges two spans into one, keeping the earliest start and latest end
     ///
     /// # Panics
@@ -143,21 +86,27 @@ impl Span {
             line_and_col: OnceLock::new(),
         }
     }
+}
 
-    fn pest(&self) -> pest::Span<'_> {
-        pest::Span::new(&self.source, self.start, self.end).unwrap()
+impl ariadne::Span for Span {
+    type SourceId = ArcIntern<str>;
+
+    fn source(&self) -> &Self::SourceId {
+        &self.source
+    }
+
+    fn start(&self) -> usize {
+        self.start
+    }
+
+    fn end(&self) -> usize {
+        self.end
     }
 }
 
 impl core::fmt::Debug for Span {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.slice())
-    }
-}
-
-impl From<pest::Span<'_>> for Span {
-    fn from(value: pest::Span) -> Self {
-        Span::from_span(value)
     }
 }
 

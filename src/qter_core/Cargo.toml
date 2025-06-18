@@ -6,10 +6,9 @@ edition = "2024"
 [dependencies]
 bnum = "0.12"
 itertools = "0.14"
-pest = "2.7"
-pest_derive = "2.7"
 internment = { version = "0.8", features = [ "arc" ] }
 pog_ans = { path = "../pog_ans" }
+ariadne = "0.5"
 
 [lints]
 workspace = true

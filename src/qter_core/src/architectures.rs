@@ -13,7 +13,6 @@ use crate::{
     discrete_math::{
         decode, lcm, lcm_iter, length_of_substring_that_this_string_is_n_repeated_copies_of,
     },
-    puzzle_parser,
     shared_facelet_detection::algorithms_to_cycle_generators,
     table_encoding,
 };
@@ -33,15 +32,6 @@ pub struct PuzzleDefinition {
 }
 
 impl PuzzleDefinition {
-    /// Parse a puzzle from the spec
-    ///
-    /// # Errors
-    ///
-    /// If the spec is invalid, it will return an error
-    pub fn parse(spec: &str) -> Result<PuzzleDefinition, String> {
-        puzzle_parser::parse(spec).map_err(|v| v.to_string())
-    }
-
     // If they want the cycles in a different order, create a new architecture with the cycles shuffled
     fn adapt_architecture(
         architecture: &Arc<Architecture>,
@@ -128,7 +118,12 @@ impl PermutationGroup {
         assert!(!generators.is_empty());
 
         for generator in generators.values() {
-            assert!(generator.facelet_count <= facelet_colors.len());
+            assert!(
+                generator.facelet_count <= facelet_colors.len(),
+                "{}, {}",
+                generator.facelet_count,
+                facelet_colors.len()
+            );
         }
 
         for perm in generators.values_mut() {
@@ -290,7 +285,7 @@ impl Permutation {
     pub fn from_cycles(mut cycles: Vec<Vec<usize>>) -> Permutation {
         cycles.retain(|cycle| cycle.len() > 1);
 
-        assert!(cycles.iter().all_unique());
+        assert!(cycles.iter().flatten().all_unique());
 
         let facelet_count = cycles.iter().flatten().max().map_or(0, |v| v + 1);
 
@@ -360,7 +355,8 @@ impl Permutation {
                 let mut cycle = vec![i];
 
                 loop {
-                    let next = mapping[*cycle.last().unwrap()];
+                    let idx = *cycle.last().unwrap();
+                    let next = mapping.get(idx).copied().unwrap_or(idx);
 
                     if cycle[0] == next {
                         break;
@@ -410,10 +406,6 @@ impl Permutation {
     }
 
     /// Compose another permutation into this permutation
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if the other permutation does not have the same number of facelets as this permutation
     pub fn compose_into(&mut self, other: &Permutation) {
         let my_mapping = self.mapping_mut();
         let other_mapping = other.mapping();
@@ -978,14 +970,150 @@ impl Architecture {
 }
 
 /// Get a puzzle definition by name
-///
-/// # Panics
-///
-/// This function will panic if the associated puzzle spec is invalid
 #[must_use]
 pub fn puzzle_by_name(name: &str) -> Option<PuzzleDefinition> {
     if name == "3x3" {
-        Some(PuzzleDefinition::parse(include_str!("../puzzles/3x3.txt")).unwrap())
+        let base_moves = [
+            (
+                "U",
+                vec![
+                    vec![0, 2, 7, 5],
+                    vec![1, 4, 6, 3],
+                    vec![8, 32, 24, 16],
+                    vec![9, 33, 25, 17],
+                    vec![10, 34, 26, 18],
+                ],
+            ),
+            (
+                "L",
+                vec![
+                    vec![8, 10, 15, 13],
+                    vec![9, 12, 14, 11],
+                    vec![0, 16, 40, 39],
+                    vec![3, 19, 43, 36],
+                    vec![5, 21, 45, 34],
+                ],
+            ),
+            (
+                "F",
+                vec![
+                    vec![16, 18, 23, 21],
+                    vec![17, 20, 22, 19],
+                    vec![5, 24, 42, 15],
+                    vec![6, 27, 41, 12],
+                    vec![7, 29, 40, 10],
+                ],
+            ),
+            (
+                "R",
+                vec![
+                    vec![24, 26, 31, 29],
+                    vec![25, 28, 30, 27],
+                    vec![2, 37, 42, 18],
+                    vec![4, 35, 44, 20],
+                    vec![7, 32, 47, 23],
+                ],
+            ),
+            (
+                "B",
+                vec![
+                    vec![32, 34, 39, 37],
+                    vec![33, 36, 38, 35],
+                    vec![2, 8, 45, 31],
+                    vec![1, 11, 46, 28],
+                    vec![0, 13, 47, 26],
+                ],
+            ),
+            (
+                "D",
+                vec![
+                    vec![40, 42, 47, 45],
+                    vec![41, 44, 46, 43],
+                    vec![13, 21, 29, 37],
+                    vec![14, 22, 30, 38],
+                    vec![15, 23, 31, 39],
+                ],
+            ),
+        ];
+
+        let mut generators = HashMap::new();
+
+        for (name, cycles) in base_moves {
+            let perm = Permutation::from_cycles(cycles);
+
+            generators.insert(ArcIntern::from(name), perm.clone());
+
+            let mut perm2 = perm.clone();
+            perm2.compose_into(&perm);
+
+            generators.insert(ArcIntern::from(format!("{name}2")), perm2.clone());
+
+            perm2.compose_into(&perm);
+
+            generators.insert(ArcIntern::from(format!("{name}'")), perm2);
+        }
+
+        println!("{generators:#?}");
+
+        let group = Arc::new(PermutationGroup::new(
+            [
+                ArcIntern::from("White"),
+                ArcIntern::from("Green"),
+                ArcIntern::from("Red"),
+                ArcIntern::from("Blue"),
+                ArcIntern::from("Orange"),
+                ArcIntern::from("Yellow"),
+            ]
+            .iter()
+            .flat_map(|v| (0..8).map(|_| ArcIntern::clone(v)))
+            .collect(),
+            generators,
+        ));
+
+        let presets: [Arc<Architecture>; 6] = [
+            (&["R U2 D' B D'"] as &[&str], None),
+            (&["U", "D"], None),
+            (&["R' F' L U' L U L F U' R", "U F R' D' R2 F R' U' D"], None),
+            (&["U R U' D2 B", "B U2 B' L' U2 B U L' B L B2 L"], Some(0)),
+            (
+                &[
+                    "U L2 B' L U' B' U2 R B' R' B L",
+                    "R2 L U' R' L2 F' D R' D L B2 D2",
+                    "L2 F2 U L' F D' F' U' L' F U D L' U'",
+                ],
+                Some(1),
+            ),
+            (
+                &[
+                    "U L B' L B' U R' D U2 L2 F2",
+                    "D L' F L2 B L' F' L B' D' L'",
+                    "R' U' L' F2 L F U F R L U'",
+                    "B2 U2 L F' R B L2 D2 B R' F L",
+                ],
+                None,
+            ),
+        ]
+        .map(|(algs, maybe_index): (&[&str], Option<usize>)| {
+            let mut arch = Architecture::new(
+                Arc::clone(&group),
+                &algs
+                    .iter()
+                    .map(|alg| alg.split(' ').map(ArcIntern::from).collect_vec())
+                    .collect_vec(),
+            )
+            .unwrap();
+
+            if let Some(index) = maybe_index {
+                arch.set_optimized_table(Cow::Borrowed(OPTIMIZED_TABLES[index]));
+            }
+
+            Arc::new(arch)
+        });
+
+        Some(PuzzleDefinition {
+            perm_group: group,
+            presets: presets.into(),
+        })
     } else {
         None
     }
@@ -1001,11 +1129,11 @@ mod tests {
 
     use crate::{I, Int, U};
 
-    use super::{Architecture, PuzzleDefinition};
+    use super::{Architecture, puzzle_by_name};
 
     #[test]
     fn three_by_three() {
-        let cube_def = PuzzleDefinition::parse(include_str!("../puzzles/3x3.txt")).unwrap();
+        let cube_def = puzzle_by_name("3x3").unwrap();
 
         for (arch, expected) in &[
             (&["U", "D"][..], &[4, 4][..]),
@@ -1043,7 +1171,7 @@ mod tests {
 
     #[test]
     fn exponentiation() {
-        let cube_def = PuzzleDefinition::parse(include_str!("../puzzles/3x3.txt")).unwrap();
+        let cube_def = puzzle_by_name("3x3").unwrap();
 
         let mut perm = cube_def.perm_group.identity();
 
