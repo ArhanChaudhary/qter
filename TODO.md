@@ -5,6 +5,7 @@
 ## SCC
 
 - Phase 2
+)
   - ⭐branding for OrbitPuzzleStates should be unqiue and happen at a very small level
   - ⭐pruning table
     - cartesian product tables

@@ -502,7 +502,7 @@ impl<'id> HeapPuzzle<'id> {
             cycle_type_piece.sort_unstable();
             cycle_type.push(cycle_type_piece);
         }
-        let sorted_cycle_type = SortedCycleType::new(cycle_type, sorted_orbit_defs);
+        let sorted_cycle_type = SortedCycleType::new(cycle_type, sorted_orbit_defs).unwrap();
         // We don't actually need to test this function because we have this
         assert!(self.induces_sorted_cycle_type(&sorted_cycle_type, sorted_orbit_defs, multi_bv));
         sorted_cycle_type

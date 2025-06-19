@@ -1020,7 +1020,7 @@ mod tests {
         let solved = cube3_def.new_solved_state();
         let u_move = cube3_def.find_move("U").unwrap();
         let identity_cycle_type =
-            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref());
+            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref()).unwrap();
 
         let generate_meta = OrbitPruningTableGenerationMeta {
             puzzle_def: &cube3_def,
@@ -1070,7 +1070,7 @@ mod tests {
         make_guard!(guard);
         let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let identity_cycle_type =
-            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref());
+            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref()).unwrap();
         let generate_metas = OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
             &identity_cycle_type,
@@ -1111,7 +1111,7 @@ mod tests {
         make_guard!(guard);
         let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let identity_cycle_type =
-            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref());
+            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref()).unwrap();
         let generate_metas =
             OrbitPruningTablesGenerateMeta::new(&cube3_def, &identity_cycle_type, 1000, id)
                 .unwrap();
@@ -1147,7 +1147,7 @@ mod tests {
         make_guard!(guard);
         let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let identity_cycle_type =
-            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref());
+            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref()).unwrap();
         let generate_metas = OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
             &identity_cycle_type,
@@ -1213,7 +1213,7 @@ mod tests {
         make_guard!(guard);
         let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let identity_cycle_type =
-            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref());
+            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref()).unwrap();
         let generate_metas = OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
             &identity_cycle_type,

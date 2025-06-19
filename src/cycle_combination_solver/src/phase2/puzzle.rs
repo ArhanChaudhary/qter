@@ -152,6 +152,18 @@ pub struct TransformationsMeta<'id, 'a> {
 }
 
 #[derive(Error, Debug)]
+pub enum SortedCycleTypeError {
+    #[error("Cycle type uses too many pieces, expected at most {expected} pieces but got {actual}")]
+    TooManyPieces { expected: usize, actual: usize },
+    #[error("Cycle type uses zero-length cycles, which is not allowed")]
+    ZeroLengthCycle,
+    #[error(
+        "There must be the same number of cycle types as orbit definitions, expected {expected}, got {actual}"
+    )]
+    MismatchedLength { expected: usize, actual: usize },
+}
+
+#[derive(Error, Debug)]
 pub enum TransformationsMetaError {
     #[error("Invalid KSolve orbit definitions. Expected: {expected:?}\nActual: {actual:?}")]
     InvalidOrbitDefs {
@@ -160,14 +172,16 @@ pub enum TransformationsMetaError {
     },
     #[error("Not enough buffer space to convert move")]
     NotEnoughBufferSpace,
-    #[error("Invalid set count, expected {0} sets but got {1}")]
-    InvalidSetCount(usize, usize),
-    #[error("Invalid piece count, expected {0} pieces but got {1}")]
-    InvalidPieceCount(u8, usize),
-    #[error("Invalid orientation delta, expected a value between 0 and {0} but got {1}")]
-    InvalidOrientationDelta(u8, u8),
-    #[error("Permutation out of range, expected a value between 1 and {0} but got {1}")]
-    PermutationOutOfRange(u8, u8),
+    #[error("Invalid set count, expected {expected} sets but got {actual}")]
+    InvalidSetCount { expected: usize, actual: usize },
+    #[error("Invalid piece count, expected {expected} pieces but got {actual}")]
+    InvalidPieceCount { expected: u8, actual: usize },
+    #[error(
+        "Invalid orientation delta, expected a value between 0 and {expected} but got {actual}"
+    )]
+    InvalidOrientationDelta { expected: u8, actual: u8 },
+    #[error("Permutation out of range, expected a value between 1 and {expected} but got {actual}")]
+    PermutationOutOfRange { expected: u8, actual: u8 },
     #[error("Move is invalid: {0:?}")]
     InvalidTransformation(Vec<Vec<(u8, u8)>>),
 }
@@ -188,10 +202,10 @@ impl<'id, 'a> TransformationsMeta<'id, 'a> {
         let expected_set_count = sorted_orbit_defs.inner.len();
 
         if sorted_transformations.len() != sorted_orbit_defs.inner.len() {
-            return Err(TransformationsMetaError::InvalidSetCount(
-                expected_set_count,
-                actual_set_count,
-            ));
+            return Err(TransformationsMetaError::InvalidSetCount {
+                expected: expected_set_count,
+                actual: actual_set_count,
+            });
         }
 
         for (transformation, orbit_def) in sorted_transformations
@@ -202,10 +216,10 @@ impl<'id, 'a> TransformationsMeta<'id, 'a> {
             let actual_piece_count = transformation.len();
 
             if actual_piece_count != expected_piece_count as usize {
-                return Err(TransformationsMetaError::InvalidPieceCount(
-                    expected_piece_count,
-                    actual_piece_count,
-                ));
+                return Err(TransformationsMetaError::InvalidPieceCount {
+                    expected: expected_piece_count,
+                    actual: actual_piece_count,
+                });
             }
 
             let max_orientation_delta = orbit_def.inner.orientation_count.get() - 1;
@@ -213,19 +227,19 @@ impl<'id, 'a> TransformationsMeta<'id, 'a> {
 
             for &(perm, orientation_delta) in transformation {
                 if orientation_delta > max_orientation_delta {
-                    return Err(TransformationsMetaError::InvalidOrientationDelta(
-                        max_orientation_delta,
-                        orientation_delta,
-                    ));
+                    return Err(TransformationsMetaError::InvalidOrientationDelta {
+                        expected: max_orientation_delta,
+                        actual: orientation_delta,
+                    });
                 }
 
                 match covered_perms.get_mut(perm as usize) {
                     Some(i) => *i = true,
                     None => {
-                        return Err(TransformationsMetaError::PermutationOutOfRange(
-                            expected_piece_count,
-                            perm,
-                        ));
+                        return Err(TransformationsMetaError::PermutationOutOfRange {
+                            expected: expected_piece_count,
+                            actual: perm,
+                        });
                     }
                 }
             }
@@ -265,28 +279,48 @@ impl<'id> BrandedOrbitDef<'id> {
 }
 
 impl<'id> SortedCycleType<'id> {
-    #[must_use]
-    // TODO: return result
-    // TODO: silenly remove (1, false)
     pub fn new<'a>(
-        sorted_cycle_type: Vec<Vec<(u8, bool)>>,
+        maybe_cycle_type: Vec<Vec<(u8, bool)>>,
         sorted_orbit_defs: SortedOrbitDefsRef<'id, 'a>,
-    ) -> Self {
-        let sorted_cycle_type = sorted_cycle_type
-            .iter()
-            .map(|cycle_type| {
-                let mut cycle_type = cycle_type
-                    .iter()
-                    .map(|&(length, oriented)| (length.try_into().unwrap(), oriented))
-                    .collect_vec();
-                cycle_type.sort_unstable();
-                cycle_type
-            })
-            .collect_vec();
-        Self {
+    ) -> Result<Self, SortedCycleTypeError> {
+        if maybe_cycle_type.len() != sorted_orbit_defs.inner.len() {
+            return Err(SortedCycleTypeError::MismatchedLength {
+                expected: sorted_orbit_defs.inner.len(),
+                actual: maybe_cycle_type.len(),
+            });
+        }
+
+        let mut sorted_cycle_type = Vec::with_capacity(maybe_cycle_type.len());
+        for (cycle_type, &orbit_def) in maybe_cycle_type.iter().zip(sorted_orbit_defs.inner) {
+            let max_piece_count_sum = orbit_def.piece_count.get() as usize;
+            let mut cycle_type_checked = Vec::with_capacity(cycle_type.len());
+            let mut piece_count_sum = 0;
+            for &(length, oriented) in cycle_type {
+                if length == 1 && !oriented {
+                    continue;
+                }
+                match NonZeroU8::new(length) {
+                    Some(length) => {
+                        piece_count_sum += length.get() as usize;
+                        cycle_type_checked.push((length, oriented));
+                    }
+                    None => return Err(SortedCycleTypeError::ZeroLengthCycle),
+                }
+            }
+            if piece_count_sum > max_piece_count_sum {
+                return Err(SortedCycleTypeError::TooManyPieces {
+                    expected: max_piece_count_sum,
+                    actual: piece_count_sum,
+                });
+            }
+            cycle_type_checked.sort_unstable();
+            sorted_cycle_type.push(cycle_type_checked);
+        }
+
+        Ok(Self {
             inner: sorted_cycle_type,
             _id: sorted_orbit_defs.id,
-        }
+        })
     }
 }
 
@@ -886,7 +920,8 @@ mod tests {
                 vec![(2, false), (2, true), (7, true)],
             ],
             cube3_def.sorted_orbit_defs_ref(),
-        );
+        )
+        .unwrap();
         assert!(order_1260.induces_sorted_cycle_type(
             &sorted_cycle_type,
             cube3_def.sorted_orbit_defs_ref(),
@@ -927,7 +962,7 @@ mod tests {
         let mut multi_bv = P::new_multi_bv(cube3_def.sorted_orbit_defs_ref());
 
         let sorted_cycle_type =
-            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref());
+            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref()).unwrap();
         assert!(solved.induces_sorted_cycle_type(
             &sorted_cycle_type,
             cube3_def.sorted_orbit_defs_ref(),
@@ -940,21 +975,24 @@ mod tests {
                 SortedCycleType::new(
                     vec![vec![(1, true), (3, true)], vec![(1, true), (5, true)]],
                     cube3_def.sorted_orbit_defs_ref(),
-                ),
+                )
+                .unwrap(),
             ),
             (
                 "U2 L B L2 F U2 B' U2 R U' F R' F' R F' L' U2",
                 SortedCycleType::new(
                     vec![vec![(1, true), (5, true)], vec![(1, true), (7, true)]],
                     cube3_def.sorted_orbit_defs_ref(),
-                ),
+                )
+                .unwrap(),
             ),
             (
                 "R' U2 R' U2 F' D' L F L2 F U2 F2 D' L' D2 F R2",
                 SortedCycleType::new(
                     vec![vec![(1, true), (3, true)], vec![(1, true), (7, true)]],
                     cube3_def.sorted_orbit_defs_ref(),
-                ),
+                )
+                .unwrap(),
             ),
             (
                 "B2 U' B' D B' L' D' B U' R2 B2 R U B2 R B' R U",
@@ -964,14 +1002,16 @@ mod tests {
                         vec![(1, true), (7, true)],
                     ],
                     cube3_def.sorted_orbit_defs_ref(),
-                ),
+                )
+                .unwrap(),
             ),
             (
                 "R2 L2 D' B L2 D' B L' B D2 R2 B2 R' D' B2 L2 U'",
                 SortedCycleType::new(
                     vec![vec![(2, true), (3, true)], vec![(4, true), (5, true)]],
                     cube3_def.sorted_orbit_defs_ref(),
-                ),
+                )
+                .unwrap(),
             ),
             (
                 "F' B2 R L U2 B U2 L2 F2 U R L B' L' D' R' D' B'",
@@ -981,7 +1021,8 @@ mod tests {
                         vec![(4, true), (5, true)],
                     ],
                     cube3_def.sorted_orbit_defs_ref(),
-                ),
+                )
+                .unwrap(),
             ),
             (
                 "L' D2 F B2 U F' L2 B R F2 D R' L F R' F' D",
@@ -991,7 +1032,8 @@ mod tests {
                         vec![(1, true), (4, true), (5, false)],
                     ],
                     cube3_def.sorted_orbit_defs_ref(),
-                ),
+                )
+                .unwrap(),
             ),
             (
                 "B' L' F2 R U' R2 F' L2 F R' L B L' U' F2 U' D2 L",
@@ -1001,7 +1043,8 @@ mod tests {
                         vec![(1, true), (4, true), (5, false)],
                     ],
                     cube3_def.sorted_orbit_defs_ref(),
-                ),
+                )
+                .unwrap(),
             ),
             (
                 "F2 D2 L' F D R2 F2 U2 L2 F R' B2 D2 R2 U R2 U",
@@ -1011,7 +1054,8 @@ mod tests {
                         vec![(4, true), (5, true)],
                     ],
                     cube3_def.sorted_orbit_defs_ref(),
-                ),
+                )
+                .unwrap(),
             ),
             (
                 "F2 B' R' F' L' D B' U' F U B' U2 D L' F' L' B R2",
@@ -1021,7 +1065,8 @@ mod tests {
                         vec![(1, true), (4, true), (5, false)],
                     ],
                     cube3_def.sorted_orbit_defs_ref(),
-                ),
+                )
+                .unwrap(),
             ),
             (
                 "U L U L2 U2 B2",
@@ -1031,14 +1076,16 @@ mod tests {
                         vec![(2, false), (3, false), (3, false)],
                     ],
                     cube3_def.sorted_orbit_defs_ref(),
-                ),
+                )
+                .unwrap(),
             ),
             (
                 "U",
                 SortedCycleType::new(
                     vec![vec![(4, false)], vec![(4, false)]],
                     cube3_def.sorted_orbit_defs_ref(),
-                ),
+                )
+                .unwrap(),
             ),
         ];
 
@@ -1210,7 +1257,8 @@ mod tests {
                 vec![(2, false), (2, true), (7, true)],
             ],
             cube3_def.sorted_orbit_defs_ref(),
-        );
+        )
+        .unwrap();
         let order_1260 = apply_moves(&cube3_def, &cube3_def.new_solved_state(), "R U2 D' B D'", 1);
         let mut multi_bv = P::new_multi_bv(cube3_def.sorted_orbit_defs_ref());
         b.iter(|| {
@@ -1253,33 +1301,39 @@ mod tests {
                     vec![(2, false), (2, true), (7, true)],
                 ],
                 cube3_def.sorted_orbit_defs_ref(),
-            ),
+            )
+            .unwrap(),
             SortedCycleType::new(
                 vec![vec![(1, true), (3, true)], vec![(1, true), (5, true)]],
                 cube3_def.sorted_orbit_defs_ref(),
-            ),
+            )
+            .unwrap(),
             SortedCycleType::new(
                 vec![vec![(2, true), (3, true)], vec![(4, true), (5, true)]],
                 cube3_def.sorted_orbit_defs_ref(),
-            ),
+            )
+            .unwrap(),
             SortedCycleType::new(
                 vec![
                     vec![(1, true), (2, true), (3, true)],
                     vec![(4, true), (5, true)],
                 ],
                 cube3_def.sorted_orbit_defs_ref(),
-            ),
+            )
+            .unwrap(),
             SortedCycleType::new(
                 vec![
                     vec![(2, true), (3, true)],
                     vec![(1, true), (4, true), (5, false)],
                 ],
                 cube3_def.sorted_orbit_defs_ref(),
-            ),
+            )
+            .unwrap(),
             SortedCycleType::new(
                 vec![vec![(4, false)], vec![(4, false)]],
                 cube3_def.sorted_orbit_defs_ref(),
-            ),
+            )
+            .unwrap(),
         ];
         let sorted_cycle_types: Vec<_> =
             sorted_cycle_types.into_iter().cycle().take(1000).collect();
