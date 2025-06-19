@@ -65,13 +65,6 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
         // SAFETY: This function calls `pop_stack` for every `push_stack` call.
         // Therefore, the `pop_stack` cannot be called more than `push_stack`.
         let last_puzzle_state = unsafe { mutable.puzzle_state_history.last_state_unchecked() };
-        let est_remaining_cost = self.pruning_tables.permissible_heuristic(last_puzzle_state);
-
-        if est_remaining_cost > togo {
-            // TODO: what the heck does this do
-            // https://github.com/cubing/twsearch/commit/a86177ac2bd462bb9d7d91af743e883449fbfb6b
-            return false;
-        }
 
         if togo == 0 {
             if last_puzzle_state.induces_sorted_cycle_type(
@@ -84,6 +77,13 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
                     .push(mutable.puzzle_state_history.create_move_history());
                 return true;
             }
+            return false;
+        }
+
+        let est_remaining_cost = self.pruning_tables.permissible_heuristic(last_puzzle_state);
+        if est_remaining_cost > togo {
+            // TODO: what the heck does this do
+            // https://github.com/cubing/twsearch/commit/a86177ac2bd462bb9d7d91af743e883449fbfb6b
             return false;
         }
 
