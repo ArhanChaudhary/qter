@@ -13,6 +13,8 @@ compiler = { path = "../compiler" }
 interpreter = { path = "../interpreter" }
 puzzle_geometry = { path = "../puzzle_geometry" }
 internment = { version = "0.8", features = [ "arc" ] }
+ariadne = "0.5.1"
+chumsky = "0.10.1"
 
 [lints]
 workspace = true

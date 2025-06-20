@@ -440,16 +440,20 @@ impl Cube3Robot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chumsky::Parser;
     use internment::ArcIntern;
     use interpreter::puzzle_states::SimulatedPuzzle;
-    use qter_core::architectures::PuzzleDefinition;
+    use qter_core::architectures::puzzle_definition;
 
     #[test]
     fn test_puzzle_state_with_rob_string() {
         init_mapping();
-        let perm_group = PuzzleDefinition::parse(include_str!("../../qter_core/puzzles/3x3.txt"))
-            .unwrap()
-            .perm_group;
+        let perm_group = Arc::clone(
+            &puzzle_definition()
+                .parse(qter_core::File::from("3x3"))
+                .unwrap()
+                .perm_group,
+        );
 
         let solved = SimulatedPuzzle::initialize(Arc::clone(&perm_group));
 

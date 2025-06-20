@@ -281,16 +281,18 @@ impl SeparatesByPuzzleType for InputRet {
 mod tests {
     use super::*;
     use crate::{Interpreter, PausedState, puzzle_states::SimulatedPuzzle};
+    use chumsky::Parser;
     use compiler::compile;
     use internment::ArcIntern;
-    use qter_core::{Int, U, architectures::PuzzleDefinition};
+    use qter_core::{
+        File, Int, U,
+        architectures::{PuzzleDefinition, puzzle_definition},
+    };
     use std::sync::Arc;
 
     #[test]
     fn facelets_solved() {
-        let perm_group = Arc::new(
-            PuzzleDefinition::parse(include_str!("../../qter_core/puzzles/3x3.txt")).unwrap(),
-        );
+        let perm_group = puzzle_definition().parse(File::from("3x3")).unwrap();
 
         let mut cube: SimulatedPuzzle =
             SimulatedPuzzle::initialize(Arc::clone(&perm_group.perm_group));
@@ -310,9 +312,7 @@ mod tests {
 
     #[test]
     fn complicated_solved_decode_test() {
-        let perm_group = Arc::new(
-            PuzzleDefinition::parse(include_str!("../../qter_core/puzzles/3x3.txt")).unwrap(),
-        );
+        let perm_group = puzzle_definition().parse(File::from("3x3")).unwrap();
 
         let arch = perm_group
             .get_preset(&[Int::from(210_u64), Int::from(24_u64)])
@@ -389,9 +389,9 @@ mod tests {
                 halt \"The modulus is\" A
         ";
 
-        let program = match compile(code, |_| unreachable!()) {
+        let program = match compile(File::from(code), |_| unreachable!()) {
             Ok(v) => v,
-            Err(e) => panic!("{e}"),
+            Err(e) => panic!("{e:?}"),
         };
 
         let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(program);
@@ -464,9 +464,9 @@ mod tests {
                 halt \"The modulus is\" B
         ";
 
-        let program = match compile(code, |_| unreachable!()) {
+        let program = match compile(File::from(code), |_| unreachable!()) {
             Ok(v) => v,
-            Err(e) => panic!("{e}"),
+            Err(e) => panic!("{e:?}"),
         };
 
         let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(program);
@@ -578,9 +578,9 @@ mod tests {
                 goto continue_1
         ";
 
-        let program = match compile(code, |_| unreachable!()) {
+        let program = match compile(File::from(code), |_| unreachable!()) {
             Ok(v) => v,
-            Err(e) => panic!("{e}"),
+            Err(e) => panic!("{e:?}"),
         };
 
         let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(program);

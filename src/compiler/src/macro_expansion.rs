@@ -1,20 +1,29 @@
 use std::{cell::OnceCell, mem};
 
+use ariadne::Span as _Span;
+use chumsky::error::Rich;
 use internment::ArcIntern;
-use itertools::Itertools;
-use pest::error::Error;
-use qter_core::{WithSpan, mk_error};
+use itertools::{Either, Itertools};
+use qter_core::{Span, WithSpan};
 
 use crate::{
     BlockID, Code, ExpandedCode, ExpandedCodeComponent, ExpansionInfo, Instruction, Macro,
     ParsedSyntax, TaggedInstruction,
 };
 
-use super::parsing::Rule;
+pub fn expand(mut parsed: ParsedSyntax) -> Result<ExpandedCode, Vec<Rich<'static, char, Span>>> {
+    let mut errs = Vec::new();
 
-pub fn expand(mut parsed: ParsedSyntax) -> Result<ExpandedCode, Box<Error<Rule>>> {
-    // TODO: Logic of `after`
-    while expand_block(BlockID(0), &mut parsed.expansion_info, &mut parsed.code)? {}
+    while expand_block(
+        BlockID(0),
+        &mut parsed.expansion_info,
+        &mut parsed.code,
+        &mut errs,
+    ) {}
+
+    if !errs.is_empty() {
+        return Err(errs);
+    }
 
     Ok(ExpandedCode {
         block_info: parsed.expansion_info.block_info,
@@ -47,11 +56,12 @@ fn expand_block(
     block_id: BlockID,
     expansion_info: &mut ExpansionInfo,
     code: &mut Vec<WithSpan<TaggedInstruction>>,
-) -> Result<bool, Box<Error<Rule>>> {
+    errs: &mut Vec<Rich<'static, char, Span>>,
+) -> bool {
     // Will be set if anything is ever changed
     let changed = OnceCell::<()>::new();
 
-    *code = mem::take(code)
+    let (new_code, new_errs) = mem::take(code)
         .into_iter()
         .map(|mut tagged_instruction| {
             let maybe_block_id = &mut tagged_instruction.1;
@@ -87,9 +97,9 @@ fn expand_block(
                 Instruction::Define(define) => {
                     for found_define in &block_info.defines {
                         if *found_define.name == *define.name {
-                            return vec![Err(mk_error(
+                            return vec![Err(Rich::custom(
+                                define.name.span().clone(),
                                 "Cannot shadow a `.define` in the same scope!",
-                                define.name.span(),
                             ))];
                         }
                     }
@@ -101,9 +111,9 @@ fn expand_block(
                 }
                 Instruction::Registers(decl) => {
                     if block_info.registers.is_some() {
-                        vec![Err(mk_error(
-                            "Cannot have multiple register declarations in the same scope!",
+                        vec![Err(Rich::custom(
                             span,
+                            "Cannot have multiple register declarations in the same scope!",
                         ))]
                     } else {
                         block_info.registers = Some(decl);
@@ -126,9 +136,15 @@ fn expand_block(
                 Instruction::LuaCall(_) => todo!(),
             }
         })
-        .collect::<Result<_, _>>()?;
+        .partition_map::<Vec<_>, Vec<_>, _, _, _>(|res| match res {
+            Ok(v) => Either::Left(v),
+            Err(e) => Either::Right(e),
+        });
 
-    Ok(changed.get().is_some())
+    errs.extend_from_slice(&new_errs);
+    *code = new_code;
+
+    changed.get().is_some()
 }
 
 fn expand_code(
@@ -136,7 +152,7 @@ fn expand_code(
     expansion_info: &mut ExpansionInfo,
     code: Code,
     changed: &OnceCell<()>,
-) -> Result<Vec<TaggedInstruction>, Box<Error<Rule>>> {
+) -> Result<Vec<TaggedInstruction>, Rich<'static, char, Span>> {
     let macro_call = match code {
         Code::Primitive(prim) => {
             return Ok(vec![(
@@ -150,12 +166,12 @@ fn expand_code(
     let _ = changed.set(());
 
     let Some(macro_access) = expansion_info.available_macros.get(&(
-        macro_call.name.span().source(),
+        macro_call.name.span().source().clone(),
         ArcIntern::clone(&*macro_call.name),
     )) else {
-        return Err(mk_error(
+        return Err(Rich::custom(
+            macro_call.name.span().clone(),
             "Macro was not found in this scope",
-            macro_call.name.span(),
         ));
     };
 
@@ -181,6 +197,8 @@ fn expand_code(
 
 #[cfg(test)]
 mod tests {
+    use qter_core::File;
+
     use crate::{macro_expansion::expand, parsing::parse};
 
     #[test]
@@ -204,14 +222,14 @@ mod tests {
                 halt \"Poggers\" b
         ";
 
-        let parsed = match parse(code, &|_| unreachable!(), false) {
+        let parsed = match parse(File::from(code), &|_| unreachable!(), false) {
             Ok(v) => v,
-            Err(e) => panic!("{e}"),
+            Err(e) => panic!("{e:?}"),
         };
 
         let expanded = match expand(parsed) {
             Ok(v) => v,
-            Err(e) => panic!("{e}"),
+            Err(e) => panic!("{e:?}"),
         };
 
         println!("{expanded:?}");

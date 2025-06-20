@@ -175,11 +175,12 @@ impl Stabilizer {
 mod tests {
     use std::{collections::HashMap, sync::Arc};
 
+    use chumsky::Parser;
     use internment::ArcIntern;
 
     use crate::{
-        Int, U,
-        architectures::{Algorithm, Permutation, PermutationGroup, puzzle_by_name},
+        File, Int, Span, U,
+        architectures::{Algorithm, Permutation, PermutationGroup, puzzle_definition},
     };
 
     use super::StabilizerChain;
@@ -203,6 +204,7 @@ mod tests {
                 ArcIntern::from("c"),
             ],
             perms,
+            Span::from_static("thingy"),
         ));
 
         let method = StabilizerChain::new(&puzzle);
@@ -213,7 +215,12 @@ mod tests {
 
     #[test]
     fn three_by_three() {
-        let cube_def = puzzle_by_name("3x3").unwrap().perm_group;
+        let cube_def = Arc::clone(
+            &puzzle_definition()
+                .parse(File::from("3x3"))
+                .unwrap()
+                .perm_group,
+        );
 
         let method = StabilizerChain::new(&cube_def);
 

@@ -7,6 +7,7 @@ edition = "2024"
 qter_core = { path = "../qter_core" }
 internment = { version = "0.8", features = [ "arc" ] }
 compiler = { path = "../compiler" }
+chumsky = "0.10.1"
 
 [lints]
 workspace = true

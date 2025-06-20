@@ -1,18 +1,17 @@
 use std::{collections::HashMap, iter::Peekable, sync::Arc};
 
+use chumsky::error::Rich;
 use internment::ArcIntern;
-use itertools::Itertools;
-use pest::error::Error;
+use itertools::{Either, Itertools};
 use qter_core::{
     ByPuzzleType, Halt, Input, Instruction, Int, Print, Program, PuzzleIdx, RegisterGenerator,
-    TheoreticalIdx, U, WithSpan,
+    Span, TheoreticalIdx, U, WithSpan,
     architectures::{Algorithm, Architecture, CycleGeneratorSubcycle, PermutationGroup},
-    mk_error,
 };
 
 use crate::{
     BlockID, ExpandedCode, ExpandedCodeComponent, LabelReference, Primitive, Puzzle,
-    RegisterReference, parsing::Rule,
+    RegisterReference,
 };
 
 #[derive(Clone, Debug)]
@@ -162,7 +161,7 @@ impl GlobalRegs {
     }
 }
 
-pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>>> {
+pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Vec<Rich<'static, char, Span>>> {
     let mut label_locations = HashMap::new();
 
     let mut global_regs = GlobalRegs {
@@ -250,7 +249,7 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>
         })
         .collect_vec();
 
-    let instructions = instructions
+    let (instructions, errors) = instructions
         .into_iter()
         .map(|fully_simplified| {
             let span = fully_simplified.span().to_owned();
@@ -280,7 +279,7 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>
                 }
                 Primitive::Goto { label } => {
                     let Some(label) = expanded.block_info.label_scope(&label) else {
-                        return Err(mk_error("Could not find label in scope", label.span()));
+                        return Err(Rich::custom(label.span().clone(), "Could not find label in scope"));
                     };
 
                     Instruction::Goto {
@@ -289,7 +288,7 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>
                 }
                 Primitive::SolvedGoto { register, label } => {
                     let Some(label) = expanded.block_info.label_scope(&label) else {
-                        return Err(mk_error("Could not find label in scope", label.span()));
+                        return Err(Rich::custom(label.span().clone(), "Could not find label in scope"));
                     };
 
                     let (reg_idx, puzzle_idx) = global_regs.get_reg(&register);
@@ -309,7 +308,7 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>
                                         .dedup()
                                         .collect_vec();
 
-                                    return Err(mk_error(format!("Could not find a set of pieces for solved-goto that encode the given modulus. The available moduli are the LCM of any combination of the following piece subcycles: {}", cycles.into_iter().join(", ")), register.reg_name.span()))
+                                    return Err(Rich::custom(register.reg_name.span().clone(), format!("Could not find a set of pieces for solved-goto that encode the given modulus. The available moduli are the LCM of any combination of the following piece subcycles: {}", cycles.into_iter().join(", "))))
                                 },
                                 None => {
                                     arch.registers()[idx].signature_facelets()
@@ -362,7 +361,14 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Box<Error<Rule>
 
             Ok(WithSpan::new(instruction, span))
         })
-        .try_collect::<_, Vec<_>, _>()?;
+        .partition_map::<Vec<_>, Vec<_>, _, _, _>(|res| match res {
+            Ok(v) => Either::Left(v),
+            Err(e) => Either::Right(e),
+        });
+
+    if !errors.is_empty() {
+        return Err(errors);
+    }
 
     Ok(Program {
         theoretical: global_regs.theoretical,

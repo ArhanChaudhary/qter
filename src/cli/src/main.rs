@@ -3,6 +3,7 @@
 
 use std::{fs, io, path::PathBuf};
 
+use ariadne::{Color, Label, Report, ReportKind, Source};
 use clap::{ArgAction, Parser};
 use color_eyre::{
     eyre::{OptionExt, eyre},
@@ -16,7 +17,7 @@ use interpreter::{
 };
 use itertools::Itertools;
 use qter_core::{
-    ByPuzzleType, I, Int,
+    ByPuzzleType, File, I, Int,
     table_encoding::{decode_table, encode_table},
 };
 use robot::Cube3Robot;
@@ -81,9 +82,9 @@ fn main() -> color_eyre::Result<()> {
             let program = match file.extension().and_then(|v| v.to_str()) {
                 Some("q") => todo!(),
                 Some("qat") => {
-                    let qat = fs::read_to_string(file)?;
+                    let qat = File::from(fs::read_to_string(&file)?);
 
-                    compile(&qat, |name| {
+                    match compile(qat.clone(), |name| {
                         let path = PathBuf::from(name);
 
                         if path.ancestors().count() > 1 {
@@ -95,7 +96,29 @@ fn main() -> color_eyre::Result<()> {
                             Ok(s) => Ok(ArcIntern::from(s)),
                             Err(e) => Err(e.to_string()),
                         }
-                    })?
+                    }) {
+                        Ok(v) => v,
+                        Err(errs) => {
+                            for err in &errs {
+                                Report::build(ReportKind::Error, err.span().clone())
+                                    .with_message(err.to_string())
+                                    .with_label(
+                                        Label::new(err.span().clone())
+                                            .with_message(err.reason().to_string())
+                                            .with_color(Color::Red),
+                                    )
+                                    .finish()
+                                    .eprint(Source::from(qat.inner()))
+                                    .unwrap();
+                            }
+
+                            return Err(eyre!(
+                                "Could not compile {} due to {} errors.",
+                                file.display(),
+                                errs.len()
+                            ));
+                        }
+                    }
                 }
                 _ => {
                     return Err(eyre!(

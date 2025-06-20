@@ -1,31 +1,33 @@
-use crate::{BlockInfoTracker, ExpansionInfo, builtin_macros::builtin_macros};
+use crate::{
+    BlockInfo, BlockInfoTracker, ExpansionInfo, builtin_macros::builtin_macros, lua::LuaMacros,
+};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::{Arc, LazyLock},
 };
 
+use chumsky::{
+    extra::{Full, SimpleState},
+    input::MapExtra,
+    inspector::Inspector,
+    prelude::*,
+};
 use internment::ArcIntern;
-use pest::{Parser, error::Error, iterators::Pair};
-use pest_derive::Parser;
+use itertools::Itertools;
 use qter_core::{
-    Int, Span, U, WithSpan,
-    architectures::{Architecture, puzzle_by_name},
-    mk_error,
+    Extra, File, Int, Span, U, WithSpan,
+    architectures::{Architecture, puzzle_definition},
 };
 
-use crate::{
-    Block, BlockID, BlockInfo, Code, Define, DefineValue, Label, LuaCall, Macro, MacroArgTy,
-    MacroBranch, MacroCall, MacroPattern, MacroPatternComponent, ParsedSyntax, Puzzle,
-    RegistersDecl, Value, lua::LuaMacros,
-};
+use crate::{BlockID, Macro, ParsedSyntax, Puzzle, RegistersDecl};
 
 use super::Instruction;
 
 static PRELUDE: LazyLock<ParsedSyntax> = LazyLock::new(|| {
-    let prelude = ArcIntern::<str>::from(include_str!("../../qter_core/prelude.qat"));
+    let prelude = File::from(include_str!("../../qter_core/prelude.qat"));
 
     let mut parsed_prelude = match parse(
-        &prelude,
+        prelude.clone(),
         &|_| {
             panic!(
                 "Prelude should not import files (because it's easier not to implement; message henry if you need this feature)"
@@ -34,10 +36,10 @@ static PRELUDE: LazyLock<ParsedSyntax> = LazyLock::new(|| {
         true,
     ) {
         Ok(v) => v,
-        Err(e) => panic!("{e}"),
+        Err(e) => panic!("{e:?}"),
     };
 
-    let builtin_macros = builtin_macros(&prelude);
+    let builtin_macros = builtin_macros(&prelude.inner());
     parsed_prelude
         .expansion_info
         .available_macros
@@ -52,24 +54,27 @@ static PRELUDE: LazyLock<ParsedSyntax> = LazyLock::new(|| {
     parsed_prelude
 });
 
-#[derive(Parser)]
-#[grammar = "./qat.pest"]
-struct QatParser;
+type ExtraAndSyntax = Full<Rich<'static, char, Span>, SimpleState<ParsedSyntax>, ()>;
 
 pub fn parse(
-    qat: &str,
+    qat: File,
     find_import: &impl Fn(&str) -> Result<ArcIntern<str>, String>,
     is_prelude: bool,
-) -> Result<ParsedSyntax, Box<Error<Rule>>> {
-    let program = QatParser::parse(Rule::program, qat)?.next().unwrap();
-    let qat = ArcIntern::<str>::from(qat);
+) -> Result<ParsedSyntax, Vec<Rich<'static, char, Span>>> {
+    thread_local! {
+        static PARSER: Boxed<'static, 'static, File, (), ExtraAndSyntax> = parser().boxed();
+    }
 
-    let zero_pos = program.as_span().start_pos();
-    let program = program.into_inner();
+    let zero_span = Span::new(qat.inner(), 0, 0);
 
     let lua_macros = match LuaMacros::new() {
         Ok(v) => v,
-        Err(e) => return Err(mk_error(e.to_string(), zero_pos)),
+        Err(e) => {
+            return Err(vec![Rich::custom(
+                zero_span,
+                format!("Failed to initialize the Lua runtime. {e}"),
+            )]);
+        }
     };
 
     let expansion_info = ExpansionInfo {
@@ -81,75 +86,14 @@ pub fn parse(
     };
     let code = Vec::new();
 
-    let mut parsed_syntax = ParsedSyntax {
+    let mut parsed_syntax = SimpleState(ParsedSyntax {
         expansion_info,
         code,
-    };
+    });
 
-    if !is_prelude {
-        merge_files(&mut parsed_syntax, &qat, (*PRELUDE).clone());
-    }
-
-    for pair in program {
-        if let Rule::EOI = pair.as_rule() {
-            break;
-        }
-
-        let span = pair.as_span();
-        match parse_statement(pair)? {
-            Statement::Macro {
-                name,
-                def: macro_def,
-            } => {
-                let span = name.span();
-                let name = ArcIntern::clone(&name);
-
-                if parsed_syntax
-                    .expansion_info
-                    .macros
-                    .contains_key(&(ArcIntern::clone(&qat), ArcIntern::clone(&name)))
-                {
-                    return Err(mk_error(
-                        format!("The macro {} is already defined!", &*name),
-                        span,
-                    ));
-                }
-
-                parsed_syntax
-                    .expansion_info
-                    .macros
-                    .insert((ArcIntern::clone(&qat), ArcIntern::clone(&name)), macro_def);
-                parsed_syntax
-                    .expansion_info
-                    .available_macros
-                    .insert((ArcIntern::clone(&qat), name), ArcIntern::clone(&qat));
-            }
-            Statement::Instruction(instruction) => {
-                let span = instruction.span().to_owned();
-
-                parsed_syntax
-                    .code
-                    .push(WithSpan::new((instruction.value, Some(BlockID(0))), span));
-            }
-            Statement::LuaBlock(code) => {
-                if let Err(e) = lua_macros.add_code(code) {
-                    return Err(mk_error(e.to_string(), span));
-                }
-            }
-            Statement::Import(name) => {
-                let import = match find_import(*name) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        return Err(mk_error(format!("Unable to find import: {e}"), name.span()));
-                    }
-                };
-
-                let importee = parse(&import, find_import, is_prelude)?;
-
-                merge_files(&mut parsed_syntax, &qat, importee);
-            }
-        }
-    }
+    PARSER
+        .with(|parser| parser.parse_with_state(qat.clone(), &mut parsed_syntax))
+        .into_result()?;
 
     parsed_syntax.expansion_info.block_info.0.insert(
         BlockID(0),
@@ -165,9 +109,271 @@ pub fn parse(
     parsed_syntax
         .expansion_info
         .lua_macros
-        .insert(qat, lua_macros);
+        .insert(qat.inner(), lua_macros);
 
-    Ok(parsed_syntax)
+    Ok(parsed_syntax.0)
+}
+
+type ExtraAndState<S> = Full<Rich<'static, char, Span>, S, ()>;
+
+fn parser() -> impl Parser<'static, File, (), ExtraAndSyntax> {
+    group((
+        shebang::<SimpleState<ParsedSyntax>>(),
+        whitespace(),
+        registers().with_state(()).map_with(
+            |regs, data: &mut MapExtra<'_, '_, File, ExtraAndSyntax>| {
+                let span = data.span();
+                data.state()
+                    .code
+                    .push(span.with((Instruction::Registers(regs), Some(BlockID(0)))));
+            },
+        ),
+    ))
+    .to(())
+}
+
+fn shebang<S: Inspector<'static, File> + 'static>()
+-> impl Parser<'static, File, (), ExtraAndState<S>> {
+    any().repeated().delimited_by(just("#!"), just('\n')).to(())
+}
+
+fn whitespace<S: Inspector<'static, File> + 'static>()
+-> impl Parser<'static, File, (), ExtraAndState<S>> {
+    choice((
+        just(' ').to(()),
+        just('\t').to(()),
+        any()
+            .repeated()
+            .delimited_by(just("--[["), just("]]--"))
+            .to(()),
+        any().repeated().delimited_by(just("--"), just('\n')).to(()),
+    ))
+    .repeated()
+}
+
+fn nl<S: Inspector<'static, File> + 'static>() -> impl Parser<'static, File, (), ExtraAndState<S>> {
+    just('\n')
+        .separated_by(whitespace())
+        .at_least(1)
+        .allow_leading()
+        .allow_trailing()
+}
+
+fn number<S: Inspector<'static, File> + 'static>()
+-> impl Parser<'static, File, (), ExtraAndState<S>> {
+    any()
+        .filter(|c: &char| c.is_ascii_digit())
+        .repeated()
+        .to(())
+}
+
+fn intu<S: Inspector<'static, File> + 'static>()
+-> impl Parser<'static, File, Int<U>, ExtraAndState<S>> {
+    number().try_map(|(), span| {
+        span.slice()
+            .parse()
+            .map_err(|e| Rich::custom(span, format!("Could not parse as an integer: {e}")))
+    })
+}
+
+fn ident<S: Inspector<'static, File> + 'static>()
+-> impl Parser<'static, File, WithSpan<ArcIntern<str>>, ExtraAndState<S>> {
+    let evil_idents = choice((number(), just("lua").to(())));
+
+    let special_char = choice((
+        just('{').to(()),
+        just('}').to(()),
+        just('.').to(()),
+        just(':').to(()),
+        just('$').to(()),
+        just("--").to(()),
+        just(',').to(()),
+        just("<-").to(()),
+        just('←').to(()),
+        just('\n').to(()),
+        just('(').to(()),
+        just(')').to(()),
+        just('!').to(()),
+        just('"').to(()),
+        whitespace(),
+    ));
+
+    group((
+        evil_idents.not(),
+        choice((
+            group((special_char.not(), any())).to_span(),
+            any()
+                .repeated()
+                .to_span()
+                .delimited_by(just('"'), just('"')),
+        )),
+    ))
+    .map(|(_, v)| WithSpan::new(ArcIntern::from(v.slice()), v))
+}
+
+fn registers() -> impl Parser<'static, File, RegistersDecl, Extra> {
+    group((
+        just(".registers"),
+        whitespace(),
+        just("{"),
+        register_decl()
+            .separated_by(nl())
+            .at_least(1)
+            .allow_leading()
+            .allow_trailing()
+            .collect(),
+        just("}"),
+    ))
+    .map(|(_, _, _, puzzles, _)| RegistersDecl {
+        puzzles,
+        block_id: BlockID(0),
+    })
+}
+
+fn register_decl() -> impl Parser<'static, File, Puzzle, Extra> {
+    choice((register_decl_switchable(), register_decl_unswitchable()))
+}
+
+fn register_decl_unswitchable() -> impl Parser<'static, File, Puzzle, Extra> {
+    group((
+        ident()
+            .separated_by(just(',').delimited_by(whitespace(), whitespace()))
+            .at_least(1)
+            .collect::<Vec<_>>(),
+        choice((just("<-").to(()), just('←').to(()))).delimited_by(whitespace(), whitespace()),
+        register_architecture(),
+    ))
+    .try_map(|(mut names, _, archs), span| match archs {
+        PuzzleUnnamed::Theoretical { order } => {
+            if names.len() != 1 {
+                Err(Rich::custom(
+                    span,
+                    format!("Expected one name whereas {} were provided.", names.len()),
+                ))
+            } else {
+                Ok(Puzzle::Theoretical {
+                    name: names.pop().unwrap(),
+                    order,
+                })
+            }
+        }
+        PuzzleUnnamed::Real { architecture } => {
+            if architecture.registers().len() != names.len() {
+                Err(Rich::custom(
+                    span,
+                    format!(
+                        "Expected {} names whereas {} were provided.",
+                        architecture.registers().len(),
+                        names.len()
+                    ),
+                ))
+            } else {
+                Ok(Puzzle::Real {
+                    architectures: vec![(names, architecture)],
+                })
+            }
+        }
+    })
+}
+
+#[derive(Clone, Debug)]
+enum PuzzleUnnamed {
+    Theoretical {
+        order: WithSpan<Int<U>>,
+    },
+    Real {
+        architecture: WithSpan<Arc<Architecture>>,
+    },
+}
+
+fn algorithm() -> impl Parser<'static, File, Vec<Span>, Extra> {
+    ident()
+        .to_span()
+        .separated_by(whitespace())
+        .at_least(1)
+        .collect()
+}
+
+fn register_architecture() -> impl Parser<'static, File, PuzzleUnnamed, Extra> {
+    choice((
+        group((
+            just("theoretical"),
+            whitespace(),
+            intu().map_with(|v, extra| extra.span().with(v)),
+        ))
+        .map(|(_, _, order)| PuzzleUnnamed::Theoretical { order }),
+        group((
+            puzzle_definition(),
+            whitespace(),
+            just("builtin"),
+            whitespace(),
+            choice((
+                intu().map(|v| vec![v]),
+                intu()
+                    .separated_by(just(",").delimited_by(whitespace(), whitespace()))
+                    .at_least(1)
+                    .collect()
+                    .delimited_by(just("("), just(")")),
+            ))
+            .map_with(|v, data| data.span().with(v)),
+        ))
+        .try_map(
+            |(def, _, _, _, orders), span| match def.get_preset(&orders) {
+                Some(arch) => Ok(PuzzleUnnamed::Real {
+                    architecture: span.with(arch),
+                }),
+                None => Err(Rich::custom(
+                    orders.span().clone(),
+                    "There does not exist a preset architecture with the given orders.",
+                )),
+            },
+        ),
+        group((
+            puzzle_definition(),
+            whitespace(),
+            choice((
+                algorithm().map(|v| vec![v]),
+                algorithm()
+                    .separated_by(just(",").delimited_by(whitespace(), whitespace()))
+                    .at_least(1)
+                    .collect()
+                    .delimited_by(just("("), just(")")),
+            ))
+            .map_with(|v, data| data.span().with(v)),
+        ))
+        .try_map(|(def, _, algs), span| {
+            match Architecture::new(Arc::clone(&def.perm_group), &algs) {
+                Ok(arch) => Ok(PuzzleUnnamed::Real {
+                    architecture: span.with(Arc::new(arch)),
+                }),
+                Err(bad_generator) => Err(Rich::custom(bad_generator.clone(), format!("This generator does not exist in the given permutation group. The options are: {}", def.perm_group.generators().map(|(name, _)| name).join(&ArcIntern::from(", "))))),
+            }
+        }),
+    ))
+}
+
+fn register_decl_switchable() -> impl Parser<'static, File, Puzzle, Extra> {
+    register_decl_unswitchable()
+        .try_map(|v, span| match v {
+            Puzzle::Theoretical { name: _, order: _ } => Err(Rich::custom(
+                span,
+                "Theoretical architectures cannot be switchable.",
+            )),
+            Puzzle::Real { architectures } => Ok(architectures),
+        })
+        .separated_by(nl())
+        .at_least(1)
+        .collect::<Vec<_>>()
+        .delimited_by(just('('), just(')'))
+        .map(|v| Puzzle::Real {
+            architectures: v
+                .into_iter()
+                .reduce(|mut a, b| {
+                    a.extend_from_slice(&b);
+                    a
+                })
+                .unwrap(),
+        })
 }
 
 fn merge_files(
@@ -223,184 +429,6 @@ fn merge_files(
     importer.code.extend(importee.code);
 }
 
-fn parse_registers(pair: Pair<'_, Rule>) -> Result<RegistersDecl, Box<Error<Rule>>> {
-    let mut puzzles = Vec::new();
-
-    let mut names = HashSet::new();
-
-    for decl in pair.into_inner() {
-        let puzzle = match decl.as_rule() {
-            Rule::unswitchable => parse_declaration(decl)?,
-            Rule::switchable => {
-                let mut decls = Vec::new();
-
-                for pair in decl.into_inner() {
-                    let span = pair.as_span();
-
-                    match parse_declaration(pair)? {
-                        Puzzle::Theoretical { name: _, order: _ } => {
-                            return Err(mk_error(
-                                "Cannot create a switchable puzzle with a theoretical register",
-                                span,
-                            ));
-                        }
-                        Puzzle::Real { architectures } => decls.extend_from_slice(&architectures),
-                    }
-                }
-
-                // TODO: Verify that the architectures are compatible with each other
-
-                Puzzle::Real {
-                    architectures: decls,
-                }
-            }
-            rule => unreachable!("{rule:?}, {}", decl.as_str()),
-        };
-
-        let mut found_names = HashSet::new();
-
-        match &puzzle {
-            Puzzle::Theoretical { name, order: _ } => {
-                found_names.insert(name.to_owned());
-            }
-            Puzzle::Real { architectures } => found_names.extend(
-                architectures
-                    .iter()
-                    .flat_map(|architecture| architecture.0.iter())
-                    .map(std::borrow::ToOwned::to_owned),
-            ),
-        }
-
-        for item in found_names {
-            if names.contains(&item) {
-                return Err(mk_error("Register name is already defined", item.span()));
-            }
-            names.insert(item);
-        }
-
-        puzzles.push(puzzle);
-    }
-
-    Ok(RegistersDecl {
-        puzzles,
-        maybe_block_id: None,
-    })
-}
-
-fn parse_declaration(pair: Pair<'_, Rule>) -> Result<Puzzle, Box<Error<Rule>>> {
-    let span = pair.as_span();
-    let mut pairs = pair.into_inner();
-
-    let mut regs = Vec::new();
-    let mut names = HashSet::new();
-
-    let mut arch = None;
-
-    for pair in pairs.by_ref() {
-        if let Rule::ident = pair.as_rule() {
-            let name = ArcIntern::<str>::from(pair.as_str());
-
-            if names.contains(&name) {
-                return Err(mk_error("Register name is already defined", pair.as_span()));
-            }
-            names.insert(ArcIntern::clone(&name));
-
-            regs.push(WithSpan::new(name, pair.as_span().into()));
-        } else {
-            arch = Some(pair);
-            break;
-        }
-    }
-
-    let arch = arch.unwrap();
-
-    match arch.as_rule() {
-        Rule::theoretical_architecture => {
-            if regs.len() > 1 {
-                return Err(mk_error(
-                    format!(
-                        "Expected one register name for a theoretical architecture, found {}",
-                        regs.len()
-                    ),
-                    span,
-                ));
-            }
-
-            let number = arch.into_inner().next().unwrap();
-
-            Ok(Puzzle::Theoretical {
-                name: regs.pop().unwrap(),
-                order: WithSpan::new(
-                    number.as_str().parse::<Int<U>>().unwrap(),
-                    number.as_span().into(),
-                ),
-            })
-        }
-        Rule::real_architecture => {
-            let arch = arch.into_inner().next().unwrap();
-            let rule = arch.as_rule();
-            let span = arch.as_span();
-            let mut arch = arch.into_inner();
-
-            let puzzle_name = arch.next().unwrap();
-            let Some(puzzle) = puzzle_by_name(puzzle_name.as_str()) else {
-                return Err(mk_error("Unknown puzzle", puzzle_name.as_span()));
-            };
-
-            let decoded_arch = match rule {
-                Rule::builtin_architecture => {
-                    let mut orders = Vec::new();
-
-                    for order in arch {
-                        orders.push(order.as_str().parse::<Int<U>>().unwrap());
-                    }
-
-                    match puzzle.get_preset(&orders) {
-                        Some(arch) => arch,
-                        None => {
-                            return Err(mk_error(
-                                "Could not find a builtin architecture for the given puzzle with the given orders",
-                                span,
-                            ));
-                        }
-                    }
-                }
-                Rule::custom_architecture => {
-                    let mut algorithms = Vec::new();
-
-                    for algorithm in arch {
-                        let mut generators = Vec::new();
-
-                        for generator in algorithm.into_inner() {
-                            generators.push(ArcIntern::<str>::from(generator.as_str()));
-                        }
-
-                        algorithms.push(generators);
-                    }
-
-                    match Architecture::new(puzzle.perm_group, &algorithms) {
-                        Ok(v) => Arc::new(v),
-                        Err(e) => {
-                            return Err(mk_error(
-                                format!("The generator `{e}` isn't defined for the given puzzle"),
-                                span,
-                            ));
-                        }
-                    }
-                }
-                rule => unreachable!("{rule:?}"),
-            };
-
-            let puzzle = Puzzle::Real {
-                architectures: vec![(regs, WithSpan::new(decoded_arch, span.into()))],
-            };
-
-            Ok(puzzle)
-        }
-        rule => unreachable!("{rule:?}"),
-    }
-}
-
 enum Statement<'a> {
     Macro {
         name: WithSpan<ArcIntern<str>>,
@@ -411,255 +439,10 @@ enum Statement<'a> {
     Import(WithSpan<&'a str>),
 }
 
-fn parse_statement(pair: Pair<'_, Rule>) -> Result<Statement<'_>, Box<Error<Rule>>> {
-    let rule = pair.as_rule();
-
-    Ok(match rule {
-        Rule::r#macro => {
-            let (name, macro_def) = parse_macro(pair)?;
-            Statement::Macro {
-                name,
-                def: macro_def,
-            }
-        }
-        Rule::instruction => Statement::Instruction(parse_instruction(pair)?),
-        Rule::lua_code => Statement::LuaBlock(pair.as_str()),
-        Rule::import => {
-            let span = pair.as_span();
-            let filename = pair.into_inner().next().unwrap();
-
-            Statement::Import(WithSpan::new(filename.as_str(), span.into()))
-        }
-        _ => unreachable!("{rule:?}"),
-    })
-}
-
-fn parse_instruction(pair: Pair<'_, Rule>) -> Result<WithSpan<Instruction>, Box<Error<Rule>>> {
-    let pair = pair.into_inner().next().unwrap();
-    let rule = pair.as_rule();
-    let span = pair.as_span().into();
-
-    Ok(WithSpan::new(
-        match rule {
-            Rule::label => Instruction::Label(Label {
-                name: ArcIntern::<str>::from(pair.into_inner().next().unwrap().as_str()),
-                maybe_block_id: None,
-                available_in_blocks: None,
-            }),
-            Rule::code => {
-                let mut pairs = pair.into_inner();
-
-                let name = pairs.next().unwrap();
-                let name =
-                    WithSpan::new(ArcIntern::<str>::from(name.as_str()), name.as_span().into());
-
-                let arguments = pairs
-                    .map(|pair| parse_value(pair))
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let span = arguments
-                    .iter()
-                    .map(WithSpan::span)
-                    .fold(name.span().to_owned().after(), Span::merge);
-
-                Instruction::Code(Code::Macro(MacroCall {
-                    name,
-                    arguments: WithSpan::new(arguments, span),
-                }))
-            }
-            Rule::constant => Instruction::Constant(ArcIntern::<str>::from(
-                pair.into_inner().next().unwrap().as_str(),
-            )),
-            Rule::lua_call => Instruction::LuaCall(parse_lua_call(pair)?),
-            Rule::define => {
-                let mut pairs = pair.into_inner();
-
-                let name = pairs.next().unwrap();
-
-                let definition = pairs.next().unwrap();
-
-                let value = match definition.as_rule() {
-                    Rule::value => DefineValue::Value(parse_value(definition)?),
-                    Rule::lua_call => {
-                        let span = definition.as_span();
-
-                        DefineValue::LuaCall(WithSpan::new(
-                            parse_lua_call(definition)?,
-                            span.into(),
-                        ))
-                    }
-                    rule => unreachable!("{rule:?}"),
-                };
-
-                Instruction::Define(Define {
-                    name: WithSpan::new(ArcIntern::from(name.as_str()), name.as_span().into()),
-                    value,
-                })
-            }
-            Rule::registers => Instruction::Registers(parse_registers(pair)?),
-            _ => unreachable!("{rule:?}"),
-        },
-        span,
-    ))
-}
-
-fn parse_value(pair: Pair<'_, Rule>) -> Result<WithSpan<Value>, Box<Error<Rule>>> {
-    let pair = pair.into_inner().next().unwrap();
-    let rule = pair.as_rule();
-    let span = pair.as_span().into();
-
-    Ok(WithSpan::new(
-        match rule {
-            Rule::number => Value::Int(pair.as_str().parse::<Int<U>>().unwrap()),
-            Rule::constant => Value::Constant(ArcIntern::from(pair.as_str())),
-            Rule::ident => Value::Ident(ArcIntern::from(pair.as_str())),
-            Rule::block => Value::Block(parse_block(pair)?),
-            _ => unreachable!("{rule:?}"),
-        },
-        span,
-    ))
-}
-
-fn parse_block(pair: Pair<'_, Rule>) -> Result<Block, Box<Error<Rule>>> {
-    Ok(Block {
-        code: pair
-            .into_inner()
-            .map(|pair| parse_instruction(pair).map(|instruction| instruction.map(|v| (v, None))))
-            .collect::<Result<Vec<_>, _>>()?,
-        maybe_id: None,
-    })
-}
-
-fn parse_lua_call(pair: Pair<'_, Rule>) -> Result<LuaCall, Box<Error<Rule>>> {
-    let mut pairs = pair.into_inner();
-
-    let name = pairs.next().unwrap();
-
-    Ok(LuaCall {
-        function_name: WithSpan::new(ArcIntern::from(name.as_str()), name.as_span().into()),
-        args: pairs
-            .map(|pair| parse_value(pair))
-            .collect::<Result<_, _>>()?,
-    })
-}
-
-fn parse_macro(
-    pair: Pair<'_, Rule>,
-) -> Result<(WithSpan<ArcIntern<str>>, WithSpan<Macro>), Box<Error<Rule>>> {
-    let span = pair.as_span();
-    let mut pairs = pair.into_inner().peekable();
-
-    let name = pairs.next().unwrap();
-    let name_str = name.as_str();
-
-    let after = pairs.peek().unwrap();
-
-    let after = if let Rule::ident = after.as_rule() {
-        Some(WithSpan::new(
-            ArcIntern::from(after.as_str()),
-            after.as_span().into(),
-        ))
-    } else {
-        None
-    };
-
-    let mut branches = Vec::<WithSpan<MacroBranch>>::new();
-
-    for branch in pairs {
-        let span = branch.as_span();
-
-        let mut pairs = branch.into_inner();
-
-        let pattern = parse_pattern(pairs.next().unwrap());
-
-        for branch in &branches {
-            if let Some(counterexample) = pattern.conflicts_with(name_str, &branch.pattern) {
-                return Err(mk_error(
-                    format!(
-                        "This macro branch conflicts with the macro branch with the pattern `{}`. A counterexample matching both is `{counterexample}`.",
-                        branch.pattern.span().slice()
-                    ),
-                    span,
-                ));
-            }
-        }
-
-        let body = pairs.next().unwrap();
-
-        // TODO: Disallow macros emitting register declarations
-        let body = match body.as_rule() {
-            Rule::instruction => vec![parse_instruction(body)?.map(|v| (v, None))],
-            Rule::block => parse_block(body)?.code,
-            illegal => unreachable!("{illegal:?}"),
-        };
-
-        branches.push(WithSpan::new(
-            MacroBranch {
-                pattern,
-                code: body,
-            },
-            span.into(),
-        ));
-    }
-
-    Ok((
-        WithSpan::new(ArcIntern::from(name.as_str()), name.as_span().into()),
-        WithSpan::new(Macro::UserDefined { branches, after }, span.into()),
-    ))
-}
-
-fn parse_pattern(pair: Pair<Rule>) -> WithSpan<MacroPattern> {
-    let mut pattern = Vec::new();
-    let span = pair.as_span();
-
-    for pair in pair.into_inner() {
-        if Rule::macro_arg != pair.as_rule() {
-            break;
-        }
-
-        let span = pair.as_span();
-
-        let mut arg_pairs = pair.into_inner();
-
-        let first_pair = arg_pairs.next().unwrap();
-
-        pattern.push(WithSpan::new(
-            match first_pair.as_rule() {
-                Rule::ident => MacroPatternComponent::Word(ArcIntern::from(first_pair.as_str())),
-                Rule::constant => {
-                    let name = WithSpan::new(
-                        ArcIntern::from(first_pair.as_str()),
-                        first_pair.as_span().into(),
-                    );
-
-                    let ty = arg_pairs.next().unwrap();
-
-                    MacroPatternComponent::Argument {
-                        name,
-                        ty: WithSpan::new(
-                            match ty.as_str() {
-                                "block" => MacroArgTy::Block,
-                                "reg" => MacroArgTy::Reg,
-                                "int" => MacroArgTy::Int,
-                                "ident" => MacroArgTy::Ident,
-                                word => unreachable!("{word}"),
-                            },
-                            ty.as_span().into(),
-                        ),
-                    }
-                }
-                rule => unreachable!("{rule:?}"),
-            },
-            span.into(),
-        ));
-    }
-
-    WithSpan::new(MacroPattern(pattern), span.into())
-}
-
 #[cfg(test)]
 mod tests {
     use internment::ArcIntern;
+    use qter_core::File;
 
     use super::parse;
 
@@ -703,9 +486,9 @@ mod tests {
             .import pog.qat
         ";
 
-        match parse(code, &|_| Ok(ArcIntern::from("add 1 a")), false) {
+        match parse(File::from(code), &|_| Ok(ArcIntern::from("add 1 a")), false) {
             Ok(_) => {}
-            Err(e) => panic!("{e}"),
+            Err(e) => panic!("{e:?}"),
         }
     }
 }

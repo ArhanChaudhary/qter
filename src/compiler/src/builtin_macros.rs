@@ -1,10 +1,10 @@
+use chumsky::error::Rich;
 use internment::ArcIntern;
-use pest::error::Error;
-use qter_core::{Span, WithSpan, mk_error};
+use qter_core::{Span, WithSpan};
 
 use crate::{
     BlockID, Code, ExpansionInfo, Instruction, LabelReference, Macro, Primitive, RegisterReference,
-    Value, parsing::Rule,
+    Value,
 };
 
 use std::collections::HashMap;
@@ -13,7 +13,7 @@ fn expect_reg(
     reg_value: &WithSpan<Value>,
     syntax: &ExpansionInfo,
     block_id: BlockID,
-) -> Result<RegisterReference, Box<Error<Rule>>> {
+) -> Result<RegisterReference, Rich<'static, char, Span>> {
     match &**reg_value {
         Value::Ident(reg_name) => match syntax.block_info.get_register(
             &RegisterReference::parse(
@@ -21,26 +21,29 @@ fn expect_reg(
                 WithSpan::new(ArcIntern::clone(reg_name), reg_value.span().to_owned()),
             )
             .map_err(|e| {
-                mk_error(
+                Rich::custom(
+                    reg_value.span().clone(),
                     format!("Could not parse the modulus as a string: {e}"),
-                    reg_value.span(),
                 )
             })?,
         ) {
             Some((reg, _)) => Ok(reg),
-            None => Err(mk_error(
+            None => Err(Rich::custom(
+                reg_value.span().clone(),
                 format!("The register {reg_name} does not exist"),
-                reg_value.span(),
             )),
         },
-        _ => Err(mk_error("Expected a register", reg_value.span())),
+        _ => Err(Rich::custom(
+            reg_value.span().clone(),
+            "Expected a register",
+        )),
     }
 }
 
 fn expect_label(
     label_value: &WithSpan<Value>,
     block_id: BlockID,
-) -> Result<WithSpan<LabelReference>, Box<Error<Rule>>> {
+) -> Result<WithSpan<LabelReference>, Rich<'static, char, Span>> {
     match &**label_value {
         Value::Ident(label_name) => Ok(WithSpan::new(
             LabelReference {
@@ -49,7 +52,7 @@ fn expect_label(
             },
             label_value.span().to_owned(),
         )),
-        _ => Err(mk_error("Expected a label", label_value.span())),
+        _ => Err(Rich::custom(label_value.span().clone(), "Expected a label")),
     }
 }
 
@@ -57,11 +60,11 @@ fn print_like(
     syntax: &ExpansionInfo,
     mut args: WithSpan<Vec<WithSpan<Value>>>,
     block_id: BlockID,
-) -> Result<(Option<RegisterReference>, WithSpan<String>), Box<Error<Rule>>> {
+) -> Result<(Option<RegisterReference>, WithSpan<String>), Rich<'static, char, Span>> {
     if args.len() > 2 {
-        return Err(mk_error(
+        return Err(Rich::custom(
+            args.span().clone(),
             format!("Expected one or two arguments, found {}", args.len()),
-            args.span(),
         ));
     }
 
@@ -76,7 +79,7 @@ fn print_like(
     let message = match message.into_inner() {
         Value::Ident(raw_message) => {
             if !raw_message.starts_with('"') || !raw_message.ends_with('"') {
-                return Err(mk_error("The message must be quoted", span));
+                return Err(Rich::custom(span, "The message must be quoted"));
             }
 
             let raw_message = raw_message.strip_prefix('"').unwrap_or(&raw_message);
@@ -85,7 +88,7 @@ fn print_like(
             WithSpan::new(raw_message.to_owned(), span)
         }
         _ => {
-            return Err(mk_error("Expected a message", span));
+            return Err(Rich::custom(span, "Expected a message"));
         }
     };
 
@@ -104,9 +107,9 @@ pub fn builtin_macros(
         WithSpan::new(
             Macro::Builtin(|syntax, mut args, block_id| {
                 if args.len() != 2 {
-                    return Err(mk_error(
+                    return Err(Rich::custom(
+                        args.span().clone(),
                         format!("Expected two arguments, found {}", args.len()),
-                        args.span(),
                     ));
                 }
 
@@ -114,7 +117,7 @@ pub fn builtin_macros(
                 let amt = match *second_arg {
                     Value::Int(int) => WithSpan::new(int, second_arg.span().to_owned()),
                     _ => {
-                        return Err(mk_error("Expected a number", second_arg.span()));
+                        return Err(Rich::custom(second_arg.span().clone(), "Expected a number"));
                     }
                 };
 
@@ -134,9 +137,9 @@ pub fn builtin_macros(
         WithSpan::new(
             Macro::Builtin(|_syntax, mut args, block_id| {
                 if args.len() != 1 {
-                    return Err(mk_error(
+                    return Err(Rich::custom(
+                        args.span().clone(),
                         format!("Expected one argument, found {}", args.len()),
-                        args.span(),
                     ));
                 }
 
@@ -155,9 +158,9 @@ pub fn builtin_macros(
         WithSpan::new(
             Macro::Builtin(|syntax, mut args, block_id| {
                 if args.len() != 2 {
-                    return Err(mk_error(
+                    return Err(Rich::custom(
+                        args.span().clone(),
                         format!("Expected two arguments, found {}", args.len()),
-                        args.span(),
                     ));
                 }
 
@@ -177,9 +180,9 @@ pub fn builtin_macros(
         WithSpan::new(
             Macro::Builtin(|syntax, mut args, block_id| {
                 if args.len() != 2 {
-                    return Err(mk_error(
+                    return Err(Rich::custom(
+                        args.span().clone(),
                         format!("Expected two arguments, found {}", args.len()),
-                        args.span(),
                     ));
                 }
 
@@ -192,7 +195,7 @@ pub fn builtin_macros(
                         WithSpan::new(raw_message.trim_matches('"').to_owned(), span)
                     }
                     _ => {
-                        return Err(mk_error("Expected a message", span));
+                        return Err(Rich::custom(span, "Expected a message"));
                     }
                 };
 

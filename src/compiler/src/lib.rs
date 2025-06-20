@@ -3,11 +3,13 @@
 
 use std::{collections::HashMap, sync::Arc};
 
+use chumsky::error::Rich;
 use internment::ArcIntern;
 use lua::LuaMacros;
-use parsing::{Rule, parse};
-use pest::error::Error;
-use qter_core::{Int, ParseIntError, Program, U, WithSpan, architectures::Architecture};
+use parsing::parse;
+use qter_core::{
+    File, Int, ParseIntError, Program, Span, U, WithSpan, architectures::Architecture,
+};
 use strip_expanded::strip_expanded;
 
 use crate::macro_expansion::expand;
@@ -24,9 +26,9 @@ mod strip_expanded;
 ///
 /// Returns an error if the QAT program is invalid or if the macro expansion fails
 pub fn compile(
-    qat: &str,
+    qat: File,
     find_import: impl Fn(&str) -> Result<ArcIntern<str>, String>,
-) -> Result<Program, Box<Error<parsing::Rule>>> {
+) -> Result<Program, Vec<Rich<'static, char, Span>>> {
     let parsed = parse(qat, &find_import, false)?;
 
     let expanded = expand(parsed)?;
@@ -237,7 +239,7 @@ enum Macro {
             &ExpansionInfo,
             WithSpan<Vec<WithSpan<Value>>>,
             BlockID,
-        ) -> Result<Vec<Instruction>, Box<Error<Rule>>>,
+        ) -> Result<Vec<Instruction>, Rich<'static, char, Span>>,
     ),
 }
 
@@ -275,8 +277,8 @@ struct BlockID(pub usize);
 
 #[derive(Clone, Debug)]
 struct RegistersDecl {
+    block_id: BlockID,
     puzzles: Vec<Puzzle>,
-    maybe_block_id: Option<BlockID>,
 }
 
 #[derive(Debug, Clone)]

@@ -267,6 +267,8 @@ checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 name = "cli"
 version = "0.1.0"
 dependencies = [
+ "ariadne",
+ "chumsky",
  "clap",
  "color-eyre",
  "compiler",
@@ -540,6 +542,7 @@ dependencies = [
 name = "interpreter"
 version = "0.1.0"
 dependencies = [
+ "chumsky",
  "compiler",
  "internment",
  "qter_core",
@@ -983,6 +986,7 @@ version = "0.1.0"
 dependencies = [
  "ariadne",
  "bnum",
+ "chumsky",
  "internment",
  "itertools 0.14.0",
  "pog_ans",

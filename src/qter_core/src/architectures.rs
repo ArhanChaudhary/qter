@@ -5,11 +5,12 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
+use chumsky::{Parser, prelude::just};
 use internment::ArcIntern;
 use itertools::Itertools;
 
 use crate::{
-    Facelets, I, Int, U,
+    Extra, Facelets, File, I, Int, Span, U,
     discrete_math::{
         decode, lcm, lcm_iter, length_of_substring_that_this_string_is_n_repeated_copies_of,
     },
@@ -102,6 +103,7 @@ pub struct PermutationGroup {
     facelet_colors: Vec<ArcIntern<str>>,
     generators: HashMap<ArcIntern<str>, Permutation>,
     generator_inverses: HashMap<ArcIntern<str>, ArcIntern<str>>,
+    definition: Span,
 }
 
 impl PermutationGroup {
@@ -114,6 +116,7 @@ impl PermutationGroup {
     pub fn new(
         facelet_colors: Vec<ArcIntern<str>>,
         mut generators: HashMap<ArcIntern<str>, Permutation>,
+        definition: Span,
     ) -> PermutationGroup {
         assert!(!generators.is_empty());
 
@@ -149,6 +152,7 @@ impl PermutationGroup {
             facelet_colors,
             generators,
             generator_inverses,
+            definition,
         }
     }
 
@@ -162,6 +166,10 @@ impl PermutationGroup {
     #[must_use]
     pub fn facelet_colors(&self) -> &[ArcIntern<str>] {
         &self.facelet_colors
+    }
+
+    pub fn definition(&self) -> Span {
+        self.definition.clone()
     }
 
     /// The identity/solved permutation of the group
@@ -193,14 +201,14 @@ impl PermutationGroup {
     /// # Errors
     ///
     /// If any of the generator names don't exist, it will compose all of the generators before it and return the name of the generator that doesn't exist as an error
-    pub fn compose_generators_into<'a>(
+    pub fn compose_generators_into<'a, T: AsRef<str>>(
         &self,
         permutation: &mut Permutation,
-        generators: impl Iterator<Item = &'a ArcIntern<str>>,
-    ) -> Result<(), ArcIntern<str>> {
+        generators: impl Iterator<Item = &'a T>,
+    ) -> Result<(), &'a T> {
         for generator in generators {
             let Some(generator) = self.generators.get(&ArcIntern::from(generator.as_ref())) else {
-                return Err(ArcIntern::clone(generator));
+                return Err(generator);
             };
 
             permutation.compose_into(generator);
@@ -509,7 +517,9 @@ impl Algorithm {
     ) -> Result<Algorithm, ArcIntern<str>> {
         let mut permutation = perm_group.identity();
 
-        perm_group.compose_generators_into(&mut permutation, move_seq.iter())?;
+        perm_group
+            .compose_generators_into(&mut permutation, move_seq.iter())
+            .map_err(ArcIntern::clone)?;
 
         Ok(Algorithm {
             perm_group,
@@ -862,10 +872,10 @@ impl Architecture {
     /// # Errors
     ///
     /// If the algorithms are invalid, it will return an error
-    pub fn new(
+    pub fn new<T: AsRef<str>>(
         perm_group: Arc<PermutationGroup>,
-        algorithms: &[Vec<ArcIntern<str>>],
-    ) -> Result<Architecture, ArcIntern<str>> {
+        algorithms: &[Vec<T>],
+    ) -> Result<Architecture, &T> {
         let (registers, shared_facelets) = algorithms_to_cycle_generators(&perm_group, algorithms)?;
 
         Ok(Architecture {
@@ -971,152 +981,152 @@ impl Architecture {
 
 /// Get a puzzle definition by name
 #[must_use]
-pub fn puzzle_by_name(name: &str) -> Option<PuzzleDefinition> {
-    if name == "3x3" {
-        let base_moves = [
-            (
-                "U",
-                vec![
-                    vec![0, 2, 7, 5],
-                    vec![1, 4, 6, 3],
-                    vec![8, 32, 24, 16],
-                    vec![9, 33, 25, 17],
-                    vec![10, 34, 26, 18],
-                ],
-            ),
-            (
-                "L",
-                vec![
-                    vec![8, 10, 15, 13],
-                    vec![9, 12, 14, 11],
-                    vec![0, 16, 40, 39],
-                    vec![3, 19, 43, 36],
-                    vec![5, 21, 45, 34],
-                ],
-            ),
-            (
-                "F",
-                vec![
-                    vec![16, 18, 23, 21],
-                    vec![17, 20, 22, 19],
-                    vec![5, 24, 42, 15],
-                    vec![6, 27, 41, 12],
-                    vec![7, 29, 40, 10],
-                ],
-            ),
-            (
-                "R",
-                vec![
-                    vec![24, 26, 31, 29],
-                    vec![25, 28, 30, 27],
-                    vec![2, 37, 42, 18],
-                    vec![4, 35, 44, 20],
-                    vec![7, 32, 47, 23],
-                ],
-            ),
-            (
-                "B",
-                vec![
-                    vec![32, 34, 39, 37],
-                    vec![33, 36, 38, 35],
-                    vec![2, 8, 45, 31],
-                    vec![1, 11, 46, 28],
-                    vec![0, 13, 47, 26],
-                ],
-            ),
-            (
-                "D",
-                vec![
-                    vec![40, 42, 47, 45],
-                    vec![41, 44, 46, 43],
-                    vec![13, 21, 29, 37],
-                    vec![14, 22, 30, 38],
-                    vec![15, 23, 31, 39],
-                ],
-            ),
-        ];
+pub fn puzzle_definition() -> impl Parser<'static, File, Arc<PuzzleDefinition>, Extra> {
+    just("3x3")
+        .to_span()
+        .map(|span| {
+            let base_moves = [
+                (
+                    "U",
+                    vec![
+                        vec![0, 2, 7, 5],
+                        vec![1, 4, 6, 3],
+                        vec![8, 32, 24, 16],
+                        vec![9, 33, 25, 17],
+                        vec![10, 34, 26, 18],
+                    ],
+                ),
+                (
+                    "L",
+                    vec![
+                        vec![8, 10, 15, 13],
+                        vec![9, 12, 14, 11],
+                        vec![0, 16, 40, 39],
+                        vec![3, 19, 43, 36],
+                        vec![5, 21, 45, 34],
+                    ],
+                ),
+                (
+                    "F",
+                    vec![
+                        vec![16, 18, 23, 21],
+                        vec![17, 20, 22, 19],
+                        vec![5, 24, 42, 15],
+                        vec![6, 27, 41, 12],
+                        vec![7, 29, 40, 10],
+                    ],
+                ),
+                (
+                    "R",
+                    vec![
+                        vec![24, 26, 31, 29],
+                        vec![25, 28, 30, 27],
+                        vec![2, 37, 42, 18],
+                        vec![4, 35, 44, 20],
+                        vec![7, 32, 47, 23],
+                    ],
+                ),
+                (
+                    "B",
+                    vec![
+                        vec![32, 34, 39, 37],
+                        vec![33, 36, 38, 35],
+                        vec![2, 8, 45, 31],
+                        vec![1, 11, 46, 28],
+                        vec![0, 13, 47, 26],
+                    ],
+                ),
+                (
+                    "D",
+                    vec![
+                        vec![40, 42, 47, 45],
+                        vec![41, 44, 46, 43],
+                        vec![13, 21, 29, 37],
+                        vec![14, 22, 30, 38],
+                        vec![15, 23, 31, 39],
+                    ],
+                ),
+            ];
 
-        let mut generators = HashMap::new();
+            let mut generators = HashMap::new();
 
-        for (name, cycles) in base_moves {
-            let perm = Permutation::from_cycles(cycles);
+            for (name, cycles) in base_moves {
+                let perm = Permutation::from_cycles(cycles);
 
-            generators.insert(ArcIntern::from(name), perm.clone());
+                generators.insert(ArcIntern::from(name), perm.clone());
 
-            let mut perm2 = perm.clone();
-            perm2.compose_into(&perm);
+                let mut perm2 = perm.clone();
+                perm2.compose_into(&perm);
 
-            generators.insert(ArcIntern::from(format!("{name}2")), perm2.clone());
+                generators.insert(ArcIntern::from(format!("{name}2")), perm2.clone());
 
-            perm2.compose_into(&perm);
+                perm2.compose_into(&perm);
 
-            generators.insert(ArcIntern::from(format!("{name}'")), perm2);
-        }
-
-        println!("{generators:#?}");
-
-        let group = Arc::new(PermutationGroup::new(
-            [
-                ArcIntern::from("White"),
-                ArcIntern::from("Green"),
-                ArcIntern::from("Red"),
-                ArcIntern::from("Blue"),
-                ArcIntern::from("Orange"),
-                ArcIntern::from("Yellow"),
-            ]
-            .iter()
-            .flat_map(|v| (0..8).map(|_| ArcIntern::clone(v)))
-            .collect(),
-            generators,
-        ));
-
-        let presets: [Arc<Architecture>; 6] = [
-            (&["R U2 D' B D'"] as &[&str], None),
-            (&["U", "D"], None),
-            (&["R' F' L U' L U L F U' R", "U F R' D' R2 F R' U' D"], None),
-            (&["U R U' D2 B", "B U2 B' L' U2 B U L' B L B2 L"], Some(0)),
-            (
-                &[
-                    "U L2 B' L U' B' U2 R B' R' B L",
-                    "R2 L U' R' L2 F' D R' D L B2 D2",
-                    "L2 F2 U L' F D' F' U' L' F U D L' U'",
-                ],
-                Some(1),
-            ),
-            (
-                &[
-                    "U L B' L B' U R' D U2 L2 F2",
-                    "D L' F L2 B L' F' L B' D' L'",
-                    "R' U' L' F2 L F U F R L U'",
-                    "B2 U2 L F' R B L2 D2 B R' F L",
-                ],
-                None,
-            ),
-        ]
-        .map(|(algs, maybe_index): (&[&str], Option<usize>)| {
-            let mut arch = Architecture::new(
-                Arc::clone(&group),
-                &algs
-                    .iter()
-                    .map(|alg| alg.split(' ').map(ArcIntern::from).collect_vec())
-                    .collect_vec(),
-            )
-            .unwrap();
-
-            if let Some(index) = maybe_index {
-                arch.set_optimized_table(Cow::Borrowed(OPTIMIZED_TABLES[index]));
+                generators.insert(ArcIntern::from(format!("{name}'")), perm2);
             }
 
-            Arc::new(arch)
-        });
+            let group = Arc::new(PermutationGroup::new(
+                [
+                    ArcIntern::from("White"),
+                    ArcIntern::from("Green"),
+                    ArcIntern::from("Red"),
+                    ArcIntern::from("Blue"),
+                    ArcIntern::from("Orange"),
+                    ArcIntern::from("Yellow"),
+                ]
+                .iter()
+                .flat_map(|v| (0..8).map(|_| ArcIntern::clone(v)))
+                .collect(),
+                generators,
+                span,
+            ));
 
-        Some(PuzzleDefinition {
-            perm_group: group,
-            presets: presets.into(),
+            let presets: [Arc<Architecture>; 6] = [
+                (&["R U2 D' B D'"] as &[&str], None),
+                (&["U", "D"], None),
+                (&["R' F' L U' L U L F U' R", "U F R' D' R2 F R' U' D"], None),
+                (&["U R U' D2 B", "B U2 B' L' U2 B U L' B L B2 L"], Some(0)),
+                (
+                    &[
+                        "U L2 B' L U' B' U2 R B' R' B L",
+                        "R2 L U' R' L2 F' D R' D L B2 D2",
+                        "L2 F2 U L' F D' F' U' L' F U D L' U'",
+                    ],
+                    Some(1),
+                ),
+                (
+                    &[
+                        "U L B' L B' U R' D U2 L2 F2",
+                        "D L' F L2 B L' F' L B' D' L'",
+                        "R' U' L' F2 L F U F R L U'",
+                        "B2 U2 L F' R B L2 D2 B R' F L",
+                    ],
+                    None,
+                ),
+            ]
+            .map(|(algs, maybe_index): (&[&str], Option<usize>)| {
+                let mut arch = Architecture::new(
+                    Arc::clone(&group),
+                    &algs
+                        .iter()
+                        .map(|alg| alg.split(' ').map(ArcIntern::from).collect_vec())
+                        .collect_vec(),
+                )
+                .unwrap();
+
+                if let Some(index) = maybe_index {
+                    arch.set_optimized_table(Cow::Borrowed(OPTIMIZED_TABLES[index]));
+                }
+
+                Arc::new(arch)
+            });
+
+            Arc::new(PuzzleDefinition {
+                perm_group: group,
+                presets: presets.into(),
+            })
         })
-    } else {
-        None
-    }
+        .memoized()
 }
 
 #[cfg(test)]
@@ -1124,16 +1134,17 @@ mod tests {
 
     use std::sync::Arc;
 
+    use chumsky::Parser;
     use internment::ArcIntern;
     use itertools::Itertools;
 
-    use crate::{I, Int, U};
+    use crate::{File, I, Int, U};
 
-    use super::{Architecture, puzzle_by_name};
+    use super::{Architecture, puzzle_definition};
 
     #[test]
     fn three_by_three() {
-        let cube_def = puzzle_by_name("3x3").unwrap();
+        let cube_def = puzzle_definition().parse(File::from("3x3")).unwrap();
 
         for (arch, expected) in &[
             (&["U", "D"][..], &[4, 4][..]),
@@ -1171,7 +1182,7 @@ mod tests {
 
     #[test]
     fn exponentiation() {
-        let cube_def = puzzle_by_name("3x3").unwrap();
+        let cube_def = puzzle_definition().parse(File::from("3x3")).unwrap();
 
         let mut perm = cube_def.perm_group.identity();
 
