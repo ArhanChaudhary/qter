@@ -137,7 +137,7 @@ fn shebang<S: Inspector<'static, File> + 'static>()
     any().repeated().delimited_by(just("#!"), just('\n')).to(())
 }
 
-fn whitespace<S: Inspector<'static, File> + 'static>()
+fn req_whitespace<S: Inspector<'static, File> + 'static>()
 -> impl Parser<'static, File, (), ExtraAndState<S>> {
     choice((
         just(' ').to(()),
@@ -149,6 +149,12 @@ fn whitespace<S: Inspector<'static, File> + 'static>()
         any().repeated().delimited_by(just("--"), just('\n')).to(()),
     ))
     .repeated()
+    .at_least(1)
+}
+
+fn whitespace<S: Inspector<'static, File> + 'static>()
+-> impl Parser<'static, File, (), ExtraAndState<S>> {
+    req_whitespace().or_not().to(())
 }
 
 fn nl<S: Inspector<'static, File> + 'static>() -> impl Parser<'static, File, (), ExtraAndState<S>> {
@@ -159,11 +165,20 @@ fn nl<S: Inspector<'static, File> + 'static>() -> impl Parser<'static, File, (),
         .allow_trailing()
 }
 
+fn nlm<S: Inspector<'static, File> + 'static>() -> impl Parser<'static, File, (), ExtraAndState<S>>
+{
+    just('\n')
+        .separated_by(whitespace())
+        .allow_leading()
+        .allow_trailing()
+}
+
 fn number<S: Inspector<'static, File> + 'static>()
 -> impl Parser<'static, File, (), ExtraAndState<S>> {
     any()
         .filter(|c: &char| c.is_ascii_digit())
         .repeated()
+        .at_least(1)
         .to(())
 }
 
@@ -178,8 +193,6 @@ fn intu<S: Inspector<'static, File> + 'static>()
 
 fn ident<S: Inspector<'static, File> + 'static>()
 -> impl Parser<'static, File, WithSpan<ArcIntern<str>>, ExtraAndState<S>> {
-    let evil_idents = choice((number(), just("lua").to(())));
-
     let special_char = choice((
         just('{').to(()),
         just('}').to(()),
@@ -195,20 +208,23 @@ fn ident<S: Inspector<'static, File> + 'static>()
         just(')').to(()),
         just('!').to(()),
         just('"').to(()),
-        whitespace(),
+        req_whitespace(),
     ));
 
-    group((
-        evil_idents.not(),
-        choice((
-            group((special_char.not(), any())).to_span(),
-            any()
-                .repeated()
-                .to_span()
-                .delimited_by(just('"'), just('"')),
-        )),
+    choice((
+        group((special_char.not(), any()))
+            .repeated()
+            .at_least(1)
+            .to_span()
+            .filter(|span: &Span| {
+                span.slice().chars().any(|c| !c.is_ascii_digit()) && span.slice() != "lua"
+            }),
+        group((just('"').not(), any()))
+            .repeated()
+            .to_span()
+            .delimited_by(just('"'), just('"')),
     ))
-    .map(|(_, v)| WithSpan::new(ArcIntern::from(v.slice()), v))
+    .map(|v: Span| WithSpan::new(ArcIntern::from(v.slice()), v))
 }
 
 fn registers() -> impl Parser<'static, File, RegistersDecl, Extra> {
@@ -224,7 +240,8 @@ fn registers() -> impl Parser<'static, File, RegistersDecl, Extra> {
             .collect(),
         just("}"),
     ))
-    .map(|(_, _, _, puzzles, _)| RegistersDecl {
+    .delimited_by(nlm(), nlm())
+    .map(|(_, (), _, puzzles, _)| RegistersDecl {
         puzzles,
         block_id: BlockID(0),
     })
@@ -243,22 +260,26 @@ fn register_decl_unswitchable() -> impl Parser<'static, File, Puzzle, Extra> {
         choice((just("<-").to(()), just('←').to(()))).delimited_by(whitespace(), whitespace()),
         register_architecture(),
     ))
-    .try_map(|(mut names, _, archs), span| match archs {
+    .try_map(|(mut names, (), archs), span| match archs {
         PuzzleUnnamed::Theoretical { order } => {
-            if names.len() != 1 {
-                Err(Rich::custom(
-                    span,
-                    format!("Expected one name whereas {} were provided.", names.len()),
-                ))
-            } else {
+            if names.len() == 1 {
                 Ok(Puzzle::Theoretical {
                     name: names.pop().unwrap(),
                     order,
                 })
+            } else {
+                Err(Rich::custom(
+                    span,
+                    format!("Expected one name whereas {} were provided.", names.len()),
+                ))
             }
         }
         PuzzleUnnamed::Real { architecture } => {
-            if architecture.registers().len() != names.len() {
+            if architecture.registers().len() == names.len() {
+                Ok(Puzzle::Real {
+                    architectures: vec![(names, architecture)],
+                })
+            } else {
                 Err(Rich::custom(
                     span,
                     format!(
@@ -267,10 +288,6 @@ fn register_decl_unswitchable() -> impl Parser<'static, File, Puzzle, Extra> {
                         names.len()
                     ),
                 ))
-            } else {
-                Ok(Puzzle::Real {
-                    architectures: vec![(names, architecture)],
-                })
             }
         }
     })
@@ -301,7 +318,7 @@ fn register_architecture() -> impl Parser<'static, File, PuzzleUnnamed, Extra> {
             whitespace(),
             intu().map_with(|v, extra| extra.span().with(v)),
         ))
-        .map(|(_, _, order)| PuzzleUnnamed::Theoretical { order }),
+        .map(|(_, (), order)| PuzzleUnnamed::Theoretical { order }),
         group((
             puzzle_definition(),
             whitespace(),
@@ -310,7 +327,7 @@ fn register_architecture() -> impl Parser<'static, File, PuzzleUnnamed, Extra> {
             choice((
                 intu().map(|v| vec![v]),
                 intu()
-                    .separated_by(just(",").delimited_by(whitespace(), whitespace()))
+                    .separated_by(just(",").delimited_by(nlm(), nlm()))
                     .at_least(1)
                     .collect()
                     .delimited_by(just("("), just(")")),
@@ -318,7 +335,7 @@ fn register_architecture() -> impl Parser<'static, File, PuzzleUnnamed, Extra> {
             .map_with(|v, data| data.span().with(v)),
         ))
         .try_map(
-            |(def, _, _, _, orders), span| match def.get_preset(&orders) {
+            |(def, (), _, (), orders), span| match def.get_preset(&orders) {
                 Some(arch) => Ok(PuzzleUnnamed::Real {
                     architecture: span.with(arch),
                 }),
@@ -334,14 +351,15 @@ fn register_architecture() -> impl Parser<'static, File, PuzzleUnnamed, Extra> {
             choice((
                 algorithm().map(|v| vec![v]),
                 algorithm()
-                    .separated_by(just(",").delimited_by(whitespace(), whitespace()))
+                    .separated_by(just(",").delimited_by(nlm(), nlm()))
+                    .allow_trailing()
                     .at_least(1)
                     .collect()
                     .delimited_by(just("("), just(")")),
             ))
             .map_with(|v, data| data.span().with(v)),
         ))
-        .try_map(|(def, _, algs), span| {
+        .try_map(|(def, (), algs), span| {
             match Architecture::new(Arc::clone(&def.perm_group), &algs) {
                 Ok(arch) => Ok(PuzzleUnnamed::Real {
                     architecture: span.with(Arc::new(arch)),
@@ -362,6 +380,8 @@ fn register_decl_switchable() -> impl Parser<'static, File, Puzzle, Extra> {
             Puzzle::Real { architectures } => Ok(architectures),
         })
         .separated_by(nl())
+        .allow_leading()
+        .allow_trailing()
         .at_least(1)
         .collect::<Vec<_>>()
         .delimited_by(just('('), just(')'))
@@ -441,10 +461,65 @@ enum Statement<'a> {
 
 #[cfg(test)]
 mod tests {
+    use chumsky::Parser;
     use internment::ArcIntern;
     use qter_core::File;
 
-    use super::parse;
+    use super::{ident, number, parse, registers};
+
+    #[test]
+    fn test_number() {
+        number::<()>().parse(File::from("123")).unwrap();
+        number::<()>().parse(File::from("12398263596868928956891896286935689869218695689689297479561963469856981968423679569173479159")).unwrap();
+
+        assert!(number::<()>().parse(File::from("")).has_errors());
+        assert!(number::<()>().parse(File::from("3x3")).has_errors());
+        assert!(number::<()>().parse(File::from("0.12")).has_errors());
+        assert!(number::<()>().parse(File::from("-11")).has_errors());
+        assert!(number::<()>().parse(File::from("-11")).has_errors());
+    }
+
+    #[test]
+    fn test_ident() {
+        ident::<()>().parse(File::from("a")).unwrap();
+        ident::<()>().parse(File::from("A")).unwrap();
+        ident::<()>().parse(File::from("3x3")).unwrap();
+        ident::<()>().parse(File::from("thingy")).unwrap();
+        ident::<()>().parse(File::from("pluah")).unwrap();
+        ident::<()>().parse(File::from("->")).unwrap();
+        ident::<()>().parse(File::from("\"345\"")).unwrap();
+        ident::<()>().parse(File::from("\"lua\"")).unwrap();
+
+        assert!(ident::<()>().parse(File::from("345")).has_errors());
+        assert!(ident::<()>().parse(File::from("lua")).has_errors());
+        assert!(ident::<()>().parse(File::from("thing<-thing")).has_errors());
+        assert!(ident::<()>().parse(File::from("aa.aa")).has_errors());
+        assert!(ident::<()>().parse(File::from("!aaaa")).has_errors());
+        assert!(ident::<()>().parse(File::from("aaaa)")).has_errors());
+    }
+
+    #[test]
+    fn test_registers() {
+        let code = "
+            .registers {
+                a, b <- 3x3 builtin (90, 90)
+                (
+                    c, d ← 3x3 builtin (210, 24)
+                    d, e, f ← 3x3 builtin (30, 30, 30)
+                )
+                f ← theoretical 90
+                g, h ← 3x3 (U, D)
+            }
+        ";
+
+        let errs = registers().parse(File::from(code)).into_errors();
+
+        for err in &errs {
+            println!("{err}; {:?}", err.span().line_and_col());
+        }
+
+        assert!(errs.is_empty());
+    }
 
     #[test]
     fn bruh() {

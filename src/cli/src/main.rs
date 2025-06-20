@@ -101,6 +101,10 @@ fn main() -> color_eyre::Result<()> {
                         Err(errs) => {
                             for err in &errs {
                                 Report::build(ReportKind::Error, err.span().clone())
+                                    .with_config(
+                                        ariadne::Config::new()
+                                            .with_index_type(ariadne::IndexType::Byte),
+                                    )
                                     .with_message(err.to_string())
                                     .with_label(
                                         Label::new(err.span().clone())

@@ -106,7 +106,15 @@ impl Span {
             let mut current_line = 1;
             let mut current_col = 1;
 
-            for c in self.source.chars().take(self.start) {
+            let mut taken = 0;
+
+            for c in self.source.chars() {
+                if taken > self.start() {
+                    break;
+                }
+
+                taken += c.len_utf8();
+
                 if c == '\n' {
                     current_line += 1;
                     current_col = 1;
