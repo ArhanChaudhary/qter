@@ -3,7 +3,7 @@ use std::{
     sync::OnceLock,
 };
 
-use chumsky::{extra::Full, input::ValueInput, prelude::*};
+use chumsky::{container::Container, extra::Full, input::ValueInput, prelude::*};
 use internment::ArcIntern;
 
 pub type Extra = Full<Rich<'static, char, Span>, (), ()>;
@@ -274,6 +274,12 @@ impl<T> WithSpan<T> {
     }
 }
 
+impl<T> WithSpan<MaybeErr<T>> {
+    pub fn spanspose(self) -> MaybeErr<WithSpan<T>> {
+        self.value.map(|v| self.span.with(v))
+    }
+}
+
 impl<T: PartialEq> PartialEq for WithSpan<T> {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
@@ -285,5 +291,43 @@ impl<T: Eq> Eq for WithSpan<T> {}
 impl<T: core::hash::Hash> core::hash::Hash for WithSpan<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.value.hash(state);
+    }
+}
+
+pub enum MaybeErr<T> {
+    Some(T),
+    None,
+}
+
+impl<T> MaybeErr<T> {
+    pub fn map<X>(self, f: impl FnOnce(T) -> X) -> MaybeErr<X> {
+        match self {
+            MaybeErr::Some(v) => MaybeErr::Some(f(v)),
+            MaybeErr::None => MaybeErr::None,
+        }
+    }
+}
+
+impl<T> MaybeErr<MaybeErr<T>> {
+    pub fn flatten(self) -> MaybeErr<T> {
+        match self {
+            MaybeErr::Some(v) => v,
+            MaybeErr::None => MaybeErr::None,
+        }
+    }
+}
+
+impl<X, T: Container<X>> Container<MaybeErr<X>> for MaybeErr<T> {
+    fn push(&mut self, item: MaybeErr<X>) {
+        match (self, item) {
+            (MaybeErr::Some(container), MaybeErr::Some(item)) => container.push(item),
+            (this, _) => *this = MaybeErr::None,
+        }
+    }
+}
+
+impl<T: Default> Default for MaybeErr<T> {
+    fn default() -> Self {
+        MaybeErr::Some(T::default())
     }
 }

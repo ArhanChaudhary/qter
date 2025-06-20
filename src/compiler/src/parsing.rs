@@ -15,7 +15,7 @@ use chumsky::{
 use internment::ArcIntern;
 use itertools::Itertools;
 use qter_core::{
-    Extra, File, Int, Span, U, WithSpan,
+    Extra, File, Int, MaybeErr, Span, U, WithSpan,
     architectures::{Architecture, puzzle_definition},
 };
 
@@ -122,10 +122,12 @@ fn parser() -> impl Parser<'static, File, (), ExtraAndSyntax> {
         whitespace(),
         registers().with_state(()).map_with(
             |regs, data: &mut MapExtra<'_, '_, File, ExtraAndSyntax>| {
-                let span = data.span();
-                data.state()
-                    .code
-                    .push(span.with((Instruction::Registers(regs), Some(BlockID(0)))));
+                if let MaybeErr::Some(regs) = regs {
+                    let span = data.span();
+                    data.state()
+                        .code
+                        .push(span.with((Instruction::Registers(regs), Some(BlockID(0)))));
+                }
             },
         ),
     ))
@@ -183,11 +185,16 @@ fn number<S: Inspector<'static, File> + 'static>()
 }
 
 fn intu<S: Inspector<'static, File> + 'static>()
--> impl Parser<'static, File, Int<U>, ExtraAndState<S>> {
-    number().try_map(|(), span| {
-        span.slice()
-            .parse()
-            .map_err(|e| Rich::custom(span, format!("Could not parse as an integer: {e}")))
+-> impl Parser<'static, File, MaybeErr<Int<U>>, ExtraAndState<S>> {
+    number().validate(|(), data, emitter| match data.span().slice().parse() {
+        Ok(v) => MaybeErr::Some(v),
+        Err(e) => {
+            emitter.emit(Rich::custom(
+                data.span(),
+                format!("Could not parse as an integer: {e}"),
+            ));
+            MaybeErr::None
+        }
     })
 }
 
@@ -227,7 +234,7 @@ fn ident<S: Inspector<'static, File> + 'static>()
     .map(|v: Span| WithSpan::new(ArcIntern::from(v.slice()), v))
 }
 
-fn registers() -> impl Parser<'static, File, RegistersDecl, Extra> {
+fn registers() -> impl Parser<'static, File, MaybeErr<RegistersDecl>, Extra> {
     group((
         just(".registers"),
         whitespace(),
@@ -237,21 +244,23 @@ fn registers() -> impl Parser<'static, File, RegistersDecl, Extra> {
             .at_least(1)
             .allow_leading()
             .allow_trailing()
-            .collect(),
+            .collect::<MaybeErr<Vec<_>>>(),
         just("}"),
     ))
     .delimited_by(nlm(), nlm())
-    .map(|(_, (), _, puzzles, _)| RegistersDecl {
-        puzzles,
-        block_id: BlockID(0),
+    .map(|(_, (), _, puzzles, _)| {
+        puzzles.map(|puzzles| RegistersDecl {
+            puzzles,
+            block_id: BlockID(0),
+        })
     })
 }
 
-fn register_decl() -> impl Parser<'static, File, Puzzle, Extra> {
+fn register_decl() -> impl Parser<'static, File, MaybeErr<Puzzle>, Extra> {
     choice((register_decl_switchable(), register_decl_unswitchable()))
 }
 
-fn register_decl_unswitchable() -> impl Parser<'static, File, Puzzle, Extra> {
+fn register_decl_unswitchable() -> impl Parser<'static, File, MaybeErr<Puzzle>, Extra> {
     group((
         ident()
             .separated_by(just(',').delimited_by(whitespace(), whitespace()))
@@ -260,36 +269,44 @@ fn register_decl_unswitchable() -> impl Parser<'static, File, Puzzle, Extra> {
         choice((just("<-").to(()), just('←').to(()))).delimited_by(whitespace(), whitespace()),
         register_architecture(),
     ))
-    .try_map(|(mut names, (), archs), span| match archs {
-        PuzzleUnnamed::Theoretical { order } => {
-            if names.len() == 1 {
-                Ok(Puzzle::Theoretical {
-                    name: names.pop().unwrap(),
-                    order,
-                })
-            } else {
-                Err(Rich::custom(
-                    span,
-                    format!("Expected one name whereas {} were provided.", names.len()),
-                ))
-            }
-        }
-        PuzzleUnnamed::Real { architecture } => {
-            if architecture.registers().len() == names.len() {
-                Ok(Puzzle::Real {
-                    architectures: vec![(names, architecture)],
-                })
-            } else {
-                Err(Rich::custom(
-                    span,
-                    format!(
-                        "Expected {} names whereas {} were provided.",
-                        architecture.registers().len(),
-                        names.len()
-                    ),
-                ))
-            }
-        }
+    .validate(|(mut names, (), archs), data, emitter| {
+        archs
+            .map(|archs| match archs {
+                PuzzleUnnamed::Theoretical { order } => {
+                    if names.len() == 1 {
+                        MaybeErr::Some(Puzzle::Theoretical {
+                            name: names.pop().unwrap(),
+                            order,
+                        })
+                    } else {
+                        emitter.emit(Rich::custom(
+                            data.span(),
+                            format!("Expected one name whereas {} were provided.", names.len()),
+                        ));
+
+                        MaybeErr::None
+                    }
+                }
+                PuzzleUnnamed::Real { architecture } => {
+                    if architecture.registers().len() == names.len() {
+                        MaybeErr::Some(Puzzle::Real {
+                            architectures: vec![(names, architecture)],
+                        })
+                    } else {
+                        emitter.emit(Rich::custom(
+                            data.span(),
+                            format!(
+                                "Expected {} names whereas {} were provided.",
+                                architecture.registers().len(),
+                                names.len()
+                            ),
+                        ));
+
+                        MaybeErr::None
+                    }
+                }
+            })
+            .flatten()
     })
 }
 
@@ -311,40 +328,40 @@ fn algorithm() -> impl Parser<'static, File, Vec<Span>, Extra> {
         .collect()
 }
 
-fn register_architecture() -> impl Parser<'static, File, PuzzleUnnamed, Extra> {
+fn register_architecture() -> impl Parser<'static, File, MaybeErr<PuzzleUnnamed>, Extra> {
     choice((
         group((
             just("theoretical"),
             whitespace(),
-            intu().map_with(|v, extra| extra.span().with(v)),
+            intu().map_with(|v, extra| v.map(|v| extra.span().with(v))),
         ))
-        .map(|(_, (), order)| PuzzleUnnamed::Theoretical { order }),
+        .map(|(_, (), order)| order.map(|order| PuzzleUnnamed::Theoretical { order })),
         group((
             puzzle_definition(),
             whitespace(),
             just("builtin"),
             whitespace(),
             choice((
-                intu().map(|v| vec![v]),
+                intu().map(|v| v.map(|v| vec![v])),
                 intu()
                     .separated_by(just(",").delimited_by(nlm(), nlm()))
                     .at_least(1)
-                    .collect()
+                    .collect::<MaybeErr<Vec<_>>>()
                     .delimited_by(just("("), just(")")),
             ))
             .map_with(|v, data| data.span().with(v)),
         ))
-        .try_map(
-            |(def, (), _, (), orders), span| match def.get_preset(&orders) {
-                Some(arch) => Ok(PuzzleUnnamed::Real {
-                    architecture: span.with(arch),
-                }),
-                None => Err(Rich::custom(
-                    orders.span().clone(),
-                    "There does not exist a preset architecture with the given orders.",
-                )),
+        .validate(
+            |(def, (), _, (), orders), data, emitter| orders.spanspose().map(|orders| if let Some(arch) = def.get_preset(&orders) { MaybeErr::Some(PuzzleUnnamed::Real {
+                architecture: data.span().with(arch),
+            }) } else {
+                emitter.emit(Rich::custom(
+                                orders.span().clone(),
+                                "There does not exist a preset architecture with the given orders.",
+                            ));
+                            MaybeErr::None
             },
-        ),
+        ).flatten()),
         group((
             puzzle_definition(),
             whitespace(),
@@ -359,40 +376,52 @@ fn register_architecture() -> impl Parser<'static, File, PuzzleUnnamed, Extra> {
             ))
             .map_with(|v, data| data.span().with(v)),
         ))
-        .try_map(|(def, (), algs), span| {
+        .validate(|(def, (), algs), data, emitter| {
             match Architecture::new(Arc::clone(&def.perm_group), &algs) {
-                Ok(arch) => Ok(PuzzleUnnamed::Real {
-                    architecture: span.with(Arc::new(arch)),
+                Ok(arch) => MaybeErr::Some(PuzzleUnnamed::Real {
+                    architecture: data.span().with(Arc::new(arch)),
                 }),
-                Err(bad_generator) => Err(Rich::custom(bad_generator.clone(), format!("This generator does not exist in the given permutation group. The options are: {}", def.perm_group.generators().map(|(name, _)| name).join(&ArcIntern::from(", "))))),
+                Err(bad_generator) => {
+                    emitter.emit(Rich::custom(bad_generator.clone(), format!("This generator does not exist in the given permutation group. The options are: {}", def.perm_group.generators().map(|(name, _)| name).join(&ArcIntern::from(", ")))));
+
+                    MaybeErr::None
+                },
             }
         }),
     ))
 }
 
-fn register_decl_switchable() -> impl Parser<'static, File, Puzzle, Extra> {
+fn register_decl_switchable() -> impl Parser<'static, File, MaybeErr<Puzzle>, Extra> {
     register_decl_unswitchable()
-        .try_map(|v, span| match v {
-            Puzzle::Theoretical { name: _, order: _ } => Err(Rich::custom(
-                span,
-                "Theoretical architectures cannot be switchable.",
-            )),
-            Puzzle::Real { architectures } => Ok(architectures),
+        .validate(|v, data, emitter| {
+            v.map(|v| match v {
+                Puzzle::Theoretical { name: _, order: _ } => {
+                    emitter.emit(Rich::custom(
+                        data.span(),
+                        "Theoretical architectures cannot be switchable.",
+                    ));
+                    MaybeErr::None
+                }
+                Puzzle::Real { architectures } => MaybeErr::Some(architectures),
+            })
+            .flatten()
         })
         .separated_by(nl())
         .allow_leading()
         .allow_trailing()
         .at_least(1)
-        .collect::<Vec<_>>()
+        .collect::<MaybeErr<Vec<_>>>()
         .delimited_by(just('('), just(')'))
-        .map(|v| Puzzle::Real {
-            architectures: v
-                .into_iter()
-                .reduce(|mut a, b| {
-                    a.extend_from_slice(&b);
-                    a
-                })
-                .unwrap(),
+        .map(|v| {
+            v.map(|v| Puzzle::Real {
+                architectures: v
+                    .into_iter()
+                    .reduce(|mut a, b| {
+                        a.extend_from_slice(&b);
+                        a
+                    })
+                    .unwrap(),
+            })
         })
 }
 
