@@ -4,8 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-pest = "2.7"
-pest_derive = "2.7"
 qter_core = { path = "../qter_core" }
 internment = { version = "0.8", features = [ "arc" ] }
 itertools = "0.14"
