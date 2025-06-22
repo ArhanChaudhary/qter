@@ -8,7 +8,7 @@ pest = "2.7"
 pest_derive = "2.7"
 qter_core = { path = "../qter_core" }
 internment = { version = "0.8", features = [ "arc" ] }
-itertools = "0.13"
+itertools = "0.14"
 mlua = { version = "0.10.2", features = ["lua54", "vendored", "send"] }
 chumsky = "0.10.1"
 ariadne = "0.5.1"

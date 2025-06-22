@@ -1,6 +1,5 @@
 use std::{cell::OnceCell, mem};
 
-use ariadne::Span as _Span;
 use chumsky::error::Rich;
 use internment::ArcIntern;
 use itertools::{Either, Itertools};
@@ -222,7 +221,7 @@ mod tests {
                 halt \"Poggers\" b
         ";
 
-        let parsed = match parse(File::from(code), &|_| unreachable!(), false) {
+        let parsed = match parse(&File::from(code), |_| unreachable!(), false) {
             Ok(v) => v,
             Err(e) => panic!("{e:?}"),
         };

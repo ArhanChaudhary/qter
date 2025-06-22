@@ -84,7 +84,7 @@ fn main() -> color_eyre::Result<()> {
                 Some("qat") => {
                     let qat = File::from(fs::read_to_string(&file)?);
 
-                    match compile(qat.clone(), |name| {
+                    match compile(&qat, |name| {
                         let path = PathBuf::from(name);
 
                         if path.ancestors().count() > 1 {

@@ -306,6 +306,13 @@ impl<T> MaybeErr<T> {
             MaybeErr::None => MaybeErr::None,
         }
     }
+
+    pub fn option(self) -> Option<T> {
+        match self {
+            MaybeErr::Some(v) => Some(v),
+            MaybeErr::None => None,
+        }
+    }
 }
 
 impl<T> MaybeErr<MaybeErr<T>> {

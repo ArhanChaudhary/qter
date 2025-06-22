@@ -320,7 +320,7 @@ dependencies = [
  "ariadne",
  "chumsky",
  "internment",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "mlua",
  "pest",
  "pest_derive",
@@ -973,7 +973,7 @@ name = "puzzle_geometry"
 version = "0.1.0"
 dependencies = [
  "internment",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "nalgebra",
  "phf",
  "qter_core",

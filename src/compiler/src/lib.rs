@@ -26,10 +26,10 @@ mod strip_expanded;
 ///
 /// Returns an error if the QAT program is invalid or if the macro expansion fails
 pub fn compile(
-    qat: File,
-    find_import: impl Fn(&str) -> Result<ArcIntern<str>, String>,
+    qat: &File,
+    find_import: impl Fn(&str) -> Result<ArcIntern<str>, String> + 'static,
 ) -> Result<Program, Vec<Rich<'static, char, Span>>> {
-    let parsed = parse(qat, &find_import, false)?;
+    let parsed = parse(qat, find_import, false)?;
 
     let expanded = expand(parsed)?;
 
@@ -39,6 +39,7 @@ pub fn compile(
 #[derive(Clone, Debug)]
 struct Label {
     name: ArcIntern<str>,
+    public: bool,
     maybe_block_id: Option<BlockID>,
     available_in_blocks: Option<Vec<BlockID>>,
 }
