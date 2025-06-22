@@ -218,7 +218,7 @@ mod tests {
 
             over:
 
-                halt \"Poggers\" b
+                halt Poggers b
         ";
 
         let parsed = match parse(&File::from(code), |_| unreachable!(), false) {

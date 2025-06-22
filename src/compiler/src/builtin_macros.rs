@@ -77,16 +77,7 @@ fn print_like(
     let message = args.pop().unwrap();
     let span = message.span().to_owned();
     let message = match message.into_inner() {
-        Value::Ident(raw_message) => {
-            if !raw_message.starts_with('"') || !raw_message.ends_with('"') {
-                return Err(Rich::custom(span, "The message must be quoted"));
-            }
-
-            let raw_message = raw_message.strip_prefix('"').unwrap_or(&raw_message);
-            let raw_message = raw_message.strip_suffix('"').unwrap_or(raw_message);
-
-            WithSpan::new(raw_message.to_owned(), span)
-        }
+        Value::Ident(raw_message) => WithSpan::new((*raw_message).to_owned(), span),
         _ => {
             return Err(Rich::custom(span, "Expected a message"));
         }

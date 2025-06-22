@@ -40,7 +40,17 @@ static PRELUDE: LazyLock<ParsedSyntax> = LazyLock::new(|| {
         true,
     ) {
         Ok(v) => v,
-        Err(e) => panic!("{e:?}"),
+        Err(errs) => {
+            for err in &errs {
+                println!(
+                    "{err}; {:?}; `{}`",
+                    err.span().line_and_col(),
+                    err.span().slice()
+                );
+            }
+
+            panic!();
+        }
     };
 
     let builtin_macros = builtin_macros(&prelude.inner());
@@ -60,11 +70,7 @@ static PRELUDE: LazyLock<ParsedSyntax> = LazyLock::new(|| {
 
 type ExtraAndSyntax = Full<
     Rich<'static, char, Span>,
-    SimpleState<(
-        ParsedSyntax,
-        Rc<dyn Fn(&str) -> Result<ArcIntern<str>, String>>,
-        bool,
-    )>,
+    SimpleState<(Rc<dyn Fn(&str) -> Result<ArcIntern<str>, String>>, bool)>,
     (),
 >;
 
@@ -74,52 +80,164 @@ pub fn parse(
     is_prelude: bool,
 ) -> Result<ParsedSyntax, Vec<Rich<'static, char, Span>>> {
     thread_local! {
-        static PARSER: Boxed<'static, 'static, File, (), ExtraAndSyntax> = parser().boxed();
+        static PARSER: Boxed<'static, 'static, File, MaybeErr<ParsedSyntax>, ExtraAndSyntax> = parser().boxed();
     }
 
-    let zero_span = Span::new(qat.inner(), 0, 0);
-
-    let lua_macros = match LuaMacros::new() {
-        Ok(v) => v,
-        Err(e) => {
-            return Err(vec![Rich::custom(
-                zero_span,
-                format!("Failed to initialize the Lua runtime. {e}"),
-            )]);
-        }
-    };
-
-    let mut expansion_info = ExpansionInfo {
-        block_counter: 1,
-        block_info: BlockInfoTracker(HashMap::new()),
-        macros: HashMap::new(),
-        available_macros: HashMap::new(),
-        lua_macros: HashMap::new(),
-    };
-    expansion_info.lua_macros.insert(qat.inner(), lua_macros);
-
-    let code = Vec::new();
-
     let mut parsed_syntax_and_extras = SimpleState((
-        ParsedSyntax {
-            expansion_info,
-            code,
-        },
         Rc::from(find_import) as Rc<dyn Fn(&str) -> Result<ArcIntern<str>, String>>,
         is_prelude,
     ));
 
-    PARSER
+    let parsed_syntax = PARSER
         .with(|parser| parser.parse_with_state(qat.clone(), &mut parsed_syntax_and_extras))
         .into_result()?;
 
-    parsed_syntax_and_extras
-        .0
-        .0
-        .expansion_info
-        .block_info
-        .0
-        .insert(
+    Ok(match parsed_syntax {
+        MaybeErr::Some(v) => v,
+        MaybeErr::None => {
+            unreachable!("A Result::None would have been returned if there were errors")
+        }
+    })
+}
+
+type ExtraAndState<S> = Full<Rich<'static, char, Span>, S, ()>;
+
+fn parser() -> impl Parser<'static, File, MaybeErr<ParsedSyntax>, ExtraAndSyntax> {
+    group((
+        shebang().or_not(),
+        registers()
+            .with_state(())
+            .map_with(|regs, data: &mut MapExtra<'_, '_, File, ExtraAndSyntax>| {
+                data.span().with(regs)
+            })
+            .or_not(),
+        statement()
+            .with_state(())
+            .separated_by(nl())
+            .allow_trailing()
+            .collect::<Vec<_>>(),
+        nlm(),
+    ))
+    .validate(|(_, regs, statements, ()), data, emitter| {
+        let qat = data.span().source();
+
+        let zero_span = Span::new(data.span().source(), 0, 0);
+
+        let lua_macros = match LuaMacros::new() {
+            Ok(v) => v,
+            Err(e) => {
+                emitter.emit(Rich::custom(
+                    zero_span,
+                    format!("Failed to initialize the Lua runtime. {e}"),
+                ));
+                return MaybeErr::None;
+            }
+        };
+
+        let expansion_info = ExpansionInfo {
+            block_counter: 1,
+            block_info: BlockInfoTracker(HashMap::new()),
+            macros: HashMap::new(),
+            available_macros: HashMap::new(),
+            lua_macros: HashMap::new(),
+        };
+
+        let code = Vec::new();
+
+        let mut parsed_syntax = ParsedSyntax {
+            expansion_info,
+            code,
+        };
+
+        let is_prelude = data.state().0.1;
+        if !is_prelude {
+            merge_files(&mut parsed_syntax, &qat, (*PRELUDE).clone());
+        }
+
+        if let Some(regs) = regs {
+            let span = regs.span().clone();
+            if let MaybeErr::Some(regs) = regs.value {
+                parsed_syntax
+                    .code
+                    .push(span.with((Instruction::Registers(regs), Some(BlockID(0)))));
+            }
+        }
+
+        for statement in statements.into_iter().filter_map(MaybeErr::option) {
+            match statement {
+                Statement::Macro { name, def } => {
+                    if parsed_syntax
+                        .expansion_info
+                        .macros
+                        .contains_key(&(ArcIntern::clone(&qat), ArcIntern::clone(&name)))
+                    {
+                        emitter.emit(Rich::custom(
+                            name.span().clone(),
+                            "This macro is already defined.",
+                        ));
+                        continue;
+                    }
+
+                    parsed_syntax
+                        .expansion_info
+                        .macros
+                        .insert((ArcIntern::clone(&qat), ArcIntern::clone(&name)), def);
+                    parsed_syntax
+                        .expansion_info
+                        .available_macros
+                        .insert((ArcIntern::clone(&qat), name.into_inner()), qat.clone());
+                }
+                Statement::Instruction(instr) => {
+                    parsed_syntax
+                        .code
+                        .push(instr.map(|instr| (instr, Some(BlockID(0)))));
+                }
+                Statement::LuaBlock(lua) => {
+                    if let Err(e) = lua_macros.add_code(lua.slice()) {
+                        emitter.emit(Rich::custom(data.span(), e.to_string()));
+                    }
+                }
+                Statement::Import(filename) => {
+                    let state_ref = &data.state().0;
+
+                    let find_import = Rc::clone(&state_ref.0);
+                    let is_prelude = state_ref.1;
+
+                    let import = match (find_import)(filename.slice()) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            emitter.emit(Rich::custom(
+                                filename,
+                                format!("Unable to find import: {e}"),
+                            ));
+
+                            continue;
+                        }
+                    };
+
+                    let importee =
+                        match parse(&File::from(import), move |v| (find_import)(v), is_prelude) {
+                            Ok(v) => v,
+                            Err(errs) => {
+                                for err in errs {
+                                    emitter.emit(err);
+                                }
+
+                                continue;
+                            }
+                        };
+
+                    merge_files(&mut parsed_syntax, &qat, importee);
+                }
+            }
+        }
+
+        parsed_syntax
+            .expansion_info
+            .lua_macros
+            .insert(data.span().source(), lua_macros);
+
+        parsed_syntax.expansion_info.block_info.0.insert(
             BlockID(0),
             BlockInfo {
                 parent_block: None,
@@ -130,30 +248,8 @@ pub fn parse(
             },
         );
 
-    Ok(parsed_syntax_and_extras.0.0)
-}
-
-type ExtraAndState<S> = Full<Rich<'static, char, Span>, S, ()>;
-
-fn parser() -> impl Parser<'static, File, (), ExtraAndSyntax> {
-    group((
-        shebang().or_not(),
-        registers()
-            .with_state(())
-            .map_with(|regs, data: &mut MapExtra<'_, '_, File, ExtraAndSyntax>| {
-                if let MaybeErr::Some(regs) = regs {
-                    let span = data.span();
-                    data.state()
-                        .0
-                        .0
-                        .code
-                        .push(span.with((Instruction::Registers(regs), Some(BlockID(0)))));
-                }
-            })
-            .or_not(),
-        statement().separated_by(nl()).allow_trailing(),
-    ))
-    .to(())
+        MaybeErr::Some(parsed_syntax)
+    })
 }
 
 fn shebang<S: Inspector<'static, File> + 'static>()
@@ -170,7 +266,6 @@ fn req_whitespace<S: Inspector<'static, File> + 'static>()
             .repeated()
             .delimited_by(just("--[["), just("]]--"))
             .to(()),
-        any().repeated().delimited_by(just("--"), just('\n')).to(()),
     ))
     .repeated()
     .at_least(1)
@@ -181,10 +276,18 @@ fn whitespace<S: Inspector<'static, File> + 'static>()
     req_whitespace().or_not().to(())
 }
 
+fn line_comment<S: Inspector<'static, File> + 'static>()
+-> impl Parser<'static, File, (), ExtraAndState<S>> {
+    group((just('\n').not(), any()))
+        .repeated()
+        .delimited_by(just("--"), just('\n'))
+        .to(())
+}
+
 fn nl<S: Inspector<'static, File> + 'static>() -> impl Parser<'static, File, (), ExtraAndState<S>> {
     group((
         whitespace(),
-        just('\n')
+        choice((just('\n').to(()), line_comment()))
             .separated_by(whitespace())
             .at_least(1)
             .allow_trailing(),
@@ -196,7 +299,9 @@ fn nlm<S: Inspector<'static, File> + 'static>() -> impl Parser<'static, File, ()
 {
     group((
         whitespace(),
-        just('\n').separated_by(whitespace()).allow_trailing(),
+        choice((just('\n').to(()), line_comment()))
+            .separated_by(whitespace())
+            .allow_trailing(),
     ))
     .to(())
 }
@@ -475,37 +580,37 @@ fn register_decl_switchable() -> impl Parser<'static, File, MaybeErr<Puzzle>, Ex
 
 type BlockParser = Recursive<Indirect<'static, 'static, File, MaybeErr<Block>, Extra>>;
 
-fn statement() -> impl Parser<'static, File, (), ExtraAndSyntax> {
+enum Statement {
+    Macro {
+        name: WithSpan<ArcIntern<str>>,
+        def: WithSpan<Macro>,
+    },
+    Instruction(WithSpan<Instruction>),
+    LuaBlock(Span),
+    Import(Span),
+}
+
+fn statement() -> impl Parser<'static, File, MaybeErr<Statement>, Extra> {
     let mut block_rec: BlockParser = Recursive::declare();
     block_rec.define(block(block_rec.clone()));
 
     choice((
-        parse_macro(block_rec.clone()),
-        instruction(block_rec).with_state(()).map_with(
-            |instr, data: &mut MapExtra<'_, '_, File, ExtraAndSyntax>| {
-                if let MaybeErr::Some(instr) = instr {
-                    let span = data.span();
-                    data.state()
-                        .0
-                        .0
-                        .code
-                        .push(span.with((instr.value, Some(BlockID(0)))));
-                }
-            },
-        ),
-        lua_block(),
-        import(),
+        parse_macro(block_rec.clone()).map(|v| v.map(|(name, def)| Statement::Macro { name, def })),
+        instruction(block_rec).map(|instr| instr.map(Statement::Instruction)),
+        lua_block().map(|v| MaybeErr::Some(Statement::LuaBlock(v))),
+        import().map(|v| v.map(Statement::Import)),
     ))
 }
 
-fn parse_macro(block_rec: BlockParser) -> impl Parser<'static, File, (), ExtraAndSyntax> {
+fn parse_macro(
+    block_rec: BlockParser,
+) -> impl Parser<'static, File, MaybeErr<(WithSpan<ArcIntern<str>>, WithSpan<Macro>)>, Extra> {
     group((
         just(".macro"),
         req_whitespace(),
         ident(),
         req_whitespace(),
         macro_branch(block_rec)
-            .with_state(())
             .separated_by(nl())
             .allow_leading()
             .allow_trailing()
@@ -514,28 +619,13 @@ fn parse_macro(block_rec: BlockParser) -> impl Parser<'static, File, (), ExtraAn
     ))
     .validate(
         |(_, (), name, (), branches),
-         data: &mut MapExtra<'_, '_, File, ExtraAndSyntax>,
+         data: &mut MapExtra<'_, '_, File, Extra>,
          emitter| {
             let MaybeErr::Some(branches) = branches else {
-                return;
+                return MaybeErr::None;
             };
 
-            let qat = data.span().source();
-
             let span = data.span();
-            let parsed_syntax = &mut data.state().0.0;
-
-            if parsed_syntax
-                .expansion_info
-                .macros
-                .contains_key(&(ArcIntern::clone(&qat), ArcIntern::clone(&name)))
-            {
-                emitter.emit(Rich::custom(
-                    name.span().clone(),
-                    "This macro is already defined.",
-                ));
-                return;
-            }
 
             let mut conflict = false;
 
@@ -551,7 +641,7 @@ fn parse_macro(block_rec: BlockParser) -> impl Parser<'static, File, (), ExtraAn
             }
 
             if conflict {
-                return;
+                return MaybeErr::None;
             }
 
             let macro_def = span.with(Macro::UserDefined {
@@ -559,14 +649,8 @@ fn parse_macro(block_rec: BlockParser) -> impl Parser<'static, File, (), ExtraAn
                 after: None,
             });
 
-            parsed_syntax
-                .expansion_info
-                .macros
-                .insert((ArcIntern::clone(&qat), ArcIntern::clone(&name)), macro_def);
-            parsed_syntax
-                .expansion_info
-                .available_macros
-                .insert((ArcIntern::clone(&qat), name.into_inner()), qat);
+            MaybeErr::Some((name, macro_def))
+
         },
     )
 }
@@ -724,42 +808,26 @@ fn define(
     })
 }
 
-fn lua_block() -> impl Parser<'static, File, (), ExtraAndSyntax> {
+fn lua_block() -> impl Parser<'static, File, Span, Extra> {
     group((
         just(".start-lua"),
         group((just("end-lua").not(), any())).repeated().to_span(),
         just("end-lua"),
     ))
-    .validate(
-        |(_, lua, _), data: &mut MapExtra<'_, '_, File, ExtraAndSyntax>, emitter| {
-            let source = data.span().source();
-            if let Err(e) = data
-                .state()
-                .0
-                .0
-                .expansion_info
-                .lua_macros
-                .get(&source)
-                .unwrap()
-                .add_code(lua.slice())
-            {
-                emitter.emit(Rich::custom(data.span(), e.to_string()));
-            }
-        },
-    )
+    .map(|(_, span, _)| span)
 }
 
-fn import() -> impl Parser<'static, File, (), ExtraAndSyntax> {
+fn import() -> impl Parser<'static, File, MaybeErr<Span>, Extra> {
     group((
         just(".import"),
         req_whitespace(),
         choice((
             group((simple_ident(), just(".qat")))
                 .to_span()
-                .map(|v| MaybeErr::Some(WithSpan::new(ArcIntern::from(v.slice()), v))),
+                .map(MaybeErr::Some),
             quoted_ident().validate(|v, data, emitter| {
                 if v.ends_with(".qat") {
-                    MaybeErr::Some(v)
+                    MaybeErr::Some(v.span().clone())
                 } else {
                     emitter.emit(Rich::custom(
                         data.span(),
@@ -770,44 +838,7 @@ fn import() -> impl Parser<'static, File, (), ExtraAndSyntax> {
             }),
         )),
     ))
-    .validate(
-        |(_, (), name), data: &mut MapExtra<'_, '_, File, ExtraAndSyntax>, emitter| {
-            let MaybeErr::Some(name) = name else {
-                return;
-            };
-
-            let span = data.span();
-            let state_ref = &*data.state();
-
-            let find_import = Rc::clone(&state_ref.1);
-            let is_prelude = state_ref.2;
-
-            let import = match (find_import)(&name) {
-                Ok(v) => v,
-                Err(e) => {
-                    emitter.emit(Rich::custom(
-                        name.span().clone(),
-                        format!("Unable to find import: {e}"),
-                    ));
-
-                    return;
-                }
-            };
-
-            let importee = match parse(&File::from(import), move |v| (find_import)(v), is_prelude) {
-                Ok(v) => v,
-                Err(errs) => {
-                    for err in errs {
-                        emitter.emit(err);
-                    }
-
-                    return;
-                }
-            };
-
-            merge_files(&mut data.state().0.0, &span.source(), importee);
-        },
-    )
+    .map(|(_, (), span)| span)
 }
 
 fn block(block_rec: BlockParser) -> impl Parser<'static, File, MaybeErr<Block>, Extra> + Clone {
@@ -985,7 +1016,14 @@ mod tests {
             .import \"pog.qat\"
         ";
 
-        match parse(&File::from(code), |_| Ok(ArcIntern::from("add 1 a")), false) {
+        match parse(
+            &File::from(code),
+            |name| {
+                assert_eq!(name, "pog.qat");
+                Ok(ArcIntern::from("add 1 a"))
+            },
+            false,
+        ) {
             Ok(_) => {}
             Err(errs) => {
                 for err in &errs {
