@@ -1,0 +1,11 @@
+[package]
+name = "phase1"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+puzzle_geometry = { version = "0.1.0", path = "../puzzle_geometry" }
+qter_core = { version = "0.1.0", path = "../qter_core" }
+
+[lints]
+workspace = true

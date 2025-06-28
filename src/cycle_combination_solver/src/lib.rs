@@ -2,5 +2,5 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::similar_names, clippy::too_many_lines)]
 
-mod phase1;
+//mod phase1;
 pub mod phase2;

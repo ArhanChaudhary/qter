@@ -1,3 +1,5 @@
+use core::num;
+
 use puzzle_geometry::ksolve::{KPUZZLE_3X3, KSolveSet};
 use qter_core::{Int, U};
 
@@ -369,6 +371,113 @@ fn optimal_equivalent_combination(
     puzzle: &[KSolveSet],
     num_registers: u16,
 ) -> Option<CycleCombination> {
+    let mut cycle_cubie_counts: Vec<u16> = vec![0; puzzle.len()]; //the count of pieces in each orbit
+    let mut orientable_pieces: Vec<u16> = vec![0; 4]; // the kth index stores the number of pieces in an orbit with orient_count k
+
+    // get number of pieces in each orbit. if the orbit pieces can orient, set a shared piece aside to allow free orientation.
+    for (o, orbit) in puzzle.iter().enumerate() {
+        let orientation_count = orbit.orientation_count().get();
+        let piece_count = orbit.piece_count().get();
+        if orientation_count > 1 {
+            orientable_pieces[orientation_count as usize] = piece_count - 1;
+            cycle_cubie_counts[o] = piece_count - 1;
+        } else {
+            cycle_cubie_counts[o] = piece_count;
+        }
+    }
+
+    let total_cubies: u16 = cycle_cubie_counts.iter().sum();
+    let cubies_per_register = total_cubies / num_registers;
+
+    // get a list of all orders that would fit within a cubies_per_register amount of pieces
+    let possible_orders: Vec<PossibleOrder> = possible_order_list(
+        cubies_per_register,
+        cycle_cubie_counts
+            .iter()
+            .max()
+            .copied()
+            .unwrap()
+            .min(cubies_per_register),
+        &orientable_pieces,
+    );
+
+    // check the possible orders, descending, until one is found that fits
+    for possible_order in possible_orders {
+        println!("Testing Order {}", possible_order.order);
+
+        // by default, prime_combo.piece_counts assumes all orientation efficiencies can be made
+        // here we check if they can actually fit, or if they must be handled by non-orienting pieces
+        let mut unorientable_excess: u16 = 0;
+        for (p, prime_power) in possible_order.prime_powers.iter().enumerate() {
+            if prime_power % 2 == 0 {
+                // find the amount of registers that can't be oriented
+                let orientable_registers = (orientable_pieces[2]
+                    / 1.max(possible_order.min_piece_counts[p]))
+                .min(num_registers);
+                // each unorientable register will use 'value' pieces instead of 'prime_combo.piece_counts[v]' pieces
+                // so we need to account for that difference
+                unorientable_excess += (num_registers - orientable_registers)
+                    * (prime_power - possible_order.min_piece_counts[p]);
+            } else if prime_power % 3 == 0 {
+                let orientable_registers = (orientable_pieces[3]
+                    / 1.max(possible_order.min_piece_counts[p]))
+                .min(num_registers);
+                unorientable_excess += (num_registers - orientable_registers)
+                    * (prime_power - possible_order.min_piece_counts[p]);
+            }
+        }
+
+        let available_pieces =
+            total_cubies - num_registers * (possible_order.min_piece_counts.iter().sum::<u16>());
+        // if the excess exceeds the total number of cubies, the order won't fit so we skip to the next
+        if unorientable_excess > available_pieces {
+            continue;
+        }
+
+        let registers = vec![possible_order.clone(); num_registers as usize];
+        if let Some(mut assignments) =
+            possible_order_test(&registers, &cycle_cubie_counts, puzzle, available_pieces)
+        {
+            return Some(assignments_to_combo(
+                &mut assignments,
+                &registers,
+                &cycle_cubie_counts,
+                puzzle,
+            ));
+        }
+    }
+
+    None
+}
+/*
+fn add_order_to_registers(
+    num_registers: u16,
+    registers: &[PossibleOrder],
+    possible_orders: &[PossibleOrder],
+    cycle_cubie_counts: &[u16],
+    puzzle: &[KSolveSet],
+    available_pieces: u16,
+) -> Option<Vec<Assignment>> {
+    let last_reg = registers.len() - 1;
+    if registers.len() == num_registers as usize {
+        None
+    } else {
+        for possible_order in possible_orders {
+            if possible_order.order > registers[last_reg].order || possible_order.min_piece_counts > available_pieces{
+                continue;
+            }
+
+            add_order_to_registers(
+                num_registers,
+                registers
+            )
+
+        }
+    }
+}
+*/
+// this is the main function. it returns all non-redundant combinations
+fn optimal_combinations(puzzle: &[KSolveSet], num_registers: u16) -> Option<CycleCombination> {
     let mut cycle_cubie_counts: Vec<u16> = vec![0; puzzle.len()]; //the count of pieces in each orbit
     let mut orientable_pieces: Vec<u16> = vec![0; 4]; // the kth index stores the number of pieces in an orbit with orient_count k
 
