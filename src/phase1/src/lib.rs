@@ -354,7 +354,7 @@ fn assignments_to_combo(
 ) -> CycleCombination {
     let mut cycle_combination: Vec<Cycle> = vec![];
 
-    for (r, register) in registers.iter().enumerate() {
+    for (r, register) in registers.iter().rev().enumerate() {
         let mut partitions: Vec<Partition> = vec![];
 
         for (o, orbit) in puzzle.iter().enumerate() {
@@ -491,9 +491,31 @@ fn add_order_to_registers(
         registers[0].order
     };
 
-    //TODO add check for redundant
+    let mut max_redundant = Int::<U>::from(0_u16);
+    for combo in &mut *cycle_combos {
+        let mut overshadows = true;
+        for reg_from_last in 0..registers.len() {
+            if registers[last_reg as usize - reg_from_last].order
+                > combo.cycles[reg_from_last].order
+            {
+                overshadows = false;
+                break;
+            }
+
+            if overshadows {
+                max_redundant = combo.cycles[(*num_registers - 1) as usize]
+                    .order
+                    .max(max_redundant);
+            }
+        }
+    }
+
     for possible_order in possible_orders {
         //println!("possible_order At {:?}, {}", possible_order, last_order);
+        if possible_order.order <= max_redundant {
+            return;
+        }
+
         if possible_order.min_piece_counts.iter().sum::<u16>() > available_pieces
             || possible_order.order > last_order
         {
@@ -512,7 +534,7 @@ fn add_order_to_registers(
             ) {
                 cycle_combos.push(assignments_to_combo(
                     &mut assignments,
-                    &registers,
+                    &registers_with_new,
                     &cycle_cubie_counts,
                     puzzle,
                 ));
@@ -571,10 +593,7 @@ fn optimal_combinations(puzzle: &[KSolveSet], num_registers: u16) {
     );
 
     for combo in cycle_combos {
-        println!("Found Combo");
-        for cyc in combo.cycles {
-            println!("Cycle {}", cyc.order);
-        }
+        println!("Found Combo {:?}", combo.cycles);
     }
 }
 
@@ -628,10 +647,5 @@ mod tests {
     fn test_optimal_order_2_registers_3x3() {
         let puzzle = puzzle_geometry::ksolve::KPUZZLE_3X3.sets();
         optimal_combinations(puzzle, 2);
-        /*
-        assert_eq!(
-            cycle_combos.unwrap().cycles[0].order,
-            Int::<U>::from(90_u16),
-        );*/
     }
 }
