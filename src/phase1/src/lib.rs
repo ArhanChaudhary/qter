@@ -37,7 +37,7 @@ struct PossibleOrder {
 impl fmt::Debug for PossibleOrder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         //write!(f,"order {}, prime powers {:?}", self.order, self.prime_powers)
-        write!(f, "{}", self.order)
+        write!(f, "{}, {:?}", self.order, self.prime_powers)
     }
 }
 
@@ -271,9 +271,11 @@ fn possible_order_test(
 
         // try adding the current prime power to each orbit
         for (o, orbit) in puzzle.iter().enumerate() {
+            let orbit_orient = orbit.orientation_count().get() as u16;
+
             // orbits with no orientation and the same piece count act the same. we should only check the first one
             // continue if this is a duplicate of an orbit that was already checked.
-            if orbit.orientation_count().get() == 1 {
+            if orbit_orient == 1 {
                 if seen.contains(&cycle_cubie_counts[o]) {
                     continue;
                 }
@@ -282,32 +284,32 @@ fn possible_order_test(
 
             let mut new_cycle: u16;
             let mut new_available: u16;
-            let orbit_orient = orbit.orientation_count().get() as usize;
             // if this orbit orients using the same prime as the power, add a cycle
-            if orbit_orient > 1
-                && registers[s.register].prime_powers[s.power]
-                    % u16::from(orbit.orientation_count().get())
-                    == 0
-            {
+            if orbit_orient > 1 && registers[s.register].prime_powers[s.power] % orbit_orient == 0 {
+                let flippers = s.assignments[s.register][o].len() as u16
+                    + shared_pieces[orbit_orient as usize].min(1);
                 new_cycle = registers[s.register].min_piece_counts[s.power];
-                let flippers =
-                    s.assignments[s.register][o].len() as u16 + shared_pieces[orbit_orient].min(1);
 
                 //TODO allow for 2 corners to twist
-                if new_cycle == 0 {
+                let excess = if new_cycle == 0 {
                     if flippers == 1 {
-                        new_cycle = 1;
+                        1
                     } else if flippers == 0 {
-                        new_cycle = 2;
+                        2
+                    } else {
+                        0
                     }
                 } else if flippers == 0 {
-                    new_cycle += 1;
-                }
+                    1
+                } else {
+                    0
+                };
 
-                if s.available_pieces < new_cycle {
+                if s.available_pieces < excess {
                     continue;
                 }
-                new_available = s.available_pieces - new_cycle;
+                new_cycle += excess;
+                new_available = s.available_pieces - excess;
             } else if registers[s.register].prime_powers[s.power] == 1 {
                 new_cycle = 0;
                 new_available = s.available_pieces;
@@ -351,7 +353,7 @@ fn possible_order_test(
             }
 
             // if there is room for the new cycle in this orbit, add it and push to stack
-            if new_cycle + parity + s.orbit_sums[o] + shared_pieces[orbit_orient]
+            if new_cycle + parity + s.orbit_sums[o] + shared_pieces[orbit_orient as usize]
                 <= cycle_cubie_counts[o]
             {
                 let mut combo_iteraton = ComboIteration {
@@ -432,20 +434,20 @@ fn optimal_equivalent_combination(
 ) -> Option<CycleCombination> {
     let mut cycle_cubie_counts: Vec<u16> = vec![0; puzzle.len()]; //the count of pieces in each orbit
     let mut orientable_pieces: Vec<u16> = vec![0; 4]; // the kth index stores the number of pieces in an orbit with orient_count k
-
+    let mut total_cubies: u16 = 0;
     // get number of pieces in each orbit. if the orbit pieces can orient, set a shared piece aside to allow free orientation.
     for (o, orbit) in puzzle.iter().enumerate() {
         let orientation_count = orbit.orientation_count().get();
         let piece_count = orbit.piece_count().get();
         if orientation_count > 1 {
             orientable_pieces[orientation_count as usize] = piece_count - 1;
-            cycle_cubie_counts[o] = piece_count - 1;
+            total_cubies += piece_count - 1;
         } else {
-            cycle_cubie_counts[o] = piece_count;
+            total_cubies += piece_count;
         }
+        cycle_cubie_counts[o] = piece_count
     }
 
-    let total_cubies: u16 = cycle_cubie_counts.iter().sum();
     let cubies_per_register = total_cubies / num_registers;
 
     // get a list of all orders that would fit within a cubies_per_register amount of pieces
