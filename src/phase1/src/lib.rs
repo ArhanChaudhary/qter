@@ -47,6 +47,12 @@ struct Partition {
     order: Int<U>,
 }
 
+impl fmt::Debug for Partition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.partition)
+    }
+}
+
 struct Cycle {
     order: Int<U>,
     partitions: Vec<Partition>,
@@ -54,6 +60,7 @@ struct Cycle {
 
 impl fmt::Debug for Cycle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        //write!(f, "{}, {:?}", self.order, self.partitions)
         write!(f, "{}", self.order)
     }
 }
@@ -62,6 +69,7 @@ struct CycleCombination {
     used_cubie_counts: Vec<u16>,
     order_product: Int<U>,
     cycles: Vec<Cycle>,
+    shared_pieces: Vec<u16>,
 }
 
 /// return a 2D list of prime powers below n. The first index is the prime, the second is the power of that prime
@@ -387,6 +395,7 @@ fn assignments_to_combo(
     registers: &[PossibleOrder],
     cycle_cubie_counts: &[u16],
     puzzle: &[KSolveSet],
+    shared_pieces: &Vec<u16>,
 ) -> CycleCombination {
     let mut cycle_combination: Vec<Cycle> = vec![];
 
@@ -395,18 +404,18 @@ fn assignments_to_combo(
 
         for (o, orbit) in puzzle.iter().enumerate() {
             let mut lcm: Int<U> = Int::<U>::from(1_u16);
-            for &a in &assignments[r][o] {
+            for &a in &assignments[registers.len() - 1 - r][o] {
                 lcm = qter_core::discrete_math::lcm(lcm, Int::<U>::from(a));
             }
 
             if orbit.orientation_count().get() > 1 {
                 lcm *= Int::<U>::from(orbit.orientation_count().get());
-                assignments[r][o].push(1);
+                //assignments[r][o].push(1);
             }
 
             partitions.push(Partition {
                 name: orbit.name().to_string(),
-                partition: assignments[r][o].clone(),
+                partition: assignments[registers.len() - 1 - r][o].clone(),
                 order: lcm,
             });
         }
@@ -423,6 +432,7 @@ fn assignments_to_combo(
         used_cubie_counts: cycle_cubie_counts.to_vec(),
         order_product,
         cycles: cycle_combination,
+        shared_pieces: shared_pieces.clone(),
     }
 }
 
@@ -497,18 +507,20 @@ fn optimal_equivalent_combination(
         }
 
         let registers = vec![possible_order.clone(); num_registers as usize];
+        let shared_pieces: Vec<u16> = vec![0, 0, 1, 1];
         if let Some(mut assignments) = possible_order_test(
             &registers,
             &cycle_cubie_counts,
             puzzle,
             available_pieces,
-            &vec![0, 0, 1, 1],
+            &shared_pieces,
         ) {
             return Some(assignments_to_combo(
                 &mut assignments,
                 &registers,
                 &cycle_cubie_counts,
                 puzzle,
+                &shared_pieces,
             ));
         }
     }
@@ -574,13 +586,14 @@ fn add_order_to_registers(
                     &cycle_cubie_counts,
                     puzzle,
                     available_pieces,
-                    shared_pieces,
+                    &shared_pieces,
                 ) {
                     cycle_combos.push(assignments_to_combo(
                         &mut assignments,
                         &registers_with_new,
                         &cycle_cubie_counts,
                         puzzle,
+                        &shared_pieces,
                     ));
                     return;
                 }
@@ -648,6 +661,7 @@ fn optimal_combinations(puzzle: &[KSolveSet], num_registers: u16) {
     );
 
     for combo in cycle_combos {
+        //println!("Found Combo {:?}, {:?}", combo.cycles, combo.shared_pieces);
         println!("Found Combo {:?}", combo.cycles);
     }
 }
@@ -699,8 +713,8 @@ mod tests {
     }
 
     #[test]
-    fn test_optimal_order_2_registers_3x3() {
+    fn test_optimal_order_3_registers_3x3() {
         let puzzle = puzzle_geometry::ksolve::KPUZZLE_3X3.sets();
-        optimal_combinations(puzzle, 2);
+        optimal_combinations(puzzle, 3);
     }
 }
