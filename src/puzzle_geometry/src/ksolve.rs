@@ -243,6 +243,39 @@ fn nonzero_perm(transformation: Vec<Vec<(u16, u8)>>) -> KSolveTransformation {
         .collect()
 }
 
+pub static KPUZZLE_5X5: LazyLock<KSolve> = LazyLock::new(|| KSolve {
+    name: "5x5x5".to_owned(),
+    sets: vec![
+        KSolveSet {
+            name: "Edges".to_owned(),
+            piece_count: 12.try_into().unwrap(),
+            orientation_count: 2.try_into().unwrap(),
+        },
+        KSolveSet {
+            name: "Corners".to_owned(),
+            piece_count: 8.try_into().unwrap(),
+            orientation_count: 3.try_into().unwrap(),
+        },
+        KSolveSet {
+            name: "Wings".to_owned(),
+            piece_count: 24.try_into().unwrap(),
+            orientation_count: 1.try_into().unwrap(),
+        },
+        KSolveSet {
+            name: "x-centers".to_owned(),
+            piece_count: 24.try_into().unwrap(),
+            orientation_count: 1.try_into().unwrap(),
+        },
+        KSolveSet {
+            name: "+-centers".to_owned(),
+            piece_count: 24.try_into().unwrap(),
+            orientation_count: 1.try_into().unwrap(),
+        },
+    ],
+    moves: vec![],
+    symmetries: vec![],
+});
+
 // This is here for testing. This should be replaced with a puzzle geometry
 // string in the future.
 pub static KPUZZLE_3X3: LazyLock<KSolve> = LazyLock::new(|| KSolve {

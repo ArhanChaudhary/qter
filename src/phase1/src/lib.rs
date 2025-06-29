@@ -256,12 +256,12 @@ fn possible_order_test(
         available_pieces: available_pieces - shared_sum, // extra pieces beyond the minimum
     }];
 
-    // let mut loops: u16 = 0;
+    let mut loops: u16 = 0;
     while let Some(mut s) = stack.pop() {
-        // loops += 1;
-        // if loops > 1000 {
-        //     return None; // a fit is usually found quickly, so quit if the search takes a while
-        // }
+        loops += 1;
+        if loops > 1000 {
+            return None; // a fit is usually found quickly, so quit if the search takes a while
+        }
 
         let mut seen = vec![]; // this is used to detect duplicates
 
@@ -716,5 +716,11 @@ mod tests {
     fn test_optimal_order_3_registers_3x3() {
         let puzzle = puzzle_geometry::ksolve::KPUZZLE_3X3.sets();
         optimal_combinations(puzzle, 3);
+    }
+
+    #[test]
+    fn test_optimal_order_2_registers_5X5() {
+        let puzzle = puzzle_geometry::ksolve::KPUZZLE_5X5.sets();
+        optimal_combinations(puzzle, 2);
     }
 }
