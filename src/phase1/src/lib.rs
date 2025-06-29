@@ -228,22 +228,32 @@ fn possible_order_test(
     cycle_cubie_counts: &[u16],
     puzzle: &[KSolveSet],
     available_pieces: u16,
+    shared_pieces: &Vec<u16>,
 ) -> Option<Vec<Assignment>> {
+    let mut shared_sum = 0;
+    for orbit in puzzle {
+        shared_sum += shared_pieces[orbit.orientation_count().get() as usize];
+    }
+    if shared_sum > available_pieces {
+        return None;
+    }
+    let parity_covered = shared_pieces[2] == 2 || shared_pieces[3] == 2;
+
     // create a stack to recursively add cycles for prime powers from each register
     let mut stack: Vec<ComboIteration> = vec![ComboIteration {
         register: 0,                                   // current register to add
         power: registers[0].prime_powers.len(), // current prime power index to add (reversed)
         orbit_sums: vec![0; cycle_cubie_counts.len()], // pieces used in each orbit
         assignments: vec![vec![vec![]; cycle_cubie_counts.len()]; registers.len()],
-        available_pieces, // extra pieces beyond the minimum
+        available_pieces: available_pieces - shared_sum, // extra pieces beyond the minimum
     }];
 
-    let mut loops: u16 = 0;
+    // let mut loops: u16 = 0;
     while let Some(mut s) = stack.pop() {
-        loops += 1;
-        if loops > 1000 {
-            return None; // a fit is usually found quickly, so quit if the search takes a while
-        }
+        // loops += 1;
+        // if loops > 1000 {
+        //     return None; // a fit is usually found quickly, so quit if the search takes a while
+        // }
 
         let mut seen = vec![]; // this is used to detect duplicates
 
@@ -272,13 +282,34 @@ fn possible_order_test(
 
             let mut new_cycle: u16;
             let mut new_available: u16;
+            let orbit_orient = orbit.orientation_count().get() as usize;
             // if this orbit orients using the same prime as the power, add a cycle
-            if orbit.orientation_count().get() > 1
+            if orbit_orient > 1
                 && registers[s.register].prime_powers[s.power]
                     % u16::from(orbit.orientation_count().get())
                     == 0
             {
                 new_cycle = registers[s.register].min_piece_counts[s.power];
+                let flippers =
+                    s.assignments[s.register][o].len() as u16 + shared_pieces[orbit_orient].min(1);
+
+                //TODO allow for 2 corners to twist
+                if new_cycle == 0 {
+                    if flippers == 1 {
+                        new_cycle = 1;
+                    } else if flippers == 0 {
+                        new_cycle = 2;
+                    }
+                } else if flippers == 0 {
+                    new_cycle += 1;
+                }
+
+                if s.available_pieces < new_cycle {
+                    continue;
+                }
+                new_available = s.available_pieces - new_cycle;
+            } else if registers[s.register].prime_powers[s.power] == 1 {
+                new_cycle = 0;
                 new_available = s.available_pieces;
             }
             // otherwise, we get no orientation multiplier, so the cycle will use the same number of pieces as the power itself
@@ -297,6 +328,7 @@ fn possible_order_test(
                 continue;
             }
 
+            /*
             // we assume 0 min_pieces for a prime cycle if there is an orbit with that prime as its orient_count
             // but that requires the orbit to have a cycle of length of a different prime
             // if there is no cycle in this register, we need to use a piece for this.
@@ -306,10 +338,10 @@ fn possible_order_test(
                 }
                 new_cycle = 1;
                 new_available -= 1;
-            }
+            }*/
 
             // assume that every even cycle needs a parity to go with it. TODO could be more efficient to share parity.
-            let parity: u16 = if new_cycle % 2 == 0 && new_cycle > 0 {
+            let parity: u16 = if new_cycle % 2 == 0 && new_cycle > 0 && !parity_covered {
                 2
             } else {
                 0
@@ -319,7 +351,9 @@ fn possible_order_test(
             }
 
             // if there is room for the new cycle in this orbit, add it and push to stack
-            if new_cycle + parity + s.orbit_sums[o] <= cycle_cubie_counts[o] {
+            if new_cycle + parity + s.orbit_sums[o] + shared_pieces[orbit_orient]
+                <= cycle_cubie_counts[o]
+            {
                 let mut combo_iteraton = ComboIteration {
                     register: s.register,
                     power: s.power,
@@ -452,17 +486,22 @@ fn optimal_equivalent_combination(
             }
         }
 
-        let available_pieces =
-            total_cubies - num_registers * (possible_order.min_piece_counts.iter().sum::<u16>());
+        let available_pieces = total_cubies
+            - num_registers * (possible_order.min_piece_counts.iter().sum::<u16>())
+            + 2;
         // if the excess exceeds the total number of cubies, the order won't fit so we skip to the next
         if unorientable_excess > available_pieces {
             continue;
         }
 
         let registers = vec![possible_order.clone(); num_registers as usize];
-        if let Some(mut assignments) =
-            possible_order_test(&registers, &cycle_cubie_counts, puzzle, available_pieces)
-        {
+        if let Some(mut assignments) = possible_order_test(
+            &registers,
+            &cycle_cubie_counts,
+            puzzle,
+            available_pieces,
+            &vec![0, 0, 1, 1],
+        ) {
             return Some(assignments_to_combo(
                 &mut assignments,
                 &registers,
@@ -483,6 +522,7 @@ fn add_order_to_registers(
     puzzle: &[KSolveSet],
     available_pieces: u16,
     cycle_combos: &mut Vec<CycleCombination>,
+    shared_piece_options: &Vec<Vec<u16>>,
 ) {
     let last_reg = registers.len() as i32 - 1;
     let last_order: Int<U> = if last_reg == -1 {
@@ -526,19 +566,22 @@ fn add_order_to_registers(
         registers_with_new.extend(registers.clone());
 
         if (last_reg + 2) as u16 == *num_registers {
-            if let Some(mut assignments) = possible_order_test(
-                &registers_with_new,
-                &cycle_cubie_counts,
-                puzzle,
-                available_pieces,
-            ) {
-                cycle_combos.push(assignments_to_combo(
-                    &mut assignments,
+            for shared_pieces in shared_piece_options {
+                if let Some(mut assignments) = possible_order_test(
                     &registers_with_new,
                     &cycle_cubie_counts,
                     puzzle,
-                ));
-                return;
+                    available_pieces,
+                    shared_pieces,
+                ) {
+                    cycle_combos.push(assignments_to_combo(
+                        &mut assignments,
+                        &registers_with_new,
+                        &cycle_cubie_counts,
+                        puzzle,
+                    ));
+                    return;
+                }
             }
         } else {
             add_order_to_registers(
@@ -549,6 +592,7 @@ fn add_order_to_registers(
                 puzzle,
                 available_pieces - possible_order.min_piece_counts.iter().sum::<u16>(),
                 cycle_combos,
+                shared_piece_options,
             );
         }
     }
@@ -564,11 +608,9 @@ fn optimal_combinations(puzzle: &[KSolveSet], num_registers: u16) {
         let orientation_count = orbit.orientation_count().get();
         let piece_count = orbit.piece_count().get();
         if orientation_count > 1 {
-            orientable_pieces[orientation_count as usize] = piece_count - 1;
-            cycle_cubie_counts[o] = piece_count - 1;
-        } else {
-            cycle_cubie_counts[o] = piece_count;
+            orientable_pieces[orientation_count as usize] = piece_count;
         }
+        cycle_cubie_counts[o] = piece_count;
     }
 
     let total_cubies: u16 = cycle_cubie_counts.iter().sum();
@@ -581,6 +623,16 @@ fn optimal_combinations(puzzle: &[KSolveSet], num_registers: u16) {
     );
 
     let mut cycle_combos: Vec<CycleCombination> = vec![];
+    let shared_piece_options: Vec<Vec<u16>> = vec![
+        vec![0, 0, 0, 0],
+        vec![0, 0, 0, 1],
+        vec![0, 0, 0, 2],
+        vec![0, 0, 1, 0],
+        vec![0, 0, 1, 1],
+        vec![0, 0, 1, 2],
+        vec![0, 0, 2, 0],
+        vec![0, 0, 2, 1],
+    ];
 
     add_order_to_registers(
         &num_registers,
@@ -590,6 +642,7 @@ fn optimal_combinations(puzzle: &[KSolveSet], num_registers: u16) {
         &puzzle,
         cycle_cubie_counts.iter().sum(),
         &mut cycle_combos,
+        &shared_piece_options,
     );
 
     for combo in cycle_combos {
