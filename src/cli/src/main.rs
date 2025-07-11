@@ -22,6 +22,7 @@ use qter_core::{
 };
 use robot::Cube3Robot;
 
+mod demo;
 mod robot;
 
 /// Compiles and interprets qter programs
@@ -52,6 +53,11 @@ enum Commands {
     Test {
         /// Which file to test; must be a .qat file
         file: PathBuf,
+    },
+    /// Execute the OpenSauce demo
+    Demo {
+        #[arg(long)]
+        robot: bool,
     },
     #[cfg(debug_assertions)]
     /// Compress an algorithm table into the special format (This subcommand will not be visible in release mode)
@@ -176,6 +182,9 @@ fn main() -> color_eyre::Result<()> {
             for moves in decoded {
                 println!("{}", moves.iter().join(" "));
             }
+        }
+        Commands::Demo { robot } => {
+            demo::demo(robot);
         }
     }
 

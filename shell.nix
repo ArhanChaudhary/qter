@@ -17,11 +17,18 @@ let
     ];
   };
 in
-pkgs.mkShell {
+pkgs.mkShell rec {
+  libraries = with pkgs; [
+    udev alsa-lib-with-plugins vulkan-loader
+    xorg.libX11 xorg.libXcursor xorg.libXi xorg.libXrandr # To use the x11 feature
+    libxkbcommon wayland # To use the wayland feature
+  ];
+
   buildInputs =
     [
       rust
     ]
+    ++ libraries
     ++ (with pkgs; [
       pkg-config
       sccache
@@ -46,4 +53,6 @@ pkgs.mkShell {
   RUST_BACKTRACE = 1;
   RUSTC_WRAPPER = "sccache";
   SCCACHE_SERVER_PORT = "54226";
+
+  LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
 }
