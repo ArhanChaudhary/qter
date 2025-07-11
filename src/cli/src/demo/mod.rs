@@ -1,4 +1,10 @@
-use std::{fs, path::PathBuf, sync::LazyLock, thread};
+use std::{
+    collections::HashMap,
+    fs,
+    path::PathBuf,
+    sync::{Arc, LazyLock},
+    thread,
+};
 
 use bevy::{
     DefaultPlugins,
@@ -9,48 +15,57 @@ use bevy::{
 };
 use compiler::compile;
 use crossbeam_channel::{Receiver, Sender, unbounded};
-use internment::ArcIntern;
+use internment::{ArcIntern, Intern};
 use interpreter::puzzle_states::SimulatedPuzzle;
-use qter_core::{File, I, Int, Program, U, architectures::Permutation};
+use qter_core::{Facelets, File, I, Int, Program, U, architectures::Permutation};
 
 use crate::robot::{Cube3Robot, RobotLike};
 
 mod interpreter_loop;
 
 struct ProgramInfo {
-    program: Program,
-    name: ArcIntern<str>,
+    program: Arc<Program>,
 }
 
-static PROGRAMS: LazyLock<Vec<ProgramInfo>> = LazyLock::new(|| {
-    vec![ProgramInfo {
-        program: compile(&File::from(include_str!("../../test.qat")), |name| {
-            let path = PathBuf::from(name);
+static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| {
+    let mut programs = HashMap::new();
 
-            if path.ancestors().count() > 1 {
-                // Easier not to implement relative paths and stuff
-                return Err("Imported files must be in the same path".to_owned());
-            }
+    programs.insert(
+        Intern::from("test"),
+        ProgramInfo {
+            program: Arc::new(
+                compile(&File::from(include_str!("../../test.qat")), |name| {
+                    let path = PathBuf::from(name);
 
-            match fs::read_to_string(path) {
-                Ok(s) => Ok(ArcIntern::from(s)),
-                Err(e) => Err(e.to_string()),
-            }
-        })
-        .unwrap(),
-        name: ArcIntern::from("test"),
-    }]
+                    if path.ancestors().count() > 1 {
+                        // Easier not to implement relative paths and stuff
+                        return Err("Imported files must be in the same path".to_owned());
+                    }
+
+                    match fs::read_to_string(path) {
+                        Ok(s) => Ok(ArcIntern::from(s)),
+                        Err(e) => Err(e.to_string()),
+                    }
+                })
+                .unwrap(),
+            ),
+        },
+    );
+
+    programs
 });
 
 #[derive(Event)]
 enum InterpretationEvent {
-    Print(String),
-    Input(String, Int<U>),
+    Message(String),
+    Input(Int<U>),
     BeginHalt,
     HaltCountUp(Int<U>),
-    EndHalt(String),
     CubeState(Permutation),
-    SolvedGoto { facelets: Vec<usize> },
+    SolvedGoto { facelets: Facelets },
+    ExecutedInstruction { next_one: usize },
+    BeganProgram(Intern<str>),
+    FinishedProgram,
     // Stuff for highlighting instructions
 }
 
@@ -58,10 +73,8 @@ enum InterpretationEvent {
 struct EventRx(Receiver<InterpretationEvent>);
 
 enum InterpretationCommand {
-    Execute(ArcIntern<str>),
+    Execute(Intern<str>),
     Step,
-    Continue,
-    Pause,
     GiveInput(Int<I>),
     Solve,
 }

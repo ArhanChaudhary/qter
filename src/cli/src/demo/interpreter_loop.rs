@@ -2,14 +2,19 @@ use std::sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock};
 
 use chumsky::Parser;
 use crossbeam_channel::{Receiver, Sender};
-use interpreter::puzzle_states::PuzzleState;
+use interpreter::{
+    ActionPerformed, ExecutionState, Interpreter, PausedState, puzzle_states::PuzzleState,
+};
 use qter_core::{
     Int, U,
     architectures::{Algorithm, PermutationGroup, puzzle_definition},
     discrete_math::lcm_iter,
 };
 
-use crate::robot::{RobotLike, RobotLikeDyn};
+use crate::{
+    demo::PROGRAMS,
+    robot::{RobotLike, RobotLikeDyn},
+};
 
 use super::{InterpretationCommand, InterpretationEvent};
 
@@ -52,7 +57,8 @@ impl PuzzleState for TrackedRobotState {
 
         handle
             .event_tx
-            .send(InterpretationEvent::CubeState(state.to_owned()));
+            .send(InterpretationEvent::CubeState(state.to_owned()))
+            .unwrap();
 
         for &facelet in facelets {
             let maps_to = state.mapping()[facelet];
@@ -76,7 +82,8 @@ impl PuzzleState for TrackedRobotState {
 
             handle
                 .event_tx
-                .send(InterpretationEvent::CubeState(state.to_owned()));
+                .send(InterpretationEvent::CubeState(state.clone()))
+                .unwrap();
 
             state
         };
@@ -103,7 +110,10 @@ impl PuzzleState for TrackedRobotState {
         generator: &Algorithm,
     ) -> Option<qter_core::Int<qter_core::U>> {
         {
-            robot_handle().event_tx.send(InterpretationEvent::BeginHalt);
+            robot_handle()
+                .event_tx
+                .send(InterpretationEvent::BeginHalt)
+                .unwrap();
         }
 
         let mut generator = generator.to_owned();
@@ -120,7 +130,8 @@ impl PuzzleState for TrackedRobotState {
             {
                 robot_handle()
                     .event_tx
-                    .send(InterpretationEvent::HaltCountUp(sum));
+                    .send(InterpretationEvent::HaltCountUp(sum))
+                    .unwrap();
             }
 
             if sum >= order {
@@ -166,7 +177,8 @@ impl PuzzleState for TrackedRobotState {
 
         handle
             .event_tx
-            .send(InterpretationEvent::CubeState(CUBE3.identity()));
+            .send(InterpretationEvent::CubeState(CUBE3.identity()))
+            .unwrap();
 
         handle.robot.solve();
     }
@@ -176,8 +188,137 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
     event_tx: Sender<InterpretationEvent>,
     command_rx: Receiver<InterpretationCommand>,
 ) {
-    ROBOT_HANDLE.set(Mutex::new(RobotHandle {
-        robot: Box::leak(Box::from(R::initialize(Arc::clone(&CUBE3)))),
-        event_tx,
-    }));
+    if ROBOT_HANDLE
+        .set(Mutex::new(RobotHandle {
+            robot: Box::leak(Box::from(R::initialize(Arc::clone(&CUBE3)))),
+            event_tx,
+        }))
+        .is_err()
+    {
+        panic!("Cannot create multiple interpreter threads")
+    }
+
+    let mut maybe_interpreter = None;
+
+    for command in command_rx {
+        use InterpretationCommand as C;
+
+        match command {
+            C::Execute(name) => {
+                maybe_interpreter = Some(Interpreter::<TrackedRobotState>::new(Arc::clone(
+                    &PROGRAMS.get(&name).unwrap().program,
+                )));
+
+                robot_handle()
+                    .event_tx
+                    .send(InterpretationEvent::BeganProgram(name))
+                    .unwrap();
+            }
+            C::Step => {
+                let Some(interpreter) = &mut maybe_interpreter else {
+                    eprintln!("Cannot step while the interpreter is closed");
+                    continue;
+                };
+
+                use ActionPerformed as A;
+
+                match interpreter.step() {
+                    A::Goto { instruction_idx: _ }
+                    | A::Added(_)
+                    | A::Solved(_)
+                    | A::RepeatedUntil {
+                        puzzle_idx: _,
+                        facelets: _,
+                        alg: _,
+                    }
+                    | A::None => {}
+                    A::Paused => match interpreter.state().execution_state() {
+                        ExecutionState::Running => unreachable!(),
+                        ExecutionState::Paused(paused_state) => match paused_state {
+                            PausedState::Halt {
+                                maybe_puzzle_idx_and_register: _,
+                            } => {
+                                robot_handle()
+                                    .event_tx
+                                    .send(InterpretationEvent::FinishedProgram)
+                                    .unwrap();
+                                maybe_interpreter = None;
+                                continue;
+                            }
+                            PausedState::Input { max_input, data: _ } => {
+                                robot_handle()
+                                    .event_tx
+                                    .send(InterpretationEvent::Input(*max_input))
+                                    .unwrap();
+                            }
+                            PausedState::Panicked => unreachable!(),
+                        },
+                    },
+                    A::FailedSolvedGoto(by_puzzle_type) => match by_puzzle_type {
+                        qter_core::ByPuzzleType::Theoretical(_) => unreachable!(),
+                        qter_core::ByPuzzleType::Puzzle((_, facelets)) => robot_handle()
+                            .event_tx
+                            .send(InterpretationEvent::SolvedGoto {
+                                facelets: facelets.clone(),
+                            })
+                            .unwrap(),
+                    },
+                    A::SucceededSolvedGoto(by_puzzle_type) => match by_puzzle_type {
+                        qter_core::ByPuzzleType::Theoretical(_) => unreachable!(),
+                        qter_core::ByPuzzleType::Puzzle((_, _, facelets)) => robot_handle()
+                            .event_tx
+                            .send(InterpretationEvent::SolvedGoto {
+                                facelets: facelets.clone(),
+                            })
+                            .unwrap(),
+                    },
+                    A::Panicked => {
+                        eprintln!("The interpreter panicked!");
+                        maybe_interpreter = None;
+                        robot_handle()
+                            .event_tx
+                            .send(InterpretationEvent::FinishedProgram)
+                            .unwrap();
+                        continue;
+                    }
+                }
+
+                while let Some(interpreter_message) = interpreter.state_mut().messages().pop_front()
+                {
+                    robot_handle()
+                        .event_tx
+                        .send(InterpretationEvent::Message(interpreter_message))
+                        .unwrap();
+                }
+
+                robot_handle()
+                    .event_tx
+                    .send(InterpretationEvent::ExecutedInstruction {
+                        next_one: interpreter.state().program_counter(),
+                    })
+                    .unwrap();
+            }
+            C::GiveInput(int) => {
+                let Some(interpreter) = &mut maybe_interpreter else {
+                    eprintln!("Cannot give input when there is no interpreter set");
+                    continue;
+                };
+
+                if let ExecutionState::Paused(PausedState::Input {
+                    max_input: _,
+                    data: _,
+                }) = interpreter.state().execution_state()
+                {
+                    interpreter.give_input(int).unwrap();
+                } else {
+                    eprintln!("Cannot give input when there is no input instruction");
+                }
+            }
+            C::Solve => {
+                maybe_interpreter = None;
+
+                TrackedRobotState.solve();
+            }
+        }
+    }
 }

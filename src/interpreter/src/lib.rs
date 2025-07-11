@@ -4,7 +4,7 @@
 mod instructions;
 pub mod puzzle_states;
 
-use std::{collections::VecDeque, mem};
+use std::{collections::VecDeque, mem, sync::Arc};
 
 use instructions::do_instr;
 use puzzle_states::{PuzzleState, PuzzleStates};
@@ -50,7 +50,7 @@ pub struct InterpreterState<P: PuzzleState> {
 /// An interpreter for a qter program
 pub struct Interpreter<P: PuzzleState> {
     state: InterpreterState<P>,
-    program: Program,
+    program: Arc<Program>,
 }
 
 pub struct FaceletsByType;
@@ -154,7 +154,7 @@ impl<P: PuzzleState> Interpreter<P> {
     ///
     /// If an initial state isn't specified, it defaults to zero.
     #[must_use]
-    pub fn new(program: Program) -> Self {
+    pub fn new(program: Arc<Program>) -> Self {
         let state = InterpreterState {
             puzzle_states: PuzzleStates::new(&program),
             program_counter: 0,
@@ -284,10 +284,7 @@ mod tests {
     use chumsky::Parser;
     use compiler::compile;
     use internment::ArcIntern;
-    use qter_core::{
-        File, Int, U,
-        architectures::{PuzzleDefinition, puzzle_definition},
-    };
+    use qter_core::{File, Int, U, architectures::puzzle_definition};
     use std::sync::Arc;
 
     #[test]
@@ -394,7 +391,7 @@ mod tests {
             Err(e) => panic!("{e:?}"),
         };
 
-        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(program);
+        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
 
         assert!(match interpreter.step_until_halt() {
             PausedState::Input {
@@ -469,7 +466,7 @@ mod tests {
             Err(e) => panic!("{e:?}"),
         };
 
-        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(program);
+        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
 
         let halted_state = interpreter.step_until_halt();
         assert!(
@@ -583,7 +580,7 @@ mod tests {
             Err(e) => panic!("{e:?}"),
         };
 
-        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(program);
+        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
 
         assert!(match interpreter.step_until_halt() {
             PausedState::Input {

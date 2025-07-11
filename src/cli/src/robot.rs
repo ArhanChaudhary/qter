@@ -213,7 +213,7 @@ impl RobotLike for SimulatedPuzzle {
     }
 }
 
-struct RobotState<R: RobotLike> {
+pub struct RobotState<R: RobotLike> {
     robot: R,
     perm_group: Arc<PermutationGroup>,
 }

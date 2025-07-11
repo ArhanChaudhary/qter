@@ -1,7 +1,8 @@
 #![warn(clippy::pedantic)]
+#![allow(clippy::items_after_statements)]
 #![allow(clippy::too_many_lines)]
 
-use std::{fs, io, path::PathBuf};
+use std::{fs, io, path::PathBuf, sync::Arc};
 
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use clap::{ArgAction, Parser};
@@ -20,7 +21,7 @@ use qter_core::{
     ByPuzzleType, File, I, Int,
     table_encoding::{decode_table, encode_table},
 };
-use robot::Cube3Robot;
+use robot::{Cube3Robot, RobotState};
 
 mod demo;
 mod robot;
@@ -54,7 +55,7 @@ enum Commands {
         /// Which file to test; must be a .qat file
         file: PathBuf,
     },
-    /// Execute the OpenSauce demo
+    /// Execute the opensauce demo
     Demo {
         #[arg(long)]
         robot: bool,
@@ -138,10 +139,10 @@ fn main() -> color_eyre::Result<()> {
             };
 
             if robot {
-                let interpreter = Interpreter::<Cube3Robot>::new(program);
+                let interpreter = Interpreter::<RobotState<Cube3Robot>>::new(Arc::new(program));
                 interpret(interpreter, trace_level)?;
             } else {
-                let interpreter = Interpreter::<SimulatedPuzzle>::new(program);
+                let interpreter = Interpreter::<SimulatedPuzzle>::new(Arc::new(program));
                 interpret(interpreter, trace_level)?;
             }
         }
