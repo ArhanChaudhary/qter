@@ -40,6 +40,33 @@ fn robot_handle() -> MutexGuard<'static, RobotHandle> {
 
 struct TrackedRobotState;
 
+impl TrackedRobotState {
+    fn halt_quiet(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<Int<U>> {
+        let mut generator = generator.to_owned();
+        generator.exponentiate(-Int::<U>::one());
+
+        let mut sum = Int::<U>::zero();
+
+        let chromatic_orders = generator.chromatic_orders_by_facelets();
+        let order = lcm_iter(facelets.iter().map(|&i| chromatic_orders[i]));
+
+        while !self.facelets_solved(facelets) {
+            sum += Int::<U>::one();
+
+            if sum >= order {
+                eprintln!(
+                    "Decoding failure! Performed as many cycles as the size of the register."
+                );
+                return None;
+            }
+
+            self.compose_into(&generator);
+        }
+
+        Some(sum)
+    }
+}
+
 impl PuzzleState for TrackedRobotState {
     fn initialize(_: Arc<PermutationGroup>) -> Self {
         robot_handle().robot.solve();
@@ -88,7 +115,7 @@ impl PuzzleState for TrackedRobotState {
             state
         };
 
-        let c = self.halt(facelets, generator)?;
+        let c = self.halt_quiet(facelets, generator)?;
 
         let mut exponentiated = generator.to_owned();
         exponentiated.exponentiate(c.into());
@@ -148,28 +175,8 @@ impl PuzzleState for TrackedRobotState {
     }
 
     fn repeat_until(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<()> {
-        let mut generator = generator.to_owned();
-        generator.exponentiate(-Int::<U>::one());
-
-        let mut sum = Int::<U>::zero();
-
-        let chromatic_orders = generator.chromatic_orders_by_facelets();
-        let order = lcm_iter(facelets.iter().map(|&i| chromatic_orders[i]));
-
-        while !self.facelets_solved(facelets) {
-            sum += Int::<U>::one();
-
-            if sum >= order {
-                eprintln!(
-                    "Decoding failure! Performed as many cycles as the size of the register."
-                );
-                return None;
-            }
-
-            self.compose_into(&generator);
-        }
-
-        Some(())
+        // repeat_until has the same behavior as halt
+        self.halt_quiet(facelets, generator).map(|_| ())
     }
 
     fn solve(&mut self) {
@@ -202,6 +209,8 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
 
     for command in command_rx {
         use InterpretationCommand as C;
+
+        let mut halted = false;
 
         match command {
             C::Execute(name) => {
@@ -242,8 +251,7 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
                                     .event_tx
                                     .send(InterpretationEvent::FinishedProgram)
                                     .unwrap();
-                                maybe_interpreter = None;
-                                continue;
+                                halted = true;
                             }
                             PausedState::Input { max_input, data: _ } => {
                                 robot_handle()
@@ -274,12 +282,11 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
                     },
                     A::Panicked => {
                         eprintln!("The interpreter panicked!");
-                        maybe_interpreter = None;
+                        halted = true;
                         robot_handle()
                             .event_tx
                             .send(InterpretationEvent::FinishedProgram)
                             .unwrap();
-                        continue;
                     }
                 }
 
@@ -291,12 +298,16 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
                         .unwrap();
                 }
 
-                robot_handle()
-                    .event_tx
-                    .send(InterpretationEvent::ExecutedInstruction {
-                        next_one: interpreter.state().program_counter(),
-                    })
-                    .unwrap();
+                if halted {
+                    maybe_interpreter = None;
+                } else {
+                    robot_handle()
+                        .event_tx
+                        .send(InterpretationEvent::ExecutedInstruction {
+                            next_one: interpreter.state().program_counter(),
+                        })
+                        .unwrap();
+                }
             }
             C::GiveInput(int) => {
                 let Some(interpreter) = &mut maybe_interpreter else {

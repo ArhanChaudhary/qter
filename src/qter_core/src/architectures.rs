@@ -245,7 +245,7 @@ impl core::fmt::Display for Permutation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let cycles = self.cycles();
         if cycles.is_empty() {
-            f.write_str("e")
+            f.write_str("Id")
         } else {
             for cycle in cycles {
                 f.write_str("(")?;

@@ -1,6 +1,7 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::items_after_statements)]
 #![allow(clippy::too_many_lines)]
+#![allow(clippy::needless_pass_by_value)]
 
 use std::{fs, io, path::PathBuf, sync::Arc};
 

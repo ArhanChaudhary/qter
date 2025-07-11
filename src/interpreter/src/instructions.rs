@@ -234,7 +234,7 @@ impl PuzzleInstructionImpl for Print {
             match &instr.1 {
                 Some((idx, algorithm, facelets)) => {
                     let puzzle = state.puzzle_states.puzzle_state_mut(*idx);
-                    match puzzle.halt(&facelets.0, algorithm) {
+                    match puzzle.print(&facelets.0, algorithm) {
                         Some(v) => Some(v),
                         None => {
                             return state.panic("The register specified is not decodable!");

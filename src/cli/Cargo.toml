@@ -15,7 +15,7 @@ puzzle_geometry = { path = "../puzzle_geometry" }
 internment = { version = "0.8", features = [ "arc" ] }
 ariadne = "0.5.1"
 chumsky = "0.10.1"
-bevy = { version = "0.16.1", features = ["wayland"] }
+bevy = { version = "0.16.1", features = [ "wayland", "dynamic_linking" ] }
 crossbeam-channel = "0.5.15"
 
 [lints]

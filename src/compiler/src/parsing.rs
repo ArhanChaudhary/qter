@@ -254,7 +254,10 @@ fn parser() -> impl Parser<'static, File, MaybeErr<ParsedSyntax>, ExtraAndSyntax
 
 fn shebang<S: Inspector<'static, File> + 'static>()
 -> impl Parser<'static, File, (), ExtraAndState<S>> {
-    any().repeated().delimited_by(just("#!"), just('\n')).to(())
+    group((just('\n').not(), any()))
+        .repeated()
+        .delimited_by(just("#!"), just('\n'))
+        .to(())
 }
 
 fn req_whitespace<S: Inspector<'static, File> + 'static>()
