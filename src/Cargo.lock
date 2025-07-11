@@ -1749,6 +1749,7 @@ dependencies = [
  "clap",
  "color-eyre",
  "compiler",
+ "crossbeam-channel",
  "internment",
  "interpreter",
  "itertools 0.13.0",

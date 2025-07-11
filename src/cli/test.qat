@@ -1,0 +1,23 @@
+#!/usr/bin/env -S cargo run -- interpret
+.registers {
+    B, A ← 3x3 builtin (24, 210)
+}
+
+    input "Number to modulus:" A
+loop:
+    print "A is now" A
+    add B 13
+decrement:
+    solved-goto B loop
+    solved-goto A fix
+    add A 209
+    add B 23
+    goto decrement
+fix:
+    solved-goto B finalize
+    add A 209
+    add B 23
+    goto fix
+finalize:
+    add A 13
+    halt "The modulus is" A

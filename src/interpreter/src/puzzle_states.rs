@@ -44,6 +44,7 @@ pub trait PuzzleState {
     /// Initialize the `Puzzle` in the solved state
     fn initialize(perm_group: Arc<PermutationGroup>) -> Self;
 
+    /// Perform an algorithm on the puzzle state
     fn compose_into(&mut self, alg: &Algorithm);
 
     /// Check whether the given facelets are solved

@@ -6,10 +6,9 @@ use std::{
     path::PathBuf,
     process::{ChildStdin, ChildStdout, Command, Stdio},
     sync::{Arc, OnceLock},
-    time::Instant,
 };
 
-use interpreter::puzzle_states::PuzzleState;
+use interpreter::puzzle_states::{PuzzleState, SimulatedPuzzle};
 use itertools::Itertools;
 use qter_core::{
     Int, U,
@@ -79,32 +78,41 @@ pub struct Cube3Robot {
     robot_path_buf: PathBuf,
     perm_group: Arc<PermutationGroup>,
     expected_perm: Permutation,
-    start: Instant,
 }
 
-impl PuzzleState for Cube3Robot {
+pub trait RobotLike {
+    fn initialize(perm_group: Arc<PermutationGroup>) -> Self;
+
+    fn compose_into(&mut self, alg: &Algorithm);
+
+    fn take_picture(&self) -> &Permutation;
+
+    fn solve(&mut self);
+}
+
+pub trait RobotLikeDyn {
+    fn compose_into(&mut self, alg: &Algorithm);
+
+    fn take_picture(&self) -> &Permutation;
+
+    fn solve(&mut self);
+}
+
+impl<R: RobotLike> RobotLikeDyn for R {
     fn compose_into(&mut self, alg: &Algorithm) {
-        self.permutation = OnceCell::new();
-
-        self.expected_perm.compose_into(alg.permutation());
-
-        let moves_file_path = self.robot_path_buf.join("resource/testSequences/tmp.txt");
-        let mut moves_file = File::create(moves_file_path).unwrap();
-        let chunk = alg.move_seq_iter().format(" ").to_string();
-        moves_file.write_all(chunk.as_bytes()).unwrap();
-
-        eprintln!(
-            "Performing alg `{chunk}` at time {}",
-            Instant::now().duration_since(self.start).as_micros(),
-        );
-
-        self.robot_tui(
-            &["t", "1\n", "0\n"],
-            &["1. tmp.txt", "1. tmp.txt", "[  Esc  ] Exit Program"],
-            "[  Esc  ] Exit Program",
-        );
+        <Self as RobotLike>::compose_into(self, alg);
     }
 
+    fn take_picture(&self) -> &Permutation {
+        <Self as RobotLike>::take_picture(self)
+    }
+
+    fn solve(&mut self) {
+        <Self as RobotLike>::solve(self);
+    }
+}
+
+impl RobotLike for Cube3Robot {
     fn initialize(perm_group: Arc<PermutationGroup>) -> Self {
         init_mapping();
 
@@ -146,7 +154,6 @@ impl PuzzleState for Cube3Robot {
             robot_path_buf,
             expected_perm: perm_group.identity(),
             perm_group,
-            start: Instant::now(),
         };
 
         ret.robot_tui(
@@ -162,13 +169,69 @@ impl PuzzleState for Cube3Robot {
         ret
     }
 
-    fn facelets_solved(&self, facelets: &[usize]) -> bool {
-        eprintln!(
-            "Solved-goto of `{facelets:?}` at time {}",
-            Instant::now().duration_since(self.start).as_micros(),
-        );
+    fn compose_into(&mut self, alg: &Algorithm) {
+        self.permutation = OnceCell::new();
 
-        let state = self.puzzle_state();
+        self.expected_perm.compose_into(alg.permutation());
+
+        let moves_file_path = self.robot_path_buf.join("resource/testSequences/tmp.txt");
+        let mut moves_file = File::create(moves_file_path).unwrap();
+        let chunk = alg.move_seq_iter().format(" ").to_string();
+        moves_file.write_all(chunk.as_bytes()).unwrap();
+
+        self.robot_tui(
+            &["t", "1\n", "0\n"],
+            &["1. tmp.txt", "1. tmp.txt", "[  Esc  ] Exit Program"],
+            "[  Esc  ] Exit Program",
+        );
+    }
+
+    fn take_picture(&self) -> &Permutation {
+        self.puzzle_state()
+    }
+
+    fn solve(&mut self) {
+        todo!()
+    }
+}
+
+impl RobotLike for SimulatedPuzzle {
+    fn initialize(perm_group: Arc<PermutationGroup>) -> Self {
+        <Self as PuzzleState>::initialize(perm_group)
+    }
+
+    fn compose_into(&mut self, alg: &Algorithm) {
+        <Self as PuzzleState>::compose_into(self, alg);
+    }
+
+    fn take_picture(&self) -> &Permutation {
+        self.puzzle_state()
+    }
+
+    fn solve(&mut self) {
+        <Self as PuzzleState>::solve(self);
+    }
+}
+
+struct RobotState<R: RobotLike> {
+    robot: R,
+    perm_group: Arc<PermutationGroup>,
+}
+
+impl<R: RobotLike> PuzzleState for RobotState<R> {
+    fn compose_into(&mut self, alg: &Algorithm) {
+        self.robot.compose_into(alg);
+    }
+
+    fn initialize(perm_group: Arc<PermutationGroup>) -> Self {
+        RobotState {
+            perm_group: Arc::clone(&perm_group),
+            robot: R::initialize(perm_group),
+        }
+    }
+
+    fn facelets_solved(&self, facelets: &[usize]) -> bool {
+        let state = self.robot.take_picture();
 
         for &facelet in facelets {
             let maps_to = state.mapping()[facelet];
@@ -183,12 +246,16 @@ impl PuzzleState for Cube3Robot {
     }
 
     fn print(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<Int<U>> {
-        let before = self.puzzle_state().to_owned();
+        let before = self.robot.take_picture().to_owned();
+
         let c = self.halt(facelets, generator)?;
+
         let mut exponentiated = generator.to_owned();
         exponentiated.exponentiate(c.into());
+
         self.compose_into(&exponentiated);
-        if &before != self.puzzle_state() {
+
+        if &before != self.robot.take_picture() {
             eprintln!("Printing did not return the cube to the original state!");
             return None;
         }
@@ -455,7 +522,7 @@ mod tests {
                 .perm_group,
         );
 
-        let solved = SimulatedPuzzle::initialize(Arc::clone(&perm_group));
+        let solved = <SimulatedPuzzle as RobotLike>::initialize(Arc::clone(&perm_group));
 
         for [seq, rob_string] in [
             ["", "UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB"],
@@ -705,7 +772,7 @@ mod tests {
                     .collect_vec(),
             )
             .unwrap();
-            expected.compose_into(&alg);
+            <SimulatedPuzzle as RobotLike>::compose_into(&mut expected, &alg);
 
             assert_eq!(
                 expected.puzzle_state().mapping(),
