@@ -25,7 +25,7 @@ struct RobotHandle {
 
 static ROBOT_HANDLE: OnceLock<Mutex<RobotHandle>> = OnceLock::new();
 
-static CUBE3: LazyLock<Arc<PermutationGroup>> = LazyLock::new(|| {
+pub static CUBE3: LazyLock<Arc<PermutationGroup>> = LazyLock::new(|| {
     Arc::clone(
         &puzzle_definition()
             .parse(qter_core::File::from("3x3"))
