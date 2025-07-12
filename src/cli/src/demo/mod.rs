@@ -9,14 +9,14 @@ use std::{
 use bevy::{
     DefaultPlugins,
     app::{App, Startup, Update},
-    asset::Assets,
+    asset::{Assets, Handle},
     color::Color,
     core_pipeline::{core_2d::Camera2d, core_3d::Camera3d},
     ecs::{
         component::Component,
         event::{Event, EventReader, EventWriter},
         resource::Resource,
-        system::{Commands, Res, ResMut},
+        system::{Commands, Query, Res, ResMut},
     },
     input::{ButtonInput, keyboard::KeyCode},
     math::{Mat2, Mat4, Quat, Vec2, Vec3, Vec3A, primitives::Rhombus},
@@ -131,18 +131,14 @@ struct CommandTx(Sender<InterpretationCommand>);
 #[derive(Component)]
 struct FaceletIdx(usize);
 
-static COLORS: LazyLock<HashMap<ArcIntern<str>, Color>> = LazyLock::new(|| {
-    let mut map = HashMap::new();
+#[derive(Component)]
+struct StateViz;
 
-    map.insert(ArcIntern::from("White"), Color::srgb_u8(255, 255, 255));
-    map.insert(ArcIntern::from("Green"), Color::srgb_u8(0, 255, 0));
-    map.insert(ArcIntern::from("Red"), Color::srgb_u8(255, 0, 0));
-    map.insert(ArcIntern::from("Blue"), Color::srgb_u8(0, 0, 255));
-    map.insert(ArcIntern::from("Orange"), Color::srgb_u8(255, 128, 0));
-    map.insert(ArcIntern::from("Yellow"), Color::srgb_u8(255, 255, 0));
+#[derive(Component)]
+struct CycleViz;
 
-    map
-});
+#[derive(Resource)]
+struct Colors(HashMap<ArcIntern<str>, Handle<ColorMaterial>>);
 
 fn setup<R: RobotLike + Send + 'static>(
     mut commands: Commands,
@@ -182,6 +178,39 @@ fn setup<R: RobotLike + Send + 'static>(
         10, 12, 15, 9, 14, 8, 11, 13, //
     ];
 
+    let mut colors = HashMap::new();
+
+    colors.insert(
+        ArcIntern::from("White"),
+        materials.add(Color::srgb_u8(255, 255, 255)),
+    );
+    colors.insert(
+        ArcIntern::from("Green"),
+        materials.add(Color::srgb_u8(0, 255, 0)),
+    );
+    colors.insert(
+        ArcIntern::from("Red"),
+        materials.add(Color::srgb_u8(255, 0, 0)),
+    );
+    colors.insert(
+        ArcIntern::from("Blue"),
+        materials.add(Color::srgb_u8(0, 0, 255)),
+    );
+    colors.insert(
+        ArcIntern::from("Orange"),
+        materials.add(Color::srgb_u8(255, 128, 0)),
+    );
+    colors.insert(
+        ArcIntern::from("Yellow"),
+        materials.add(Color::srgb_u8(255, 255, 0)),
+    );
+    colors.insert(
+        ArcIntern::from("Grey"),
+        materials.add(Color::srgb_u8(127, 127, 127)),
+    );
+
+    let grey = ArcIntern::from("Grey");
+
     let center_colors = [
         ArcIntern::<str>::from("White"),
         ArcIntern::from("Green"),
@@ -192,10 +221,10 @@ fn setup<R: RobotLike + Send + 'static>(
     ];
 
     for (is_cycle_viz, is_right) in spots {
-        let mut transform = Mat4::from_translation(Vec3::new(off_center, -dist / 2., 0.));
+        let mut transform = Mat4::from_translation(Vec3::new(off_center, dist / 2., 0.));
 
         if is_cycle_viz {
-            transform *= Mat4::from_translation(Vec3::new(0., dist, 0.));
+            transform *= Mat4::from_translation(Vec3::new(0., -dist, 0.));
         }
 
         let idx_to_add = if is_right { 3 } else { 0 };
@@ -233,23 +262,41 @@ fn setup<R: RobotLike + Send + 'static>(
                 let transform =
                     transform * tri * Mat4::from_translation(Vec3::new(spot.x, spot.y, 0.));
 
-                let color = *COLORS.get(&center_colors[j + idx_to_add]).unwrap();
+                let color = colors
+                    .get(if !is_cycle_viz || i == 8 {
+                        &center_colors[j + idx_to_add]
+                    } else {
+                        &grey
+                    })
+                    .unwrap()
+                    .clone();
 
                 if i == 8 {
                     commands.spawn((
                         Mesh2d(mesh.clone()),
-                        MeshMaterial2d(materials.add(color)),
+                        MeshMaterial2d(color),
                         Transform::from_matrix(transform),
                     ));
                 } else {
                     let facelet_idx = indices[(j + idx_to_add) * 8 + i];
 
-                    commands.spawn((
-                        Mesh2d(mesh.clone()),
-                        MeshMaterial2d(materials.add(color)),
-                        Transform::from_matrix(transform),
-                        FaceletIdx(facelet_idx),
-                    ));
+                    if is_cycle_viz {
+                        commands.spawn((
+                            Mesh2d(mesh.clone()),
+                            MeshMaterial2d(color),
+                            Transform::from_matrix(transform),
+                            FaceletIdx(facelet_idx),
+                            CycleViz,
+                        ));
+                    } else {
+                        commands.spawn((
+                            Mesh2d(mesh.clone()),
+                            MeshMaterial2d(color),
+                            Transform::from_matrix(transform),
+                            FaceletIdx(facelet_idx),
+                            StateViz,
+                        ));
+                    }
 
                     // commands.spawn((
                     //     Text2d::new(facelet_idx.to_string()),
@@ -260,6 +307,8 @@ fn setup<R: RobotLike + Send + 'static>(
             }
         }
     }
+
+    commands.insert_resource(Colors(colors));
 }
 
 pub fn demo(robot: bool) {
@@ -276,6 +325,7 @@ pub fn demo(robot: bool) {
         .add_event::<FinishedProgram>()
         .add_plugins(DefaultPlugins)
         .add_systems(Update, keyboard_control)
+        .add_systems(Update, state_visualizer)
         .add_systems(Update, read_events);
 
     if robot {
@@ -330,6 +380,28 @@ fn read_events(
             }
         }
     }
+}
+
+fn state_visualizer(
+    colors: Res<Colors>,
+    mut cube_states: EventReader<CubeState>,
+    mut query: Query<(&mut MeshMaterial2d<ColorMaterial>, &FaceletIdx, &StateViz)>,
+) {
+    let Some(state) = cube_states.read().last() else {
+        return;
+    };
+
+    query
+        .par_iter_mut()
+        .for_each(|(mut color_material, facelet, StateViz)| {
+            let new_color = colors
+                .0
+                .get(&CUBE3.facelet_colors()[state.0.mapping()[facelet.0]])
+                .unwrap()
+                .clone();
+
+            *color_material = MeshMaterial2d(new_color);
+        });
 }
 
 // Replace this with buttons

@@ -1068,10 +1068,10 @@ pub fn puzzle_definition() -> impl Parser<'static, File, Arc<PuzzleDefinition>, 
             let group = Arc::new(PermutationGroup::new(
                 [
                     ArcIntern::from("White"),
+                    ArcIntern::from("Orange"),
                     ArcIntern::from("Green"),
                     ArcIntern::from("Red"),
                     ArcIntern::from("Blue"),
-                    ArcIntern::from("Orange"),
                     ArcIntern::from("Yellow"),
                 ]
                 .iter()
