@@ -6,26 +6,8 @@ use std::{
     thread,
 };
 
-use bevy::{
-    DefaultPlugins,
-    app::{App, Startup, Update},
-    asset::{Assets, Handle},
-    color::Color,
-    core_pipeline::{core_2d::Camera2d, core_3d::Camera3d},
-    ecs::{
-        component::Component,
-        event::{Event, EventReader, EventWriter},
-        resource::Resource,
-        system::{Commands, Query, Res, ResMut},
-    },
-    input::{ButtonInput, keyboard::KeyCode},
-    math::{Mat2, Mat4, Quat, Vec2, Vec3, Vec3A, primitives::Rhombus},
-    prelude::Deref,
-    render::mesh::{Mesh, Mesh2d},
-    sprite::{ColorMaterial, MeshMaterial2d, Sprite},
-    text::{Text2d, TextColor},
-    transform::components::{GlobalTransform, Transform},
-};
+use bevy::prelude::*;
+use chumsky::container::Seq;
 use compiler::compile;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use internment::{ArcIntern, Intern};
@@ -137,8 +119,17 @@ struct StateViz;
 #[derive(Component)]
 struct CycleViz;
 
+#[derive(Component)]
+struct Border;
+
+#[derive(Component)]
+struct Sticker;
+
 #[derive(Resource)]
 struct Colors(HashMap<ArcIntern<str>, Handle<ColorMaterial>>);
+
+#[derive(Resource)]
+struct CurrentState(Permutation);
 
 fn setup<R: RobotLike + Send + 'static>(
     mut commands: Commands,
@@ -154,6 +145,7 @@ fn setup<R: RobotLike + Send + 'static>(
 
     commands.insert_resource(EventRx(event_rx));
     commands.insert_resource(CommandTx(command_tx));
+    commands.insert_resource(CurrentState(CUBE3.identity()));
 
     let scale = 40.;
 
@@ -162,7 +154,8 @@ fn setup<R: RobotLike + Send + 'static>(
     let rhombus_matrix = Mat2::from_diagonal(Vec2::new(weird_dist, scale))
         * Mat2::from_cols(Vec2::new(-1., 1.), Vec2::new(1., 1.));
 
-    let mesh = meshes.add(Rhombus::new(weird_dist * 2. * 0.9, 2. * scale * 0.9));
+    let sticker = meshes.add(Rhombus::new(weird_dist * 2. * 0.9, 2. * scale * 0.9));
+    let border = meshes.add(Rhombus::new(weird_dist * 2. * 1.1, 2. * scale * 1.1));
 
     let dist = 500.;
     let off_center = 300.;
@@ -208,8 +201,17 @@ fn setup<R: RobotLike + Send + 'static>(
         ArcIntern::from("Grey"),
         materials.add(Color::srgb_u8(127, 127, 127)),
     );
+    colors.insert(
+        ArcIntern::from("Purple"),
+        materials.add(Color::srgb_u8(255, 0, 255)),
+    );
+    colors.insert(
+        ArcIntern::from("Transparent"),
+        materials.add(Color::srgba_u8(0, 0, 0, 0)),
+    );
 
     let grey = ArcIntern::from("Grey");
+    let transparent = colors.get(&ArcIntern::from("Transparent")).unwrap();
 
     let center_colors = [
         ArcIntern::<str>::from("White"),
@@ -273,7 +275,7 @@ fn setup<R: RobotLike + Send + 'static>(
 
                 if i == 8 {
                     commands.spawn((
-                        Mesh2d(mesh.clone()),
+                        Mesh2d(sticker.clone()),
                         MeshMaterial2d(color),
                         Transform::from_matrix(transform),
                     ));
@@ -282,19 +284,43 @@ fn setup<R: RobotLike + Send + 'static>(
 
                     if is_cycle_viz {
                         commands.spawn((
-                            Mesh2d(mesh.clone()),
+                            Mesh2d(border.clone()),
+                            MeshMaterial2d(transparent.clone()),
+                            Transform::from_matrix(
+                                Mat4::from_translation(Vec3::new(0., 0., -1.)) * transform,
+                            ),
+                            FaceletIdx(facelet_idx),
+                            CycleViz,
+                            Border,
+                        ));
+
+                        commands.spawn((
+                            Mesh2d(sticker.clone()),
                             MeshMaterial2d(color),
                             Transform::from_matrix(transform),
                             FaceletIdx(facelet_idx),
                             CycleViz,
+                            Sticker,
                         ));
                     } else {
                         commands.spawn((
-                            Mesh2d(mesh.clone()),
+                            Mesh2d(border.clone()),
+                            MeshMaterial2d(transparent.clone()),
+                            Transform::from_matrix(
+                                Mat4::from_translation(Vec3::new(0., 0., -1.)) * transform,
+                            ),
+                            FaceletIdx(facelet_idx),
+                            StateViz,
+                            Border,
+                        ));
+
+                        commands.spawn((
+                            Mesh2d(sticker.clone()),
                             MeshMaterial2d(color),
                             Transform::from_matrix(transform),
                             FaceletIdx(facelet_idx),
                             StateViz,
+                            Sticker,
                         ));
                     }
 
@@ -325,8 +351,16 @@ pub fn demo(robot: bool) {
         .add_event::<FinishedProgram>()
         .add_plugins(DefaultPlugins)
         .add_systems(Update, keyboard_control)
-        .add_systems(Update, state_visualizer)
-        .add_systems(Update, read_events);
+        .add_systems(
+            Update,
+            (
+                read_events,
+                executed_instruction,
+                state_visualizer,
+                solved_goto_visualizer,
+            )
+                .chain(),
+        );
 
     if robot {
         app.add_systems(Startup, setup::<Cube3Robot>)
@@ -382,18 +416,48 @@ fn read_events(
     }
 }
 
+fn executed_instruction(
+    mut commands: Commands,
+    colors: Res<Colors>,
+    mut executed_instructions: EventReader<ExecutedInstruction>,
+    mut backgrounds: Query<(&mut MeshMaterial2d<ColorMaterial>, &StateViz, &Border)>,
+    mut solved_goto_statements: Query<(Entity, &SolvedGotoStatement)>,
+) {
+    let Some(instr) = executed_instructions.read().last() else {
+        return;
+    };
+
+    let transparent = colors.0.get(&ArcIntern::from("Transparent")).unwrap();
+
+    backgrounds
+        .par_iter_mut()
+        .for_each(|(mut color, StateViz, Border)| *color = MeshMaterial2d(transparent.to_owned()));
+
+    for (entity, SolvedGotoStatement) in solved_goto_statements {
+        commands.entity(entity).despawn();
+    }
+}
+
 fn state_visualizer(
     colors: Res<Colors>,
+    mut current_state: ResMut<CurrentState>,
     mut cube_states: EventReader<CubeState>,
-    mut query: Query<(&mut MeshMaterial2d<ColorMaterial>, &FaceletIdx, &StateViz)>,
+    mut query: Query<(
+        &mut MeshMaterial2d<ColorMaterial>,
+        &FaceletIdx,
+        &StateViz,
+        &Sticker,
+    )>,
 ) {
     let Some(state) = cube_states.read().last() else {
         return;
     };
 
+    state.0.clone_into(&mut current_state.0);
+
     query
         .par_iter_mut()
-        .for_each(|(mut color_material, facelet, StateViz)| {
+        .for_each(|(mut color_material, facelet, StateViz, Sticker)| {
             let new_color = colors
                 .0
                 .get(&CUBE3.facelet_colors()[state.0.mapping()[facelet.0]])
@@ -402,6 +466,64 @@ fn state_visualizer(
 
             *color_material = MeshMaterial2d(new_color);
         });
+}
+
+#[derive(Component)]
+struct SolvedGotoStatement;
+
+fn solved_goto_visualizer(
+    mut commands: Commands,
+    colors: Res<Colors>,
+    current_state: Res<CurrentState>,
+    mut solved_gotos: EventReader<SolvedGoto>,
+    mut query: Query<(
+        &mut MeshMaterial2d<ColorMaterial>,
+        &FaceletIdx,
+        &StateViz,
+        &Border,
+    )>,
+) {
+    let Some(solved_goto) = solved_gotos.read().last() else {
+        return;
+    };
+
+    let purple = colors.0.get(&ArcIntern::from("Purple")).unwrap();
+
+    let color_scheme = CUBE3.facelet_colors();
+
+    let mut taken = true;
+
+    for (mut color, idx, StateViz, Border) in &mut query {
+        if solved_goto.facelets.0.contains(&idx.0) {
+            *color = MeshMaterial2d(purple.to_owned());
+
+            taken &= color_scheme[current_state.0.mapping()[idx.0]] == color_scheme[idx.0];
+        }
+    }
+
+    if taken {
+        commands.spawn((
+            Text2d::new("Taken"),
+            TextColor(Color::srgb_u8(0, 255, 0)),
+            TextFont {
+                font_size: 50.,
+                ..Default::default()
+            },
+            Transform::from_translation(Vec3::new(300. + 250., 0., 0.)),
+            SolvedGotoStatement,
+        ));
+    } else {
+        commands.spawn((
+            Text2d::new("Not taken"),
+            TextColor(Color::srgb_u8(255, 0, 0)),
+            TextFont {
+                font_size: 50.,
+                ..Default::default()
+            },
+            Transform::from_translation(Vec3::new(300. + 250., 0., 0.)),
+            SolvedGotoStatement,
+        ));
+    }
 }
 
 // Replace this with buttons
