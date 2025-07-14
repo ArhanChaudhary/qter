@@ -147,7 +147,7 @@ impl RobotLike for Cube3Robot {
 
         let robot_stdin = RefCell::new(robot_process.stdin.take().unwrap());
         let robot_stdout = RefCell::new(robot_process.stdout.take().unwrap());
-        let ret = Cube3Robot {
+        let mut ret = Cube3Robot {
             permutation: OnceCell::new(),
             robot_stdin,
             robot_stdout,
@@ -157,15 +157,11 @@ impl RobotLike for Cube3Robot {
         };
 
         ret.robot_tui(
-            &["p", "7", "\n", "\n"],
-            &[
-                "Preset 7: Safe for Qter",
-                "[ Enter ] Ready to Solve",
-                "[ Enter ] Start the Solve",
-                "Total Time: ",
-            ],
-            "[   C   ] Print Cube State",
+            &["p", "7"],
+            &["Preset 7: Safe for Qter", "[ Enter ] Ready to Solve"],
+            "[  Esc  ] Exit Program",
         );
+        RobotLike::solve(&mut ret);
         ret
     }
 
@@ -191,7 +187,14 @@ impl RobotLike for Cube3Robot {
     }
 
     fn solve(&mut self) {
-        todo!()
+        self.robot_tui(
+            &["\n", "\n"],
+            &[
+                "[ Enter ] Start the Solve",
+                "Total Time: ",
+            ],
+            "[   C   ] Print Cube State",
+        );
     }
 }
 
@@ -422,10 +425,10 @@ impl Cube3Robot {
                     robot_debug(&line);
                     if rob_string.is_none() && ret.is_none() {
                         if line.contains(expected1) {
-                            // rob_string = Some(line[expected1.len()..].trim().to_string());
-                            let mut buffer = String::new();
-                            io::stdin().read_line(&mut buffer).unwrap();
-                            rob_string = Some(buffer.trim().to_string());
+                            rob_string = Some(line[expected1.len()..].trim().to_string());
+                            // let mut buffer = String::new();
+                            // io::stdin().read_line(&mut buffer).unwrap();
+                            // rob_string = Some(buffer.trim().to_string());
                         }
                     } else {
                         if ret.is_none() && line.contains(expected2) {
