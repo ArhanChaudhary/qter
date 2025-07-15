@@ -3,24 +3,27 @@ use std::{
     fs,
     path::PathBuf,
     sync::{Arc, LazyLock},
-    thread,
 };
 
 use bevy::prelude::*;
 use chumsky::container::Seq;
 use compiler::compile;
-use crossbeam_channel::{Receiver, Sender, unbounded};
 use internment::{ArcIntern, Intern};
 use interpreter::puzzle_states::SimulatedPuzzle;
 use interpreter_loop::{CUBE3, CUBE3_DEF};
+use interpreter_plugin::{
+    CommandTx, CubeState, ExecutedInstruction, FinishedProgram, InterpretationCommand,
+    InterpreterPlugin, SolvedGoto,
+};
 use qter_core::{
-    Facelets, File, I, Int, Program, U,
+    File, Int, Program,
     architectures::{Architecture, Permutation},
 };
 
 use crate::robot::{Cube3Robot, RobotLike};
 
 mod interpreter_loop;
+mod interpreter_plugin;
 
 struct ProgramInfo {
     program: Arc<Program>,
@@ -60,65 +63,6 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
 
 static NAMES: &[&str] = &["A", "B", "C", "D"];
 
-#[derive(Event)]
-struct Message(String);
-
-#[derive(Event)]
-struct Input(Int<U>);
-
-#[derive(Event)]
-struct BeginHalt;
-
-#[derive(Event)]
-struct HaltCountUp(Int<U>);
-
-#[derive(Event)]
-struct CubeState(Permutation);
-
-#[derive(Event)]
-struct SolvedGoto {
-    facelets: Facelets,
-}
-
-#[derive(Event)]
-struct ExecutedInstruction {
-    next_one: usize,
-}
-
-#[derive(Event)]
-struct BeganProgram(Intern<str>);
-
-#[derive(Event)]
-struct FinishedProgram;
-
-#[derive(Debug)]
-enum InterpretationEvent {
-    Message(String),
-    Input(Int<U>),
-    BeginHalt,
-    HaltCountUp(Int<U>),
-    CubeState(Permutation),
-    SolvedGoto { facelets: Facelets },
-    ExecutedInstruction { next_one: usize },
-    BeganProgram(Intern<str>),
-    FinishedProgram,
-    // Stuff for highlighting instructions
-}
-
-#[derive(Resource, Deref)]
-struct EventRx(Receiver<InterpretationEvent>);
-
-#[derive(Debug)]
-enum InterpretationCommand {
-    Execute(Intern<str>),
-    Step,
-    GiveInput(Int<I>),
-    Solve,
-}
-
-#[derive(Resource, Deref)]
-struct CommandTx(Sender<InterpretationCommand>);
-
 #[derive(Component)]
 struct FaceletIdx(usize);
 
@@ -153,13 +97,6 @@ fn setup<R: RobotLike + Send + 'static>(
 ) {
     commands.spawn(Camera2d);
 
-    let (event_tx, event_rx) = unbounded::<InterpretationEvent>();
-    let (command_tx, command_rx) = unbounded::<InterpretationCommand>();
-
-    thread::spawn(move || interpreter_loop::interpreter_loop::<R>(event_tx, command_rx));
-
-    commands.insert_resource(EventRx(event_rx));
-    commands.insert_resource(CommandTx(command_tx));
     commands.insert_resource(CurrentState(CUBE3.identity()));
 
     let scale = 35.;
@@ -356,21 +293,12 @@ fn setup<R: RobotLike + Send + 'static>(
 pub fn demo(robot: bool) {
     let mut app = App::new();
     let app = app
-        .add_event::<Message>()
-        .add_event::<Input>()
-        .add_event::<BeginHalt>()
-        .add_event::<HaltCountUp>()
-        .add_event::<CubeState>()
-        .add_event::<SolvedGoto>()
-        .add_event::<ExecutedInstruction>()
-        .add_event::<BeganProgram>()
-        .add_event::<FinishedProgram>()
         .add_plugins(DefaultPlugins)
+        .add_plugins(InterpreterPlugin { robot })
         .add_systems(Update, keyboard_control)
         .add_systems(
             Update,
             (
-                read_events,
                 executed_instruction,
                 state_visualizer,
                 solved_goto_visualizer,
@@ -380,57 +308,12 @@ pub fn demo(robot: bool) {
         );
 
     if robot {
-        app.add_systems(Startup, setup::<Cube3Robot>)
+        app.add_systems(Startup, setup::<Cube3Robot>);
     } else {
-        app.add_systems(Startup, setup::<SimulatedPuzzle>)
+        app.add_systems(Startup, setup::<SimulatedPuzzle>);
     }
-    .run();
-}
 
-#[expect(clippy::too_many_arguments)]
-fn read_events(
-    recv: Res<EventRx>,
-    mut messages: EventWriter<Message>,
-    mut inputs: EventWriter<Input>,
-    mut begin_halts: EventWriter<BeginHalt>,
-    mut halt_count_ups: EventWriter<HaltCountUp>,
-    mut cube_states: EventWriter<CubeState>,
-    mut solved_gotos: EventWriter<SolvedGoto>,
-    mut executed_instructions: EventWriter<ExecutedInstruction>,
-    mut began_programs: EventWriter<BeganProgram>,
-    mut finished_programs: EventWriter<FinishedProgram>,
-) {
-    for event in recv.try_iter() {
-        match event {
-            InterpretationEvent::Message(msg) => {
-                messages.write(Message(msg));
-            }
-            InterpretationEvent::Input(int) => {
-                inputs.write(Input(int));
-            }
-            InterpretationEvent::BeginHalt => {
-                begin_halts.write(BeginHalt);
-            }
-            InterpretationEvent::HaltCountUp(int) => {
-                halt_count_ups.write(HaltCountUp(int));
-            }
-            InterpretationEvent::CubeState(permutation) => {
-                cube_states.write(CubeState(permutation));
-            }
-            InterpretationEvent::SolvedGoto { facelets } => {
-                solved_gotos.write(SolvedGoto { facelets });
-            }
-            InterpretationEvent::ExecutedInstruction { next_one } => {
-                executed_instructions.write(ExecutedInstruction { next_one });
-            }
-            InterpretationEvent::BeganProgram(intern) => {
-                began_programs.write(BeganProgram(intern));
-            }
-            InterpretationEvent::FinishedProgram => {
-                finished_programs.write(FinishedProgram);
-            }
-        }
-    }
+    app.run();
 }
 
 fn executed_instruction(
@@ -523,7 +406,7 @@ fn solved_goto_visualizer(
                 font_size: 50.,
                 ..Default::default()
             },
-            Transform::from_translation(Vec3::new(300. + 250., 0., 0.)),
+            Transform::from_translation(Vec3::new(350. + 250., -150., 0.)),
             SolvedGotoStatement,
         ));
     } else {
@@ -534,7 +417,7 @@ fn solved_goto_visualizer(
                 font_size: 50.,
                 ..Default::default()
             },
-            Transform::from_translation(Vec3::new(300. + 250., 0., 0.)),
+            Transform::from_translation(Vec3::new(350. + 250., -150., 0.)),
             SolvedGotoStatement,
         ));
     }

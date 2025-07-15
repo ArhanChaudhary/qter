@@ -16,7 +16,7 @@ use crate::{
     robot::{RobotLike, RobotLikeDyn},
 };
 
-use super::{InterpretationCommand, InterpretationEvent};
+use super::{InterpretationCommand, interpreter_plugin::InterpretationEvent};
 
 struct RobotHandle {
     robot: &'static mut (dyn RobotLikeDyn + Send + 'static),
