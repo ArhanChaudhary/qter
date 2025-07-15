@@ -1,7 +1,7 @@
 use std::thread;
 
 use bevy::{
-    app::{Plugin, Startup, Update},
+    app::{Plugin, PreUpdate, Startup, Update},
     ecs::{
         event::{Event, EventWriter},
         resource::Resource,
@@ -110,7 +110,7 @@ impl Plugin for InterpreterPlugin {
                     setup::<SimulatedPuzzle>
                 },
             )
-            .add_systems(Update, read_events);
+            .add_systems(PreUpdate, read_events);
     }
 }
 
