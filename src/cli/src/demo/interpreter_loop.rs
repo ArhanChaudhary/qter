@@ -7,7 +7,7 @@ use interpreter::{
 };
 use qter_core::{
     Int, U,
-    architectures::{Algorithm, PermutationGroup, puzzle_definition},
+    architectures::{Algorithm, PermutationGroup, PuzzleDefinition, puzzle_definition},
     discrete_math::lcm_iter,
 };
 
@@ -25,14 +25,14 @@ struct RobotHandle {
 
 static ROBOT_HANDLE: OnceLock<Mutex<RobotHandle>> = OnceLock::new();
 
-pub static CUBE3: LazyLock<Arc<PermutationGroup>> = LazyLock::new(|| {
-    Arc::clone(
-        &puzzle_definition()
-            .parse(qter_core::File::from("3x3"))
-            .unwrap()
-            .perm_group,
-    )
+pub static CUBE3_DEF: LazyLock<Arc<PuzzleDefinition>> = LazyLock::new(|| {
+    puzzle_definition()
+        .parse(qter_core::File::from("3x3"))
+        .unwrap()
 });
+
+pub static CUBE3: LazyLock<Arc<PermutationGroup>> =
+    LazyLock::new(|| Arc::clone(&CUBE3_DEF.perm_group));
 
 fn robot_handle() -> MutexGuard<'static, RobotHandle> {
     ROBOT_HANDLE.get().unwrap().lock().unwrap()

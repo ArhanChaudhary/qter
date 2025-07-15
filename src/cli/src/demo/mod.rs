@@ -12,8 +12,11 @@ use compiler::compile;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use internment::{ArcIntern, Intern};
 use interpreter::puzzle_states::SimulatedPuzzle;
-use interpreter_loop::CUBE3;
-use qter_core::{Facelets, File, I, Int, Program, U, architectures::Permutation};
+use interpreter_loop::{CUBE3, CUBE3_DEF};
+use qter_core::{
+    Facelets, File, I, Int, Program, U,
+    architectures::{Architecture, Permutation},
+};
 
 use crate::robot::{Cube3Robot, RobotLike};
 
@@ -21,6 +24,7 @@ mod interpreter_loop;
 
 struct ProgramInfo {
     program: Arc<Program>,
+    architecture: Arc<Architecture>,
 }
 
 static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| {
@@ -45,11 +49,16 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
                 })
                 .unwrap(),
             ),
+            architecture: CUBE3_DEF
+                .get_preset(&[Int::from(210_u32), Int::from(24_u32)])
+                .unwrap(),
         },
     );
 
     programs
 });
+
+static NAMES: &[&str] = &["A", "B", "C", "D"];
 
 #[derive(Event)]
 struct Message(String);
@@ -125,6 +134,12 @@ struct Border;
 #[derive(Component)]
 struct Sticker;
 
+#[derive(Component)]
+struct SolvedGotoStatement;
+
+#[derive(Component)]
+struct RegistersViz;
+
 #[derive(Resource)]
 struct Colors(HashMap<ArcIntern<str>, Handle<ColorMaterial>>);
 
@@ -147,7 +162,7 @@ fn setup<R: RobotLike + Send + 'static>(
     commands.insert_resource(CommandTx(command_tx));
     commands.insert_resource(CurrentState(CUBE3.identity()));
 
-    let scale = 40.;
+    let scale = 35.;
 
     let weird_dist = (3_f32 / 4.).sqrt() * scale * 2.;
 
@@ -157,8 +172,8 @@ fn setup<R: RobotLike + Send + 'static>(
     let sticker = meshes.add(Rhombus::new(weird_dist * 2. * 0.9, 2. * scale * 0.9));
     let border = meshes.add(Rhombus::new(weird_dist * 2. * 1.1, 2. * scale * 1.1));
 
-    let dist = 500.;
-    let off_center = 300.;
+    let dist = 450.;
+    let off_center = Vec2::new(350., -150.);
 
     let spots = [(false, false), (false, true), (true, false), (true, true)];
 
@@ -223,9 +238,10 @@ fn setup<R: RobotLike + Send + 'static>(
     ];
 
     for (is_cycle_viz, is_right) in spots {
-        let mut transform = Mat4::from_translation(Vec3::new(off_center, dist / 2., 0.));
+        let mut transform =
+            Mat4::from_translation(Vec3::new(off_center.x, dist / 2. + off_center.y, 0.));
 
-        if is_cycle_viz {
+        if !is_cycle_viz {
             transform *= Mat4::from_translation(Vec3::new(0., -dist, 0.));
         }
 
@@ -358,6 +374,7 @@ pub fn demo(robot: bool) {
                 executed_instruction,
                 state_visualizer,
                 solved_goto_visualizer,
+                finished_program,
             )
                 .chain(),
         );
@@ -421,7 +438,7 @@ fn executed_instruction(
     colors: Res<Colors>,
     mut executed_instructions: EventReader<ExecutedInstruction>,
     mut backgrounds: Query<(&mut MeshMaterial2d<ColorMaterial>, &StateViz, &Border)>,
-    mut solved_goto_statements: Query<(Entity, &SolvedGotoStatement)>,
+    solved_goto_statements: Query<(Entity, &SolvedGotoStatement)>,
 ) {
     let Some(instr) = executed_instructions.read().last() else {
         return;
@@ -467,9 +484,6 @@ fn state_visualizer(
             *color_material = MeshMaterial2d(new_color);
         });
 }
-
-#[derive(Component)]
-struct SolvedGotoStatement;
 
 fn solved_goto_visualizer(
     mut commands: Commands,
@@ -523,6 +537,20 @@ fn solved_goto_visualizer(
             Transform::from_translation(Vec3::new(300. + 250., 0., 0.)),
             SolvedGotoStatement,
         ));
+    }
+}
+
+fn finished_program(
+    mut commands: Commands,
+    mut executed_instructions: EventReader<FinishedProgram>,
+    registers_viz: Query<(Entity, &RegistersViz)>,
+) {
+    let Some(FinishedProgram) = executed_instructions.read().last() else {
+        return;
+    };
+
+    for (entity, RegistersViz) in registers_viz {
+        commands.entity(entity).despawn();
     }
 }
 
