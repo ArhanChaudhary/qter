@@ -63,9 +63,7 @@ pub fn demo(robot: bool) {
     let mut app = App::new();
     app.add_plugins(DefaultPlugins)
         .add_plugins(InterpreterPlugin { robot })
-        .add_plugins(CubeViz {
-            spot: Vec2::new(350., -150.),
-        })
+        .add_plugins(CubeViz)
         .add_systems(PreUpdate, keyboard_control)
         .run();
 }

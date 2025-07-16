@@ -1,24 +1,6 @@
 use std::collections::HashMap;
 
-use bevy::{
-    app::{Plugin, Startup, Update},
-    asset::{Assets, Handle},
-    color::Color,
-    core_pipeline::core_2d::Camera2d,
-    ecs::{
-        component::Component,
-        entity::Entity,
-        event::EventReader,
-        resource::Resource,
-        schedule::IntoScheduleConfigs,
-        system::{Commands, Query, Res, ResMut},
-    },
-    math::{Mat2, Mat4, Vec2, Vec3, primitives::Rhombus},
-    render::mesh::{Mesh, Mesh2d},
-    sprite::{ColorMaterial, MeshMaterial2d},
-    text::{Text2d, TextColor, TextFont},
-    transform::components::Transform,
-};
+use bevy::prelude::*;
 use internment::ArcIntern;
 
 use super::{
@@ -27,9 +9,7 @@ use super::{
     interpreter_plugin::{CubeState, ExecutedInstruction, FinishedProgram, SolvedGoto},
 };
 
-pub struct CubeViz {
-    pub spot: Vec2,
-}
+pub struct CubeViz;
 
 static NAMES: &[&str] = &["A", "B", "C", "D"];
 
@@ -57,11 +37,7 @@ struct RegistersViz;
 #[derive(Resource)]
 struct Colors(HashMap<ArcIntern<str>, Handle<ColorMaterial>>);
 
-#[derive(Resource)]
-struct Spot(Vec2);
-
 fn setup(
-    spot: Res<Spot>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
@@ -70,7 +46,7 @@ fn setup(
 
     commands.insert_resource(CurrentState(CUBE3.identity()));
 
-    let scale = 35.;
+    let scale = 30.;
 
     let weird_dist = (3_f32 / 4.).sqrt() * scale * 2.;
 
@@ -79,9 +55,6 @@ fn setup(
 
     let sticker = meshes.add(Rhombus::new(weird_dist * 2. * 0.9, 2. * scale * 0.9));
     let border = meshes.add(Rhombus::new(weird_dist * 2. * 1.1, 2. * scale * 1.1));
-
-    let dist = 450.;
-    let off_center = spot.0;
 
     let spots = [(false, false), (false, true), (true, false), (true, true)];
 
@@ -145,136 +118,173 @@ fn setup(
         ArcIntern::from("Orange"),
     ];
 
-    for (is_cycle_viz, is_right) in spots {
-        let mut transform =
-            Mat4::from_translation(Vec3::new(off_center.x, dist / 2. + off_center.y, 0.));
+    commands
+        .spawn((Node {
+            display: Display::Grid,
+            width: Val::Vw(33.),
+            height: Val::Vh(100.),
+            column_gap: Val::Px(0.),
+            row_gap: Val::Px(0.),
+            margin: UiRect::all(Val::Px(0.)),
+            position_type: PositionType::Absolute,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::SpaceEvenly,
+            grid_template_columns: vec![GridTrack::flex(1.), GridTrack::flex(1.)],
+            grid_template_rows: vec![GridTrack::flex(1.), GridTrack::flex(1.)],
+            top: Val::Px(0.),
+            right: Val::Px(0.),
+            ..Node::default()
+        },))
+        .with_children(|builder| {
+            // These offsets are probably not responsive
+            let center = Mat4::from_translation(Vec3::new(
+                -scale * 2. * 9.3 * 2.,
+                -scale * 2. * 6. * 2.,
+                0.,
+            ));
 
-        if !is_cycle_viz {
-            transform *= Mat4::from_translation(Vec3::new(0., -dist, 0.));
-        }
+            for (is_cycle_viz, is_right) in spots {
+                builder
+                    .spawn((Node {
+                        display: Display::Grid,
+                        width: Val::Px(weird_dist * 2. * 3.),
+                        height: Val::Px(scale * 2. * 6.),
+                        margin: UiRect::all(Val::Px(0.)),
+                        padding: UiRect::all(Val::Px(0.)),
+                        ..Node::default()
+                    },))
+                    .with_children(|builder| {
+                        // builder.spawn((
+                        //     Node {
+                        //         ..Default::default()
+                        //     },
+                        //     BackgroundColor(Color::srgba_u8(128, 0, 255, 127)),
+                        //     Text2d::new(format!("{is_cycle_viz}-{is_right}")),
+                        //     TextColor(Color::srgb_u8(128, 255, 255)),
+                        // ));
 
-        let idx_to_add = if is_right { 3 } else { 0 };
+                        let idx_to_add = if is_right { 3 } else { 0 };
 
-        if is_right {
-            transform *= Mat4::from_translation(Vec3::new(dist, 0., 0.))
-                * Mat4::from_rotation_z((60_f32).to_radians());
-        }
+                        let tri_translate = Mat4::from_translation(Vec3::new(0., scale * 3., 0.));
 
-        let tri_translate = Mat4::from_translation(Vec3::new(0., scale * 3., 0.));
+                        for (j, tri) in [
+                            tri_translate,
+                            Mat4::from_rotation_z((120_f32).to_radians()) * tri_translate,
+                            Mat4::from_rotation_z((240_f32).to_radians()) * tri_translate,
+                        ]
+                        .into_iter()
+                        .enumerate()
+                        {
+                            for (i, (x, y)) in [
+                                (1., 1.),
+                                (0., 1.),
+                                (-1., 1.),
+                                (1., 0.),
+                                (-1., 0.),
+                                (1., -1.),
+                                (0., -1.),
+                                (-1., -1.),
+                                (0., 0.),
+                            ]
+                            .into_iter()
+                            .enumerate()
+                            {
+                                let spot = rhombus_matrix * Vec2::new(x, y);
+                                let transform = center
+                                    * tri
+                                    * Mat4::from_translation(Vec3::new(spot.x, spot.y, 0.));
 
-        for (j, tri) in [
-            tri_translate,
-            Mat4::from_rotation_z((120_f32).to_radians()) * tri_translate,
-            Mat4::from_rotation_z((240_f32).to_radians()) * tri_translate,
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            for (i, (x, y)) in [
-                (1., 1.),
-                (0., 1.),
-                (-1., 1.),
-                (1., 0.),
-                (-1., 0.),
-                (1., -1.),
-                (0., -1.),
-                (-1., -1.),
-                (0., 0.),
-            ]
-            .into_iter()
-            .enumerate()
-            {
-                let spot = rhombus_matrix * Vec2::new(x, y);
-                let transform =
-                    transform * tri * Mat4::from_translation(Vec3::new(spot.x, spot.y, 0.));
+                                println!("{:?} {is_cycle_viz}", Transform::from_matrix(transform));
 
-                let color = colors
-                    .get(if !is_cycle_viz || i == 8 {
-                        &center_colors[j + idx_to_add]
-                    } else {
-                        &grey
-                    })
-                    .unwrap()
-                    .clone();
+                                let color = colors
+                                    .get(if !is_cycle_viz || i == 8 {
+                                        &center_colors[j + idx_to_add]
+                                    } else {
+                                        &grey
+                                    })
+                                    .unwrap()
+                                    .clone();
 
-                if i == 8 {
-                    commands.spawn((
-                        Mesh2d(sticker.clone()),
-                        MeshMaterial2d(color),
-                        Transform::from_matrix(transform),
-                    ));
-                } else {
-                    let facelet_idx = indices[(j + idx_to_add) * 8 + i];
+                                if i == 8 {
+                                    builder.spawn((
+                                        Mesh2d(sticker.clone()),
+                                        MeshMaterial2d(color),
+                                        Transform::from_matrix(transform),
+                                    ));
+                                } else {
+                                    let facelet_idx = indices[(j + idx_to_add) * 8 + i];
 
-                    if is_cycle_viz {
-                        commands.spawn((
-                            Mesh2d(border.clone()),
-                            MeshMaterial2d(transparent.clone()),
-                            Transform::from_matrix(
-                                Mat4::from_translation(Vec3::new(0., 0., -1.)) * transform,
-                            ),
-                            FaceletIdx(facelet_idx),
-                            CycleViz,
-                            Border,
-                        ));
+                                    if is_cycle_viz {
+                                        builder.spawn((
+                                            Mesh2d(border.clone()),
+                                            MeshMaterial2d(transparent.clone()),
+                                            Transform::from_matrix(
+                                                Mat4::from_translation(Vec3::new(0., 0., -1.))
+                                                    * transform,
+                                            ),
+                                            FaceletIdx(facelet_idx),
+                                            CycleViz,
+                                            Border,
+                                        ));
 
-                        commands.spawn((
-                            Mesh2d(sticker.clone()),
-                            MeshMaterial2d(color),
-                            Transform::from_matrix(transform),
-                            FaceletIdx(facelet_idx),
-                            CycleViz,
-                            Sticker,
-                        ));
-                    } else {
-                        commands.spawn((
-                            Mesh2d(border.clone()),
-                            MeshMaterial2d(transparent.clone()),
-                            Transform::from_matrix(
-                                Mat4::from_translation(Vec3::new(0., 0., -1.)) * transform,
-                            ),
-                            FaceletIdx(facelet_idx),
-                            StateViz,
-                            Border,
-                        ));
+                                        builder.spawn((
+                                            Mesh2d(sticker.clone()),
+                                            MeshMaterial2d(color),
+                                            Transform::from_matrix(transform),
+                                            FaceletIdx(facelet_idx),
+                                            CycleViz,
+                                            Sticker,
+                                        ));
+                                    } else {
+                                        builder.spawn((
+                                            Mesh2d(border.clone()),
+                                            MeshMaterial2d(transparent.clone()),
+                                            Transform::from_matrix(
+                                                Mat4::from_translation(Vec3::new(0., 0., -1.))
+                                                    * transform,
+                                            ),
+                                            FaceletIdx(facelet_idx),
+                                            StateViz,
+                                            Border,
+                                        ));
 
-                        commands.spawn((
-                            Mesh2d(sticker.clone()),
-                            MeshMaterial2d(color),
-                            Transform::from_matrix(transform),
-                            FaceletIdx(facelet_idx),
-                            StateViz,
-                            Sticker,
-                        ));
-                    }
+                                        builder.spawn((
+                                            Mesh2d(sticker.clone()),
+                                            MeshMaterial2d(color),
+                                            Transform::from_matrix(transform),
+                                            FaceletIdx(facelet_idx),
+                                            StateViz,
+                                            Sticker,
+                                        ));
+                                    }
 
-                    // commands.spawn((
-                    //     Text2d::new(facelet_idx.to_string()),
-                    //     TextColor(Color::srgb_u8(0, 0, 0)),
-                    //     Transform::from_matrix(transform).with_rotation(Quat::IDENTITY),
-                    // ));
-                }
+                                    // commands.spawn((
+                                    //     Text2d::new(facelet_idx.to_string()),
+                                    //     TextColor(Color::srgb_u8(0, 0, 0)),
+                                    //     Transform::from_matrix(transform).with_rotation(Quat::IDENTITY),
+                                    // ));
+                                }
+                            }
+                        }
+                    });
             }
-        }
-    }
+        });
 
     commands.insert_resource(Colors(colors));
 }
 
 impl Plugin for CubeViz {
     fn build(&self, app: &mut bevy::app::App) {
-        app.insert_resource(Spot(self.spot))
-            .add_systems(Startup, setup)
-            .add_systems(
-                Update,
-                (
-                    executed_instruction,
-                    state_visualizer,
-                    solved_goto_visualizer,
-                    finished_program,
-                )
-                    .chain(),
-            );
+        app.add_systems(Startup, setup).add_systems(
+            Update,
+            (
+                executed_instruction,
+                state_visualizer,
+                solved_goto_visualizer,
+                finished_program,
+            )
+                .chain(),
+        );
     }
 }
 
@@ -332,7 +342,6 @@ fn state_visualizer(
 
 fn solved_goto_visualizer(
     mut commands: Commands,
-    spot: Res<Spot>,
     colors: Res<Colors>,
     current_state: Res<CurrentState>,
     mut solved_gotos: EventReader<SolvedGoto>,
@@ -369,7 +378,7 @@ fn solved_goto_visualizer(
                 font_size: 50.,
                 ..Default::default()
             },
-            Transform::from_translation(Vec3::new(spot.0.x + 250., spot.0.y, 0.)),
+            // Transform::from_translation(Vec3::new(spot.0.x + 250., spot.0.y, 0.)),
             SolvedGotoStatement,
         ));
     } else {
