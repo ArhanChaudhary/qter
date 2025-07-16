@@ -48,7 +48,7 @@ pub struct ExecutedInstruction {
 }
 
 #[derive(Event)]
-pub struct BeganProgram(Intern<str>);
+pub struct BeganProgram(pub Intern<str>);
 
 #[derive(Event)]
 pub struct FinishedProgram;
