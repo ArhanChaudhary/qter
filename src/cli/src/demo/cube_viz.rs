@@ -2,6 +2,11 @@ use std::{collections::HashMap, sync::Arc};
 
 use bevy::prelude::*;
 use internment::ArcIntern;
+use qter_core::{
+    I, Int,
+    architectures::Architecture,
+    discrete_math::{chinese_remainder_theorem, decode, lcm_iter},
+};
 
 use super::{
     CurrentState, PROGRAMS,
@@ -39,8 +44,23 @@ struct RegistersViz;
 #[derive(Component)]
 struct RegistersList;
 
+#[derive(Component)]
+struct RegisterValueText(usize);
+
+#[derive(Component)]
+struct CycleValueText(usize, usize);
+
+#[derive(Component)]
+struct StickerLabel;
+
 #[derive(Resource)]
-struct Colors(HashMap<ArcIntern<str>, Handle<ColorMaterial>>);
+struct Colors {
+    named: HashMap<ArcIntern<str>, Handle<ColorMaterial>>,
+    cycles: HashMap<(usize, usize), Handle<ColorMaterial>>,
+}
+
+#[derive(Resource)]
+struct CurrentArch(Option<Arc<Architecture>>);
 
 fn setup(
     mut commands: Commands,
@@ -110,6 +130,14 @@ fn setup(
         ArcIntern::from("Transparent"),
         materials.add(Color::srgba_u8(0, 0, 0, 0)),
     );
+
+    let mut cycle_colors = HashMap::new();
+
+    for i in 0..10 {
+        for j in 0..10 {
+            cycle_colors.insert((i, j), materials.add(cycle_color(i, j)));
+        }
+    }
 
     let grey = ArcIntern::from("Grey");
     let transparent = colors.get(&ArcIntern::from("Transparent")).unwrap();
@@ -208,6 +236,12 @@ fn setup(
         //     TextColor(Color::srgb_u8(128, 255, 255)),
         // ));
 
+        let rotate = if is_right {
+            Mat4::from_scale(Vec3::new(-1., 1., 1.)) * Mat4::from_rotation_z((60_f32).to_radians())
+        } else {
+            Mat4::IDENTITY
+        };
+
         let idx_to_add = if is_right { 3 } else { 0 };
 
         let tri_translate = Mat4::from_translation(Vec3::new(0., scale * 3., 0.));
@@ -236,7 +270,7 @@ fn setup(
             {
                 let spot = rhombus_matrix * Vec2::new(x, y);
                 let transform =
-                    center * tri * Mat4::from_translation(Vec3::new(spot.x, spot.y, 0.));
+                    center * rotate * tri * Mat4::from_translation(Vec3::new(spot.x, spot.y, 0.));
 
                 let color = colors
                     .get(if !is_cycle_viz || i == 8 {
@@ -259,14 +293,13 @@ fn setup(
 
                     if is_cycle_viz {
                         commands.spawn((
-                            Mesh2d(border.clone()),
-                            MeshMaterial2d(transparent.clone()),
-                            Transform::from_matrix(
-                                Mat4::from_translation(Vec3::new(0., 0., -1.)) * transform,
-                            ),
+                            Text2d::new(""),
+                            TextColor(Color::BLACK),
+                            Transform::from_matrix(transform)
+                                .with_rotation(Quat::IDENTITY)
+                                .with_scale(Vec3::new(1., 1., 1.)),
                             FaceletIdx(facelet_idx),
-                            CycleViz,
-                            Border,
+                            StickerLabel,
                             ChildOf(puzzle),
                         ));
 
@@ -313,29 +346,55 @@ fn setup(
         }
     }
 
-    commands.insert_resource(Colors(colors));
+    commands.insert_resource(Colors {
+        named: colors,
+        cycles: cycle_colors,
+    });
 }
 
 impl Plugin for CubeViz {
     fn build(&self, app: &mut bevy::app::App) {
-        app.add_systems(Startup, setup).add_systems(
-            Update,
-            (
-                executed_instruction,
-                state_visualizer,
-                solved_goto_visualizer,
-                started_program,
-                finished_program,
-            )
-                .chain(),
-        );
+        app.insert_resource(CurrentArch(None))
+            .add_systems(Startup, setup)
+            .add_systems(
+                Update,
+                (
+                    started_program,
+                    finished_program,
+                    executed_instruction,
+                    state_visualizer,
+                    solved_goto_visualizer,
+                )
+                    .chain(),
+            );
     }
 }
 
+fn cycle_color(reg_idx: usize, cycle_idx: usize) -> Color {
+    #[expect(clippy::cast_precision_loss)]
+    Color::oklch(
+        0.76,
+        0.12,
+        (reg_idx as f32 + cycle_idx as f32 / 4.) * 360. / 1.61,
+    )
+}
+
 fn started_program(
+    colors: Res<Colors>,
+    mut current_arch: ResMut<CurrentArch>,
     mut commands: Commands,
     mut began_programs: EventReader<BeganProgram>,
     regs_list: Query<(Entity, &RegistersList)>,
+    mut regs_stickers: Query<
+        (
+            &mut MeshMaterial2d<ColorMaterial>,
+            &FaceletIdx,
+            &CycleViz,
+            &Sticker,
+        ),
+        Without<StickerLabel>,
+    >,
+    mut sticker_labels: Query<(&mut Text2d, &StickerLabel, &FaceletIdx), Without<Sticker>>,
 ) {
     let Some(program) = began_programs.read().last() else {
         return;
@@ -346,6 +405,8 @@ fn started_program(
     };
 
     let arch = Arc::clone(&PROGRAMS.get(&program.0).unwrap().architecture);
+
+    *current_arch = CurrentArch(Some(Arc::clone(&arch)));
 
     for (i, reg) in arch.registers().iter().enumerate() {
         #[expect(clippy::cast_possible_wrap)]
@@ -388,6 +449,7 @@ fn started_program(
                     font_size: 40.,
                     ..Default::default()
                 },
+                RegisterValueText(i),
             ));
 
         for (j, cycle) in reg.unshared_cycles().iter().enumerate() {
@@ -404,8 +466,7 @@ fn started_program(
                         ..Default::default()
                     },
                     RegistersViz,
-                    #[expect(clippy::cast_precision_loss)]
-                    BackgroundColor(Color::oklch(0.76, 0.12, j as f32 * 360. / 1.61)),
+                    BackgroundColor(cycle_color(i, j)),
                     ChildOf(regs_list),
                 ))
                 .id();
@@ -428,10 +489,45 @@ fn started_program(
                     ..Default::default()
                 },
                 TextLayout::new_with_justify(JustifyText::Center),
+                CycleValueText(i, j),
                 ChildOf(text_container),
             ));
         }
     }
+
+    regs_stickers
+        .par_iter_mut()
+        .for_each(|(mut color_material, facelet, CycleViz, Sticker)| {
+            for (i, reg) in arch.registers().iter().enumerate() {
+                for (j, cycle) in reg.unshared_cycles().iter().enumerate() {
+                    if cycle.facelet_cycle().contains(&facelet.0) {
+                        *color_material =
+                            MeshMaterial2d(colors.cycles.get(&(i, j)).unwrap().clone());
+
+                        return;
+                    }
+                }
+            }
+        });
+
+    sticker_labels
+        .par_iter_mut()
+        .for_each(|(mut text, StickerLabel, FaceletIdx(idx))| {
+            for reg in arch.registers() {
+                for cycle in reg.unshared_cycles() {
+                    if let Some((spot, _)) = cycle
+                        .facelet_cycle()
+                        .iter()
+                        .enumerate()
+                        .find(|(_, found_idx)| *found_idx == idx)
+                    {
+                        *text = Text2d::new(spot.to_string());
+
+                        return;
+                    }
+                }
+            }
+        });
 }
 
 fn executed_instruction(
@@ -445,7 +541,7 @@ fn executed_instruction(
         return;
     };
 
-    let transparent = colors.0.get(&ArcIntern::from("Transparent")).unwrap();
+    let transparent = colors.named.get(&ArcIntern::from("Transparent")).unwrap();
 
     backgrounds
         .par_iter_mut()
@@ -458,14 +554,26 @@ fn executed_instruction(
 
 fn state_visualizer(
     colors: Res<Colors>,
+    current_arch: Res<CurrentArch>,
     mut current_state: ResMut<CurrentState>,
     mut cube_states: EventReader<CubeState>,
-    mut query: Query<(
-        &mut MeshMaterial2d<ColorMaterial>,
-        &FaceletIdx,
-        &StateViz,
-        &Sticker,
-    )>,
+    mut state_stickers: Query<
+        (
+            &mut MeshMaterial2d<ColorMaterial>,
+            &FaceletIdx,
+            &StateViz,
+            &Sticker,
+        ),
+        (Without<RegisterValueText>, Without<CycleValueText>),
+    >,
+    mut register_value_text: Query<
+        (&mut Text, &RegisterValueText),
+        (Without<StateViz>, Without<CycleValueText>),
+    >,
+    mut cycle_value_text: Query<
+        (&mut Text, &CycleValueText),
+        (Without<StateViz>, Without<RegisterValueText>),
+    >,
 ) {
     let Some(state) = cube_states.read().last() else {
         return;
@@ -473,16 +581,66 @@ fn state_visualizer(
 
     state.0.clone_into(&mut current_state.0);
 
-    query
+    let mut state_inv = state.0.clone();
+    state_inv.exponentiate(-Int::<I>::one());
+
+    state_stickers
         .par_iter_mut()
         .for_each(|(mut color_material, facelet, StateViz, Sticker)| {
+            // Qter uses the active "goes to" representation whereas a rubik's cube is effectively displayed in a passive "comes from" representation. If the UFR piece is in the DBL spot, that means that the DBL spot is colored with UFR colors because that's where the piece comes from.
+            // We need to invert the puzzle to convert the active representation to the passive one and then display that.
+
             let new_color = colors
-                .0
-                .get(&CUBE3.facelet_colors()[state.0.mapping()[facelet.0]])
+                .named
+                .get(&CUBE3.facelet_colors()[state_inv.mapping()[facelet.0]])
                 .unwrap()
                 .clone();
 
             *color_material = MeshMaterial2d(new_color);
+        });
+
+    let CurrentArch(Some(arch)) = &*current_arch else {
+        return;
+    };
+
+    let mut regs = Vec::new();
+
+    for reg in arch.registers() {
+        let mut cycles = Vec::new();
+
+        for cycle in reg.unshared_cycles() {
+            let decoded = decode(&state.0, cycle.facelet_cycle(), reg.algorithm());
+
+            cycles.push((decoded, cycle.chromatic_order()));
+        }
+
+        regs.push(cycles);
+    }
+
+    cycle_value_text
+        .par_iter_mut()
+        .for_each(|(mut text, CycleValueText(reg_idx, cycle_idx))| {
+            let (maybe_value, order) = regs[*reg_idx][*cycle_idx];
+            *text = Text::new(match maybe_value {
+                Some(value) => format!("{value}/{order}"),
+                None => format!("??/{order}"),
+            });
+        });
+
+    register_value_text
+        .par_iter_mut()
+        .for_each(|(mut text, RegisterValueText(idx))| {
+            let order = lcm_iter(regs[*idx].iter().map(|v| v.1));
+            let maybe_value = chinese_remainder_theorem(
+                regs[*idx]
+                    .iter()
+                    .map(|(maybe_value, order)| maybe_value.map(|value| (value, *order))),
+            );
+
+            *text = Text::new(match maybe_value {
+                Some(value) => format!("= {value}/{order}  "),
+                None => format!("= ??/{order}  "),
+            });
         });
 }
 
@@ -502,7 +660,7 @@ fn solved_goto_visualizer(
         return;
     };
 
-    let purple = colors.0.get(&ArcIntern::from("Purple")).unwrap();
+    let purple = colors.named.get(&ArcIntern::from("Purple")).unwrap();
 
     let color_scheme = CUBE3.facelet_colors();
 
@@ -542,15 +700,28 @@ fn solved_goto_visualizer(
 }
 
 fn finished_program(
+    colors: Res<Colors>,
     mut commands: Commands,
+    mut current_arch: ResMut<CurrentArch>,
     mut executed_instructions: EventReader<FinishedProgram>,
+    mut cycle_stickers: Query<(&mut MeshMaterial2d<ColorMaterial>, &CycleViz, &Sticker)>,
     registers_viz: Query<(Entity, &RegistersViz)>,
 ) {
     let Some(FinishedProgram) = executed_instructions.read().last() else {
         return;
     };
 
+    *current_arch = CurrentArch(None);
+
     for (entity, RegistersViz) in registers_viz {
         commands.entity(entity).despawn();
     }
+
+    let grey = colors.named.get(&ArcIntern::<str>::from("Grey")).unwrap();
+
+    cycle_stickers
+        .iter_mut()
+        .for_each(|(mut color, CycleViz, Sticker)| {
+            *color = MeshMaterial2d(grey.clone());
+        });
 }
