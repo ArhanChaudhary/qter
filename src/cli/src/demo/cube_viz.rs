@@ -204,6 +204,28 @@ fn setup(
         ))
         .id();
 
+    commands
+        .spawn((
+            Node {
+                align_self: AlignSelf::Center,
+                justify_self: JustifySelf::Center,
+                grid_row: GridPlacement::start_span(1, 2),
+                grid_column: GridPlacement::start_span(1, 2),
+                ..Default::default()
+            },
+            // BackgroundColor(Color::srgba_u8(128, 255, 128, 128)),
+            ChildOf(puzzles),
+        ))
+        .with_child((
+            Text::new(""),
+            TextColor(Color::srgb_u8(0, 0, 0)),
+            TextFont {
+                font_size: 50.,
+                ..Default::default()
+            },
+            SolvedGotoStatement,
+        ));
+
     // These offsets are hardcoded and probably not responsive
     let center = Mat4::from_translation(Vec3::new(
         -scale * 2. * 8.0 * 2.,
@@ -221,6 +243,8 @@ fn setup(
                     height: Val::Px(scale * 2. * 6.),
                     margin: UiRect::all(Val::Px(0.)),
                     padding: UiRect::all(Val::Px(0.)),
+                    grid_row: GridPlacement::start_span(if is_cycle_viz { 2 } else { 1 }, 1),
+                    grid_column: GridPlacement::start_span(if is_right { 2 } else { 1 }, 1),
                     ..Node::default()
                 },
                 // BackgroundColor(Color::srgba_u8(128, 255, 255, 128)),
@@ -531,11 +555,10 @@ fn started_program(
 }
 
 fn executed_instruction(
-    mut commands: Commands,
     colors: Res<Colors>,
     mut executed_instructions: EventReader<ExecutedInstruction>,
     mut backgrounds: Query<(&mut MeshMaterial2d<ColorMaterial>, &StateViz, &Border)>,
-    solved_goto_statements: Query<(Entity, &SolvedGotoStatement)>,
+    mut solved_goto_statement: Single<(&mut Text, &SolvedGotoStatement)>,
 ) {
     let Some(_) = executed_instructions.read().last() else {
         return;
@@ -547,9 +570,7 @@ fn executed_instruction(
         .par_iter_mut()
         .for_each(|(mut color, StateViz, Border)| *color = MeshMaterial2d(transparent.to_owned()));
 
-    for (entity, SolvedGotoStatement) in solved_goto_statements {
-        commands.entity(entity).despawn();
-    }
+    *solved_goto_statement.0 = Text::new("");
 }
 
 fn state_visualizer(
@@ -645,9 +666,9 @@ fn state_visualizer(
 }
 
 fn solved_goto_visualizer(
-    mut commands: Commands,
     colors: Res<Colors>,
     current_state: Res<CurrentState>,
+    mut solved_goto_statement: Single<(&mut Text, &mut TextColor, &SolvedGotoStatement)>,
     mut solved_gotos: EventReader<SolvedGoto>,
     mut query: Query<(
         &mut MeshMaterial2d<ColorMaterial>,
@@ -675,27 +696,11 @@ fn solved_goto_visualizer(
     }
 
     if taken {
-        commands.spawn((
-            Text2d::new("Taken"),
-            TextColor(Color::srgb_u8(0, 255, 0)),
-            TextFont {
-                font_size: 50.,
-                ..Default::default()
-            },
-            // Transform::from_translation(Vec3::new(spot.0.x + 250., spot.0.y, 0.)),
-            SolvedGotoStatement,
-        ));
+        *solved_goto_statement.0 = Text::new("Taken");
+        *solved_goto_statement.1 = TextColor(Color::srgb_u8(0, 255, 0));
     } else {
-        commands.spawn((
-            Text2d::new("Not taken"),
-            TextColor(Color::srgb_u8(255, 0, 0)),
-            TextFont {
-                font_size: 50.,
-                ..Default::default()
-            },
-            Transform::from_translation(Vec3::new(350. + 250., -150., 0.)),
-            SolvedGotoStatement,
-        ));
+        *solved_goto_statement.0 = Text::new("Not taken");
+        *solved_goto_statement.1 = TextColor(Color::srgb_u8(255, 0, 0));
     }
 }
 
@@ -705,6 +710,7 @@ fn finished_program(
     mut current_arch: ResMut<CurrentArch>,
     mut executed_instructions: EventReader<FinishedProgram>,
     mut cycle_stickers: Query<(&mut MeshMaterial2d<ColorMaterial>, &CycleViz, &Sticker)>,
+    mut cycle_sticker_labels: Query<(&mut Text2d, &StickerLabel)>,
     registers_viz: Query<(Entity, &RegistersViz)>,
 ) {
     let Some(FinishedProgram) = executed_instructions.read().last() else {
@@ -723,5 +729,11 @@ fn finished_program(
         .iter_mut()
         .for_each(|(mut color, CycleViz, Sticker)| {
             *color = MeshMaterial2d(grey.clone());
+        });
+
+    cycle_sticker_labels
+        .iter_mut()
+        .for_each(|(mut text, StickerLabel)| {
+            *text = Text2d::new("");
         });
 }
