@@ -60,7 +60,7 @@ struct Colors {
 }
 
 #[derive(Resource)]
-struct CurrentArch(Option<Arc<Architecture>>);
+struct CurrentArch(Option<(Arc<Architecture>, &'static [Vec<usize>])>);
 
 fn setup(
     mut commands: Commands,
@@ -358,13 +358,16 @@ fn setup(
                             Sticker,
                             ChildOf(puzzle),
                         ));
-                    }
 
-                    // commands.spawn((
-                    //     Text2d::new(facelet_idx.to_string()),
-                    //     TextColor(Color::srgb_u8(0, 0, 0)),
-                    //     Transform::from_matrix(transform).with_rotation(Quat::IDENTITY),
-                    // ));
+                        commands.spawn((
+                            Text2d::new(facelet_idx.to_string()),
+                            TextColor(Color::srgb_u8(0, 0, 0)),
+                            Transform::from_matrix(transform)
+                                .with_rotation(Quat::IDENTITY)
+                                .with_scale(Vec3::new(1., 1., 1.)),
+                            ChildOf(puzzle),
+                        ));
+                    }
                 }
             }
         }
@@ -428,9 +431,10 @@ fn started_program(
         unreachable!();
     };
 
-    let arch = Arc::clone(&PROGRAMS.get(&program.0).unwrap().architecture);
+    let program_info = PROGRAMS.get(&program.0).unwrap();
+    let arch = Arc::clone(&program_info.architecture);
 
-    *current_arch = CurrentArch(Some(Arc::clone(&arch)));
+    *current_arch = CurrentArch(Some((Arc::clone(&arch), &program_info.solved_goto_pieces)));
 
     for (i, reg) in arch.registers().iter().enumerate() {
         #[expect(clippy::cast_possible_wrap)]
@@ -626,7 +630,7 @@ fn state_visualizer(
 
     let mut regs = Vec::new();
 
-    for reg in arch.registers() {
+    for reg in arch.0.registers() {
         let mut cycles = Vec::new();
 
         for cycle in reg.unshared_cycles() {
@@ -665,9 +669,40 @@ fn state_visualizer(
         });
 }
 
+fn translate_solved_goto_pieces(
+    arch: &Architecture,
+    available_pieces: &[Vec<usize>],
+    pieces_got: &[usize],
+) -> Vec<usize> {
+    let mut out = Vec::new();
+
+    for reg in arch.registers() {
+        'next_cycle: for cycle in reg.unshared_cycles() {
+            for facelet in cycle.facelet_cycle() {
+                if pieces_got.contains(facelet) {
+                    for piece in available_pieces {
+                        for facelet in piece {
+                            if cycle.facelet_cycle().contains(facelet) {
+                                out.extend_from_slice(piece);
+
+                                continue 'next_cycle;
+                            }
+                        }
+                    }
+
+                    unreachable!();
+                }
+            }
+        }
+    }
+
+    out
+}
+
 fn solved_goto_visualizer(
     colors: Res<Colors>,
     current_state: Res<CurrentState>,
+    current_arch: Res<CurrentArch>,
     mut solved_goto_statement: Single<(&mut Text, &mut TextColor, &SolvedGotoStatement)>,
     mut solved_gotos: EventReader<SolvedGoto>,
     mut query: Query<(
@@ -681,6 +716,10 @@ fn solved_goto_visualizer(
         return;
     };
 
+    let CurrentArch(Some((arch, solved_goto_pieces))) = &*current_arch else {
+        unreachable!();
+    };
+
     let purple = colors.named.get(&ArcIntern::from("Purple")).unwrap();
 
     let color_scheme = CUBE3.facelet_colors();
@@ -688,7 +727,9 @@ fn solved_goto_visualizer(
     let mut taken = true;
 
     for (mut color, idx, StateViz, Border) in &mut query {
-        if solved_goto.facelets.0.contains(&idx.0) {
+        if translate_solved_goto_pieces(arch, solved_goto_pieces, &solved_goto.facelets.0)
+            .contains(&idx.0)
+        {
             *color = MeshMaterial2d(purple.to_owned());
 
             taken &= color_scheme[current_state.0.mapping()[idx.0]] == color_scheme[idx.0];

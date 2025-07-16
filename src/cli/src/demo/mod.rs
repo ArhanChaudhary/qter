@@ -23,6 +23,7 @@ mod interpreter_plugin;
 struct ProgramInfo {
     program: Arc<Program>,
     architecture: Arc<Architecture>,
+    solved_goto_pieces: Vec<Vec<usize>>,
 }
 
 static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| {
@@ -50,6 +51,12 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
             architecture: CUBE3_DEF
                 .get_preset(&[Int::from(210_u32), Int::from(24_u32)])
                 .unwrap(),
+            solved_goto_pieces: vec![
+                vec![6, 17],      // UF
+                vec![7, 18, 24],  // UFR
+                vec![20, 27],     // FR
+                vec![23, 29, 45], // FRD
+            ],
         },
     );
 
