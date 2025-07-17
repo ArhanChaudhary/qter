@@ -5,7 +5,7 @@
 
     input "Number to modulus:" A
 loop:
-    print "A is now" A
+--    print "A is now" A
     add B 13
 decrement:
     solved-goto B loop

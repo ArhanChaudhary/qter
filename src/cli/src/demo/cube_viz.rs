@@ -18,6 +18,24 @@ use super::{
 
 pub struct CubeViz;
 
+impl Plugin for CubeViz {
+    fn build(&self, app: &mut bevy::app::App) {
+        app.insert_resource(CurrentArch(None))
+            .add_systems(Startup, setup)
+            .add_systems(
+                Update,
+                (
+                    started_program,
+                    finished_program,
+                    executed_instruction,
+                    state_visualizer,
+                    solved_goto_visualizer,
+                )
+                    .chain(),
+            );
+    }
+}
+
 static NAMES: &[&str] = &["A", "B", "C", "D", "E", "F", "G"];
 
 #[derive(Component)]
@@ -377,24 +395,6 @@ fn setup(
         named: colors,
         cycles: cycle_colors,
     });
-}
-
-impl Plugin for CubeViz {
-    fn build(&self, app: &mut bevy::app::App) {
-        app.insert_resource(CurrentArch(None))
-            .add_systems(Startup, setup)
-            .add_systems(
-                Update,
-                (
-                    started_program,
-                    finished_program,
-                    executed_instruction,
-                    state_visualizer,
-                    solved_goto_visualizer,
-                )
-                    .chain(),
-            );
-    }
 }
 
 fn cycle_color(reg_idx: usize, cycle_idx: usize) -> Color {
