@@ -1,7 +1,7 @@
 use std::thread;
 
 use bevy::{
-    app::{Plugin, PreUpdate, Startup, Update},
+    app::{Plugin, PreUpdate, Startup},
     ecs::{
         event::{Event, EventWriter},
         resource::Resource,
@@ -43,9 +43,12 @@ pub struct SolvedGoto {
 }
 
 #[derive(Event)]
-pub struct ExecutedInstruction {
-    pub next_one: usize,
+pub struct ExecutingInstruction {
+    pub which_one: usize,
 }
+
+#[derive(Event)]
+pub struct DoneExecuting;
 
 #[derive(Event)]
 pub struct BeganProgram(pub Intern<str>);
@@ -61,7 +64,8 @@ pub enum InterpretationEvent {
     HaltCountUp(Int<U>),
     CubeState(Permutation),
     SolvedGoto { facelets: Facelets },
-    ExecutedInstruction { next_one: usize },
+    ExecutingInstruction { which_one: usize },
+    DoneExecuting,
     BeganProgram(Intern<str>),
     FinishedProgram,
     // Stuff for highlighting instructions
@@ -99,7 +103,8 @@ impl Plugin for InterpreterPlugin {
             .add_event::<HaltCountUp>()
             .add_event::<CubeState>()
             .add_event::<SolvedGoto>()
-            .add_event::<ExecutedInstruction>()
+            .add_event::<ExecutingInstruction>()
+            .add_event::<DoneExecuting>()
             .add_event::<BeganProgram>()
             .add_event::<FinishedProgram>()
             .add_systems(
@@ -123,7 +128,8 @@ fn read_events(
     mut halt_count_ups: EventWriter<HaltCountUp>,
     mut cube_states: EventWriter<CubeState>,
     mut solved_gotos: EventWriter<SolvedGoto>,
-    mut executed_instructions: EventWriter<ExecutedInstruction>,
+    mut executed_instructions: EventWriter<ExecutingInstruction>,
+    mut done_executings: EventWriter<DoneExecuting>,
     mut began_programs: EventWriter<BeganProgram>,
     mut finished_programs: EventWriter<FinishedProgram>,
 ) {
@@ -147,8 +153,15 @@ fn read_events(
             InterpretationEvent::SolvedGoto { facelets } => {
                 solved_gotos.write(SolvedGoto { facelets });
             }
-            InterpretationEvent::ExecutedInstruction { next_one } => {
-                executed_instructions.write(ExecutedInstruction { next_one });
+            InterpretationEvent::ExecutingInstruction {
+                which_one: next_one,
+            } => {
+                executed_instructions.write(ExecutingInstruction {
+                    which_one: next_one,
+                });
+            }
+            InterpretationEvent::DoneExecuting => {
+                done_executings.write(DoneExecuting);
             }
             InterpretationEvent::BeganProgram(intern) => {
                 began_programs.write(BeganProgram(intern));

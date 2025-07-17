@@ -231,6 +231,13 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
 
                 use ActionPerformed as A;
 
+                let instr = interpreter.state().program_counter();
+
+                robot_handle()
+                    .event_tx
+                    .send(InterpretationEvent::ExecutingInstruction { which_one: instr })
+                    .unwrap();
+
                 match interpreter.step() {
                     A::Goto { instruction_idx: _ }
                     | A::Added(_)
@@ -298,15 +305,13 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
                         .unwrap();
                 }
 
+                robot_handle()
+                    .event_tx
+                    .send(InterpretationEvent::DoneExecuting)
+                    .unwrap();
+
                 if halted {
                     maybe_interpreter = None;
-                } else {
-                    robot_handle()
-                        .event_tx
-                        .send(InterpretationEvent::ExecutedInstruction {
-                            next_one: interpreter.state().program_counter(),
-                        })
-                        .unwrap();
                 }
             }
             C::GiveInput(int) => {

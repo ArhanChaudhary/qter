@@ -1,13 +1,16 @@
 use bevy::prelude::*;
 
-use super::{PROGRAMS, interpreter_plugin::BeganProgram};
+use super::{
+    PROGRAMS,
+    interpreter_plugin::{BeganProgram, ExecutingInstruction},
+};
 
 pub struct CodeViz;
 
 impl Plugin for CodeViz {
     fn build(&self, app: &mut bevy::app::App) {
         app.add_systems(Startup, setup)
-            .add_systems(Update, started_program);
+            .add_systems(Update, (started_program, next_instruction).chain());
     }
 }
 
@@ -26,9 +29,10 @@ fn setup(mut commands: Commands) {
                 position_type: PositionType::Absolute,
                 top: Val::Px(0.),
                 left: Val::Vw(33.5),
+                padding: UiRect::all(Val::Px(8.)),
                 ..Default::default()
             },
-            BackgroundColor(Color::srgba_u8(128, 128, 255, 128)),
+            // BackgroundColor(Color::srgba_u8(128, 128, 255, 128)),
         ))
         .id();
 
@@ -36,8 +40,8 @@ fn setup(mut commands: Commands) {
         Node {
             position_type: PositionType::Absolute,
             width: Val::Percent(100.),
-            top: Val::Px(90. * 1.2),
-            height: Val::Px(60.0 * 1.2),
+            top: Val::Px(0.),
+            height: Val::Px(0.),
             padding: UiRect::right(Val::Px(8.)),
             box_sizing: BoxSizing::ContentBox,
             ..Default::default()
@@ -67,4 +71,34 @@ fn started_program(
     };
 
     *code.0 = Text(PROGRAMS.get(&program.0).unwrap().code.clone());
+}
+
+#[expect(clippy::cast_precision_loss)]
+fn next_instruction(
+    mut executing_instructions: EventReader<ExecutingInstruction>,
+    code: Single<(&Text, &Code)>,
+    mut highlight: Single<(&mut Node, &Highlight)>,
+) {
+    let Some(instruction) = executing_instructions.read().last() else {
+        return;
+    };
+
+    let target_lineno = instruction.which_one.to_string();
+
+    let code = &code.0.0;
+
+    let mut lines = code.split('\n').enumerate();
+
+    let (idx, _) = lines
+        .by_ref()
+        .find(|(_, line)| line.starts_with(&target_lineno))
+        .unwrap();
+
+    let end = lines
+        .by_ref()
+        .find(|(_, line)| line.is_empty() || line.contains('|') || line.contains("--"))
+        .map_or_else(|| code.split('\n').count(), |(idx, _)| idx);
+
+    highlight.0.top = Val::Px(30. * 1.2 * idx as f32 + 8.);
+    highlight.0.height = Val::Px(30. * 1.2 * (end - idx) as f32);
 }

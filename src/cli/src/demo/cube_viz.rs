@@ -12,7 +12,7 @@ use super::{
     CurrentState, PROGRAMS,
     interpreter_loop::CUBE3,
     interpreter_plugin::{
-        BeganProgram, CubeState, ExecutedInstruction, FinishedProgram, SolvedGoto,
+        BeganProgram, CubeState, ExecutingInstruction, FinishedProgram, SolvedGoto,
     },
 };
 
@@ -26,10 +26,10 @@ impl Plugin for CubeViz {
                 Update,
                 (
                     started_program,
-                    finished_program,
                     executed_instruction,
                     state_visualizer,
                     solved_goto_visualizer,
+                    finished_program,
                 )
                     .chain(),
             );
@@ -560,7 +560,7 @@ fn started_program(
 
 fn executed_instruction(
     colors: Res<Colors>,
-    mut executed_instructions: EventReader<ExecutedInstruction>,
+    mut executed_instructions: EventReader<ExecutingInstruction>,
     mut backgrounds: Query<(&mut MeshMaterial2d<ColorMaterial>, &StateViz, &Border)>,
     mut solved_goto_statement: Single<(&mut Text, &SolvedGotoStatement)>,
 ) {
@@ -746,13 +746,13 @@ fn solved_goto_visualizer(
 }
 
 fn finished_program(
-    colors: Res<Colors>,
-    mut commands: Commands,
+    // colors: Res<Colors>,
+    // mut commands: Commands,
     mut current_arch: ResMut<CurrentArch>,
     mut executed_instructions: EventReader<FinishedProgram>,
-    mut cycle_stickers: Query<(&mut MeshMaterial2d<ColorMaterial>, &CycleViz, &Sticker)>,
-    mut cycle_sticker_labels: Query<(&mut Text2d, &StickerLabel)>,
-    registers_viz: Query<(Entity, &RegistersViz)>,
+    // mut cycle_stickers: Query<(&mut MeshMaterial2d<ColorMaterial>, &CycleViz, &Sticker)>,
+    // mut cycle_sticker_labels: Query<(&mut Text2d, &StickerLabel)>,
+    // registers_viz: Query<(Entity, &RegistersViz)>,
 ) {
     let Some(FinishedProgram) = executed_instructions.read().last() else {
         return;
@@ -760,21 +760,21 @@ fn finished_program(
 
     *current_arch = CurrentArch(None);
 
-    for (entity, RegistersViz) in registers_viz {
-        commands.entity(entity).despawn();
-    }
+    // for (entity, RegistersViz) in registers_viz {
+    //     commands.entity(entity).despawn();
+    // }
 
-    let grey = colors.named.get(&ArcIntern::<str>::from("Grey")).unwrap();
+    // let grey = colors.named.get(&ArcIntern::<str>::from("Grey")).unwrap();
 
-    cycle_stickers
-        .iter_mut()
-        .for_each(|(mut color, CycleViz, Sticker)| {
-            *color = MeshMaterial2d(grey.clone());
-        });
+    // cycle_stickers
+    //     .iter_mut()
+    //     .for_each(|(mut color, CycleViz, Sticker)| {
+    //         *color = MeshMaterial2d(grey.clone());
+    //     });
 
-    cycle_sticker_labels
-        .iter_mut()
-        .for_each(|(mut text, StickerLabel)| {
-            *text = Text2d::new("");
-        });
+    // cycle_sticker_labels
+    //     .iter_mut()
+    //     .for_each(|(mut text, StickerLabel)| {
+    //         *text = Text2d::new("");
+    //     });
 }

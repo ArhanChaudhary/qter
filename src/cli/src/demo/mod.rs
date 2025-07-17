@@ -67,6 +67,9 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
             code: r#"0  | input "Number to modulus:"
            U R U' D2 B
            max-input 209
+
+-- Calculate 13 - A%13
+
 1  | U R' F U2 R' F L F2
      L' F U' F' U R2 U2
 2  | solved-goto 1 UF UFR
@@ -74,12 +77,17 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
 4  | F L2 F' B' U D R' U2
      R' U F U2 F D R U'
 5  | goto 2
+
+-- Calculate A%13 as
+-- -(13 - A%13) + 13
+
 6  | solved-goto 9 UF UFR
 7  | F L2 F' B' U D R' U2
      R' U F U2 F D R U'
 8  | goto 6
 9  | B' L U R' U' B2 L'
      D2 B2 D2 B2
+
 10 | halt "The modulus is"
           B' D2 U R' U'
           counting-until FR FRD"#
