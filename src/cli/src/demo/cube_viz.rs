@@ -428,7 +428,10 @@ fn track_puzzles(
 
             puzzle.0.translation = camera
                 .0
-                .viewport_to_world_2d(camera.1, spot.0.translation().xy())
+                .viewport_to_world_2d(
+                    camera.1,
+                    spot.0.translation().xy() / window.resolution.scale_factor(),
+                )
                 .unwrap()
                 .xyx()
                 .with_z(0.);
