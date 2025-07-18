@@ -426,16 +426,12 @@ fn track_puzzles(
                 continue;
             }
 
-            // https://discord.com/channels/691052431525675048/885021580353237032/1356419610404192557
-            let viewport = camera.0.logical_viewport_rect().unwrap();
-            let mut translation = spot.0.translation();
-            translation.y = -translation.y; // flip y axis
-            puzzle.0.translation = translation
-                - Vec3 {
-                    x: viewport.width() / 2.,
-                    y: -viewport.height() / 2.,
-                    z: 0.,
-                };
+            puzzle.0.translation = camera
+                .0
+                .viewport_to_world_2d(camera.1, spot.0.translation().xy())
+                .unwrap()
+                .xyx()
+                .with_z(0.);
 
             puzzle.0.scale =
                 Vec3::splat(spot.2.size().x / window.resolution.scale_factor() / 2. / 1000.);
