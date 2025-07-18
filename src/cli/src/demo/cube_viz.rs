@@ -94,14 +94,15 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    window: Single<&Window>,
 ) {
     commands.spawn(Camera2d);
 
     commands.insert_resource(CurrentState(CUBE3.identity()));
 
-    let scale = 35.;
+    let weird_dist = (window.width() / 3. / 2. - 16.) / 3. * 0.9;
 
-    let weird_dist = (3_f32 / 4.).sqrt() * scale * 2.;
+    let scale = weird_dist / ((3_f32 / 4.).sqrt() * 2.);
 
     let rhombus_matrix = Mat2::from_diagonal(Vec2::new(weird_dist, scale))
         * Mat2::from_cols(Vec2::new(-1., 1.), Vec2::new(1., 1.));
@@ -187,8 +188,8 @@ fn setup(
                 position_type: PositionType::Absolute,
                 width: Val::Vw(33.),
                 height: Val::Vh(100.),
-                top: Val::Px(0.),
-                right: Val::Px(0.),
+                top: Val::ZERO,
+                right: Val::ZERO,
                 ..Default::default()
             },
             // BackgroundColor(Color::srgba_u8(128, 128, 255, 128)),
@@ -215,9 +216,9 @@ fn setup(
         .spawn((
             Node {
                 display: Display::Grid,
-                column_gap: Val::Px(0.),
-                row_gap: Val::Px(0.),
-                margin: UiRect::all(Val::Px(0.)),
+                column_gap: Val::ZERO,
+                row_gap: Val::ZERO,
+                margin: UiRect::all(Val::ZERO),
                 align_items: AlignItems::Center,
                 align_content: AlignContent::SpaceEvenly,
                 justify_items: JustifyItems::Center,
@@ -265,8 +266,8 @@ fn setup(
                 display: Display::Grid,
                 width: Val::Px(weird_dist * 2. * 3.),
                 height: Val::Px(scale * 2. * 6.),
-                margin: UiRect::all(Val::Px(0.)),
-                padding: UiRect::all(Val::Px(0.)),
+                margin: UiRect::all(Val::ZERO),
+                padding: UiRect::all(Val::ZERO),
                 grid_row: GridPlacement::start_span(if is_cycle_viz { 1 } else { 2 }, 1),
                 grid_column: GridPlacement::start_span(if is_right { 2 } else { 1 }, 1),
                 ..Node::default()
