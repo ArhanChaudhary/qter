@@ -415,6 +415,7 @@ fn setup(
 }
 
 fn track_puzzles(
+    camera: Single<(&Camera, &GlobalTransform)>,
     puzzle_ui_spots: Query<(&GlobalTransform, &WhichPuzzle, &ComputedNode), Without<PuzzleMeshes>>,
     mut puzzles: Query<(&mut Transform, &WhichPuzzle), With<PuzzleMeshes>>,
     window: Single<&Window>,
@@ -426,12 +427,13 @@ fn track_puzzles(
             }
 
             // https://discord.com/channels/691052431525675048/885021580353237032/1356419610404192557
+            let viewport = camera.0.logical_viewport_rect().unwrap();
             let mut translation = spot.0.translation();
             translation.y = -translation.y; // flip y axis
             puzzle.0.translation = translation
                 - Vec3 {
-                    x: window.width() / 2.,
-                    y: -window.height() / 2.,
+                    x: viewport.width() / 2.,
+                    y: -viewport.height() / 2.,
                     z: 0.,
                 };
 
