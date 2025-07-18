@@ -1,4 +1,8 @@
-use std::sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock};
+use std::{
+    sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock},
+    thread,
+    time::Duration,
+};
 
 use chumsky::Parser;
 use crossbeam_channel::{Receiver, Sender};
@@ -6,7 +10,7 @@ use interpreter::{
     ActionPerformed, ExecutionState, Interpreter, PausedState, puzzle_states::PuzzleState,
 };
 use qter_core::{
-    Int, U,
+    Facelets, Int, U,
     architectures::{Algorithm, PermutationGroup, PuzzleDefinition, puzzle_definition},
     discrete_math::lcm_iter,
 };
@@ -139,7 +143,9 @@ impl PuzzleState for TrackedRobotState {
         {
             robot_handle()
                 .event_tx
-                .send(InterpretationEvent::BeginHalt)
+                .send(InterpretationEvent::BeginHalt {
+                    facelets: Facelets(facelets.to_owned()),
+                })
                 .unwrap();
         }
 
@@ -168,6 +174,7 @@ impl PuzzleState for TrackedRobotState {
                 return None;
             }
 
+            thread::sleep(Duration::from_millis(500));
             self.compose_into(&generator);
         }
 

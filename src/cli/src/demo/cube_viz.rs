@@ -22,6 +22,7 @@ impl Plugin for CubeViz {
     fn build(&self, app: &mut bevy::app::App) {
         app.insert_resource(CurrentArch(None))
             .add_systems(Startup, setup)
+            .add_systems(Update, track_puzzles)
             .add_systems(
                 Update,
                 (
@@ -52,6 +53,15 @@ struct Border;
 
 #[derive(Component)]
 struct Sticker;
+
+#[derive(Component)]
+struct PuzzleMeshes;
+
+#[derive(Component, Clone, Copy, Eq, PartialEq)]
+struct WhichPuzzle {
+    is_right: bool,
+    is_cycle_viz: bool,
+}
 
 #[derive(Component)]
 struct SolvedGotoStatement;
@@ -244,31 +254,27 @@ fn setup(
             SolvedGotoStatement,
         ));
 
-    // These offsets are hardcoded and probably not responsive
-    let center = Mat4::from_translation(Vec3::new(
-        -scale * 2. * 8.0 * 2.,
-        -scale * 2. * 4.65 * 3.77,
-        0.,
-    ));
-    // let center = Mat4::IDENTITY;
-
     for (is_cycle_viz, is_right) in spots {
-        let puzzle = commands
-            .spawn((
-                Node {
-                    display: Display::Grid,
-                    width: Val::Px(weird_dist * 2. * 3.),
-                    height: Val::Px(scale * 2. * 6.),
-                    margin: UiRect::all(Val::Px(0.)),
-                    padding: UiRect::all(Val::Px(0.)),
-                    grid_row: GridPlacement::start_span(if is_cycle_viz { 2 } else { 1 }, 1),
-                    grid_column: GridPlacement::start_span(if is_right { 2 } else { 1 }, 1),
-                    ..Node::default()
-                },
-                // BackgroundColor(Color::srgba_u8(128, 255, 255, 128)),
-                ChildOf(puzzles),
-            ))
-            .id();
+        let which_puzzle = WhichPuzzle {
+            is_right,
+            is_cycle_viz,
+        };
+
+        commands.spawn((
+            Node {
+                display: Display::Grid,
+                width: Val::Px(weird_dist * 2. * 3.),
+                height: Val::Px(scale * 2. * 6.),
+                margin: UiRect::all(Val::Px(0.)),
+                padding: UiRect::all(Val::Px(0.)),
+                grid_row: GridPlacement::start_span(if is_cycle_viz { 1 } else { 2 }, 1),
+                grid_column: GridPlacement::start_span(if is_right { 2 } else { 1 }, 1),
+                ..Node::default()
+            },
+            // BackgroundColor(Color::srgba_u8(128, 255, 255, 128)),
+            which_puzzle,
+            ChildOf(puzzles),
+        ));
         // builder.spawn((
         //     Node {
         //         ..Default::default()
@@ -277,6 +283,15 @@ fn setup(
         //     Text2d::new(format!("{is_cycle_viz}-{is_right}")),
         //     TextColor(Color::srgb_u8(128, 255, 255)),
         // ));
+
+        let puzzle_meshes = commands
+            .spawn((
+                Transform::from_xyz(0., 0., 0.),
+                Visibility::default(),
+                which_puzzle,
+                PuzzleMeshes,
+            ))
+            .id();
 
         let rotate = if is_right {
             Mat4::from_scale(Vec3::new(-1., 1., 1.)) * Mat4::from_rotation_z((60_f32).to_radians())
@@ -312,7 +327,7 @@ fn setup(
             {
                 let spot = rhombus_matrix * Vec2::new(x, y);
                 let transform =
-                    center * rotate * tri * Mat4::from_translation(Vec3::new(spot.x, spot.y, 0.));
+                    rotate * tri * Mat4::from_translation(Vec3::new(spot.x, spot.y, 0.));
 
                 let color = colors
                     .get(if !is_cycle_viz || i == 8 {
@@ -328,7 +343,7 @@ fn setup(
                         Mesh2d(sticker.clone()),
                         MeshMaterial2d(color),
                         Transform::from_matrix(transform),
-                        ChildOf(puzzle),
+                        ChildOf(puzzle_meshes),
                     ));
                 } else {
                     let facelet_idx = indices[(j + idx_to_add) * 8 + i];
@@ -342,7 +357,7 @@ fn setup(
                                 .with_scale(Vec3::new(1., 1., 1.)),
                             FaceletIdx(facelet_idx),
                             StickerLabel,
-                            ChildOf(puzzle),
+                            ChildOf(puzzle_meshes),
                         ));
 
                         commands.spawn((
@@ -352,7 +367,7 @@ fn setup(
                             FaceletIdx(facelet_idx),
                             CycleViz,
                             Sticker,
-                            ChildOf(puzzle),
+                            ChildOf(puzzle_meshes),
                         ));
                     } else {
                         commands.spawn((
@@ -364,7 +379,7 @@ fn setup(
                             FaceletIdx(facelet_idx),
                             StateViz,
                             Border,
-                            ChildOf(puzzle),
+                            ChildOf(puzzle_meshes),
                         ));
 
                         commands.spawn((
@@ -374,7 +389,7 @@ fn setup(
                             FaceletIdx(facelet_idx),
                             StateViz,
                             Sticker,
-                            ChildOf(puzzle),
+                            ChildOf(puzzle_meshes),
                         ));
 
                         // commands.spawn((
@@ -394,6 +409,30 @@ fn setup(
     commands.insert_resource(Colors {
         named: colors,
         cycles: cycle_colors,
+    });
+}
+
+fn track_puzzles(
+    puzzle_ui_spots: Query<(&GlobalTransform, &WhichPuzzle), Without<PuzzleMeshes>>,
+    mut puzzles: Query<(&mut Transform, &WhichPuzzle), With<PuzzleMeshes>>,
+    window: Single<&Window>,
+) {
+    puzzles.par_iter_mut().for_each(|mut puzzle| {
+        for spot in puzzle_ui_spots {
+            if spot.1 != puzzle.1 {
+                continue;
+            }
+
+            // https://discord.com/channels/691052431525675048/885021580353237032/1356419610404192557
+            let mut translation = spot.0.translation();
+            translation.y = -translation.y; // flip y axis
+            puzzle.0.translation = translation
+                - Vec3 {
+                    x: window.width() / 2.,
+                    y: -window.height() / 2.,
+                    z: 0.,
+                };
+        }
     });
 }
 

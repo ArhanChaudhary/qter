@@ -29,7 +29,9 @@ pub struct Message(pub String);
 pub struct Input(pub Int<U>);
 
 #[derive(Event)]
-pub struct BeginHalt;
+pub struct BeginHalt {
+    facelets: Facelets,
+}
 
 #[derive(Event)]
 pub struct HaltCountUp(pub Int<U>);
@@ -60,7 +62,7 @@ pub struct FinishedProgram;
 pub enum InterpretationEvent {
     Message(String),
     Input(Int<U>),
-    BeginHalt,
+    BeginHalt { facelets: Facelets },
     HaltCountUp(Int<U>),
     CubeState(Permutation),
     SolvedGoto { facelets: Facelets },
@@ -141,8 +143,8 @@ fn read_events(
             InterpretationEvent::Input(int) => {
                 inputs.write(Input(int));
             }
-            InterpretationEvent::BeginHalt => {
-                begin_halts.write(BeginHalt);
+            InterpretationEvent::BeginHalt { facelets } => {
+                begin_halts.write(BeginHalt { facelets });
             }
             InterpretationEvent::HaltCountUp(int) => {
                 halt_count_ups.write(HaltCountUp(int));
