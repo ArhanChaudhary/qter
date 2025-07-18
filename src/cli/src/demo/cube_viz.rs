@@ -94,13 +94,12 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    window: Single<&Window>,
 ) {
     commands.spawn(Camera2d);
 
     commands.insert_resource(CurrentState(CUBE3.identity()));
 
-    let weird_dist = (window.width() / 3. / 2. - 16.) / 3. * 0.9;
+    let weird_dist = 1. / 3. * 1000.;
 
     let scale = weird_dist / ((3_f32 / 4.).sqrt() * 2.);
 
@@ -216,16 +215,15 @@ fn setup(
         .spawn((
             Node {
                 display: Display::Grid,
-                column_gap: Val::ZERO,
-                row_gap: Val::ZERO,
+                column_gap: Val::Px(16.),
+                row_gap: Val::Px(16.),
                 margin: UiRect::all(Val::ZERO),
-                align_items: AlignItems::Center,
+                align_items: AlignItems::Stretch,
                 align_content: AlignContent::SpaceEvenly,
-                justify_items: JustifyItems::Center,
+                justify_items: JustifyItems::Stretch,
                 justify_content: JustifyContent::SpaceEvenly,
                 grid_template_columns: vec![GridTrack::flex(1.), GridTrack::flex(1.)],
                 grid_template_rows: vec![GridTrack::flex(1.), GridTrack::flex(1.)],
-                height: Val::Px(scale * 2. * 6. * 2. * 1.1),
                 ..Node::default()
             },
             // BackgroundColor(Color::srgba_u8(128, 255, 128, 128)),
@@ -264,8 +262,7 @@ fn setup(
         commands.spawn((
             Node {
                 display: Display::Grid,
-                width: Val::Px(weird_dist * 2. * 3.),
-                height: Val::Px(scale * 2. * 6.),
+                aspect_ratio: Some((weird_dist * 3.) / (scale * 6.)),
                 margin: UiRect::all(Val::ZERO),
                 padding: UiRect::all(Val::ZERO),
                 grid_row: GridPlacement::start_span(if is_cycle_viz { 1 } else { 2 }, 1),
@@ -353,6 +350,10 @@ fn setup(
                         commands.spawn((
                             Text2d::new(""),
                             TextColor(Color::BLACK),
+                            TextFont {
+                                font_size: scale * 2. / 3.,
+                                ..Default::default()
+                            },
                             Transform::from_matrix(transform)
                                 .with_rotation(Quat::IDENTITY)
                                 .with_scale(Vec3::new(1., 1., 1.)),
@@ -414,7 +415,7 @@ fn setup(
 }
 
 fn track_puzzles(
-    puzzle_ui_spots: Query<(&GlobalTransform, &WhichPuzzle), Without<PuzzleMeshes>>,
+    puzzle_ui_spots: Query<(&GlobalTransform, &WhichPuzzle, &ComputedNode), Without<PuzzleMeshes>>,
     mut puzzles: Query<(&mut Transform, &WhichPuzzle), With<PuzzleMeshes>>,
     window: Single<&Window>,
 ) {
@@ -433,6 +434,9 @@ fn track_puzzles(
                     y: -window.height() / 2.,
                     z: 0.,
                 };
+
+            puzzle.0.scale =
+                Vec3::splat(spot.2.size().x / window.resolution.scale_factor() / 2. / 1000.);
         }
     });
 }
