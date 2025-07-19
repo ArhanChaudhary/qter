@@ -30,7 +30,7 @@ pub struct Input(pub Int<U>);
 
 #[derive(Event)]
 pub struct BeginHalt {
-    facelets: Facelets,
+    pub facelets: Facelets,
 }
 
 #[derive(Event)]

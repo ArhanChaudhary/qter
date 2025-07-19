@@ -12,7 +12,8 @@ use super::{
     CurrentState, PROGRAMS,
     interpreter_loop::CUBE3,
     interpreter_plugin::{
-        BeganProgram, CubeState, ExecutingInstruction, FinishedProgram, SolvedGoto,
+        BeganProgram, BeginHalt, CubeState, ExecutingInstruction, FinishedProgram, HaltCountUp,
+        SolvedGoto,
     },
 };
 
@@ -30,6 +31,8 @@ impl Plugin for CubeViz {
                     executed_instruction,
                     state_visualizer,
                     solved_goto_visualizer,
+                    start_halt,
+                    halt_count,
                     finished_program,
                 )
                     .chain(),
@@ -750,7 +753,7 @@ fn solved_goto_visualizer(
     current_arch: Res<CurrentArch>,
     mut solved_goto_statement: Single<(&mut Text, &mut TextColor, &SolvedGotoStatement)>,
     mut solved_gotos: EventReader<SolvedGoto>,
-    mut query: Query<(
+    mut facelet_borders: Query<(
         &mut MeshMaterial2d<ColorMaterial>,
         &FaceletIdx,
         &StateViz,
@@ -771,10 +774,10 @@ fn solved_goto_visualizer(
 
     let mut taken = true;
 
-    for (mut color, idx, StateViz, Border) in &mut query {
-        if translate_solved_goto_pieces(arch, solved_goto_pieces, &solved_goto.facelets.0)
-            .contains(&idx.0)
-        {
+    let pieces = translate_solved_goto_pieces(arch, solved_goto_pieces, &solved_goto.facelets.0);
+
+    for (mut color, idx, StateViz, Border) in &mut facelet_borders {
+        if pieces.contains(&idx.0) {
             *color = MeshMaterial2d(purple.to_owned());
 
             taken &= color_scheme[current_state.0.mapping()[idx.0]] == color_scheme[idx.0];
@@ -788,6 +791,56 @@ fn solved_goto_visualizer(
         *solved_goto_statement.0 = Text::new("Not taken");
         *solved_goto_statement.1 = TextColor(Color::srgb_u8(255, 0, 0));
     }
+}
+
+fn start_halt(
+    colors: Res<Colors>,
+    current_arch: Res<CurrentArch>,
+    mut started_halts: EventReader<BeginHalt>,
+    mut solved_goto_statement: Single<(&mut Text, &mut TextColor, &SolvedGotoStatement)>,
+    mut facelet_borders: Query<(
+        &mut MeshMaterial2d<ColorMaterial>,
+        &FaceletIdx,
+        &StateViz,
+        &Border,
+    )>,
+) {
+    let Some(halt) = started_halts.read().last() else {
+        return;
+    };
+
+    println!("Started halt");
+
+    let CurrentArch(Some((arch, solved_goto_pieces))) = &*current_arch else {
+        unreachable!();
+    };
+
+    let purple = colors.named.get(&ArcIntern::from("Purple")).unwrap();
+
+    let pieces = translate_solved_goto_pieces(arch, solved_goto_pieces, &halt.facelets.0);
+    println!("{pieces:?}");
+
+    facelet_borders
+        .par_iter_mut()
+        .for_each(|(mut color, idx, StateViz, Border)| {
+            if pieces.contains(&idx.0) {
+                *color = MeshMaterial2d(purple.to_owned());
+            }
+        });
+
+    *solved_goto_statement.0 = Text("0".to_owned());
+    *solved_goto_statement.1 = TextColor::WHITE;
+}
+
+fn halt_count(
+    mut halt_count_ups: EventReader<HaltCountUp>,
+    mut solved_goto_statement: Single<(&mut Text, &mut TextColor, &SolvedGotoStatement)>,
+) {
+    let Some(count) = halt_count_ups.read().last() else {
+        return;
+    };
+
+    *solved_goto_statement.0 = Text(count.0.to_string());
 }
 
 fn finished_program(
