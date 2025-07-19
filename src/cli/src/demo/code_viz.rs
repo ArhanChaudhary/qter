@@ -54,7 +54,7 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
     commands.spawn((
         Text(String::new()),
         TextFont {
-            font_size: window.size().x / 43.,
+            font_size: window.size().x / 66.,
             ..Default::default()
         },
         Code,
