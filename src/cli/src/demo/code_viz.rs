@@ -20,7 +20,7 @@ struct Code;
 #[derive(Component)]
 struct Highlight;
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: Commands, window: Single<&Window>) {
     let panel = commands
         .spawn((
             Node {
@@ -54,7 +54,7 @@ fn setup(mut commands: Commands) {
     commands.spawn((
         Text(String::new()),
         TextFont {
-            font_size: 30.,
+            font_size: window.size().x / 43.,
             ..Default::default()
         },
         Code,

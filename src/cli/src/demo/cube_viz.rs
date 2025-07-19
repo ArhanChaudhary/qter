@@ -97,6 +97,7 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    window: Single<&Window>,
 ) {
     commands.spawn(Camera2d);
 
@@ -250,7 +251,7 @@ fn setup(
             Text::new(""),
             TextColor(Color::srgb_u8(0, 0, 0)),
             TextFont {
-                font_size: 50.,
+                font_size: window.size().x / 40.,
                 ..Default::default()
             },
             SolvedGotoStatement,
@@ -454,6 +455,7 @@ fn cycle_color(reg_idx: usize, cycle_idx: usize) -> Color {
     )
 }
 
+#[expect(clippy::too_many_arguments)]
 fn started_program(
     colors: Res<Colors>,
     mut current_arch: ResMut<CurrentArch>,
@@ -470,6 +472,7 @@ fn started_program(
         Without<StickerLabel>,
     >,
     mut sticker_labels: Query<(&mut Text2d, &StickerLabel, &FaceletIdx), Without<Sticker>>,
+    window: Single<&Window>,
 ) {
     let Some(program) = began_programs.read().last() else {
         return;
@@ -503,7 +506,7 @@ fn started_program(
                 Text::new(NAMES[i]),
                 TextColor::WHITE,
                 TextFont {
-                    font_size: 80.,
+                    font_size: window.size().x / 25.,
                     ..Default::default()
                 },
             ));
@@ -522,7 +525,7 @@ fn started_program(
                 Text::new(format!("= 0/{}  ", reg.order())),
                 TextColor::WHITE,
                 TextFont {
-                    font_size: 40.,
+                    font_size: window.size().x / 40.,
                     ..Default::default()
                 },
                 RegisterValueText(i),
@@ -561,7 +564,7 @@ fn started_program(
                 Text::new(format!("0/{}", cycle.chromatic_order())),
                 TextColor::WHITE,
                 TextFont {
-                    font_size: 40.,
+                    font_size: window.size().x / 50.,
                     ..Default::default()
                 },
                 TextLayout::new_with_justify(JustifyText::Center),
