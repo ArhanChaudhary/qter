@@ -76,7 +76,7 @@ fn started_program(
 #[expect(clippy::cast_precision_loss)]
 fn next_instruction(
     mut executing_instructions: EventReader<ExecutingInstruction>,
-    code: Single<(&Text, &Code)>,
+    code: Single<(&Text, &TextFont, &Code)>,
     mut highlight: Single<(&mut Node, &Highlight)>,
 ) {
     let Some(instruction) = executing_instructions.read().last() else {
@@ -85,6 +85,7 @@ fn next_instruction(
 
     let target_lineno = instruction.which_one.to_string();
 
+    let text_size = code.1.font_size;
     let code = &code.0.0;
 
     let mut lines = code.split('\n').enumerate();
@@ -99,6 +100,6 @@ fn next_instruction(
         .find(|(_, line)| line.is_empty() || line.contains('|') || line.contains("--"))
         .map_or_else(|| code.split('\n').count(), |(idx, _)| idx);
 
-    highlight.0.top = Val::Px(30. * 1.2 * idx as f32 + 8.);
-    highlight.0.height = Val::Px(30. * 1.2 * (end - idx) as f32);
+    highlight.0.top = Val::Px(text_size * 1.2 * idx as f32 + 8.);
+    highlight.0.height = Val::Px(text_size * 1.2 * (end - idx) as f32);
 }
