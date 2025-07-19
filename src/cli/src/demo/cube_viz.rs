@@ -449,9 +449,9 @@ fn track_puzzles(
 fn cycle_color(reg_idx: usize, cycle_idx: usize) -> Color {
     #[expect(clippy::cast_precision_loss)]
     Color::oklch(
-        0.76,
+        0.76 - cycle_idx as f32 * 0.15,
         0.12,
-        (reg_idx as f32 + cycle_idx as f32 / 4.) * 360. / 1.61,
+        reg_idx as f32 / 3. * 360. + 240.,
     )
 }
 
