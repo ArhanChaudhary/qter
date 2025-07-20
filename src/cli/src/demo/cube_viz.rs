@@ -490,6 +490,7 @@ fn started_program(
     for entity in registers_viz {
         if let Ok(mut entity) = commands.get_entity(entity) {
             entity.despawn_related::<Children>();
+            entity.despawn();
         }
     }
 
@@ -585,9 +586,13 @@ fn started_program(
         }
     }
 
+    let grey = colors.named.get(&ArcIntern::from("Grey")).unwrap();
+
     regs_stickers
         .par_iter_mut()
         .for_each(|(mut color_material, facelet, CycleViz, Sticker)| {
+            *color_material = MeshMaterial2d(grey.clone());
+
             for (i, reg) in arch.registers().iter().enumerate() {
                 for (j, cycle) in reg.unshared_cycles().iter().enumerate() {
                     if cycle.facelet_cycle().contains(&facelet.0) {
@@ -603,6 +608,8 @@ fn started_program(
     sticker_labels
         .par_iter_mut()
         .for_each(|(mut text, StickerLabel, FaceletIdx(idx))| {
+            *text = Text2d::new(String::new());
+
             for reg in arch.registers() {
                 for cycle in reg.unshared_cycles() {
                     if let Some((spot, _)) = cycle
