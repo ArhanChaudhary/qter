@@ -11,9 +11,9 @@ use compiler::compile;
 use cube_viz::CubeViz;
 use internment::{ArcIntern, Intern};
 use interpreter_loop::{CUBE3, CUBE3_DEF};
-use interpreter_plugin::{CommandTx, InterpretationCommand, InterpreterPlugin};
+use interpreter_plugin::{InterpretationCommand, InterpreterPlugin};
 use qter_core::{
-    File, Int, Program,
+    File, Program,
     architectures::{Architecture, Permutation},
 };
 
@@ -441,23 +441,5 @@ pub fn demo(robot: bool) {
         .add_plugins(CodeViz)
         .add_plugins(IOViz)
         .add_plugins(TextInputPlugin)
-        .add_systems(PreUpdate, keyboard_control)
         .run();
-}
-
-// Replace this with buttons
-fn keyboard_control(keyboard_input: Res<ButtonInput<KeyCode>>, command_tx: Res<CommandTx>) {
-    if keyboard_input.just_pressed(KeyCode::KeyN) {
-        command_tx.send(InterpretationCommand::Step).unwrap();
-    }
-
-    if keyboard_input.just_pressed(KeyCode::KeyS) {
-        command_tx.send(InterpretationCommand::Solve).unwrap();
-    }
-
-    if keyboard_input.just_pressed(KeyCode::KeyT) {
-        command_tx
-            .send(InterpretationCommand::Execute(Intern::from("multiply")))
-            .unwrap();
-    }
 }

@@ -332,6 +332,11 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
                             .event_tx
                             .send(InterpretationEvent::Message(msg))
                             .unwrap();
+                    } else {
+                        robot_handle()
+                            .event_tx
+                            .send(InterpretationEvent::GaveInput)
+                            .unwrap();
                     }
                 } else {
                     eprintln!("Cannot give input when there is no input instruction");

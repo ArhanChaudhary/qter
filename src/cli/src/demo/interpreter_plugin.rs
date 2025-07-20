@@ -29,6 +29,9 @@ pub struct Message(pub String);
 pub struct Input(pub Int<U>);
 
 #[derive(Event)]
+pub struct GaveInput;
+
+#[derive(Event)]
 pub struct BeginHalt {
     pub facelets: Facelets,
 }
@@ -62,6 +65,7 @@ pub struct FinishedProgram;
 pub enum InterpretationEvent {
     Message(String),
     Input(Int<U>),
+    GaveInput,
     BeginHalt { facelets: Facelets },
     HaltCountUp(Int<U>),
     CubeState(Permutation),
@@ -74,7 +78,7 @@ pub enum InterpretationEvent {
 }
 
 #[derive(Resource, Deref)]
-struct EventRx(Receiver<InterpretationEvent>);
+pub struct EventRx(Receiver<InterpretationEvent>);
 
 #[derive(Debug)]
 pub enum InterpretationCommand {
@@ -101,6 +105,7 @@ impl Plugin for InterpreterPlugin {
     fn build(&self, app: &mut bevy::app::App) {
         app.add_event::<Message>()
             .add_event::<Input>()
+            .add_event::<GaveInput>()
             .add_event::<BeginHalt>()
             .add_event::<HaltCountUp>()
             .add_event::<CubeState>()
@@ -126,6 +131,7 @@ fn read_events(
     recv: Res<EventRx>,
     mut messages: EventWriter<Message>,
     mut inputs: EventWriter<Input>,
+    mut gave_inputs: EventWriter<GaveInput>,
     mut begin_halts: EventWriter<BeginHalt>,
     mut halt_count_ups: EventWriter<HaltCountUp>,
     mut cube_states: EventWriter<CubeState>,
@@ -143,6 +149,9 @@ fn read_events(
             }
             InterpretationEvent::Input(int) => {
                 inputs.write(Input(int));
+            }
+            InterpretationEvent::GaveInput => {
+                gave_inputs.write(GaveInput);
             }
             InterpretationEvent::BeginHalt { facelets } => {
                 begin_halts.write(BeginHalt { facelets });

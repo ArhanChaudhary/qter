@@ -1,14 +1,11 @@
 // use bevy::{app::{App, Plugin, Startup, Update}, ecs::system::Commands};
-use bevy::{
-    color::palettes::css::{GRAY, RED, YELLOW},
-    prelude::*,
-    text::FontStyle,
-};
+use bevy::prelude::*;
 use bevy_simple_text_input::{TextInput, TextInputSubmitEvent};
 use internment::Intern;
-use qter_core::Int;
 
-use crate::demo::interpreter_plugin::{BeganProgram, CommandTx, InterpretationCommand, Message};
+use crate::demo::interpreter_plugin::{
+    BeganProgram, CommandTx, FinishedProgram, GaveInput, Input, InterpretationCommand, Message,
+};
 
 pub struct IOViz;
 
@@ -27,15 +24,25 @@ pub struct ExecuteButton;
 #[derive(Component)]
 struct MessageDisplay;
 
+#[derive(Resource, Debug)]
+// struct ExecuteClicked(bool);
+enum ExecuteButtonState {
+    None,
+    Clicked,
+    WaitingForInput,
+}
+
 impl Plugin for IOViz {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup)
+            .insert_resource(ExecuteButtonState::None)
             .add_systems(
                 Update,
                 (step_button, solve_button, execute_button, input_button).chain(),
             )
             .add_systems(Update, (started_program, got_message).chain())
-            .add_systems(Update, on_submit);
+            .add_systems(Update, on_submit)
+            .add_systems(Update, execute_conditionally);
     }
 }
 
@@ -138,6 +145,32 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
     commands
         .spawn((
             Node {
+                flex_grow: 1.0,
+                display: Display::Flex,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..Default::default()
+            },
+            ChildOf(input_buttons),
+            BackgroundColor(Color::srgba(0.5, 0.5, 0.5, 0.5)),
+            Button,
+            ExecuteButton,
+        ))
+        .with_child((
+            Text("Execute".to_string()),
+            TextLayout {
+                justify: JustifyText::Center,
+                ..Default::default()
+            },
+            TextFont {
+                font_size: window.size().x / 66.,
+                ..Default::default()
+            },
+        ));
+
+    commands
+        .spawn((
+            Node {
                 flex_grow: 1.,
                 ..Default::default()
             },
@@ -210,12 +243,6 @@ fn on_submit(
     }
 }
 
-// fn step_button(mut commands: Commands, query: Query<Entity, With<StepButton>>) {}
-
-// fn solve_button(mut commands: Commands, query: Query<Entity, With<SolveButton>>) {}
-
-// fn execute_button(mut commands: Commands, query: Query<Entity, With<ExecuteButton>>) {}
-
 fn input_button(
     interaction_query: Query<(&Interaction, &InputButton), Changed<Interaction>>,
     command_tx: Res<CommandTx>,
@@ -249,35 +276,36 @@ fn solve_button(
 
 fn execute_button(
     interaction_query: Query<&Interaction, With<ExecuteButton>>,
-    command_tx: Res<CommandTx>,
+    mut execute_button_state: ResMut<ExecuteButtonState>,
 ) {
     if let Ok(&Interaction::Pressed) = interaction_query.single() {
-        command_tx
-            .send(InterpretationCommand::Execute(Intern::from("multiply")))
-            .unwrap();
+        *execute_button_state = match *execute_button_state {
+            ExecuteButtonState::None | ExecuteButtonState::Clicked => ExecuteButtonState::Clicked,
+            ExecuteButtonState::WaitingForInput => ExecuteButtonState::WaitingForInput,
+        };
     }
 }
 
-/*
-fn keyboard_control(keyboard_input: Res<ButtonInput<KeyCode>>, command_tx: Res<CommandTx>) {
-    if keyboard_input.just_pressed(KeyCode::KeyN) {
-        command_tx.send(InterpretationCommand::Step).unwrap();
+fn execute_conditionally(
+    command_tx: Res<CommandTx>,
+    mut execute_button_state: ResMut<ExecuteButtonState>,
+    gave_inputs: EventReader<GaveInput>,
+    finished_programs: EventReader<FinishedProgram>,
+    inputs: EventReader<Input>,
+) {
+    if !inputs.is_empty() {
+        *execute_button_state = ExecuteButtonState::WaitingForInput;
     }
-
-    if keyboard_input.just_pressed(KeyCode::KeyS) {
-        command_tx.send(InterpretationCommand::Solve).unwrap();
+    if !finished_programs.is_empty() {
+        *execute_button_state = ExecuteButtonState::None;
     }
-
-    if keyboard_input.just_pressed(KeyCode::KeyT) {
-        command_tx
-            .send(InterpretationCommand::Execute(Intern::from("multiply")))
-            .unwrap();
+    if !gave_inputs.is_empty() {
+        *execute_button_state = ExecuteButtonState::Clicked;
     }
-
-    if keyboard_input.just_pressed(KeyCode::Enter) {
-        command_tx
-            .send(InterpretationCommand::GiveInput(Int::one()))
-            .unwrap();
+    match *execute_button_state {
+        ExecuteButtonState::None | ExecuteButtonState::WaitingForInput => (),
+        ExecuteButtonState::Clicked => {
+            command_tx.send(InterpretationCommand::Step).unwrap();
+        }
     }
 }
-*/
