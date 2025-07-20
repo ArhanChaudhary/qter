@@ -5,14 +5,15 @@ use bevy::{
     text::FontStyle,
 };
 use bevy_simple_text_input::{TextInput, TextInputSubmitEvent};
+use internment::Intern;
 use qter_core::Int;
 
-use super::interpreter_plugin::{BeganProgram, CommandTx, InterpretationCommand, Message};
+use crate::demo::interpreter_plugin::{BeganProgram, CommandTx, InterpretationCommand, Message};
 
 pub struct IOViz;
 
 #[derive(Component)]
-pub struct ChooserButton;
+pub struct InputButton(String, Intern<str>);
 
 #[derive(Component)]
 pub struct StepButton;
@@ -22,9 +23,6 @@ pub struct SolveButton;
 
 #[derive(Component)]
 pub struct ExecuteButton;
-
-#[derive(Component)]
-pub struct InputButton;
 
 #[derive(Component)]
 struct MessageDisplay;
@@ -64,6 +62,7 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
             Node {
                 justify_content: JustifyContent::Center,
                 width: Val::Percent(100.),
+                margin: UiRect::bottom(Val::Vh(2.)),
                 ..Default::default()
             },
             // BackgroundColor(Color::Srgba(RED)),
@@ -72,23 +71,29 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
         .id();
 
     commands.spawn((
-        Text("Choose a program:".to_string()),
+        Text("Choose a qter program:".to_string()),
         TextLayout {
             justify: JustifyText::Center,
+            ..Default::default()
+        },
+        TextFont {
+            font_size: window.size().x / 66.,
             ..Default::default()
         },
         ChildOf(choose_a_program),
     ));
 
-    let chooser_buttons = commands
+    let input_buttons = commands
         .spawn((
             Node {
                 width: Val::Percent(100.),
                 height: Val::Vh(20.),
                 display: Display::Grid,
+                column_gap: Val::Px(6.),
+                row_gap: Val::Px(6.),
                 grid_template_columns: vec![GridTrack::flex(1.0); 2],
                 grid_template_rows: vec![GridTrack::flex(1.0); 2],
-                align_items: AlignItems::Center,
+                // align_items: AlignItems::Center,
                 ..Default::default()
             },
             // BackgroundColor(Color::srgba(1., 1., 0., 0.5)),
@@ -96,17 +101,38 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
         ))
         .id();
 
-    for program_choice in ["Simple", "Average", "Fibonacci", "Multiply"] {
-        commands.spawn((
-            Text(program_choice.to_string()),
-            TextLayout {
-                justify: JustifyText::Center,
-                ..Default::default()
-            },
-            ChooserButton,
-            BackgroundColor(Color::srgba(0.5, 0.5, 0.5, 0.5)),
-            ChildOf(chooser_buttons),
-        ));
+    for input_button in [
+        InputButton("Simple".to_string(), Intern::<str>::from("simple")),
+        InputButton("Average".to_string(), Intern::<str>::from("avg")),
+        InputButton("Fibonacci".to_string(), Intern::<str>::from("fib")),
+        InputButton("Multiply".to_string(), Intern::<str>::from("multiply")),
+    ] {
+        let text = input_button.0.clone();
+        commands
+            .spawn((
+                Node {
+                    flex_grow: 1.0,
+                    display: Display::Flex,
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..Default::default()
+                },
+                ChildOf(input_buttons),
+                BackgroundColor(Color::srgba(0.5, 0.5, 0.5, 0.5)),
+                Button,
+                input_button,
+            ))
+            .with_child((
+                Text(text),
+                TextLayout {
+                    justify: JustifyText::Center,
+                    ..Default::default()
+                },
+                TextFont {
+                    font_size: window.size().x / 66.,
+                    ..Default::default()
+                },
+            ));
     }
 
     commands
@@ -184,10 +210,74 @@ fn on_submit(
     }
 }
 
-fn step_button(mut commands: Commands, query: Query<Entity, With<StepButton>>) {}
+// fn step_button(mut commands: Commands, query: Query<Entity, With<StepButton>>) {}
 
-fn solve_button(mut commands: Commands, query: Query<Entity, With<SolveButton>>) {}
+// fn solve_button(mut commands: Commands, query: Query<Entity, With<SolveButton>>) {}
 
-fn execute_button(mut commands: Commands, query: Query<Entity, With<ExecuteButton>>) {}
+// fn execute_button(mut commands: Commands, query: Query<Entity, With<ExecuteButton>>) {}
 
-fn input_button(mut commands: Commands, query: Query<Entity, With<InputButton>>) {}
+fn input_button(
+    interaction_query: Query<(&Interaction, &InputButton), Changed<Interaction>>,
+    command_tx: Res<CommandTx>,
+) {
+    for (&interaction, input_button) in interaction_query {
+        if interaction == Interaction::Pressed {
+            command_tx
+                .send(InterpretationCommand::Execute(input_button.1))
+                .unwrap();
+        }
+    }
+}
+
+fn step_button(
+    interaction_query: Query<&Interaction, With<StepButton>>,
+    command_tx: Res<CommandTx>,
+) {
+    if let Ok(&Interaction::Pressed) = interaction_query.single() {
+        command_tx.send(InterpretationCommand::Step).unwrap();
+    }
+}
+
+fn solve_button(
+    interaction_query: Query<&Interaction, With<SolveButton>>,
+    command_tx: Res<CommandTx>,
+) {
+    if let Ok(&Interaction::Pressed) = interaction_query.single() {
+        command_tx.send(InterpretationCommand::Solve).unwrap();
+    }
+}
+
+fn execute_button(
+    interaction_query: Query<&Interaction, With<ExecuteButton>>,
+    command_tx: Res<CommandTx>,
+) {
+    if let Ok(&Interaction::Pressed) = interaction_query.single() {
+        command_tx
+            .send(InterpretationCommand::Execute(Intern::from("multiply")))
+            .unwrap();
+    }
+}
+
+/*
+fn keyboard_control(keyboard_input: Res<ButtonInput<KeyCode>>, command_tx: Res<CommandTx>) {
+    if keyboard_input.just_pressed(KeyCode::KeyN) {
+        command_tx.send(InterpretationCommand::Step).unwrap();
+    }
+
+    if keyboard_input.just_pressed(KeyCode::KeyS) {
+        command_tx.send(InterpretationCommand::Solve).unwrap();
+    }
+
+    if keyboard_input.just_pressed(KeyCode::KeyT) {
+        command_tx
+            .send(InterpretationCommand::Execute(Intern::from("multiply")))
+            .unwrap();
+    }
+
+    if keyboard_input.just_pressed(KeyCode::Enter) {
+        command_tx
+            .send(InterpretationCommand::GiveInput(Int::one()))
+            .unwrap();
+    }
+}
+*/
