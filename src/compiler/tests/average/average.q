@@ -7,9 +7,9 @@ A: 3x3
 2 | input "Second number"
           U F R' D' R2 F R' U' D
           max-input 90
-3 | B2 R L2 D L' F' D2 F' L2
+3 | solved-goto DFR FR 6
+4 | B2 R L2 D L' F' D2 F' L2
     B' U' R D' L' B2 R F
-4 | solved-goto DFR FR 6
 5 | goto 3
 6 | R' F' L U' L U L F U' R
 7 | R' U F' L' U' L' U L' F R

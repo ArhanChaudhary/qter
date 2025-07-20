@@ -5,11 +5,11 @@
     -- Calculate the average of two numbers
     input "First number:" A
     input "Second number:" B
-    print "Calculating average..."
+    -- print "Calculating average..."
 sum_loop:
+    solved-goto B found_sum
     add A 1
     add B 89
-    solved-goto B found_sum
     goto sum_loop
 found_sum:
     add A 1

@@ -1,8 +1,4 @@
-use std::{
-    sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock},
-    thread,
-    time::Duration,
-};
+use std::sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock};
 
 use chumsky::Parser;
 use crossbeam_channel::{Receiver, Sender};
@@ -174,7 +170,6 @@ impl PuzzleState for TrackedRobotState {
                 return None;
             }
 
-            thread::sleep(Duration::from_millis(500));
             self.compose_into(&generator);
         }
 

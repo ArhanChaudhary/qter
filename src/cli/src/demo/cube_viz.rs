@@ -398,14 +398,18 @@ fn setup(
                             ChildOf(puzzle_meshes),
                         ));
 
-                        // commands.spawn((
-                        //     Text2d::new(facelet_idx.to_string()),
-                        //     TextColor(Color::srgb_u8(0, 0, 0)),
-                        //     Transform::from_matrix(transform)
-                        //         .with_rotation(Quat::IDENTITY)
-                        //         .with_scale(Vec3::new(1., 1., 1.)),
-                        //     ChildOf(puzzle),
-                        // ));
+                        commands.spawn((
+                            Text2d::new(facelet_idx.to_string()),
+                            TextColor(Color::srgb_u8(0, 0, 0)),
+                            TextFont {
+                                font_size: scale * 2. / 3.,
+                                ..Default::default()
+                            },
+                            Transform::from_matrix(transform)
+                                .with_rotation(Quat::IDENTITY)
+                                .with_scale(Vec3::new(1., 1., 1.)),
+                            ChildOf(puzzle_meshes),
+                        ));
                     }
                 }
             }
@@ -451,7 +455,7 @@ fn cycle_color(reg_idx: usize, cycle_idx: usize) -> Color {
     Color::oklch(
         0.76 - cycle_idx as f32 * 0.15,
         0.12,
-        reg_idx as f32 / 3. * 360. + 240.,
+        reg_idx as f32 / 4. * 360. + 240.,
     )
 }
 
@@ -506,7 +510,7 @@ fn started_program(
                 Text::new(NAMES[i]),
                 TextColor::WHITE,
                 TextFont {
-                    font_size: window.size().x / 25.,
+                    font_size: window.size().x / 30.,
                     ..Default::default()
                 },
             ));
@@ -525,7 +529,7 @@ fn started_program(
                 Text::new(format!("= 0/{}  ", reg.order())),
                 TextColor::WHITE,
                 TextFont {
-                    font_size: window.size().x / 40.,
+                    font_size: window.size().x / 45.,
                     ..Default::default()
                 },
                 RegisterValueText(i),
@@ -564,7 +568,7 @@ fn started_program(
                 Text::new(format!("0/{}", cycle.chromatic_order())),
                 TextColor::WHITE,
                 TextFont {
-                    font_size: window.size().x / 50.,
+                    font_size: window.size().x / 60.,
                     ..Default::default()
                 },
                 TextLayout::new_with_justify(JustifyText::Center),
@@ -741,7 +745,7 @@ fn translate_solved_goto_pieces(
                         }
                     }
 
-                    unreachable!();
+                    // unreachable!();
                 }
             }
         }

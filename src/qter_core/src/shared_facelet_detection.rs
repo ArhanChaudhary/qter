@@ -101,6 +101,10 @@ pub fn algorithms_to_cycle_generators<'a, T: AsRef<str>>(
                             cycle.iter().map(|&idx| &*group.facelet_colors()[idx]),
                         );
 
+                    if chromatic_order == 1 {
+                        continue;
+                    }
+
                     unshared_cycles.push(CycleGeneratorSubcycle {
                         facelet_cycle: cycle.to_owned(),
                         chromatic_order: Int::from(chromatic_order),
