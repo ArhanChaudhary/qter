@@ -6,8 +6,6 @@ use std::{
     path::PathBuf,
     process::{ChildStdin, ChildStdout, Command, Stdio},
     sync::{Arc, OnceLock},
-    thread,
-    time::Duration,
 };
 
 use interpreter::puzzle_states::{PuzzleState, SimulatedPuzzle};

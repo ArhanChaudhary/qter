@@ -145,19 +145,53 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
     commands
         .spawn((
             Node {
-                flex_grow: 1.0,
+                margin: UiRect::top(Val::Vh(4.)),
+                // flex_grow: 1.0,
+                border: UiRect::all(Val::Px(4.)),
+                height: Val::Vh(7.),
                 display: Display::Flex,
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 ..Default::default()
             },
-            ChildOf(input_buttons),
+            BorderColor(Color::BLACK),
             BackgroundColor(Color::srgba(0.5, 0.5, 0.5, 0.5)),
             Button,
             ExecuteButton,
+            ChildOf(panel),
         ))
         .with_child((
             Text("Execute".to_string()),
+            TextLayout {
+                justify: JustifyText::Center,
+                ..Default::default()
+            },
+            TextFont {
+                font_size: window.size().x / 66.,
+                ..Default::default()
+            },
+        ));
+
+    commands
+        .spawn((
+            Node {
+                margin: UiRect::top(Val::Vh(4.)),
+                // flex_grow: 1.0,
+                border: UiRect::all(Val::Px(4.)),
+                height: Val::Vh(7.),
+                display: Display::Flex,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..Default::default()
+            },
+            BorderColor(Color::BLACK),
+            BackgroundColor(Color::srgba(0.5, 0.5, 0.5, 0.5)),
+            Button,
+            StepButton,
+            ChildOf(panel),
+        ))
+        .with_child((
+            Text("Step".to_string()),
             TextLayout {
                 justify: JustifyText::Center,
                 ..Default::default()
@@ -257,11 +291,13 @@ fn input_button(
 }
 
 fn step_button(
-    interaction_query: Query<&Interaction, With<StepButton>>,
+    interaction_query: Query<(&Interaction, &StepButton), Changed<Interaction>>,
     command_tx: Res<CommandTx>,
 ) {
-    if let Ok(&Interaction::Pressed) = interaction_query.single() {
-        command_tx.send(InterpretationCommand::Step).unwrap();
+    for (&interaction, _) in interaction_query {
+        if interaction == Interaction::Pressed {
+            command_tx.send(InterpretationCommand::Step).unwrap();
+        }
     }
 }
 
@@ -275,12 +311,26 @@ fn solve_button(
 }
 
 fn execute_button(
-    interaction_query: Query<&Interaction, With<ExecuteButton>>,
+    interaction_query: Query<(&Interaction, &ExecuteButton, &Children), Changed<Interaction>>,
     mut execute_button_state: ResMut<ExecuteButtonState>,
+    mut text: Query<&mut Text>,
 ) {
-    if let Ok(&Interaction::Pressed) = interaction_query.single() {
+    // if let Ok(&Interaction::Pressed) = interaction_query.single() {
+    for (&interaction, execute_button, children) in interaction_query {
+        if interaction != Interaction::Pressed {
+            return;
+        }
+        // dbg!(&children.0);
+        let mut text = text.get_mut(children[0]).unwrap();
         *execute_button_state = match *execute_button_state {
-            ExecuteButtonState::None | ExecuteButtonState::Clicked => ExecuteButtonState::Clicked,
+            ExecuteButtonState::None => {
+                **text = "Pause".to_string();
+                ExecuteButtonState::Clicked
+            }
+            ExecuteButtonState::Clicked => {
+                **text = "Execute".to_string();
+                ExecuteButtonState::None
+            }
             ExecuteButtonState::WaitingForInput => ExecuteButtonState::WaitingForInput,
         };
     }
@@ -293,19 +343,22 @@ fn execute_conditionally(
     finished_programs: EventReader<FinishedProgram>,
     inputs: EventReader<Input>,
 ) {
-    if !inputs.is_empty() {
-        *execute_button_state = ExecuteButtonState::WaitingForInput;
-    }
     if !finished_programs.is_empty() {
         *execute_button_state = ExecuteButtonState::None;
     }
-    if !gave_inputs.is_empty() {
-        *execute_button_state = ExecuteButtonState::Clicked;
-    }
     match *execute_button_state {
-        ExecuteButtonState::None | ExecuteButtonState::WaitingForInput => (),
+        ExecuteButtonState::None => (),
+        ExecuteButtonState::WaitingForInput => {
+            if !gave_inputs.is_empty() {
+                *execute_button_state = ExecuteButtonState::Clicked;
+            }
+        }
         ExecuteButtonState::Clicked => {
-            command_tx.send(InterpretationCommand::Step).unwrap();
+            if inputs.is_empty() {
+                command_tx.send(InterpretationCommand::Step).unwrap();
+            } else {
+                *execute_button_state = ExecuteButtonState::WaitingForInput;
+            }
         }
     }
 }
