@@ -8,6 +8,8 @@ use crate::demo::interpreter_plugin::{
     BeganProgram, CommandTx, FinishedProgram, GaveInput, Input, InterpretationCommand, Message,
 };
 
+use super::interpreter_plugin::DoneExecuting;
+
 pub struct IOViz;
 
 #[derive(Component)]
@@ -326,6 +328,7 @@ fn solve_button(
 }
 
 fn execute_button(
+    command_tx: Res<CommandTx>,
     interaction: Single<&Interaction, (Changed<Interaction>, With<ExecuteButton>)>,
     mut execute_button_state: ResMut<ExecuteButtonState>,
     mut text: Single<&mut Text, With<ExecuteButton>>,
@@ -337,6 +340,7 @@ fn execute_button(
     // dbg!(&children.0);
     *execute_button_state = match *execute_button_state {
         ExecuteButtonState::None => {
+            command_tx.send(InterpretationCommand::Step).unwrap();
             ***text = "Pause".to_string();
             ExecuteButtonState::Clicked
         }
@@ -353,14 +357,19 @@ fn execute_conditionally(
     mut execute_button_state: ResMut<ExecuteButtonState>,
     gave_inputs: EventReader<GaveInput>,
     inputs: EventReader<Input>,
+    mut finished_instruction: EventReader<DoneExecuting>,
 ) {
-    match *execute_button_state {
-        ExecuteButtonState::None => (),
-        ExecuteButtonState::WaitingForInput => {
-            if !gave_inputs.is_empty() {
-                *execute_button_state = ExecuteButtonState::Clicked;
-            }
+    if let ExecuteButtonState::WaitingForInput = *execute_button_state {
+        if !gave_inputs.is_empty() {
+            *execute_button_state = ExecuteButtonState::Clicked;
         }
+    } else if finished_instruction.read().last().is_none() {
+        return;
+    }
+
+    match *execute_button_state {
+        ExecuteButtonState::None => {}
+        ExecuteButtonState::WaitingForInput => {}
         ExecuteButtonState::Clicked => {
             if inputs.is_empty() {
                 command_tx.send(InterpretationCommand::Step).unwrap();

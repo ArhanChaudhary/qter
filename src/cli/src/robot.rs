@@ -6,6 +6,8 @@ use std::{
     path::PathBuf,
     process::{ChildStdin, ChildStdout, Command, Stdio},
     sync::{Arc, OnceLock},
+    thread,
+    time::Duration,
 };
 
 use interpreter::puzzle_states::{PuzzleState, SimulatedPuzzle};
@@ -201,12 +203,12 @@ impl RobotLike for SimulatedPuzzle {
     }
 
     fn compose_into(&mut self, alg: &Algorithm) {
-        // thread::sleep(Duration::from_millis(500));
+        thread::sleep(Duration::from_millis(500));
         <Self as PuzzleState>::compose_into(self, alg);
     }
 
     fn take_picture(&self) -> &Permutation {
-        // thread::sleep(Duration::from_millis(500));
+        thread::sleep(Duration::from_millis(500));
         self.puzzle_state()
     }
 
