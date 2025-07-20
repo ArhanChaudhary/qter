@@ -42,7 +42,7 @@ impl Plugin for IOViz {
             )
             .add_systems(Update, (started_program, got_message).chain())
             .add_systems(Update, on_submit)
-            .add_systems(Update, execute_conditionally);
+            .add_systems(Update, (finished_program, execute_conditionally).chain());
     }
 }
 
@@ -170,6 +170,7 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
                 font_size: window.size().x / 66.,
                 ..Default::default()
             },
+            ExecuteButton,
         ));
 
     commands
@@ -311,41 +312,34 @@ fn solve_button(
 }
 
 fn execute_button(
-    interaction_query: Query<(&Interaction, &ExecuteButton, &Children), Changed<Interaction>>,
+    interaction: Single<&Interaction, (Changed<Interaction>, With<ExecuteButton>)>,
     mut execute_button_state: ResMut<ExecuteButtonState>,
-    mut text: Query<&mut Text>,
+    mut text: Single<&mut Text, With<ExecuteButton>>,
 ) {
     // if let Ok(&Interaction::Pressed) = interaction_query.single() {
-    for (&interaction, execute_button, children) in interaction_query {
-        if interaction != Interaction::Pressed {
-            return;
-        }
-        // dbg!(&children.0);
-        let mut text = text.get_mut(children[0]).unwrap();
-        *execute_button_state = match *execute_button_state {
-            ExecuteButtonState::None => {
-                **text = "Pause".to_string();
-                ExecuteButtonState::Clicked
-            }
-            ExecuteButtonState::Clicked => {
-                **text = "Execute".to_string();
-                ExecuteButtonState::None
-            }
-            ExecuteButtonState::WaitingForInput => ExecuteButtonState::WaitingForInput,
-        };
+    if *interaction != &Interaction::Pressed {
+        return;
     }
+    // dbg!(&children.0);
+    *execute_button_state = match *execute_button_state {
+        ExecuteButtonState::None => {
+            ***text = "Pause".to_string();
+            ExecuteButtonState::Clicked
+        }
+        ExecuteButtonState::Clicked => {
+            ***text = "Execute".to_string();
+            ExecuteButtonState::None
+        }
+        ExecuteButtonState::WaitingForInput => ExecuteButtonState::WaitingForInput,
+    };
 }
 
 fn execute_conditionally(
     command_tx: Res<CommandTx>,
     mut execute_button_state: ResMut<ExecuteButtonState>,
     gave_inputs: EventReader<GaveInput>,
-    finished_programs: EventReader<FinishedProgram>,
     inputs: EventReader<Input>,
 ) {
-    if !finished_programs.is_empty() {
-        *execute_button_state = ExecuteButtonState::None;
-    }
     match *execute_button_state {
         ExecuteButtonState::None => (),
         ExecuteButtonState::WaitingForInput => {
@@ -360,5 +354,16 @@ fn execute_conditionally(
                 *execute_button_state = ExecuteButtonState::WaitingForInput;
             }
         }
+    }
+}
+
+fn finished_program(
+    mut execute_button_state: ResMut<ExecuteButtonState>,
+    mut finished_programs: EventReader<FinishedProgram>,
+    mut text: Single<&mut Text, With<ExecuteButton>>,
+) {
+    if finished_programs.read().last().is_some() {
+        *execute_button_state = ExecuteButtonState::None;
+        ***text = "Execute".to_owned();
     }
 }
