@@ -18,6 +18,9 @@ impl Plugin for CodeViz {
 struct Code;
 
 #[derive(Component)]
+struct Panel;
+
+#[derive(Component)]
 struct Highlight;
 
 fn setup(mut commands: Commands, window: Single<&Window>) {
@@ -25,13 +28,15 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
         .spawn((
             Node {
                 // width: Val::Vw(33.),
-                height: Val::Vh(100.),
+                // height: Val::Vh(100.),
                 position_type: PositionType::Absolute,
                 top: Val::Px(0.),
                 left: Val::Vw(33.5),
                 padding: UiRect::all(Val::Px(8.)),
+                overflow: Overflow::visible(),
                 ..Default::default()
             },
+            Panel,
             // BackgroundColor(Color::srgba_u8(128, 128, 255, 128)),
         ))
         .id();
@@ -44,6 +49,7 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
             height: Val::Px(0.),
             padding: UiRect::right(Val::Px(8.)),
             box_sizing: BoxSizing::ContentBox,
+            overflow: Overflow::visible(),
             ..Default::default()
         },
         BackgroundColor(Color::srgba_u8(255, 0, 255, 128)),
@@ -76,8 +82,10 @@ fn started_program(
 #[expect(clippy::cast_precision_loss)]
 fn next_instruction(
     mut executing_instructions: EventReader<ExecutingInstruction>,
-    code: Single<(&Text, &TextFont, &Code)>,
+    mut panel: Single<&mut Node, (With<Panel>, Without<Highlight>)>,
+    code: Single<(&Text, &TextFont, &Code), Without<Highlight>>,
     mut highlight: Single<(&mut Node, &Highlight)>,
+    window: Single<&Window>,
 ) {
     let Some(instruction) = executing_instructions.read().last() else {
         return;
@@ -86,9 +94,7 @@ fn next_instruction(
     let target_lineno = instruction.which_one.to_string();
 
     let text_size = code.1.font_size;
-    let code = &code.0.0;
-
-    let mut lines = code.split('\n').enumerate();
+    let mut lines = code.0.0.split('\n').enumerate();
 
     let (idx, _) = lines
         .by_ref()
@@ -98,8 +104,28 @@ fn next_instruction(
     let end = lines
         .by_ref()
         .find(|(_, line)| line.is_empty() || line.contains('|') || line.contains("--"))
-        .map_or_else(|| code.split('\n').count(), |(idx, _)| idx);
+        .map_or_else(|| code.0.0.split('\n').count(), |(idx, _)| idx);
 
-    highlight.0.top = Val::Px(text_size * 1.2 * idx as f32 + 8.);
-    highlight.0.height = Val::Px(text_size * 1.2 * (end - idx) as f32);
+    let start_spot = text_size * 1.2 * idx as f32 + 8.;
+    let size = text_size * 1.2 * (end - idx) as f32;
+    let end_spot = start_spot + size;
+
+    highlight.0.top = Val::Px(start_spot);
+    highlight.0.height = Val::Px(size);
+
+    let offset = match panel.top {
+        Val::Px(px) => px,
+        Val::Auto => 0.,
+        _ => unreachable!(),
+    };
+
+    if start_spot + offset < 0. {
+        panel.top = Val::Px(-start_spot);
+    }
+
+    let max_spot = window.size().y * 9. / 10.;
+    println!("{end_spot} {offset} {max_spot}");
+    if end_spot + offset > max_spot {
+        panel.top = Val::Px(max_spot - end_spot);
+    }
 }

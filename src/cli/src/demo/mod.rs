@@ -394,7 +394,7 @@ fn keyboard_control(keyboard_input: Res<ButtonInput<KeyCode>>, command_tx: Res<C
 
     if keyboard_input.just_pressed(KeyCode::KeyT) {
         command_tx
-            .send(InterpretationCommand::Execute(Intern::from("avg")))
+            .send(InterpretationCommand::Execute(Intern::from("multiply")))
             .unwrap();
     }
 

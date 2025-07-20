@@ -398,18 +398,18 @@ fn setup(
                             ChildOf(puzzle_meshes),
                         ));
 
-                        commands.spawn((
-                            Text2d::new(facelet_idx.to_string()),
-                            TextColor(Color::srgb_u8(0, 0, 0)),
-                            TextFont {
-                                font_size: scale * 2. / 3.,
-                                ..Default::default()
-                            },
-                            Transform::from_matrix(transform)
-                                .with_rotation(Quat::IDENTITY)
-                                .with_scale(Vec3::new(1., 1., 1.)),
-                            ChildOf(puzzle_meshes),
-                        ));
+                        // commands.spawn((
+                        //     Text2d::new(facelet_idx.to_string()),
+                        //     TextColor(Color::srgb_u8(0, 0, 0)),
+                        //     TextFont {
+                        //         font_size: scale * 2. / 3.,
+                        //         ..Default::default()
+                        //     },
+                        //     Transform::from_matrix(transform)
+                        //         .with_rotation(Quat::IDENTITY)
+                        //         .with_scale(Vec3::new(1., 1., 1.)),
+                        //     ChildOf(puzzle_meshes),
+                        // ));
                     }
                 }
             }
