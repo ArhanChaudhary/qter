@@ -5,6 +5,8 @@ use bevy::{
     text::FontStyle,
 };
 
+use super::interpreter_plugin::{BeganProgram, Message};
+
 pub struct IOViz;
 
 #[derive(Component)]
@@ -22,20 +24,25 @@ pub struct ExecuteButton;
 #[derive(Component)]
 pub struct InputButton;
 
+#[derive(Component)]
+struct MessageDisplay;
+
 impl Plugin for IOViz {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup).add_systems(
-            Update,
-            (step_button, solve_button, execute_button, input_button).chain(),
-        );
+        app.add_systems(Startup, setup)
+            .add_systems(
+                Update,
+                (step_button, solve_button, execute_button, input_button).chain(),
+            )
+            .add_systems(Update, (started_program, got_message).chain());
     }
 }
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: Commands, window: Single<&Window>) {
     let panel = commands
         .spawn((
             Node {
-                width: Val::Vw(20.),
+                width: Val::Vw(25.),
                 height: Val::Vh(100.),
                 position_type: PositionType::Absolute,
                 // display: Display::Flex,
@@ -97,6 +104,37 @@ fn setup(mut commands: Commands) {
             BackgroundColor(Color::srgba(0.5, 0.5, 0.5, 0.5)),
             ChildOf(chooser_buttons),
         ));
+    }
+
+    commands.spawn((
+        Text::new(String::new()),
+        TextFont {
+            font_size: window.size().x / 66.,
+            ..Default::default()
+        },
+        MessageDisplay,
+        ChildOf(panel),
+    ));
+}
+
+fn started_program(
+    mut began_programs: EventReader<BeganProgram>,
+    mut message_display: Single<&mut Text, With<MessageDisplay>>,
+) {
+    let Some(_) = began_programs.read().last() else {
+        return;
+    };
+
+    **message_display = Text(String::new());
+}
+
+fn got_message(
+    mut messages: EventReader<Message>,
+    mut message_display: Single<&mut Text, With<MessageDisplay>>,
+) {
+    for message in messages.read() {
+        message_display.0.push('\n');
+        message_display.0.push_str(&message.0);
     }
 }
 

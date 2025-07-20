@@ -138,6 +138,7 @@ fn read_events(
     for event in recv.try_iter() {
         match event {
             InterpretationEvent::Message(msg) => {
+                println!("{}", msg);
                 messages.write(Message(msg));
             }
             InterpretationEvent::Input(int) => {

@@ -70,13 +70,18 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
 
 fn started_program(
     mut began_programs: EventReader<BeganProgram>,
+    mut panel: Single<&mut Node, (With<Panel>, Without<Highlight>)>,
     mut code: Single<(&mut Text, &Code)>,
+    mut highlight: Single<(&mut Node, &Highlight)>,
 ) {
     let Some(program) = began_programs.read().last() else {
         return;
     };
 
     *code.0 = Text(PROGRAMS.get(&program.0).unwrap().code.clone());
+
+    highlight.0.height = Val::ZERO;
+    panel.top = Val::ZERO;
 }
 
 #[expect(clippy::cast_precision_loss)]
