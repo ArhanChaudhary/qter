@@ -35,7 +35,7 @@ fn setup(mut commands: Commands) {
     let panel = commands
         .spawn((
             Node {
-                width: Val::Vw(33.),
+                width: Val::Vw(20.),
                 height: Val::Vh(100.),
                 position_type: PositionType::Absolute,
                 // display: Display::Flex,
@@ -70,19 +70,21 @@ fn setup(mut commands: Commands) {
         ChildOf(choose_a_program),
     ));
 
-    let chooser_buttons = commands.spawn((
-        Node {
-            width: Val::Percent(100.),
-            height: Val::Vh(20.),
-            display: Display::Grid,
-            grid_template_columns: vec![GridTrack::flex(1.0); 2],
-            grid_template_rows: vec![GridTrack::flex(1.0); 2],
-            align_items: AlignItems::Center,
-            ..Default::default()
-        },
-        // BackgroundColor(Color::srgba(1., 1., 0., 0.5)),
-        ChildOf(panel),
-    )).id();
+    let chooser_buttons = commands
+        .spawn((
+            Node {
+                width: Val::Percent(100.),
+                height: Val::Vh(20.),
+                display: Display::Grid,
+                grid_template_columns: vec![GridTrack::flex(1.0); 2],
+                grid_template_rows: vec![GridTrack::flex(1.0); 2],
+                align_items: AlignItems::Center,
+                ..Default::default()
+            },
+            // BackgroundColor(Color::srgba(1., 1., 0., 0.5)),
+            ChildOf(panel),
+        ))
+        .id();
 
     for program_choice in ["Simple", "Average", "Fibonacci", "Multiply"] {
         commands.spawn((

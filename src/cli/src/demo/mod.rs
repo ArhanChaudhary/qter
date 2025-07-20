@@ -140,9 +140,10 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
                 vec![5, 16, 10],  // UFL
             ],
             code: r#"
-0  | input "Which Fibonacci number to calculate:"
-           B2 U2 L F' R B L2 D2 B R' F L
-           max-input 7
+0  | input
+     "Which Fibonacci number to calculate:"
+     B2 U2 L F' R B L2 D2 B R' F L
+     max-input 7
 1  | solved-goto UFR 3
 2  | goto 4
 3  | halt "The number is: 0"
@@ -154,7 +155,8 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
           L D B L' F L B' L2 F' L D'
           counting-until DL DFL
 9  | solved-goto DL DFL 12
-10 | L U' B R' L B' L' U' L U R2 B R2 D2 R2 D'
+10 | L U' B R' L B' L' U'
+     L U R2 B R2 D2 R2 D'
 11 | goto 9
 12 | L' F' R B' D2 L2 B' R' F L' U2 B2
 13 | solved-goto UFR 15
@@ -206,162 +208,218 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
             ],
             code: r#"
 0   | input "Enter number X"
-          L2 F2 U L' F D' F' U' L' F U D L' U'
-          max-input 29
+            L2 F2 U L' F D' F'
+            U' L' F U D L' U'
+            max-input 29
 1   | input "Enter number Y"
-          R2 L U' R' L2 F' D R' D L B2 D2
-          max-input 29
+            R2 L U' R' L2 F'
+            D R' D L B2 D2
+            max-input 29
 2   | solved-goto FR UFR 145
 3   | solved-goto UB DLB 148
 4   | solved-goto UB 9
-5   | F2 B2 U F2 B2 D' B L2 D2 B' D B2 D L D2 B2 D'
+5   | F2 B2 U F2 B2 D' B L2
+      D2 B' D B2 D L D2 B2 D'
 6   | solved-goto UB 51
-7   | F2 B2 U F2 B2 D' B L2 D2 B' D B2 D L D2 B2 D'
+7   | F2 B2 U F2 B2 D' B L2
+      D2 B' D B2 D L D2 B2 D'
 8   | goto 4
 9   | solved-goto ULF 12
-10  | D B2 D2 L' D' B2 D' B D2 L2 B' D F2 B2 U' F2 B2
+10  | D B2 D2 L' D' B2 D' B D2
+      L2 B' D F2 B2 U' F2 B2
 11  | goto 9
 12  | solved-goto UR ULF 15
-13  | D' R L' U' F' B2 L B U B L U R' D2 B' U'
+13  | D' R L' U' F' B2 L B U B
+      L U R' D2 B' U'
 14  | goto 12
 15  | solved-goto UB DLB 18
-16  | F' B' D2 R' B2 R U R2 B2 L' B' U B R2 L2 F R L'
+16  | F' B' D2 R' B2 R U R2 B2
+      L' B' U B R2 L2 F R L'
 17  | goto 15
 18  | solved-goto ULF 21
-19  | D B2 D2 L' D' B2 D' B D2 L2 B' D F2 B2 U' F2 B2
+19  | D B2 D2 L' D' B2 D' B D2
+      L2 B' D F2 B2 U' F2 B2
 20  | goto 18
 21  | solved-goto UR ULF 24
-22  | D' R L' U' F' B2 L B U B L U R' D2 B' U'
+22  | D' R L' U' F' B2 L B U B
+      L U R' D2 B' U'
 23  | goto 21
 24  | solved-goto FR UFR 27
-25  | B2 L F D R2 F R' U F' R2 F D2 L2 D L B2
+25  | B2 L F D R2 F R' U F' R2
+      F D2 L2 D L B2
 26  | goto 24
 27  | solved-goto UR 30
-28  | D2 L D' F' D' R D' R U2 B R B2 U R' U F D
+28  | D2 L D' F' D' R D' R U2
+      B R B2 U R' U F D
 29  | goto 27
 30  | solved-goto UR ULF 4
-31  | F2 L' B' D F2 U' R2 F U2 R' D' B U2 F' L2 U
+31  | F2 L' B' D F2 U' R2 F
+      U2 R' D' B U2 F' L2 U
 32  | goto 30
 33  | solved-goto UB DLB 36
-34  | U' R2 L2 U R2 F2 D2 R' F2 L' U2 L U L' B D' B
+34  | U' R2 L2 U R2 F2 D2 R'
+      F2 L' U2 L U L' B D' B
 35  | goto 33
 36  | solved-goto ULF 39
-37  | D B2 D2 L' D' B2 D' B D2 L2 B' D F2 B2 U' F2 B2
+37  | D B2 D2 L' D' B2 D' B D2
+      L2 B' D F2 B2 U' F2 B2
 38  | goto 36
 39  | solved-goto UR ULF 42
-40  | D' R L' U' F' B2 L B U B L U R' D2 B' U'
+40  | D' R L' U' F' B2 L B
+      U B L U R' D2 B' U'
 41  | goto 39
 42  | solved-goto FR UFR 45
-43  | U' R' L2 B' L' D' F' R F' D R' L B2 R2 L2 U' R2
+43  | U' R' L2 B' L' D' F' R
+      F' D R' L B2 R2 L2 U' R2
 44  | goto 42
 45  | solved-goto UR 48
-46  | D2 L D' F' D' R D' R U2 B R B2 U R' U F D
+46  | D2 L D' F' D' R D' R
+      U2 B R B2 U R' U F D
 47  | goto 45
 48  | solved-goto UR ULF 57
-49  | F2 L' B' D F2 U' R2 F U2 R' D' B U2 F' L2 U
+49  | F2 L' B' D F2 U' R2 F
+      U2 R' D' B U2 F' L2 U
 50  | goto 48
 51  | solved-goto ULF 54
-52  | D B2 D2 L' D' B2 D' B D2 L2 B' D F2 B2 U' F2 B2
+52  | D B2 D2 L' D' B2 D' B D2
+      L2 B' D F2 B2 U' F2 B2
 53  | goto 51
 54  | solved-goto UR ULF 57
-55  | D' R L' U' F' B2 L B U B L U R' D2 B' U'
+55  | D' R L' U' F' B2 L B
+      U B L U R' D2 B' U'
 56  | goto 54
 57  | solved-goto DLB 33
-58  | D2 B2 L' D' R D' F R L2 U R2 L'
+58  | D2 B2 L' D' R D'
+      F R L2 U R2 L'
 59  | solved-goto UB DLB 151
 60  | goto 63
 61  | solved-goto UB 73
-62  | D2 B2 L' D' R D' F R L2 U R2 L'
-63  | U L2 B' L U' B' U2 R B' R' B L
+62  | D2 B2 L' D' R D'
+      F R L2 U R2 L'
+63  | U L2 B' L U' B'
+      U2 R B' R' B L
 64  | solved-goto UB 97
-65  | F2 B2 U F2 B2 D' B L2 D2 B' D B2 D L D2 B2 D'
+65  | F2 B2 U F2 B2 D' B L2
+      D2 B' D B2 D L D2 B2 D'
 66  | solved-goto UB 97
-67  | F2 B2 U F2 B2 D' B L2 D2 B' D B2 D L D2 B2 D'
+67  | F2 B2 U F2 B2 D' B L2
+      D2 B' D B2 D L D2 B2 D'
 68  | solved-goto UB 97
-69  | F2 B2 U F2 B2 D' B L2 D2 B' D B2 D L D2 B2 D'
+69  | F2 B2 U F2 B2 D' B L2
+      D2 B' D B2 D L D2 B2 D'
 70  | solved-goto UB 97
-71  | F2 B2 U F2 B2 D' B L2 D2 B' D B2 D L D2 B2 D'
+71  | F2 B2 U F2 B2 D' B L2
+      D2 B' D B2 D L D2 B2 D'
 72  | goto 61
 73  | solved-goto ULF 76
-74  | D B2 D2 L' D' B2 D' B D2 L2 B' D F2 B2 U' F2 B2
+74  | D B2 D2 L' D' B2 D' B D2
+      L2 B' D F2 B2 U' F2 B2
 75  | goto 73
 76  | solved-goto UR ULF 79
-77  | D' R L' U' F' B2 L B U B L U R' D2 B' U'
+77  | D' R L' U' F' B2 L B
+      U B L U R' D2 B' U'
 78  | goto 76
 79  | solved-goto UB DLB 82
-80  | F2 B2 U F2 D L' B D2 B2 D L2 D' B R' L2 B2 R L
+80  | F2 B2 U F2 D L' B D2 B2
+      D L2 D' B R' L2 B2 R L
 81  | goto 79
 82  | solved-goto ULF 85
-83  | D B2 D2 L' D' B2 D' B D2 L2 B' D F2 B2 U' F2 B2
+83  | D B2 D2 L' D' B2 D' B D2
+      L2 B' D F2 B2 U' F2 B2
 84  | goto 82
 85  | solved-goto UR ULF 88
-86  | D' R L' U' F' B2 L B U B L U R' D2 B' U'
+86  | D' R L' U' F' B2 L B U
+      B L U R' D2 B' U'
 87  | goto 85
 88  | solved-goto FR UFR 91
-89  | D2 R' F' D2 R F R F' R' B' D F' L' D' B' L2 U' B2
+89  | D2 R' F' D2 R F R F' R'
+      B' D F' L' D' B' L2 U' B2
 90  | goto 88
 91  | solved-goto UR 94
-92  | D2 L D' F' D' R D' R U2 B R B2 U R' U F D
+92  | D2 L D' F' D' R D' R
+      U2 B R B2 U R' U F D
 93  | goto 91
 94  | solved-goto UR ULF 61
-95  | F2 L' B' D F2 U' R2 F U2 R' D' B U2 F' L2 U
+95  | F2 L' B' D F2 U' R2 F
+      U2 R' D' B U2 F' L2 U
 96  | goto 94
 97  | solved-goto ULF 100
-98  | D B2 D2 L' D' B2 D' B D2 L2 B' D F2 B2 U' F2 B2
+98  | D B2 D2 L' D' B2 D' B D2
+      L2 B' D F2 B2 U' F2 B2
 99  | goto 97
 100 | solved-goto UR ULF 103
-101 | D' R L' U' F' B2 L B U B L U R' D2 B' U'
+101 | D' R L' U' F' B2 L B
+      U B L U R' D2 B' U'
 102 | goto 100
-103 | D2 B2 L' D' R D' F R L2 U R2 L'
+103 | D2 B2 L' D' R D'
+      F R L2 U R2 L'
 104 | solved-goto UB 125
-105 | R2 L U' R' L2 F' D R' D L B2 D2
+105 | R2 L U' R' L2 F'
+      D R' D L B2 D2
 106 | solved-goto UB DLB 109
-107 | F' D' F' U' R B2 U2 D' R D F2 L B2 L D2 L2 D2
+107 | F' D' F' U' R B2 U2 D'
+      R D F2 L B2 L D2 L2 D2
 108 | goto 106
 109 | solved-goto ULF 112
-110 | D B2 D2 L' D' B2 D' B D2 L2 B' D F2 B2 U' F2 B2
+110 | D B2 D2 L' D' B2 D' B D2
+      L2 B' D F2 B2 U' F2 B2
 111 | goto 109
 112 | solved-goto UR ULF 118
-113 | D' R L' U' F' B2 L B U B L U R' D2 B' U'
+113 | D' R L' U' F' B2 L B
+      U B L U R' D2 B' U'
 114 | goto 112
 115 | solved-goto FR UFR 118
-116 | D2 F U2 R' U D2 F D' R D R2 D F' R U R
+116 | D2 F U2 R' U D2 F D'
+      R D R2 D F' R U R
 117 | goto 118
 118 | solved-goto UR 121
-119 | D2 L D' F' D' R D' R U2 B R B2 U R' U F D
+119 | D2 L D' F' D' R D' R
+      U2 B R B2 U R' U F D
 120 | goto 118
 121 | solved-goto UR ULF 103
-122 | F2 L' B' D F2 U' R2 F U2 R' D' B U2 F' L2 U
+122 | F2 L' B' D F2 U' R2 F
+      U2 R' D' B U2 F' L2 U
 123 | goto 121
-124 | D2 B2 L' D' R D' F R L2 U R2 L'
+124 | D2 B2 L' D' R
+      D' F R L2 U R2 L'
 125 | solved-goto UB DLB 151
-126 | R2 L U' R' L2 F' D R' D L B2 D2
+126 | R2 L U' R' L2 F'
+      D R' D L B2 D2
 127 | solved-goto UB DLB 130
-128 | R' B' R D F L2 U' B2 L2 B' U L2 U L' U' B2 L2 F'
+128 | R' B' R D F L2 U' B2 L2
+      B' U L2 U L' U' B2 L2 F'
 129 | goto 127
 130 | solved-goto ULF 133
-131 | D B2 D2 L' D' B2 D' B D2 L2 B' D F2 B2 U' F2 B2
+131 | D B2 D2 L' D' B2 D' B D2
+      L2 B' D F2 B2 U' F2 B2
 132 | goto 130
 133 | solved-goto UR ULF 136
-134 | D' R L' U' F' B2 L B U B L U R' D2 B' U'
+134 | D' R L' U' F' B2 L B
+      U B L U R' D2 B' U'
 135 | goto 133
 136 | solved-goto FR UFR 139
-137 | R' F2 D F' B2 L2 U L2 U F' B2 R D2 R' D' F2 D'
+137 | R' F2 D F' B2 L2 U L2 U
+      F' B2 R D2 R' D' F2 D'
 138 | goto 136
 139 | solved-goto UR 142
-140 | D2 L D' F' D' R D' R U2 B R B2 U R' U F D
+140 | D2 L D' F' D' R D' R
+      U2 B R B2 U R' U F D
 141 | goto 139
 142 | solved-goto UR ULF 124
-143 | F2 L' B' D F2 U' R2 F U2 R' D' B U2 F' L2 U
+143 | F2 L' B' D F2 U' R2 F
+      U2 R' D' B U2 F' L2 U
 144 | goto 142
 145 | solved-goto UB DLB 151
-146 | D2 B2 L' D' R D' F R L2 U R2 L'
+146 | D2 B2 L' D' R
+      D' F R L2 U R2 L'
 147 | goto 145
 148 | solved-goto FR UFR 151
-149 | U L U' D' F' L U F D F' L U' F2 L2
+149 | U L U' D' F' L U
+      F D F' L U' F2 L2
 150 | goto 148
 151 | halt "(X * Y) mod 30 ="
-         U L U' D' F' L U F D F' L U' F2 L2
+         U L U' D' F' L U
+         F D F' L U' F2 L2
          counting-until FR UFR
 "#
             .to_owned(),

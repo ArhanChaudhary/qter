@@ -31,7 +31,7 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
                 // height: Val::Vh(100.),
                 position_type: PositionType::Absolute,
                 top: Val::Px(0.),
-                left: Val::Vw(33.5),
+                left: Val::Vw(26.),
                 padding: UiRect::all(Val::Px(8.)),
                 overflow: Overflow::visible(),
                 ..Default::default()
