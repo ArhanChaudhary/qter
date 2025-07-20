@@ -4,8 +4,10 @@ use bevy::{
     prelude::*,
     text::FontStyle,
 };
+use bevy_simple_text_input::{TextInput, TextInputSubmitEvent};
+use qter_core::Int;
 
-use super::interpreter_plugin::{BeganProgram, Message};
+use super::interpreter_plugin::{BeganProgram, CommandTx, InterpretationCommand, Message};
 
 pub struct IOViz;
 
@@ -34,7 +36,8 @@ impl Plugin for IOViz {
                 Update,
                 (step_button, solve_button, execute_button, input_button).chain(),
             )
-            .add_systems(Update, (started_program, got_message).chain());
+            .add_systems(Update, (started_program, got_message).chain())
+            .add_systems(Update, on_submit);
     }
 }
 
@@ -106,15 +109,37 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
         ));
     }
 
-    commands.spawn((
-        Text::new(String::new()),
-        TextFont {
-            font_size: window.size().x / 66.,
-            ..Default::default()
-        },
-        MessageDisplay,
-        ChildOf(panel),
-    ));
+    commands
+        .spawn((
+            Node {
+                flex_grow: 1.,
+                ..Default::default()
+            },
+            ChildOf(panel),
+        ))
+        .with_child((
+            Text::new(String::new()),
+            TextFont {
+                font_size: window.size().x / 66.,
+                ..Default::default()
+            },
+            MessageDisplay,
+        ));
+
+    let bottom_stuff = commands
+        .spawn((
+            Node {
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                border: UiRect::all(Val::Px(2.0)),
+                ..Default::default()
+            },
+            BorderColor(Color::WHITE),
+            ChildOf(panel),
+        ))
+        .id();
+
+    commands.spawn((TextInput, ChildOf(bottom_stuff)));
 }
 
 fn started_program(
@@ -135,6 +160,27 @@ fn got_message(
     for message in messages.read() {
         message_display.0.push('\n');
         message_display.0.push_str(&message.0);
+    }
+}
+
+fn on_submit(
+    mut submissions: EventReader<TextInputSubmitEvent>,
+    command_tx: Res<CommandTx>,
+    mut message_display: Single<&mut Text, With<MessageDisplay>>,
+) {
+    for submission in submissions.read() {
+        command_tx
+            .send(InterpretationCommand::GiveInput(
+                if let Ok(v) = submission.value.parse() {
+                    message_display.push('\n');
+                    message_display.push_str(&submission.value);
+                    v
+                } else {
+                    message_display.push_str("\nValue needs to be parsable as a string");
+                    continue;
+                },
+            ))
+            .unwrap();
     }
 }
 

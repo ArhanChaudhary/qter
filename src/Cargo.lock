@@ -1194,6 +1194,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_simple_text_input"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85acdf186fcf5b5cab71832cfbb09e16f640af373a85340674abca761b720f07"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
 name = "bevy_sprite"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1755,6 +1764,7 @@ version = "0.1.0"
 dependencies = [
  "ariadne",
  "bevy",
+ "bevy_simple_text_input",
  "chumsky",
  "clap",
  "color-eyre",

@@ -327,7 +327,12 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
                     data: _,
                 }) = interpreter.state().execution_state()
                 {
-                    interpreter.give_input(int).unwrap();
+                    if let Err(msg) = interpreter.give_input(int) {
+                        robot_handle()
+                            .event_tx
+                            .send(InterpretationEvent::Message(msg))
+                            .unwrap();
+                    }
                 } else {
                     eprintln!("Cannot give input when there is no input instruction");
                 }

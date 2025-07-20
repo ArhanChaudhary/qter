@@ -6,6 +6,7 @@ use std::{
 };
 
 use bevy::prelude::*;
+use bevy_simple_text_input::TextInputPlugin;
 use compiler::compile;
 use cube_viz::CubeViz;
 use internment::{ArcIntern, Intern};
@@ -439,6 +440,7 @@ pub fn demo(robot: bool) {
         .add_plugins(CubeViz)
         .add_plugins(CodeViz)
         .add_plugins(IOViz)
+        .add_plugins(TextInputPlugin)
         .add_systems(PreUpdate, keyboard_control)
         .run();
 }
@@ -456,12 +458,6 @@ fn keyboard_control(keyboard_input: Res<ButtonInput<KeyCode>>, command_tx: Res<C
     if keyboard_input.just_pressed(KeyCode::KeyT) {
         command_tx
             .send(InterpretationCommand::Execute(Intern::from("multiply")))
-            .unwrap();
-    }
-
-    if keyboard_input.just_pressed(KeyCode::Enter) {
-        command_tx
-            .send(InterpretationCommand::GiveInput(Int::one()))
             .unwrap();
     }
 }
