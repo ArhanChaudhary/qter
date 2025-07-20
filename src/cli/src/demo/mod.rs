@@ -6,7 +6,6 @@ use std::{
 };
 
 use bevy::prelude::*;
-use code_viz::CodeViz;
 use compiler::compile;
 use cube_viz::CubeViz;
 use internment::{ArcIntern, Intern};
@@ -17,10 +16,13 @@ use qter_core::{
     architectures::{Architecture, Permutation},
 };
 
+use crate::demo::{code_viz::CodeViz, io_viz::IOViz};
+
 mod code_viz;
 mod cube_viz;
 mod interpreter_loop;
 mod interpreter_plugin;
+mod io_viz;
 
 struct ProgramInfo {
     program: Arc<Program>,
@@ -378,6 +380,7 @@ pub fn demo(robot: bool) {
         .add_plugins(InterpreterPlugin { robot })
         .add_plugins(CubeViz)
         .add_plugins(CodeViz)
+        .add_plugins(IOViz)
         .add_systems(PreUpdate, keyboard_control)
         .run();
 }
