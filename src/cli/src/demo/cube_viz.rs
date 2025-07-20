@@ -464,6 +464,7 @@ fn started_program(
     colors: Res<Colors>,
     mut current_arch: ResMut<CurrentArch>,
     mut commands: Commands,
+    registers_viz: Query<Entity, With<RegistersViz>>,
     mut began_programs: EventReader<BeganProgram>,
     regs_list: Query<(Entity, &RegistersList)>,
     mut regs_stickers: Query<
@@ -485,6 +486,12 @@ fn started_program(
     let Some((regs_list, RegistersList)) = regs_list.iter().next() else {
         unreachable!();
     };
+
+    for entity in registers_viz {
+        if let Ok(mut entity) = commands.get_entity(entity) {
+            entity.despawn_related::<Children>();
+        }
+    }
 
     let program_info = PROGRAMS.get(&program.0).unwrap();
     let arch = Arc::clone(&program_info.architecture);
