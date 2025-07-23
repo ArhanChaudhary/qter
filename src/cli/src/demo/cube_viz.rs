@@ -116,12 +116,12 @@ fn setup(
     let spots = [(false, false), (false, true), (true, false), (true, true)];
 
     let indices = [
-        0, 1, 2, 3, 4, 5, 6, 7, //
-        21, 19, 16, 22, 17, 23, 20, 18, //
-        31, 30, 29, 28, 27, 26, 25, 24, //
-        32, 33, 34, 35, 36, 37, 38, 39, //
-        42, 44, 47, 41, 46, 40, 43, 45, //
-        10, 12, 15, 9, 14, 8, 11, 13, //
+        5, 3, 0, 6, 1, 7, 4, 2, // top
+        29, 27, 24, 30, 25, 31, 28, 26, // right
+        39, 38, 37, 36, 35, 34, 33, 32, // rear
+        8, 9, 10, 11, 12, 13, 14, 15, // left
+        47, 46, 45, 44, 43, 42, 41, 40, // bottom
+        18, 20, 23, 17, 22, 16, 19, 21, // front
     ];
 
     let mut colors = HashMap::new();
@@ -176,11 +176,11 @@ fn setup(
 
     let center_colors = [
         ArcIntern::<str>::from("White"),
-        ArcIntern::from("Green"),
         ArcIntern::from("Red"),
         ArcIntern::from("Blue"),
-        ArcIntern::from("Yellow"),
         ArcIntern::from("Orange"),
+        ArcIntern::from("Yellow"),
+        ArcIntern::from("Green"),
     ];
 
     let panel = commands

@@ -1,4 +1,4 @@
-use std::sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock};
+use std::{sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock}, thread, time::Duration};
 
 use chumsky::Parser;
 use crossbeam_channel::{Receiver, Sender};
@@ -230,6 +230,8 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
                     eprintln!("Cannot step while the interpreter is closed");
                     continue;
                 };
+
+                thread::sleep(Duration::from_millis(250));
 
                 use ActionPerformed as A;
 
