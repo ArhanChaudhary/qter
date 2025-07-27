@@ -10,8 +10,7 @@ use qter_core::{
 };
 
 use crate::{
-    BlockID, ExpandedCode, ExpandedCodeComponent, LabelReference, Primitive, Puzzle,
-    RegisterReference,
+    ExpandedCode, ExpandedCodeComponent, LabelReference, Primitive, Puzzle, RegisterReference,
 };
 
 #[derive(Clone, Debug)]
@@ -136,28 +135,24 @@ struct GlobalRegs {
 
 impl GlobalRegs {
     fn get_reg(&self, reference: &RegisterReference) -> (RegisterIdx, usize) {
-        if reference.block_id == BlockID(0) {
-            let mut reg = self
-                .register_table
-                .get(&reference.reg_name)
-                .unwrap()
-                .to_owned();
+        let mut reg = self
+            .register_table
+            .get(&reference.reg_name)
+            .unwrap()
+            .to_owned();
 
-            if let Some(mod_) = reference.modulus {
-                match &mut reg.0 {
-                    RegisterIdx::Theoretical => todo!(),
-                    RegisterIdx::Real {
-                        idx: _,
-                        arch: _,
-                        modulus,
-                    } => *modulus = Some(mod_),
-                }
+        if let Some(mod_) = reference.modulus {
+            match &mut reg.0 {
+                RegisterIdx::Theoretical => todo!(),
+                RegisterIdx::Real {
+                    idx: _,
+                    arch: _,
+                    modulus,
+                } => *modulus = Some(mod_),
             }
-
-            reg
-        } else {
-            todo!()
         }
+
+        reg
     }
 }
 
@@ -170,45 +165,41 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Vec<Rich<'stati
         puzzles: vec![],
     };
 
-    if let Some(decl) = &expanded.block_info.0.get(&BlockID(0)).unwrap().registers {
-        for puzzle in &decl.puzzles {
-            match puzzle {
-                Puzzle::Theoretical { name, order } => {
+    for puzzle in &expanded.registers.puzzles {
+        match puzzle {
+            Puzzle::Theoretical { name, order } => {
+                global_regs.register_table.insert(
+                    ArcIntern::clone(name),
+                    (RegisterIdx::Theoretical, global_regs.theoretical.len()),
+                );
+
+                global_regs.theoretical.push(order.to_owned());
+            }
+            Puzzle::Real { architectures } => {
+                // TODO: Support for architecture switching
+                // Just take the first architecture
+                let (names, architecture) = &architectures[0];
+                for (i, name) in names.iter().enumerate() {
                     global_regs.register_table.insert(
                         ArcIntern::clone(name),
-                        (RegisterIdx::Theoretical, global_regs.theoretical.len()),
+                        (
+                            RegisterIdx::Real {
+                                idx: i,
+                                arch: Arc::clone(architecture),
+                                modulus: None,
+                            },
+                            global_regs.puzzles.len(),
+                        ),
                     );
-
-                    global_regs.theoretical.push(order.to_owned());
                 }
-                Puzzle::Real { architectures } => {
-                    // TODO: Support for architecture switching
-                    // Just take the first architecture
-                    let (names, architecture) = &architectures[0];
-                    for (i, name) in names.iter().enumerate() {
-                        global_regs.register_table.insert(
-                            ArcIntern::clone(name),
-                            (
-                                RegisterIdx::Real {
-                                    idx: i,
-                                    arch: Arc::clone(architecture),
-                                    modulus: None,
-                                },
-                                global_regs.puzzles.len(),
-                            ),
-                        );
-                    }
 
-                    global_regs.puzzles.push(WithSpan::new(
-                        architecture.group_arc(),
-                        architecture.span().to_owned(),
-                    ));
-                }
+                global_regs.puzzles.push(WithSpan::new(
+                    architecture.group_arc(),
+                    architecture.span().to_owned(),
+                ));
             }
         }
     }
-
-    // TODO: Coalesce add instructions
 
     let mut program_counter = 0;
 

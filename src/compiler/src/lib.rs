@@ -60,25 +60,19 @@ struct Block {
 
 #[derive(Clone, Debug)]
 struct RegisterReference {
-    block_id: BlockID,
     reg_name: WithSpan<ArcIntern<str>>,
     modulus: Option<Int<U>>,
 }
 
 impl RegisterReference {
-    fn parse(
-        block_id: BlockID,
-        name: WithSpan<ArcIntern<str>>,
-    ) -> Result<RegisterReference, ParseIntError<U>> {
+    fn parse(name: WithSpan<ArcIntern<str>>) -> Result<RegisterReference, ParseIntError<U>> {
         match Self::try_parse_mod(&name) {
             Some(Ok((s, mod_))) => Ok(RegisterReference {
-                block_id,
                 reg_name: WithSpan::new(ArcIntern::from(s), name.span().to_owned()),
                 modulus: Some(mod_),
             }),
             Some(Err(e)) => Err(e),
             None => Ok(RegisterReference {
-                block_id,
                 reg_name: name,
                 modulus: None,
             }),
@@ -155,7 +149,6 @@ enum Instruction {
     Constant(ArcIntern<str>),
     LuaCall(LuaCall),
     Define(Define),
-    Registers(RegistersDecl),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -278,15 +271,55 @@ struct BlockID(pub usize);
 
 #[derive(Clone, Debug)]
 struct RegistersDecl {
-    block_id: BlockID,
     puzzles: Vec<Puzzle>,
+}
+
+impl RegistersDecl {
+    fn get_register(&self, reference: &RegisterReference) -> Option<(RegisterReference, &Puzzle)> {
+        let reg_name = reference.reg_name.clone();
+
+        for puzzle in &self.puzzles {
+            match puzzle {
+                Puzzle::Theoretical {
+                    name: found_name,
+                    order: _,
+                } => {
+                    if *reg_name == **found_name {
+                        return Some((
+                            RegisterReference {
+                                reg_name,
+                                modulus: reference.modulus,
+                            },
+                            puzzle,
+                        ));
+                    }
+                }
+                Puzzle::Real { architectures } => {
+                    for (names, _) in architectures {
+                        for found_name in names {
+                            if *reg_name == **found_name {
+                                return Some((
+                                    RegisterReference {
+                                        reg_name,
+                                        modulus: reference.modulus,
+                                    },
+                                    puzzle,
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
 }
 
 #[derive(Debug, Clone)]
 struct BlockInfo {
     parent_block: Option<BlockID>,
     child_blocks: Vec<BlockID>,
-    registers: Option<RegistersDecl>,
     defines: Vec<Define>,
     labels: Vec<Label>,
 }
@@ -295,54 +328,6 @@ struct BlockInfo {
 struct BlockInfoTracker(HashMap<BlockID, BlockInfo>);
 
 impl BlockInfoTracker {
-    fn get_register(&self, reference: &RegisterReference) -> Option<(RegisterReference, &Puzzle)> {
-        let mut from = reference.block_id;
-        let reg_name = reference.reg_name.clone();
-
-        loop {
-            let block_info = self.0.get(&from)?;
-            let registers = block_info.registers.as_ref()?;
-
-            for puzzle in &registers.puzzles {
-                match puzzle {
-                    Puzzle::Theoretical {
-                        name: found_name,
-                        order: _,
-                    } => {
-                        if *reg_name == **found_name {
-                            return Some((
-                                RegisterReference {
-                                    block_id: from,
-                                    reg_name,
-                                    modulus: reference.modulus,
-                                },
-                                puzzle,
-                            ));
-                        }
-                    }
-                    Puzzle::Real { architectures } => {
-                        for (names, _) in architectures {
-                            for found_name in names {
-                                if *reg_name == **found_name {
-                                    return Some((
-                                        RegisterReference {
-                                            block_id: from,
-                                            reg_name,
-                                            modulus: reference.modulus,
-                                        },
-                                        puzzle,
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            from = block_info.parent_block?;
-        }
-    }
-
     fn label_scope(&self, reference: &LabelReference) -> Option<LabelReference> {
         let mut current = reference.block_id;
 
@@ -376,6 +361,7 @@ impl BlockInfoTracker {
 
 #[derive(Clone, Debug)]
 struct ExpansionInfo {
+    registers: Option<WithSpan<RegistersDecl>>,
     // Each block gets an ID and `block_parent` maps a block ID to it's parent
     // The global scope is block zero and if the block/label hasn't been expanded its ID is None
     block_counter: usize,
@@ -386,6 +372,15 @@ struct ExpansionInfo {
     available_macros: HashMap<(ArcIntern<str>, ArcIntern<str>), ArcIntern<str>>,
     /// Each file has its own `LuaMacros`; use the file contents as the key
     lua_macros: HashMap<ArcIntern<str>, LuaMacros>,
+}
+
+impl ExpansionInfo {
+    fn get_register(&self, reference: &RegisterReference) -> Option<(RegisterReference, &Puzzle)> {
+        match &self.registers {
+            Some(regs) => regs.get_register(reference),
+            None => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -402,6 +397,7 @@ enum ExpandedCodeComponent {
 
 #[derive(Clone, Debug)]
 struct ExpandedCode {
+    registers: RegistersDecl,
     block_info: BlockInfoTracker,
     expanded_code_components: Vec<WithSpan<ExpandedCodeComponent>>,
 }

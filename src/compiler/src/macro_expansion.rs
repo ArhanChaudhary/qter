@@ -7,7 +7,7 @@ use qter_core::{Span, WithSpan};
 
 use crate::{
     BlockID, Code, ExpandedCode, ExpandedCodeComponent, ExpansionInfo, Instruction, Macro,
-    ParsedSyntax, TaggedInstruction,
+    ParsedSyntax, RegistersDecl, TaggedInstruction,
 };
 
 pub fn expand(mut parsed: ParsedSyntax) -> Result<ExpandedCode, Vec<Rich<'static, char, Span>>> {
@@ -25,6 +25,12 @@ pub fn expand(mut parsed: ParsedSyntax) -> Result<ExpandedCode, Vec<Rich<'static
     }
 
     Ok(ExpandedCode {
+        registers: match parsed.expansion_info.registers {
+            Some(decl) => decl.into_inner(),
+            None => RegistersDecl {
+                puzzles: Vec::new(),
+            },
+        },
         block_info: parsed.expansion_info.block_info,
         expanded_code_components: parsed
             .code
@@ -107,18 +113,6 @@ fn expand_block(
                     let _ = changed.set(());
 
                     vec![]
-                }
-                Instruction::Registers(decl) => {
-                    if block_info.registers.is_some() {
-                        vec![Err(Rich::custom(
-                            span,
-                            "Cannot have multiple register declarations in the same scope!",
-                        ))]
-                    } else {
-                        block_info.registers = Some(decl);
-                        let _ = changed.set(());
-                        vec![]
-                    }
                 }
                 Instruction::Code(code) => {
                     match expand_code(block_id, expansion_info, code, &changed) {

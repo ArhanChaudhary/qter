@@ -161,7 +161,7 @@ mod tests {
         );
         generators.insert(
             ArcIntern::from("E"),
-            Permutation::from_cycles(vec![vec![10, 11, 12]]),
+            Permutation::from_cycles(vec![vec![10, 11, 12, 13]]),
         );
         generators.insert(
             ArcIntern::from("A'"),
@@ -177,7 +177,7 @@ mod tests {
         );
         generators.insert(
             ArcIntern::from("E'"),
-            Permutation::from_cycles(vec![vec![12, 11, 10]]),
+            Permutation::from_cycles(vec![vec![13, 12, 11, 10]]),
         );
 
         let perm_group = Arc::new(PermutationGroup::new(
@@ -193,8 +193,9 @@ mod tests {
                 ArcIntern::from("I"),
                 ArcIntern::from("J"),
                 ArcIntern::from("K"),
+                ArcIntern::from("L"),
                 ArcIntern::from("K"),
-                ArcIntern::from("K"),
+                ArcIntern::from("L"),
             ],
             generators,
             Span::from_static("thingy"),
@@ -234,8 +235,8 @@ mod tests {
                     chromatic_order: Int::from(2_usize)
                 },
                 CycleGeneratorSubcycle {
-                    facelet_cycle: vec![10, 11, 12],
-                    chromatic_order: Int::one(),
+                    facelet_cycle: vec![10, 11, 12, 13],
+                    chromatic_order: Int::from(2_usize)
                 }
             ]
         );

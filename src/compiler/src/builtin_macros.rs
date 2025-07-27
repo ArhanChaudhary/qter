@@ -12,14 +12,13 @@ use std::collections::HashMap;
 fn expect_reg(
     reg_value: &WithSpan<Value>,
     syntax: &ExpansionInfo,
-    block_id: BlockID,
 ) -> Result<RegisterReference, Rich<'static, char, Span>> {
     match &**reg_value {
-        Value::Ident(reg_name) => match syntax.block_info.get_register(
-            &RegisterReference::parse(
-                block_id,
-                WithSpan::new(ArcIntern::clone(reg_name), reg_value.span().to_owned()),
-            )
+        Value::Ident(reg_name) => match syntax.get_register(
+            &RegisterReference::parse(WithSpan::new(
+                ArcIntern::clone(reg_name),
+                reg_value.span().to_owned(),
+            ))
             .map_err(|e| {
                 Rich::custom(
                     reg_value.span().clone(),
@@ -59,7 +58,6 @@ fn expect_label(
 fn print_like(
     syntax: &ExpansionInfo,
     mut args: WithSpan<Vec<WithSpan<Value>>>,
-    block_id: BlockID,
 ) -> Result<(Option<RegisterReference>, WithSpan<String>), Rich<'static, char, Span>> {
     if args.len() > 2 {
         return Err(Rich::custom(
@@ -69,7 +67,7 @@ fn print_like(
     }
 
     let maybe_reg = if args.len() == 2 {
-        Some(expect_reg(args.pop().as_ref().unwrap(), syntax, block_id)?)
+        Some(expect_reg(args.pop().as_ref().unwrap(), syntax)?)
     } else {
         None
     };
@@ -96,7 +94,7 @@ pub fn builtin_macros(
     macros.insert(
         (prelude.clone(), ArcIntern::from("add")),
         WithSpan::new(
-            Macro::Builtin(|syntax, mut args, block_id| {
+            Macro::Builtin(|syntax, mut args, _| {
                 if args.len() != 2 {
                     return Err(Rich::custom(
                         args.span().clone(),
@@ -112,7 +110,7 @@ pub fn builtin_macros(
                     }
                 };
 
-                let register = expect_reg(args.pop().as_ref().unwrap(), syntax, block_id)?;
+                let register = expect_reg(args.pop().as_ref().unwrap(), syntax)?;
 
                 Ok(vec![Instruction::Code(Code::Primitive(Primitive::Add {
                     amt,
@@ -156,7 +154,7 @@ pub fn builtin_macros(
                 }
 
                 let label = expect_label(args.pop().as_ref().unwrap(), block_id)?;
-                let register = expect_reg(args.pop().as_ref().unwrap(), syntax, block_id)?;
+                let register = expect_reg(args.pop().as_ref().unwrap(), syntax)?;
 
                 Ok(vec![Instruction::Code(Code::Primitive(
                     Primitive::SolvedGoto { register, label },
@@ -169,7 +167,7 @@ pub fn builtin_macros(
     macros.insert(
         (prelude.to_owned(), ArcIntern::from("input")),
         WithSpan::new(
-            Macro::Builtin(|syntax, mut args, block_id| {
+            Macro::Builtin(|syntax, mut args, _| {
                 if args.len() != 2 {
                     return Err(Rich::custom(
                         args.span().clone(),
@@ -177,7 +175,7 @@ pub fn builtin_macros(
                     ));
                 }
 
-                let register = expect_reg(args.pop().as_ref().unwrap(), syntax, block_id)?;
+                let register = expect_reg(args.pop().as_ref().unwrap(), syntax)?;
 
                 let second_arg = args.pop().unwrap();
                 let span = second_arg.span().to_owned();
@@ -202,8 +200,8 @@ pub fn builtin_macros(
     macros.insert(
         (prelude.to_owned(), ArcIntern::from("halt")),
         WithSpan::new(
-            Macro::Builtin(|syntax, args, block_id| {
-                let (register, message) = print_like(syntax, args, block_id)?;
+            Macro::Builtin(|syntax, args, _| {
+                let (register, message) = print_like(syntax, args)?;
 
                 Ok(vec![Instruction::Code(Code::Primitive(Primitive::Halt {
                     register,
@@ -217,8 +215,8 @@ pub fn builtin_macros(
     macros.insert(
         (prelude.to_owned(), ArcIntern::from("print")),
         WithSpan::new(
-            Macro::Builtin(|syntax, args, block_id| {
-                let (register, message) = print_like(syntax, args, block_id)?;
+            Macro::Builtin(|syntax, args, _| {
+                let (register, message) = print_like(syntax, args)?;
 
                 Ok(vec![Instruction::Code(Code::Primitive(Primitive::Print {
                     register,

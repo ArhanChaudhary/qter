@@ -11,7 +11,7 @@ use std::{
 
 use chumsky::{
     extra::{Full, SimpleState},
-    input::MapExtra,
+    input::{Emitter, MapExtra},
     inspector::Inspector,
     prelude::*,
     recursive::Indirect,
@@ -135,6 +135,13 @@ fn parser() -> impl Parser<'static, File, MaybeErr<ParsedSyntax>, ExtraAndSyntax
         };
 
         let expansion_info = ExpansionInfo {
+            registers: match regs {
+                Some(decl) => match decl.spanspose() {
+                    MaybeErr::Some(decl) => Some(decl),
+                    MaybeErr::None => return MaybeErr::None,
+                },
+                None => None,
+            },
             block_counter: 1,
             block_info: BlockInfoTracker(HashMap::new()),
             macros: HashMap::new(),
@@ -151,16 +158,13 @@ fn parser() -> impl Parser<'static, File, MaybeErr<ParsedSyntax>, ExtraAndSyntax
 
         let is_prelude = data.state().0.1;
         if !is_prelude {
-            merge_files(&mut parsed_syntax, &qat, (*PRELUDE).clone());
-        }
-
-        if let Some(regs) = regs {
-            let span = regs.span().clone();
-            if let MaybeErr::Some(regs) = regs.value {
-                parsed_syntax
-                    .code
-                    .push(span.with((Instruction::Registers(regs), Some(BlockID(0)))));
-            }
+            merge_files(
+                &mut parsed_syntax,
+                &qat,
+                (*PRELUDE).clone(),
+                data.span(),
+                emitter,
+            );
         }
 
         for statement in statements.into_iter().filter_map(MaybeErr::option) {
@@ -227,7 +231,7 @@ fn parser() -> impl Parser<'static, File, MaybeErr<ParsedSyntax>, ExtraAndSyntax
                             }
                         };
 
-                    merge_files(&mut parsed_syntax, &qat, importee);
+                    merge_files(&mut parsed_syntax, &qat, importee, data.span(), emitter);
                 }
             }
         }
@@ -242,7 +246,6 @@ fn parser() -> impl Parser<'static, File, MaybeErr<ParsedSyntax>, ExtraAndSyntax
             BlockInfo {
                 parent_block: None,
                 child_blocks: vec![],
-                registers: None,
                 defines: vec![],
                 labels: vec![],
             },
@@ -402,12 +405,7 @@ fn registers() -> impl Parser<'static, File, MaybeErr<RegistersDecl>, Extra> {
         just("}"),
     ))
     .delimited_by(nlm(), nlm())
-    .map(|(_, (), _, puzzles, _)| {
-        puzzles.map(|puzzles| RegistersDecl {
-            puzzles,
-            block_id: BlockID(0),
-        })
-    })
+    .map(|(_, (), _, puzzles, _)| puzzles.map(|puzzles| RegistersDecl { puzzles }))
 }
 
 fn register_decl() -> impl Parser<'static, File, MaybeErr<Puzzle>, Extra> {
@@ -866,7 +864,21 @@ fn merge_files(
     importer: &mut ParsedSyntax,
     importer_contents: &ArcIntern<str>,
     mut importee: ParsedSyntax,
+    span: Span,
+    emitter: &mut Emitter<Rich<'static, char, Span>>,
 ) {
+    match (
+        &importer.expansion_info.registers,
+        importee.expansion_info.registers,
+    ) {
+        (None, Some(regs)) => importer.expansion_info.registers = Some(regs),
+        (Some(_), Some(_)) => emitter.emit(Rich::custom(
+            span,
+            "Cannot merge files that both contain registers declarations.",
+        )),
+        (_, None) => {}
+    }
+
     // Block numbers shouldn't be defined deeper than the root in this stage
     let block_offset = importer.expansion_info.block_counter;
 
