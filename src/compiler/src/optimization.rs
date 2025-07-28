@@ -1,6 +1,5 @@
-use std::{collections::VecDeque, iter::from_fn, mem, sync::Arc};
+use std::{collections::VecDeque, iter::from_fn, sync::Arc};
 
-use internment::ArcIntern;
 use qter_core::{
     ByPuzzleType, Int, PuzzleIdx, StateIdx, TheoreticalIdx, U, WithSpan,
     architectures::Architecture,
@@ -233,6 +232,18 @@ impl Rewriter for CoalesceAdds {
     }
 }
 
+// TODO: Remove when https://doc.rust-lang.org/beta/unstable-book/language-features/deref-patterns.html is stable
+macro_rules! primitive_match {
+    ($pattern:pat = $val:expr) => {
+        let OptimizingCodeComponent::Instruction(instr, _) = $val else {
+            return None;
+        };
+        let $pattern = &**instr else {
+            return None;
+        };
+    };
+}
+
 /// Transforms
 ///
 /// ```
@@ -259,30 +270,16 @@ impl RepeatUntil1 {
             return None;
         };
 
-        let OptimizingCodeComponent::Instruction(instr, _) = &*self.window[1] else {
-            return None;
-        };
-        let OptimizingPrimitive::SolvedGoto {
-            label: spot2,
-            register,
-        } = &**instr
-        else {
-            return None;
-        };
+        primitive_match!(
+            OptimizingPrimitive::SolvedGoto {
+                label: spot2,
+                register,
+            } = &*self.window[1]
+        );
 
-        let OptimizingCodeComponent::Instruction(instr, _) = &*self.window[2] else {
-            return None;
-        };
-        let OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &**instr else {
-            return None;
-        };
+        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &*self.window[2]);
 
-        let OptimizingCodeComponent::Instruction(instr, _) = &*self.window[3] else {
-            return None;
-        };
-        let OptimizingPrimitive::Goto { label } = &**instr else {
-            return None;
-        };
+        primitive_match!(OptimizingPrimitive::Goto { label } = &*self.window[3]);
 
         if label.name != spot1.name || label.block_id != spot1.maybe_block_id.unwrap() {
             return None;
