@@ -24,6 +24,12 @@ pub enum OptimizingPrimitive {
         label: WithSpan<LabelReference>,
         register: RegisterReference,
     },
+    // RepeatUntil {
+    //     puzzle: PuzzleIdx,
+    //     arch: Arc<Architecture>,
+    //     amts: Vec<(usize, Option<Int<U>>, WithSpan<Int<U>>)>,
+    //     register: RegisterReference,
+    // },
     Input {
         message: WithSpan<String>,
         register: RegisterReference,

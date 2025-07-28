@@ -40,12 +40,6 @@ impl RegisterIdx {
     }
 }
 
-enum CoalescedAddsRemovedLabels {
-    AddPuzzle(PuzzleIdx, Algorithm),
-    AddTheoretical(TheoreticalIdx, Int<U>),
-    Instruction(Primitive),
-}
-
 struct GlobalRegs {
     register_table: HashMap<ArcIntern<str>, (RegisterIdx, usize)>,
     theoretical: Vec<WithSpan<Int<U>>>,
@@ -182,50 +176,7 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Vec<Rich<'stati
             match component.into_inner() {
                 OptimizingCodeComponent::Instruction(primitive, _) => {
                     program_counter += 1;
-
-                    Some(match *primitive {
-                        OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } => {
-                            CoalescedAddsRemovedLabels::AddPuzzle(
-                                puzzle,
-                                Algorithm::new_from_effect(
-                                    &arch,
-                                    amts.into_iter()
-                                        .map(|(idx, _, amt)| (idx, amt.into_inner()))
-                                        .collect(),
-                                ),
-                            )
-                        }
-                        OptimizingPrimitive::AddTheoretical { theoretical, amt } => {
-                            CoalescedAddsRemovedLabels::AddTheoretical(theoretical, *amt)
-                        }
-                        OptimizingPrimitive::Goto { label } => {
-                            CoalescedAddsRemovedLabels::Instruction(Primitive::Goto { label })
-                        }
-                        OptimizingPrimitive::SolvedGoto { label, register } => {
-                            CoalescedAddsRemovedLabels::Instruction(Primitive::SolvedGoto {
-                                label,
-                                register,
-                            })
-                        }
-                        OptimizingPrimitive::Input { message, register } => {
-                            CoalescedAddsRemovedLabels::Instruction(Primitive::Input {
-                                message,
-                                register,
-                            })
-                        }
-                        OptimizingPrimitive::Halt { message, register } => {
-                            CoalescedAddsRemovedLabels::Instruction(Primitive::Halt {
-                                message,
-                                register,
-                            })
-                        }
-                        OptimizingPrimitive::Print { message, register } => {
-                            CoalescedAddsRemovedLabels::Instruction(Primitive::Print {
-                                message,
-                                register,
-                            })
-                        }
-                    })
+                    Some(primitive)
                 }
                 OptimizingCodeComponent::Label(label) => {
                     label_locations.insert(
@@ -247,30 +198,23 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Vec<Rich<'stati
         .map(|fully_simplified| {
             let span = fully_simplified.span().to_owned();
 
-            let prim = match fully_simplified.into_inner() {
-                CoalescedAddsRemovedLabels::AddPuzzle(puzzle_idx, alg) => {
-                    return Ok(WithSpan::new(
-                        Instruction::PerformAlgorithm(ByPuzzleType::Puzzle((puzzle_idx, alg))),
-                        span,
-                    ));
+            let instruction = match *fully_simplified.into_inner() {
+                OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } => {
+                    
+                        Instruction::PerformAlgorithm(ByPuzzleType::Puzzle((puzzle,
+                            Algorithm::new_from_effect(
+                                     &arch,
+                                     amts.into_iter()
+                                         .map(|(idx, _, amt)| (idx, amt.into_inner()))
+                                         .collect(),
+                                 ),
+                        )))
+                    
                 }
-                CoalescedAddsRemovedLabels::AddTheoretical(puzzle_idx, amt) => {
-                    return Ok(WithSpan::new(
-                        Instruction::PerformAlgorithm(ByPuzzleType::Theoretical(( puzzle_idx , amt))),
-                        span,
-                    ));
-                }
-                CoalescedAddsRemovedLabels::Instruction(v) => v,
-            };
-
-            let instruction = match prim {
-                Primitive::Add {
-                    amt: _,
-                    register: _,
-                } => {
-                    unreachable!()
-                }
-                Primitive::Goto { label } => {
+                OptimizingPrimitive::AddTheoretical { theoretical, amt } => {
+                    Instruction::PerformAlgorithm(ByPuzzleType::Theoretical((theoretical, *amt)))
+                },
+                OptimizingPrimitive::Goto { label } => {
                     let Some(label) = expanded.block_info.label_scope(&label) else {
                         return Err(Rich::custom(label.span().clone(), "Could not find label in scope"));
                     };
@@ -279,7 +223,7 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Vec<Rich<'stati
                         instruction_idx: *label_locations.get(&label).unwrap(),
                     }
                 }
-                Primitive::SolvedGoto { register, label } => {
+                OptimizingPrimitive::SolvedGoto { register, label } => {
                     let Some(label) = expanded.block_info.label_scope(&label) else {
                         return Err(Rich::custom(label.span().clone(), "Could not find label in scope"));
                     };
@@ -312,7 +256,7 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Vec<Rich<'stati
                         },
                     })
                 }
-                Primitive::Input { message, register } => {
+                OptimizingPrimitive::Input { message, register } => {
                     let (reg_idx, puzzle_idx) = global_regs.get_reg(&register);
 
                     let input = Input { message: message.into_inner() };
@@ -322,7 +266,7 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Vec<Rich<'stati
                         ByPuzzleType::Puzzle ( (generator, solved_goto_facelets) ) => ByPuzzleType::Puzzle((input, PuzzleIdx(puzzle_idx), generator, solved_goto_facelets)),
                     })
                 }
-                Primitive::Halt { message, register } => {
+                OptimizingPrimitive::Halt { message, register } => {
                     let halt = Halt { message: message.into_inner() };
                     Instruction::Halt(match register {
                         Some(register) => {
@@ -336,7 +280,7 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Vec<Rich<'stati
                         None => ByPuzzleType::Puzzle((halt, None)),
                     })
                 },
-                Primitive::Print { message, register } => {
+                OptimizingPrimitive::Print { message, register } => {
                     let print = Print { message: message.into_inner() };
                     Instruction::Print(match register {
                         Some(register) => {
