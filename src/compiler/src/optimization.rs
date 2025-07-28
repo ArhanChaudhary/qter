@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, iter::from_fn, sync::Arc};
+use std::{collections::VecDeque, iter::from_fn, marker::PhantomData, sync::Arc};
 
 use qter_core::{
     ByPuzzleType, Int, PuzzleIdx, StateIdx, TheoreticalIdx, U, WithSpan,
@@ -114,7 +114,7 @@ pub fn do_optimization(
         .detach();
 
     let rx = add_stage::<CoalesceAdds>(&executor, rx);
-    let rx = add_stage::<RepeatUntil1>(&executor, rx);
+    let rx = add_stage::<Peephole<RepeatUntil1>>(&executor, rx);
 
     from_fn(move || future::block_on(executor.run(rx.recv())).ok())
 }
@@ -232,6 +232,50 @@ impl Rewriter for CoalesceAdds {
     }
 }
 
+struct Peephole<R: PeepholeRewriter> {
+    window: VecDeque<WithSpan<OptimizingCodeComponent>>,
+    phantom_: PhantomData<R>,
+}
+
+impl<R: PeepholeRewriter> Default for Peephole<R> {
+    fn default() -> Self {
+        Peephole {
+            window: VecDeque::new(),
+            phantom_: PhantomData,
+        }
+    }
+}
+
+trait PeepholeRewriter {
+    const WINDOW_SIZE: usize;
+
+    fn try_match(
+        window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
+    ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>>;
+}
+
+impl<R: PeepholeRewriter> Rewriter for Peephole<R> {
+    fn rewrite(
+        &mut self,
+        component: WithSpan<OptimizingCodeComponent>,
+    ) -> Vec<WithSpan<OptimizingCodeComponent>> {
+        self.window.push_back(component);
+
+        if self.window.len() < R::WINDOW_SIZE {
+            return Vec::new();
+        }
+
+        match R::try_match(&mut self.window) {
+            Some(v) => v,
+            None => vec![self.window.pop_front().unwrap()],
+        }
+    }
+
+    fn eof(self) -> Vec<WithSpan<OptimizingCodeComponent>> {
+        self.window.into()
+    }
+}
+
 // TODO: Remove when https://doc.rust-lang.org/beta/unstable-book/language-features/deref-patterns.html is stable
 macro_rules! primitive_match {
     ($pattern:pat = $val:expr) => {
@@ -259,14 +303,15 @@ macro_rules! primitive_match {
 /// repeat until <positions> solved <algorithm>
 /// spot2:
 /// ```
-#[derive(Default)]
-struct RepeatUntil1 {
-    window: VecDeque<WithSpan<OptimizingCodeComponent>>,
-}
+struct RepeatUntil1;
 
-impl RepeatUntil1 {
-    fn try_match(&mut self) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
-        let OptimizingCodeComponent::Label(spot1) = &*self.window[0] else {
+impl PeepholeRewriter for RepeatUntil1 {
+    const WINDOW_SIZE: usize = 5;
+
+    fn try_match(
+        window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
+    ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
+        let OptimizingCodeComponent::Label(spot1) = &*window[0] else {
             return None;
         };
 
@@ -274,18 +319,18 @@ impl RepeatUntil1 {
             OptimizingPrimitive::SolvedGoto {
                 label: spot2,
                 register,
-            } = &*self.window[1]
+            } = &*window[1]
         );
 
-        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &*self.window[2]);
+        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &*window[2]);
 
-        primitive_match!(OptimizingPrimitive::Goto { label } = &*self.window[3]);
+        primitive_match!(OptimizingPrimitive::Goto { label } = &*window[3]);
 
         if label.name != spot1.name || label.block_id != spot1.maybe_block_id.unwrap() {
             return None;
         }
 
-        let OptimizingCodeComponent::Label(real_spot2) = &*self.window[4] else {
+        let OptimizingCodeComponent::Label(real_spot2) = &*window[4] else {
             return None;
         };
 
@@ -304,10 +349,9 @@ impl RepeatUntil1 {
         );
 
         let mut values = Vec::new();
-        values.push(self.window.pop_front().unwrap());
+        values.push(window.pop_front().unwrap());
 
-        let span = self
-            .window
+        let span = window
             .drain(0..3)
             .map(|v| v.span().clone())
             .reduce(|a, v| a.merge(&v))
@@ -316,27 +360,5 @@ impl RepeatUntil1 {
         values.push(span.with(repeat_until));
 
         Some(values)
-    }
-}
-
-impl Rewriter for RepeatUntil1 {
-    fn rewrite(
-        &mut self,
-        component: WithSpan<OptimizingCodeComponent>,
-    ) -> Vec<WithSpan<OptimizingCodeComponent>> {
-        self.window.push_back(component);
-
-        if self.window.len() < 5 {
-            return Vec::new();
-        }
-
-        match self.try_match() {
-            Some(v) => v,
-            None => vec![self.window.pop_front().unwrap()],
-        }
-    }
-
-    fn eof(self) -> Vec<WithSpan<OptimizingCodeComponent>> {
-        self.window.into()
     }
 }
