@@ -661,8 +661,6 @@ mod tests {
             Err(e) => panic!("{e:?}"),
         };
 
-        println!("{:#?}", program.instructions);
-
         assert_eq!(program.instructions.len(), 4 + 6 + 1);
 
         let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
@@ -673,6 +671,65 @@ mod tests {
             interpreter.step_until_halt(),
             PausedState::Halt {
                 maybe_puzzle_idx_and_register: None,
+            }
+        ));
+
+        assert_eq!(
+            expected_output.len(),
+            interpreter.state_mut().messages().len(),
+            "{:?}",
+            interpreter.state_mut().messages()
+        );
+
+        for (message, expected) in interpreter
+            .state()
+            .messages
+            .iter()
+            .zip(expected_output.iter())
+        {
+            assert_eq!(message, expected);
+        }
+    }
+
+    #[test]
+    fn repeat_until() {
+        let code = "
+            .registers {
+                A, B <- 3x3 builtin (90, 90)
+            }
+
+            add A 1
+
+            spot1:
+                solved-goto A spot2
+                add A 89
+                add B 2
+                goto spot1
+            spot2:
+                solved-goto B spot3
+                add B 89
+                add A 2
+                goto spot2
+            spot3:
+
+            halt \"A*4=\" A
+        ";
+
+        let program = match compile(&File::from(code), |_| unreachable!()) {
+            Ok(v) => v,
+            Err(e) => panic!("{e:?}"),
+        };
+
+        assert_eq!(program.instructions.len(), 1 + 2 + 1);
+
+        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
+
+        let expected_output = ["A*4= 4"];
+
+        assert!(matches!(
+            interpreter.step_until_halt(),
+            PausedState::Halt {
+                maybe_puzzle_idx_and_register: Some(ByPuzzleType::Puzzle((PuzzleIdx(0), _, _))),
             }
         ));
 

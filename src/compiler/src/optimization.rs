@@ -1,4 +1,4 @@
-use std::{iter::from_fn, mem, sync::Arc};
+use std::{collections::VecDeque, iter::from_fn, mem, sync::Arc};
 
 use internment::ArcIntern;
 use qter_core::{
@@ -250,43 +250,76 @@ impl Rewriter for CoalesceAdds {
 /// ```
 #[derive(Default)]
 struct RepeatUntil1 {
-    found: Vec<WithSpan<OptimizingCodeComponent>>,
-    spot_1: Option<LabelReference>,
-    spot_2: Option<LabelReference>,
-    register: Option<RegisterReference>,
-    addition: Option<(
-        PuzzleIdx,
-        Arc<Architecture>,
-        Vec<(usize, Option<Int<U>>, WithSpan<Int<U>>)>,
-    )>,
-    stage: SolvedGoto1Stage,
+    window: VecDeque<WithSpan<OptimizingCodeComponent>>,
 }
 
 impl RepeatUntil1 {
-    fn reset(
-        &mut self,
-        found_instr: WithSpan<OptimizingCodeComponent>,
-    ) -> Vec<WithSpan<OptimizingCodeComponent>> {
-        self.stage = SolvedGoto1Stage::None;
+    fn try_match(&mut self) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
+        let OptimizingCodeComponent::Label(spot1) = &*self.window[0] else {
+            return None;
+        };
 
-        let mut ret = mem::take(&mut self.found);
-        if ret.is_empty() {
-            vec![found_instr]
-        } else {
-            ret.extend(self.rewrite(found_instr));
-            ret
+        let OptimizingCodeComponent::Instruction(instr, _) = &*self.window[1] else {
+            return None;
+        };
+        let OptimizingPrimitive::SolvedGoto {
+            label: spot2,
+            register,
+        } = &**instr
+        else {
+            return None;
+        };
+
+        let OptimizingCodeComponent::Instruction(instr, _) = &*self.window[2] else {
+            return None;
+        };
+        let OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &**instr else {
+            return None;
+        };
+
+        let OptimizingCodeComponent::Instruction(instr, _) = &*self.window[3] else {
+            return None;
+        };
+        let OptimizingPrimitive::Goto { label } = &**instr else {
+            return None;
+        };
+
+        if label.name != spot1.name || label.block_id != spot1.maybe_block_id.unwrap() {
+            return None;
         }
-    }
-}
 
-#[derive(Default)]
-enum SolvedGoto1Stage {
-    #[default]
-    None,
-    Spot1,
-    SolvedGoto,
-    AddPuzzle,
-    Goto,
+        let OptimizingCodeComponent::Label(real_spot2) = &*self.window[4] else {
+            return None;
+        };
+
+        if spot2.name != real_spot2.name || spot2.block_id != real_spot2.maybe_block_id.unwrap() {
+            return None;
+        }
+
+        let repeat_until = OptimizingCodeComponent::Instruction(
+            Box::new(OptimizingPrimitive::RepeatUntil {
+                puzzle: *puzzle,
+                arch: Arc::clone(arch),
+                amts: amts.to_owned(),
+                register: register.to_owned(),
+            }),
+            spot2.block_id,
+        );
+
+        let mut values = Vec::new();
+        values.push(self.window.pop_front().unwrap());
+
+        let span = self
+            .window
+            .drain(0..3)
+            .map(|v| v.span().clone())
+            .reduce(|a, v| a.merge(&v))
+            .unwrap();
+
+        values.push(span.with(repeat_until));
+
+        Some(values)
+    }
 }
 
 impl Rewriter for RepeatUntil1 {
@@ -294,94 +327,19 @@ impl Rewriter for RepeatUntil1 {
         &mut self,
         component: WithSpan<OptimizingCodeComponent>,
     ) -> Vec<WithSpan<OptimizingCodeComponent>> {
-        match self.stage {
-            SolvedGoto1Stage::None => match &*component {
-                OptimizingCodeComponent::Instruction(_, _) => self.reset(component),
-                OptimizingCodeComponent::Label(label) => {
-                    self.spot_1 = Some(LabelReference {
-                        name: ArcIntern::clone(&label.name),
-                        block_id: label.maybe_block_id.unwrap(),
-                    });
-                    self.found.push(component);
-                    self.stage = SolvedGoto1Stage::Spot1;
-                    Vec::new()
-                }
-            },
-            SolvedGoto1Stage::Spot1 => match &*component {
-                OptimizingCodeComponent::Instruction(primitive, _) => match &**primitive {
-                    OptimizingPrimitive::SolvedGoto { label, register } => {
-                        self.register = Some(register.clone());
-                        self.spot_2 = Some((**label).clone());
-                        self.found.push(component);
-                        self.stage = SolvedGoto1Stage::SolvedGoto;
-                        Vec::new()
-                    }
-                    _ => self.reset(component),
-                },
-                OptimizingCodeComponent::Label(_) => self.reset(component),
-            },
-            SolvedGoto1Stage::SolvedGoto => match &*component {
-                OptimizingCodeComponent::Instruction(primitive, _) => match &**primitive {
-                    OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } => {
-                        self.addition = Some((*puzzle, Arc::clone(arch), amts.clone()));
-                        self.found.push(component);
-                        self.stage = SolvedGoto1Stage::AddPuzzle;
-                        Vec::new()
-                    }
-                    _ => self.reset(component),
-                },
-                OptimizingCodeComponent::Label(_) => self.reset(component),
-            },
-            SolvedGoto1Stage::AddPuzzle => match &*component {
-                OptimizingCodeComponent::Instruction(primitive, _) => match &**primitive {
-                    OptimizingPrimitive::Goto { label } => {
-                        if &**label == self.spot_1.as_ref().unwrap() {
-                            self.found.push(component);
-                            self.stage = SolvedGoto1Stage::Goto;
-                            Vec::new()
-                        } else {
-                            self.reset(component)
-                        }
-                    }
-                    _ => self.reset(component),
-                },
-                OptimizingCodeComponent::Label(_) => self.reset(component),
-            },
-            SolvedGoto1Stage::Goto => match &*component {
-                OptimizingCodeComponent::Instruction(_, _) => self.reset(component),
-                OptimizingCodeComponent::Label(label) => {
-                    let spot_2 = self.spot_2.as_ref().unwrap();
+        self.window.push_back(component);
 
-                    if spot_2.name == label.name && spot_2.block_id == label.maybe_block_id.unwrap()
-                    {
-                        let span = self
-                            .found
-                            .drain(1..)
-                            .map(|v| v.span().clone())
-                            .reduce(|a, v| a.merge(&v))
-                            .unwrap();
+        if self.window.len() < 5 {
+            return Vec::new();
+        }
 
-                        let addition = self.addition.take().unwrap();
-
-                        self.found
-                            .push(span.with(OptimizingCodeComponent::Instruction(
-                                Box::new(OptimizingPrimitive::RepeatUntil {
-                                    puzzle: addition.0,
-                                    arch: addition.1,
-                                    amts: addition.2,
-                                    register: self.register.take().unwrap(),
-                                }),
-                                spot_2.block_id,
-                            )));
-                    }
-
-                    self.reset(component)
-                }
-            },
+        match self.try_match() {
+            Some(v) => v,
+            None => vec![self.window.pop_front().unwrap()],
         }
     }
 
     fn eof(self) -> Vec<WithSpan<OptimizingCodeComponent>> {
-        self.found
+        self.window.into()
     }
 }
