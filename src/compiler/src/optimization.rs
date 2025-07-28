@@ -12,6 +12,17 @@ use smol::{
 
 use crate::{BlockID, Label, LabelReference, RegisterReference};
 
+// TODO:
+// IMPORTANT:
+// - Dead code erasure
+// - Removing labels that are never jumped to
+// - `solve` instruction
+//
+// NICETIES:
+// - Remove jumps to next instruction
+// - Coalesce solved-gotos to the same label
+// - Coalesce adjacent labels
+
 #[derive(Clone, Debug)]
 pub enum OptimizingPrimitive {
     AddPuzzle {
@@ -115,6 +126,7 @@ pub fn do_optimization(
 
     let rx = add_stage::<CoalesceAdds>(&executor, rx);
     let rx = add_stage::<Peephole<RepeatUntil1>>(&executor, rx);
+    let rx = add_stage::<Peephole<RepeatUntil2>>(&executor, rx);
 
     from_fn(move || future::block_on(executor.run(rx.recv())).ok())
 }
@@ -288,21 +300,22 @@ macro_rules! primitive_match {
     };
 }
 
-/// Transforms
-///
-/// ```
-/// spot1:
-/// solved-goto spot2 <positions>
-/// <algorithm>
-/// goto spot1
-/// spot2:
-/// ```
-/// into
-/// ```
-/// spot1:
-/// repeat until <positions> solved <algorithm>
-/// spot2:
-/// ```
+/*
+Transforms
+```
+spot1:
+    solved-goto <positions> spot2
+    <algorithm>
+    goto spot1
+spot2:
+```
+into
+```
+spot1:
+    repeat until <positions> solved <algorithm>
+spot2:
+```
+*/
 struct RepeatUntil1;
 
 impl PeepholeRewriter for RepeatUntil1 {
@@ -362,3 +375,117 @@ impl PeepholeRewriter for RepeatUntil1 {
         Some(values)
     }
 }
+
+/*
+Transforms
+```
+    goto spot2
+spot1:
+    <algorithm>
+spot2:
+    solved-goto <positions> spot3
+    goto spot1
+spot3:
+```
+into
+```
+    goto spot2
+spot1:
+    <algorithm>
+spot2:
+    repeat until <positions> solved <algorithm>
+spot3:
+```
+*/
+struct RepeatUntil2;
+
+impl PeepholeRewriter for RepeatUntil2 {
+    const WINDOW_SIZE: usize = 7;
+
+    fn try_match(
+        window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
+    ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
+        primitive_match!(OptimizingPrimitive::Goto { label: spot2 } = &*window[0]);
+
+        let OptimizingCodeComponent::Label(spot1) = &*window[1] else {
+            return None;
+        };
+
+        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &*window[2]);
+
+        let OptimizingCodeComponent::Label(real_spot2) = &*window[3] else {
+            return None;
+        };
+
+        if spot2.name != real_spot2.name || spot2.block_id != real_spot2.maybe_block_id.unwrap() {
+            return None;
+        }
+
+        primitive_match!(
+            OptimizingPrimitive::SolvedGoto {
+                label: spot3,
+                register,
+            } = &*window[4]
+        );
+
+        primitive_match!(OptimizingPrimitive::Goto { label: maybe_spot1 } = &*window[5]);
+
+        if spot1.name != maybe_spot1.name || spot1.maybe_block_id.unwrap() != maybe_spot1.block_id {
+            return None;
+        }
+
+        let OptimizingCodeComponent::Label(real_spot3) = &*window[6] else {
+            return None;
+        };
+
+        if spot3.name != real_spot3.name || spot3.block_id != real_spot3.maybe_block_id.unwrap() {
+            return None;
+        }
+
+        let repeat_until = OptimizingCodeComponent::Instruction(
+            Box::new(OptimizingPrimitive::RepeatUntil {
+                puzzle: *puzzle,
+                arch: Arc::clone(arch),
+                amts: amts.to_owned(),
+                register: register.to_owned(),
+            }),
+            spot3.block_id,
+        );
+
+        let mut out = Vec::new();
+
+        out.extend(window.drain(0..4));
+
+        let span = window
+            .drain(0..2)
+            .map(|v| v.span().clone())
+            .reduce(|a, v| a.merge(&v))
+            .unwrap();
+
+        out.push(span.with(repeat_until));
+
+        Some(out)
+    }
+}
+
+/*
+Transforms
+```
+spot1:
+    <algorithm>
+<optional label>:
+    solved-goto <positions> spot2
+    <optional algorithm>
+    goto spot1
+spot2:
+```
+into
+```
+spot1:
+    <algorithm>
+<optional label>:
+    repeat until <positions> solved <optional algorithm> <algorithm>
+spot2:
+```
+*/
+struct RepeatUntil3;

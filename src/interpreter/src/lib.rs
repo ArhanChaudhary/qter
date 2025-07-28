@@ -700,6 +700,7 @@ mod tests {
 
             add A 1
 
+            -- Two repeat untils
             spot1:
                 solved-goto A spot2
                 add A 89
@@ -712,7 +713,25 @@ mod tests {
                 goto spot2
             spot3:
 
-            halt \"A*4=\" A
+            -- Two repeat untils plus four instructions of dead code
+                goto spot5
+            spot4:
+                add A 89
+                add B 2
+            spot5:
+                solved-goto A spot6
+                goto spot4
+            spot6:
+                goto spot8
+            spot7:
+                add A 2
+                add B 89
+            spot8:
+                solved-goto B spot9
+                goto spot7
+            spot9:
+
+                halt \"A*whatever=\" A
         ";
 
         let program = match compile(&File::from(code), |_| unreachable!()) {
@@ -720,11 +739,12 @@ mod tests {
             Err(e) => panic!("{e:?}"),
         };
 
-        assert_eq!(program.instructions.len(), 1 + 2 + 1);
+        // println!("{:#?}", program);
+        assert_eq!(program.instructions.len(), 1 + 2 + (1 + 2) * 2 + 1);
 
         let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
 
-        let expected_output = ["A*4= 4"];
+        let expected_output = ["A*whatever= 16"];
 
         assert!(matches!(
             interpreter.step_until_halt(),
