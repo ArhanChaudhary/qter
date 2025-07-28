@@ -31,10 +31,10 @@ impl SeparatesByPuzzleType for StateIdx {
     type Puzzle<'s> = PuzzleIdx;
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TheoreticalIdx(pub usize);
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PuzzleIdx(pub usize);
 
 #[derive(Clone)]

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter::Peekable, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use chumsky::error::Rich;
 use internment::ArcIntern;
@@ -11,10 +11,11 @@ use qter_core::{
 
 use crate::{
     ExpandedCode, ExpandedCodeComponent, LabelReference, Primitive, Puzzle, RegisterReference,
+    optimization::{OptimizingCodeComponent, OptimizingPrimitive, do_optimization},
 };
 
 #[derive(Clone, Debug)]
-enum RegisterIdx {
+pub enum RegisterIdx {
     Theoretical,
     Real {
         idx: usize,
@@ -37,88 +38,6 @@ impl RegisterIdx {
             )),
         }
     }
-}
-
-fn coalesce_adds<V: Iterator<Item = WithSpan<ExpandedCodeComponent>>>(
-    code_components_iter: &mut Peekable<V>,
-    global_regs: &GlobalRegs,
-) -> Option<Vec<WithSpan<CoalescedAdds>>> {
-    let mut adds = HashMap::new();
-
-    while let Some(ExpandedCodeComponent::Instruction(b, _)) =
-        code_components_iter.peek().map(|v| &**v)
-    {
-        let Primitive::Add { amt, register } = &**b else {
-            break;
-        };
-        let (reg_idx, puzzle_idx) = global_regs.get_reg(register);
-        adds.entry(puzzle_idx)
-            .or_insert(Vec::new())
-            .push((reg_idx, amt.to_owned()));
-        code_components_iter.next();
-    }
-
-    if adds.is_empty() {
-        return code_components_iter
-            .next()
-            .map(|next| vec![next.map(CoalescedAdds::Instruction)]);
-    }
-
-    Some(
-        adds.into_iter()
-            .sorted_unstable_by_key(|&(puzzle_idx, _)| puzzle_idx)
-            .map(|(puzzle_idx, adds)| {
-                let merged_adds = adds
-                    .iter()
-                    .map(|(_, add)| add.span().to_owned())
-                    .reduce(|acc, add| acc.merge(&add))
-                    .unwrap();
-
-                WithSpan::new(
-                    match &adds[0].0 {
-                        RegisterIdx::Theoretical => CoalescedAdds::AddTheoretical(
-                            TheoreticalIdx(puzzle_idx),
-                            adds.iter().map(|(_, amt)| **amt).sum::<Int<U>>(),
-                        ),
-                        RegisterIdx::Real {
-                            idx: _,
-                            arch,
-                            modulus: _,
-                        } => CoalescedAdds::AddPuzzle(
-                            PuzzleIdx(puzzle_idx),
-                            Algorithm::new_from_effect(
-                                arch,
-                                adds.iter()
-                                    .map(|(reg_idx, add)| {
-                                        (
-                                            match reg_idx {
-                                                RegisterIdx::Theoretical => unreachable!(),
-                                                RegisterIdx::Real {
-                                                    idx,
-                                                    arch: _,
-                                                    modulus: _,
-                                                } => *idx,
-                                            },
-                                            **add,
-                                        )
-                                    })
-                                    .collect_vec(),
-                            ),
-                        ),
-                    },
-                    merged_adds,
-                )
-            })
-            .collect_vec(),
-    )
-}
-
-// all usize here is puzzle index
-
-enum CoalescedAdds {
-    AddPuzzle(PuzzleIdx, Algorithm),
-    AddTheoretical(TheoreticalIdx, Int<U>),
-    Instruction(ExpandedCodeComponent),
 }
 
 enum CoalescedAddsRemovedLabels {
@@ -201,23 +120,114 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Vec<Rich<'stati
         }
     }
 
+    let global_regs = Arc::new(global_regs);
+    let global_regs_for_iter = Arc::clone(&global_regs);
+
+    let instructions_iter = expanded.expanded_code_components.into_iter().map(move |v| {
+        v.map(|v| match v {
+            ExpandedCodeComponent::Instruction(primitive, block_id) => {
+                OptimizingCodeComponent::Instruction(
+                    Box::new(match *primitive {
+                        Primitive::Add { amt, register } => {
+                            match global_regs_for_iter.get_reg(&register) {
+                                (RegisterIdx::Theoretical, theoretical_idx) => {
+                                    OptimizingPrimitive::AddTheoretical {
+                                        theoretical: TheoreticalIdx(theoretical_idx),
+                                        amt,
+                                    }
+                                }
+                                (
+                                    RegisterIdx::Real {
+                                        idx: reg_idx,
+                                        arch,
+                                        modulus,
+                                    },
+                                    puzzle_idx,
+                                ) => OptimizingPrimitive::AddPuzzle {
+                                    puzzle: PuzzleIdx(puzzle_idx),
+                                    arch,
+                                    amts: vec![(reg_idx, modulus, amt)],
+                                },
+                            }
+                        }
+                        Primitive::Goto { label } => OptimizingPrimitive::Goto { label },
+                        Primitive::SolvedGoto { label, register } => {
+                            OptimizingPrimitive::SolvedGoto { label, register }
+                        }
+                        Primitive::Input { message, register } => {
+                            OptimizingPrimitive::Input { message, register }
+                        }
+                        Primitive::Halt { message, register } => {
+                            OptimizingPrimitive::Halt { message, register }
+                        }
+                        Primitive::Print { message, register } => {
+                            OptimizingPrimitive::Print { message, register }
+                        }
+                    }),
+                    block_id,
+                )
+            }
+            ExpandedCodeComponent::Label(label) => OptimizingCodeComponent::Label(label),
+        })
+    });
+
+    let optimized_iter = do_optimization(instructions_iter);
+
     let mut program_counter = 0;
 
-    let instructions = expanded
-        .expanded_code_components
-        .into_iter()
-        .peekable()
-        .batching(|code_components_iter| coalesce_adds(code_components_iter, &global_regs))
-        .flatten()
-        .filter_map(|coalesced_adds| {
-            let span = coalesced_adds.span().to_owned();
+    let instructions = optimized_iter
+        .filter_map(|component| {
+            let span = component.span().to_owned();
 
-            match coalesced_adds.into_inner() {
-                CoalescedAdds::Instruction(ExpandedCodeComponent::Instruction(primitive, _)) => {
+            match component.into_inner() {
+                OptimizingCodeComponent::Instruction(primitive, _) => {
                     program_counter += 1;
-                    Some(CoalescedAddsRemovedLabels::Instruction(*primitive))
+
+                    Some(match *primitive {
+                        OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } => {
+                            CoalescedAddsRemovedLabels::AddPuzzle(
+                                puzzle,
+                                Algorithm::new_from_effect(
+                                    &arch,
+                                    amts.into_iter()
+                                        .map(|(idx, _, amt)| (idx, amt.into_inner()))
+                                        .collect(),
+                                ),
+                            )
+                        }
+                        OptimizingPrimitive::AddTheoretical { theoretical, amt } => {
+                            CoalescedAddsRemovedLabels::AddTheoretical(theoretical, *amt)
+                        }
+                        OptimizingPrimitive::Goto { label } => {
+                            CoalescedAddsRemovedLabels::Instruction(Primitive::Goto { label })
+                        }
+                        OptimizingPrimitive::SolvedGoto { label, register } => {
+                            CoalescedAddsRemovedLabels::Instruction(Primitive::SolvedGoto {
+                                label,
+                                register,
+                            })
+                        }
+                        OptimizingPrimitive::Input { message, register } => {
+                            CoalescedAddsRemovedLabels::Instruction(Primitive::Input {
+                                message,
+                                register,
+                            })
+                        }
+                        OptimizingPrimitive::Halt { message, register } => {
+                            CoalescedAddsRemovedLabels::Instruction(Primitive::Halt {
+                                message,
+                                register,
+                            })
+                        }
+                        OptimizingPrimitive::Print { message, register } => {
+                            CoalescedAddsRemovedLabels::Instruction(Primitive::Print {
+                                message,
+                                register,
+                            })
+                        }
+                    })
                 }
-                CoalescedAdds::Instruction(ExpandedCodeComponent::Label(label)) => {
+                OptimizingCodeComponent::Label(label) => {
                     label_locations.insert(
                         LabelReference {
                             name: label.name,
@@ -226,14 +236,6 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Vec<Rich<'stati
                         program_counter,
                     );
                     None
-                }
-                CoalescedAdds::AddPuzzle(puzzle_idx, alg) => {
-                    program_counter += 1;
-                    Some(CoalescedAddsRemovedLabels::AddPuzzle(puzzle_idx, alg))
-                }
-                CoalescedAdds::AddTheoretical(puzzle_idx, amt) => {
-                    program_counter += 1;
-                    Some(CoalescedAddsRemovedLabels::AddTheoretical(puzzle_idx, amt))
                 }
             }
             .map(|v| WithSpan::new(v, span))
@@ -360,6 +362,8 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Vec<Rich<'stati
     if !errors.is_empty() {
         return Err(errors);
     }
+
+    let global_regs = Arc::into_inner(global_regs).unwrap();
 
     Ok(Program {
         theoretical: global_regs.theoretical,

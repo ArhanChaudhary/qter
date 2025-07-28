@@ -17,6 +17,7 @@ use crate::macro_expansion::expand;
 mod builtin_macros;
 mod lua;
 mod macro_expansion;
+mod optimization;
 mod parsing;
 mod strip_expanded;
 

@@ -620,4 +620,75 @@ mod tests {
             assert_eq!(message, expected);
         }
     }
+
+    #[test]
+    fn add_coalesce() {
+        let code = "
+            .registers {
+                A, B <- 3x3 builtin (90, 90)
+                C, D <- 3x3 builtin (90, 90)
+                E    <- theoretical 90
+                F    <- theoretical 90
+            }
+
+            -- These should be coalesced into just four instructions
+            add A 1
+            add E 1
+            add C 1
+            add B 1
+            add F 1
+            add D 1
+            add A 1
+            add E 1
+            add C 1
+            add B 1
+            add F 1
+            add D 1
+
+            print \"A\" A
+            print \"B\" B
+            print \"C\" C
+            print \"D\" D
+            print \"E\" E
+            print \"F\" F
+
+            halt \"Done\"
+        ";
+
+        let program = match compile(&File::from(code), |_| unreachable!()) {
+            Ok(v) => v,
+            Err(e) => panic!("{e:?}"),
+        };
+
+        println!("{:#?}", program.instructions);
+
+        assert_eq!(program.instructions.len(), 4 + 6 + 1);
+
+        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
+
+        let expected_output = ["A 2", "B 2", "C 2", "D 2", "E 2", "F 2", "Done"];
+
+        assert!(matches!(
+            interpreter.step_until_halt(),
+            PausedState::Halt {
+                maybe_puzzle_idx_and_register: None,
+            }
+        ));
+
+        assert_eq!(
+            expected_output.len(),
+            interpreter.state_mut().messages().len(),
+            "{:?}",
+            interpreter.state_mut().messages()
+        );
+
+        for (message, expected) in interpreter
+            .state()
+            .messages
+            .iter()
+            .zip(expected_output.iter())
+        {
+            assert_eq!(message, expected);
+        }
+    }
 }

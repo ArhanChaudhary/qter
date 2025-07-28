@@ -479,7 +479,7 @@ impl Algorithm {
         let mut expanded_effect = vec![Int::<U>::zero(); arch.registers().len()];
 
         for (register, amt) in effect {
-            expanded_effect[register] = amt;
+            expanded_effect[register] = amt % arch.registers()[register].order();
         }
 
         let table = arch.decoding_table();
