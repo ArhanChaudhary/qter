@@ -37,7 +37,6 @@ pub struct TheoreticalIdx(pub usize);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PuzzleIdx(pub usize);
 
-#[derive(Clone)]
 pub enum ByPuzzleType<'a, T: SeparatesByPuzzleType> {
     Theoretical(T::Theoretical<'a>),
     Puzzle(T::Puzzle<'a>),
@@ -54,6 +53,19 @@ where
                 f.debug_tuple("ByPuzzleType::Theoretical").field(v).finish()
             }
             ByPuzzleType::Puzzle(v) => f.debug_tuple("ByPuzzleType::Puzzle").field(v).finish(),
+        }
+    }
+}
+
+impl<'a, T: SeparatesByPuzzleType> Clone for ByPuzzleType<'a, T>
+where
+    T::Theoretical<'a>: Clone,
+    T::Puzzle<'a>: Clone,
+{
+    fn clone(&self) -> Self {
+        match self {
+            ByPuzzleType::Theoretical(v) => ByPuzzleType::Theoretical(v.clone()),
+            ByPuzzleType::Puzzle(v) => ByPuzzleType::Puzzle(v.clone()),
         }
     }
 }

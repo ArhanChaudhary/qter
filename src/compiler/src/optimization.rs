@@ -1,6 +1,9 @@
 use std::{iter::from_fn, sync::Arc};
 
-use qter_core::{Int, PuzzleIdx, TheoreticalIdx, U, WithSpan, architectures::Architecture};
+use qter_core::{
+    ByPuzzleType, Int, PuzzleIdx, StateIdx, TheoreticalIdx, U, WithSpan,
+    architectures::Architecture,
+};
 use smol::{Executor, channel::bounded, future};
 
 use crate::{BlockID, Label, LabelReference, RegisterReference};
@@ -24,12 +27,15 @@ pub enum OptimizingPrimitive {
         label: WithSpan<LabelReference>,
         register: RegisterReference,
     },
-    // RepeatUntil {
-    //     puzzle: PuzzleIdx,
-    //     arch: Arc<Architecture>,
-    //     amts: Vec<(usize, Option<Int<U>>, WithSpan<Int<U>>)>,
-    //     register: RegisterReference,
-    // },
+    RepeatUntil {
+        puzzle: PuzzleIdx,
+        arch: Arc<Architecture>,
+        amts: Vec<(usize, Option<Int<U>>, WithSpan<Int<U>>)>,
+        register: RegisterReference,
+    },
+    Solve {
+        puzzle: ByPuzzleType<'static, StateIdx>,
+    },
     Input {
         message: WithSpan<String>,
         register: RegisterReference,
