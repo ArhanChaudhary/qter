@@ -202,6 +202,7 @@ impl<P: PuzzleState> Interpreter<P> {
     /// Panics if the interpreter is not in a paused state
     pub fn step_until_halt(&mut self) -> &PausedState {
         loop {
+            // println!("{}", self.state.program_counter);
             if let ActionPerformed::Paused | ActionPerformed::Panicked = self.step() {
                 break;
             }

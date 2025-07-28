@@ -289,6 +289,8 @@ impl PuzzleInstructionImpl for Solve {
     ) -> ActionPerformed<'a> {
         state.puzzle_states.theoretical_state_mut(*instr).zero_out();
 
+        state.program_counter += 1;
+
         ActionPerformed::Solved(ByPuzzleType::Theoretical(*instr))
     }
 
@@ -297,6 +299,8 @@ impl PuzzleInstructionImpl for Solve {
         state: &mut InterpreterState<P>,
     ) -> ActionPerformed<'a> {
         state.puzzle_states.puzzle_state_mut(*instr).solve();
+
+        state.program_counter += 1;
 
         ActionPerformed::Solved(ByPuzzleType::Puzzle(*instr))
     }
@@ -318,6 +322,9 @@ impl PuzzleInstructionImpl for RepeatUntil {
             .puzzle_states
             .puzzle_state_mut(instr.puzzle_idx)
             .repeat_until(&instr.facelets.0, &instr.alg);
+
+        state.program_counter += 1;
+
         ActionPerformed::RepeatedUntil {
             puzzle_idx: instr.puzzle_idx,
             facelets: &instr.facelets,

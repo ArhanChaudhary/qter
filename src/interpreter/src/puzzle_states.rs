@@ -18,8 +18,6 @@ impl TheoreticalState {
     }
 
     pub fn add_to(&mut self, amt: Int<U>) {
-        assert!(amt < self.order);
-
         self.value += amt % self.order;
 
         if self.value >= self.order {
@@ -31,10 +29,12 @@ impl TheoreticalState {
         self.value = Int::zero();
     }
 
+    #[must_use]
     pub fn order(&self) -> Int<U> {
         self.order
     }
 
+    #[must_use]
     pub fn value(&self) -> Int<U> {
         self.value
     }
@@ -118,9 +118,10 @@ impl PuzzleState for SimulatedPuzzle {
     }
 
     fn repeat_until(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<()> {
-        let v = decode(&self.state, facelets, generator)?;
         let mut generator = generator.to_owned();
-        generator.exponentiate(v.into());
+        generator.exponentiate(-Int::<U>::one());
+        let v = decode(&self.state, facelets, &generator)?;
+        generator.exponentiate(-v);
         self.compose_into(&generator);
         Some(())
     }
@@ -133,6 +134,7 @@ pub struct PuzzleStates<P: PuzzleState> {
 }
 
 impl<P: PuzzleState> PuzzleStates<P> {
+    #[must_use]
     pub fn new(program: &Program) -> Self {
         let theoretical_states = program
             .theoretical
@@ -155,10 +157,12 @@ impl<P: PuzzleState> PuzzleStates<P> {
         }
     }
 
+    #[must_use]
     pub fn theoretical_state(&self, idx: TheoreticalIdx) -> &TheoreticalState {
         &self.theoretical_states[idx.0]
     }
 
+    #[must_use]
     pub fn puzzle_state(&self, idx: PuzzleIdx) -> &P {
         &self.puzzle_states[idx.0]
     }
