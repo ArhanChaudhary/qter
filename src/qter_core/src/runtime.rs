@@ -70,6 +70,12 @@ where
     }
 }
 
+impl<A: SeparatesByPuzzleType, B: SeparatesByPuzzleType> SeparatesByPuzzleType for (A, B) {
+    type Theoretical<'s> = (A::Theoretical<'s>, B::Theoretical<'s>);
+
+    type Puzzle<'s> = (A::Puzzle<'s>, B::Puzzle<'s>);
+}
+
 /// A qter instruction
 #[derive(Debug)]
 pub enum Instruction {

@@ -7,7 +7,7 @@ use qter_core::{
     architectures::Architecture,
 };
 
-use crate::{BlockID, Label, LabelReference, RegisterReference};
+use crate::{BlockID, Label, LabelReference, RegisterReference, strip_expanded::GlobalRegs};
 
 mod global;
 mod local;
@@ -27,7 +27,6 @@ macro_rules! primitive_match {
 
 // TODO:
 // IMPORTANT:
-// - Removing labels that are never jumped to
 // - `solve` instruction
 //
 // NICETIES:
@@ -85,12 +84,13 @@ pub enum OptimizingCodeComponent {
 
 pub fn do_optimization(
     instructions: impl Iterator<Item = WithSpan<OptimizingCodeComponent>> + Send + 'static,
+    global_regs: Arc<GlobalRegs>,
 ) -> Vec<WithSpan<OptimizingCodeComponent>> {
-    let iter = do_local_optimization(instructions);
+    let iter = do_local_optimization(instructions, Arc::clone(&global_regs));
     let (mut new_code, mut convergence) = do_global_optimization(iter);
 
     while !convergence {
-        let iter = do_local_optimization(new_code.into_iter());
+        let iter = do_local_optimization(new_code.into_iter(), Arc::clone(&global_regs));
         (new_code, convergence) = do_global_optimization(iter);
     }
 

@@ -793,6 +793,60 @@ mod tests {
     }
 
     #[test]
+    fn repeat_until_two_cubes() {
+        let code = "
+            .registers {
+                A <- 3x3 builtin (1260)
+                B <- 3x3 builtin (1260)
+            }
+
+            -- Should not be converted to a repeat until
+            spot1:
+                solved-goto B spot2
+                add A 89
+                goto spot1
+            spot2:
+                
+                halt \"A=\" A
+        ";
+
+        let program = match compile(&File::from(code), |_| unreachable!()) {
+            Ok(v) => v,
+            Err(e) => panic!("{e:?}"),
+        };
+
+        // println!("{:#?}", program);
+        assert_eq!(program.instructions.len(), 4);
+
+        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
+
+        let expected_output = ["A= 0"];
+
+        assert!(matches!(
+            interpreter.step_until_halt(),
+            PausedState::Halt {
+                maybe_puzzle_idx_and_register: Some(ByPuzzleType::Puzzle((PuzzleIdx(0), _, _))),
+            }
+        ));
+
+        assert_eq!(
+            expected_output.len(),
+            interpreter.state_mut().messages().len(),
+            "{:?}",
+            interpreter.state_mut().messages()
+        );
+
+        for (message, expected) in interpreter
+            .state()
+            .messages
+            .iter()
+            .zip(expected_output.iter())
+        {
+            assert_eq!(message, expected);
+        }
+    }
+
+    #[test]
     fn dead_code() {
         let code = "
             .registers {

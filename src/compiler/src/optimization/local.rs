@@ -7,7 +7,9 @@ use smol::{
     future,
 };
 
-use crate::{BlockID, optimization::OptimizingPrimitive, primitive_match};
+use crate::{
+    BlockID, optimization::OptimizingPrimitive, primitive_match, strip_expanded::GlobalRegs,
+};
 
 use super::OptimizingCodeComponent;
 
@@ -15,14 +17,16 @@ trait Rewriter {
     fn rewrite(
         &mut self,
         component: WithSpan<OptimizingCodeComponent>,
+        global_regs: &GlobalRegs,
     ) -> Vec<WithSpan<OptimizingCodeComponent>>;
 
-    fn eof(self) -> Vec<WithSpan<OptimizingCodeComponent>>;
+    fn eof(self, global_regs: &GlobalRegs) -> Vec<WithSpan<OptimizingCodeComponent>>;
 }
 
 fn add_stage<R: Rewriter + Default + Send>(
     executor: &Executor,
     rx: Receiver<WithSpan<OptimizingCodeComponent>>,
+    global_regs: Arc<GlobalRegs>,
 ) -> Receiver<WithSpan<OptimizingCodeComponent>> {
     let (tx, new_rx) = bounded(32);
 
@@ -31,14 +35,14 @@ fn add_stage<R: Rewriter + Default + Send>(
             let mut rewriter = R::default();
 
             while let Ok(instruction) = rx.recv().await {
-                let new = rewriter.rewrite(instruction);
+                let new = rewriter.rewrite(instruction, &global_regs);
 
                 for new_instr in new {
                     tx.send(new_instr).await.unwrap();
                 }
             }
 
-            let new = rewriter.eof();
+            let new = rewriter.eof(&global_regs);
 
             for new_instr in new {
                 tx.send(new_instr).await.unwrap();
@@ -51,6 +55,7 @@ fn add_stage<R: Rewriter + Default + Send>(
 
 pub fn do_local_optimization(
     instructions: impl Iterator<Item = WithSpan<OptimizingCodeComponent>> + Send + 'static,
+    global_regs: Arc<GlobalRegs>,
 ) -> impl Iterator<Item = WithSpan<OptimizingCodeComponent>> {
     let executor = Executor::new();
 
@@ -64,12 +69,12 @@ pub fn do_local_optimization(
         })
         .detach();
 
-    let rx = add_stage::<RemoveDeadCode>(&executor, rx);
-    let rx = add_stage::<Peephole<RemoveUselessJumps>>(&executor, rx);
-    let rx = add_stage::<CoalesceAdds>(&executor, rx);
-    let rx = add_stage::<Peephole<RepeatUntil1>>(&executor, rx);
-    let rx = add_stage::<Peephole<RepeatUntil2>>(&executor, rx);
-    let rx = add_stage::<Peephole<RepeatUntil3>>(&executor, rx);
+    let rx = add_stage::<RemoveDeadCode>(&executor, rx, Arc::clone(&global_regs));
+    let rx = add_stage::<Peephole<RemoveUselessJumps>>(&executor, rx, Arc::clone(&global_regs));
+    let rx = add_stage::<CoalesceAdds>(&executor, rx, Arc::clone(&global_regs));
+    let rx = add_stage::<Peephole<RepeatUntil1>>(&executor, rx, Arc::clone(&global_regs));
+    let rx = add_stage::<Peephole<RepeatUntil2>>(&executor, rx, Arc::clone(&global_regs));
+    let rx = add_stage::<Peephole<RepeatUntil3>>(&executor, rx, global_regs);
 
     from_fn(move || future::block_on(executor.run(rx.recv())).ok())
 }
@@ -84,6 +89,7 @@ impl Rewriter for RemoveDeadCode {
     fn rewrite(
         &mut self,
         component: WithSpan<OptimizingCodeComponent>,
+        _: &GlobalRegs,
     ) -> Vec<WithSpan<OptimizingCodeComponent>> {
         match self.diverging.take() {
             Some(goto) => {
@@ -106,7 +112,7 @@ impl Rewriter for RemoveDeadCode {
         }
     }
 
-    fn eof(self) -> Vec<WithSpan<OptimizingCodeComponent>> {
+    fn eof(self, _: &GlobalRegs) -> Vec<WithSpan<OptimizingCodeComponent>> {
         match self.diverging {
             Some(goto) => vec![goto],
             None => Vec::new(),
@@ -122,6 +128,7 @@ impl PeepholeRewriter for RemoveUselessJumps {
 
     fn try_match(
         window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
+        _: &GlobalRegs,
     ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
         let OptimizingCodeComponent::Label(label) = &**window.get(1)? else {
             return None;
@@ -199,6 +206,7 @@ impl Rewriter for CoalesceAdds {
     fn rewrite(
         &mut self,
         component: WithSpan<OptimizingCodeComponent>,
+        _: &GlobalRegs,
     ) -> Vec<WithSpan<OptimizingCodeComponent>> {
         let span = component.span().clone();
 
@@ -257,7 +265,7 @@ impl Rewriter for CoalesceAdds {
         }
     }
 
-    fn eof(mut self) -> Vec<WithSpan<OptimizingCodeComponent>> {
+    fn eof(mut self, _: &GlobalRegs) -> Vec<WithSpan<OptimizingCodeComponent>> {
         self.dump_state()
     }
 }
@@ -268,10 +276,10 @@ struct Peephole<R: PeepholeRewriter> {
 }
 
 impl<R: PeepholeRewriter> Peephole<R> {
-    fn do_try_match(&mut self) -> Vec<WithSpan<OptimizingCodeComponent>> {
-        match R::try_match(&mut self.window) {
+    fn do_try_match(&mut self, global_regs: &GlobalRegs) -> Vec<WithSpan<OptimizingCodeComponent>> {
+        match R::try_match(&mut self.window, global_regs) {
             Some(mut v) => {
-                let again = self.do_try_match();
+                let again = self.do_try_match(global_regs);
                 v.extend(again);
                 v
             }
@@ -300,6 +308,7 @@ trait PeepholeRewriter {
 
     fn try_match(
         window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
+        global_regs: &GlobalRegs,
     ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>>;
 }
 
@@ -307,17 +316,18 @@ impl<R: PeepholeRewriter> Rewriter for Peephole<R> {
     fn rewrite(
         &mut self,
         component: WithSpan<OptimizingCodeComponent>,
+        global_regs: &GlobalRegs,
     ) -> Vec<WithSpan<OptimizingCodeComponent>> {
         self.window.push_back(component);
 
-        self.do_try_match()
+        self.do_try_match(global_regs)
     }
 
-    fn eof(mut self) -> Vec<WithSpan<OptimizingCodeComponent>> {
+    fn eof(mut self, global_regs: &GlobalRegs) -> Vec<WithSpan<OptimizingCodeComponent>> {
         let mut out = Vec::new();
 
         loop {
-            out.extend(self.do_try_match());
+            out.extend(self.do_try_match(global_regs));
 
             match self.window.pop_front() {
                 Some(first) => out.push(first),
@@ -350,6 +360,7 @@ impl PeepholeRewriter for RepeatUntil1 {
 
     fn try_match(
         window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
+        _: &GlobalRegs,
     ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
         let OptimizingCodeComponent::Label(spot1) = &**window.front()? else {
             return None;
@@ -431,6 +442,7 @@ impl PeepholeRewriter for RepeatUntil2 {
 
     fn try_match(
         window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
+        _: &GlobalRegs,
     ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
         primitive_match!(OptimizingPrimitive::Goto { label: spot2 } = &**window.front()?);
 
@@ -522,6 +534,7 @@ impl PeepholeRewriter for RepeatUntil3 {
 
     fn try_match(
         window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
+        _: &GlobalRegs,
     ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
         let OptimizingCodeComponent::Label(spot1) = &**window.front()? else {
             return None;
