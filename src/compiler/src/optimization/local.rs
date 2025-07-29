@@ -1,87 +1,15 @@
 use std::{collections::VecDeque, iter::from_fn, marker::PhantomData, sync::Arc};
 
-use qter_core::{
-    ByPuzzleType, Int, PuzzleIdx, StateIdx, TheoreticalIdx, U, WithSpan,
-    architectures::Architecture,
-};
+use qter_core::{Int, PuzzleIdx, TheoreticalIdx, U, WithSpan, architectures::Architecture};
 use smol::{
     Executor,
     channel::{Receiver, bounded},
     future,
 };
 
-use crate::{BlockID, Label, LabelReference, RegisterReference};
+use crate::{BlockID, optimization::OptimizingPrimitive, primitive_match};
 
-// TODO: Remove when https://doc.rust-lang.org/beta/unstable-book/language-features/deref-patterns.html is stable
-macro_rules! primitive_match {
-    ($pattern:pat = $val:expr) => {
-        primitive_match!($pattern = $val; else { return None; });
-    };
-
-    ($pattern:pat = $val:expr; else $else:block) => {
-        let OptimizingCodeComponent::Instruction(instr, _) = $val else $else;
-        let $pattern = &**instr else $else;
-    }
-}
-
-// TODO:
-// IMPORTANT:
-// - Removing labels that are never jumped to
-// - `solve` instruction
-//
-// NICETIES:
-// - Remove jumps to next instruction
-// - Coalesce solved-gotos to the same label
-// - Coalesce adjacent labels
-// - Strength reduction of `solved-goto` after a `repeat until` or `solve` that guarantees whether or not it succeeds
-
-#[derive(Clone, Debug)]
-pub enum OptimizingPrimitive {
-    AddPuzzle {
-        puzzle: PuzzleIdx,
-        arch: Arc<Architecture>,
-        // register idx, modulus, amt to add
-        amts: Vec<(usize, Option<Int<U>>, WithSpan<Int<U>>)>,
-    },
-    AddTheoretical {
-        theoretical: TheoreticalIdx,
-        amt: WithSpan<Int<U>>,
-    },
-    Goto {
-        label: WithSpan<LabelReference>,
-    },
-    SolvedGoto {
-        label: WithSpan<LabelReference>,
-        register: RegisterReference,
-    },
-    RepeatUntil {
-        puzzle: PuzzleIdx,
-        arch: Arc<Architecture>,
-        amts: Vec<(usize, Option<Int<U>>, WithSpan<Int<U>>)>,
-        register: RegisterReference,
-    },
-    Solve {
-        puzzle: ByPuzzleType<'static, StateIdx>,
-    },
-    Input {
-        message: WithSpan<String>,
-        register: RegisterReference,
-    },
-    Halt {
-        message: WithSpan<String>,
-        register: Option<RegisterReference>,
-    },
-    Print {
-        message: WithSpan<String>,
-        register: Option<RegisterReference>,
-    },
-}
-
-#[derive(Clone, Debug)]
-pub enum OptimizingCodeComponent {
-    Instruction(Box<OptimizingPrimitive>, BlockID),
-    Label(Label),
-}
+use super::OptimizingCodeComponent;
 
 trait Rewriter {
     fn rewrite(
@@ -121,7 +49,7 @@ fn add_stage<R: Rewriter + Default + Send>(
     new_rx
 }
 
-pub fn do_optimization(
+pub fn do_local_optimization(
     instructions: impl Iterator<Item = WithSpan<OptimizingCodeComponent>> + Send + 'static,
 ) -> impl Iterator<Item = WithSpan<OptimizingCodeComponent>> {
     let executor = Executor::new();
@@ -146,7 +74,7 @@ pub fn do_optimization(
     from_fn(move || future::block_on(executor.run(rx.recv())).ok())
 }
 
-/// Any non-label instructions that come immedately after an unconditional goto are unreachable and can be removed
+/// Any non-label instructions that come immedately after an unconditional goto or halt are unreachable and can be removed
 #[derive(Default)]
 struct RemoveDeadCode {
     diverging: Option<WithSpan<OptimizingCodeComponent>>,

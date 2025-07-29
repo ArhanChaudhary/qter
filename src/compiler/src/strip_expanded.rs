@@ -117,8 +117,6 @@ impl SeparatesByPuzzleType for FaceletsInfo {
 }
 
 pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Vec<Rich<'static, char, Span>>> {
-    let mut label_locations = HashMap::new();
-
     let mut global_regs = GlobalRegs {
         register_table: HashMap::new(),
         theoretical: vec![],
@@ -212,11 +210,14 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Vec<Rich<'stati
         })
     });
 
-    let optimized_iter = do_optimization(instructions_iter);
+    let optimized = do_optimization(instructions_iter);
 
     let mut program_counter = 0;
 
-    let instructions = optimized_iter
+    let mut label_locations = HashMap::new();
+
+    let instructions = optimized
+        .into_iter()
         .filter_map(|component| {
             let span = component.span().to_owned();
 

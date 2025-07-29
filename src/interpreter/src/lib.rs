@@ -713,7 +713,7 @@ mod tests {
                 goto spot2
             spot3:
 
-            -- Two repeat untils plus four instructions of dead code
+            -- Two repeat untils
                 goto spot5
             spot4:
                 add A 89
@@ -731,7 +731,7 @@ mod tests {
                 goto spot7
             spot9:
 
-            -- Two instructions + one repeat until
+            -- One repeat until
 
             goto spot11
 
@@ -762,10 +762,7 @@ mod tests {
         };
 
         // println!("{:#?}", program);
-        assert_eq!(
-            program.instructions.len(),
-            1 + 2 + (1 + 2) * 2 + (1 + 2) + 2 + 1
-        );
+        assert_eq!(program.instructions.len(), 1 + 2 + 2 + 1 + 2 + 1);
 
         let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
 
@@ -806,6 +803,7 @@ mod tests {
 
                 -- Dead code
                 goto spot1
+            never_jumped_to:
                 add A 80
                 add B 30
             spot1:
