@@ -801,11 +801,30 @@ mod tests {
             }
 
             -- Should not be converted to a repeat until
+            -- 3 instructions
             spot1:
                 solved-goto B spot2
                 add A 89
                 goto spot1
             spot2:
+
+            -- 4 instructions
+                goto spot5
+            spot4:
+                add A 89
+            spot5:
+                solved-goto B spot6
+                goto spot4
+            spot6:
+
+            -- 4 instructions
+            spot10:
+                add A 89
+            spot11:
+                solved-goto B spot12
+                add B 1
+                goto spot10
+            spot12:
                 
                 halt \"A=\" A
         ";
@@ -816,11 +835,11 @@ mod tests {
         };
 
         // println!("{:#?}", program);
-        assert_eq!(program.instructions.len(), 4);
+        assert_eq!(program.instructions.len(), 3 + 4 + 4 + 1);
 
         let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
 
-        let expected_output = ["A= 0"];
+        let expected_output = ["A= 89"];
 
         assert!(matches!(
             interpreter.step_until_halt(),

@@ -360,7 +360,7 @@ impl PeepholeRewriter for RepeatUntil1 {
 
     fn try_match(
         window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
-        _: &GlobalRegs,
+        global_regs: &GlobalRegs,
     ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
         let OptimizingCodeComponent::Label(spot1) = &**window.front()? else {
             return None;
@@ -374,6 +374,13 @@ impl PeepholeRewriter for RepeatUntil1 {
         );
 
         primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &**window.get(2)?);
+
+        if match global_regs.get_reg(register) {
+            qter_core::ByPuzzleType::Theoretical(_) => true,
+            qter_core::ByPuzzleType::Puzzle((idx, _)) => idx != *puzzle,
+        } {
+            return None;
+        }
 
         primitive_match!(OptimizingPrimitive::Goto { label } = &**window.get(3)?);
 
@@ -442,7 +449,7 @@ impl PeepholeRewriter for RepeatUntil2 {
 
     fn try_match(
         window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
-        _: &GlobalRegs,
+        global_regs: &GlobalRegs,
     ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
         primitive_match!(OptimizingPrimitive::Goto { label: spot2 } = &**window.front()?);
 
@@ -466,6 +473,13 @@ impl PeepholeRewriter for RepeatUntil2 {
                 register,
             } = &**window.get(4)?
         );
+
+        if match global_regs.get_reg(register) {
+            qter_core::ByPuzzleType::Theoretical(_) => true,
+            qter_core::ByPuzzleType::Puzzle((idx, _)) => idx != *puzzle,
+        } {
+            return None;
+        }
 
         primitive_match!(OptimizingPrimitive::Goto { label: maybe_spot1 } = &**window.get(5)?);
 
@@ -534,7 +548,7 @@ impl PeepholeRewriter for RepeatUntil3 {
 
     fn try_match(
         window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
-        _: &GlobalRegs,
+        global_regs: &GlobalRegs,
     ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
         let OptimizingCodeComponent::Label(spot1) = &**window.front()? else {
             return None;
@@ -551,11 +565,26 @@ impl PeepholeRewriter for RepeatUntil3 {
             } = &**window.get(2 + optional_label)?
         );
 
+        if match global_regs.get_reg(register) {
+            qter_core::ByPuzzleType::Theoretical(_) => true,
+            qter_core::ByPuzzleType::Puzzle((idx, _)) => idx != *puzzle,
+        } {
+            return None;
+        }
+
         let maybe_algorithm = match &**window.get(3 + optional_label)? {
             OptimizingCodeComponent::Instruction(optimizing_primitive, _) => {
                 match &**optimizing_primitive {
-                    OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } => {
-                        Some((puzzle, arch, amts))
+                    OptimizingPrimitive::AddPuzzle {
+                        puzzle: new_puzzle,
+                        arch,
+                        amts,
+                    } => {
+                        if puzzle != new_puzzle {
+                            return None;
+                        }
+
+                        Some((new_puzzle, arch, amts))
                     }
                     _ => None,
                 }
