@@ -12,6 +12,18 @@ use smol::{
 
 use crate::{BlockID, Label, LabelReference, RegisterReference};
 
+// TODO: Remove when https://doc.rust-lang.org/beta/unstable-book/language-features/deref-patterns.html is stable
+macro_rules! primitive_match {
+    ($pattern:pat = $val:expr) => {
+        primitive_match!($pattern = $val; else { return None; });
+    };
+
+    ($pattern:pat = $val:expr; else $else:block) => {
+        let OptimizingCodeComponent::Instruction(instr, _) = $val else $else;
+        let $pattern = &**instr else $else;
+    }
+}
+
 // TODO:
 // IMPORTANT:
 // - Dead code erasure
@@ -22,6 +34,7 @@ use crate::{BlockID, Label, LabelReference, RegisterReference};
 // - Remove jumps to next instruction
 // - Coalesce solved-gotos to the same label
 // - Coalesce adjacent labels
+// - Strength reduction of `solved-goto` after a `repeat until` or `solve` that guarantees whether or not it succeeds
 
 #[derive(Clone, Debug)]
 pub enum OptimizingPrimitive {
@@ -124,12 +137,82 @@ pub fn do_optimization(
         })
         .detach();
 
+    let rx = add_stage::<RemoveDeadCode>(&executor, rx);
+    let rx = add_stage::<Peephole<RemoveUselessJumps>>(&executor, rx);
     let rx = add_stage::<CoalesceAdds>(&executor, rx);
     let rx = add_stage::<Peephole<RepeatUntil1>>(&executor, rx);
     let rx = add_stage::<Peephole<RepeatUntil2>>(&executor, rx);
     let rx = add_stage::<Peephole<RepeatUntil3>>(&executor, rx);
 
     from_fn(move || future::block_on(executor.run(rx.recv())).ok())
+}
+
+/// Any non-label instructions that come immedately after an unconditional goto are unreachable and can be removed
+#[derive(Default)]
+struct RemoveDeadCode {
+    goto: Option<WithSpan<OptimizingCodeComponent>>,
+}
+
+impl Rewriter for RemoveDeadCode {
+    fn rewrite(
+        &mut self,
+        component: WithSpan<OptimizingCodeComponent>,
+    ) -> Vec<WithSpan<OptimizingCodeComponent>> {
+        match self.goto.take() {
+            Some(goto) => {
+                if matches!(&*component, OptimizingCodeComponent::Label(_)) {
+                    return vec![goto, component];
+                }
+
+                // Otherwise throw out the instruction
+                self.goto = Some(goto);
+
+                Vec::new()
+            }
+            None => {
+                primitive_match!(OptimizingPrimitive::Goto { .. } = &*component; else { return vec![component]; });
+
+                self.goto = Some(component);
+
+                Vec::new()
+            }
+        }
+    }
+
+    fn eof(self) -> Vec<WithSpan<OptimizingCodeComponent>> {
+        match self.goto {
+            Some(goto) => vec![goto],
+            None => Vec::new(),
+        }
+    }
+}
+
+#[derive(Default)]
+struct RemoveUselessJumps;
+
+impl PeepholeRewriter for RemoveUselessJumps {
+    const MAX_WINDOW_SIZE: usize = 2;
+
+    fn try_match(
+        window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
+    ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
+        let OptimizingCodeComponent::Label(label) = &**window.get(1)? else {
+            return None;
+        };
+
+        primitive_match!(
+            (OptimizingPrimitive::SolvedGoto {
+                label: jumps_to,
+                ..
+            } | OptimizingPrimitive::Goto { label: jumps_to }) = &**window.front()?
+        );
+
+        if jumps_to.name == label.name && jumps_to.block_id == label.maybe_block_id.unwrap() {
+            window.pop_front().unwrap();
+        }
+
+        None
+    }
 }
 
 #[derive(Default)]
@@ -315,18 +398,6 @@ impl<R: PeepholeRewriter> Rewriter for Peephole<R> {
             }
         }
     }
-}
-
-// TODO: Remove when https://doc.rust-lang.org/beta/unstable-book/language-features/deref-patterns.html is stable
-macro_rules! primitive_match {
-    ($pattern:pat = $val:expr) => {
-        let OptimizingCodeComponent::Instruction(instr, _) = $val else {
-            return None;
-        };
-        let $pattern = &**instr else {
-            return None;
-        };
-    };
 }
 
 /*

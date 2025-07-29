@@ -761,7 +761,7 @@ mod tests {
             Err(e) => panic!("{e:?}"),
         };
 
-        println!("{:#?}", program);
+        // println!("{:#?}", program);
         assert_eq!(
             program.instructions.len(),
             1 + 2 + (1 + 2) * 2 + (1 + 2) + 2 + 1
@@ -770,6 +770,62 @@ mod tests {
         let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
 
         let expected_output = ["A= 64"];
+
+        assert!(matches!(
+            interpreter.step_until_halt(),
+            PausedState::Halt {
+                maybe_puzzle_idx_and_register: Some(ByPuzzleType::Puzzle((PuzzleIdx(0), _, _))),
+            }
+        ));
+
+        assert_eq!(
+            expected_output.len(),
+            interpreter.state_mut().messages().len(),
+            "{:?}",
+            interpreter.state_mut().messages()
+        );
+
+        for (message, expected) in interpreter
+            .state()
+            .messages
+            .iter()
+            .zip(expected_output.iter())
+        {
+            assert_eq!(message, expected);
+        }
+    }
+
+    #[test]
+    fn dead_code() {
+        let code = "
+            .registers {
+                A, B <- 3x3 builtin (90, 90)
+            }
+
+                add A 1
+
+                -- Dead code
+                goto spot1
+                add A 80
+                add B 30
+            spot1:
+
+                solved-goto A spot2
+            spot2:
+
+                halt \"A=\" A
+        ";
+
+        let program = match compile(&File::from(code), |_| unreachable!()) {
+            Ok(v) => v,
+            Err(e) => panic!("{e:?}"),
+        };
+
+        assert_eq!(program.instructions.len(), 2);
+
+        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
+
+        let expected_output = ["A= 1"];
 
         assert!(matches!(
             interpreter.step_until_halt(),

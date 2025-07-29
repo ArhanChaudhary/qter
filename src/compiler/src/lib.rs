@@ -1,5 +1,9 @@
 #![warn(clippy::pedantic)]
-#![allow(clippy::too_many_lines, clippy::similar_names)]
+#![allow(
+    clippy::too_many_lines,
+    clippy::similar_names,
+    clippy::single_match_else
+)]
 
 use std::{collections::HashMap, sync::Arc};
 
