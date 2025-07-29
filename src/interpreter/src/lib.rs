@@ -731,7 +731,29 @@ mod tests {
                 goto spot7
             spot9:
 
-                halt \"A*whatever=\" A
+            -- Two instructions + one repeat until
+
+            goto spot11
+
+            spot10:
+                add B 1
+            spot11:
+                solved-goto A spot12
+                add A 89
+                add B 1
+                goto spot10
+            spot12:
+
+            -- One algorithm + one repeat until
+
+            spot13:
+                add B 89
+                add A 2
+                solved-goto B spot14
+                goto spot13
+            spot14:
+                
+                halt \"A=\" A
         ";
 
         let program = match compile(&File::from(code), |_| unreachable!()) {
@@ -739,12 +761,15 @@ mod tests {
             Err(e) => panic!("{e:?}"),
         };
 
-        // println!("{:#?}", program);
-        assert_eq!(program.instructions.len(), 1 + 2 + (1 + 2) * 2 + 1);
+        println!("{:#?}", program);
+        assert_eq!(
+            program.instructions.len(),
+            1 + 2 + (1 + 2) * 2 + (1 + 2) + 2 + 1
+        );
 
         let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
 
-        let expected_output = ["A*whatever= 16"];
+        let expected_output = ["A= 64"];
 
         assert!(matches!(
             interpreter.step_until_halt(),

@@ -127,6 +127,7 @@ pub fn do_optimization(
     let rx = add_stage::<CoalesceAdds>(&executor, rx);
     let rx = add_stage::<Peephole<RepeatUntil1>>(&executor, rx);
     let rx = add_stage::<Peephole<RepeatUntil2>>(&executor, rx);
+    let rx = add_stage::<Peephole<RepeatUntil3>>(&executor, rx);
 
     from_fn(move || future::block_on(executor.run(rx.recv())).ok())
 }
@@ -166,6 +167,22 @@ impl CoalesceAdds {
             }))
             .collect()
     }
+
+    fn merge_effects(
+        effect1: &mut Vec<(usize, Option<Int<U>>, WithSpan<Int<U>>)>,
+        effect2: &[(usize, Option<Int<U>>, WithSpan<Int<U>>)],
+    ) {
+        'next_effect: for new_effect in effect2 {
+            for effect in &mut *effect1 {
+                if effect.0 == new_effect.0 {
+                    *effect.2 += *new_effect.2;
+                    continue 'next_effect;
+                }
+            }
+
+            effect1.push(new_effect.to_owned());
+        }
+    }
 }
 
 impl Rewriter for CoalesceAdds {
@@ -203,16 +220,7 @@ impl Rewriter for CoalesceAdds {
 
                     for puzzle in &mut self.puzzles {
                         if puzzle.0 == puzzle_idx {
-                            'next_effect: for new_effect in &amts {
-                                for effect in &mut puzzle.2 {
-                                    if effect.0 == new_effect.0 {
-                                        *effect.2 += *new_effect.2;
-                                        continue 'next_effect;
-                                    }
-                                }
-
-                                puzzle.2.push(new_effect.to_owned());
-                            }
+                            CoalesceAdds::merge_effects(&mut puzzle.2, &amts);
 
                             return Vec::new();
                         }
@@ -249,6 +257,25 @@ struct Peephole<R: PeepholeRewriter> {
     phantom_: PhantomData<R>,
 }
 
+impl<R: PeepholeRewriter> Peephole<R> {
+    fn do_try_match(&mut self) -> Vec<WithSpan<OptimizingCodeComponent>> {
+        match R::try_match(&mut self.window) {
+            Some(mut v) => {
+                let again = self.do_try_match();
+                v.extend(again);
+                v
+            }
+            None => {
+                if self.window.len() >= R::MAX_WINDOW_SIZE {
+                    vec![self.window.pop_front().unwrap()]
+                } else {
+                    Vec::new()
+                }
+            }
+        }
+    }
+}
+
 impl<R: PeepholeRewriter> Default for Peephole<R> {
     fn default() -> Self {
         Peephole {
@@ -259,7 +286,7 @@ impl<R: PeepholeRewriter> Default for Peephole<R> {
 }
 
 trait PeepholeRewriter {
-    const WINDOW_SIZE: usize;
+    const MAX_WINDOW_SIZE: usize;
 
     fn try_match(
         window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
@@ -273,18 +300,20 @@ impl<R: PeepholeRewriter> Rewriter for Peephole<R> {
     ) -> Vec<WithSpan<OptimizingCodeComponent>> {
         self.window.push_back(component);
 
-        if self.window.len() < R::WINDOW_SIZE {
-            return Vec::new();
-        }
-
-        match R::try_match(&mut self.window) {
-            Some(v) => v,
-            None => vec![self.window.pop_front().unwrap()],
-        }
+        self.do_try_match()
     }
 
-    fn eof(self) -> Vec<WithSpan<OptimizingCodeComponent>> {
-        self.window.into()
+    fn eof(mut self) -> Vec<WithSpan<OptimizingCodeComponent>> {
+        let mut out = Vec::new();
+
+        loop {
+            out.extend(self.do_try_match());
+
+            match self.window.pop_front() {
+                Some(first) => out.push(first),
+                _ => return out,
+            }
+        }
     }
 }
 
@@ -319,12 +348,12 @@ spot2:
 struct RepeatUntil1;
 
 impl PeepholeRewriter for RepeatUntil1 {
-    const WINDOW_SIZE: usize = 5;
+    const MAX_WINDOW_SIZE: usize = 5;
 
     fn try_match(
         window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
     ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
-        let OptimizingCodeComponent::Label(spot1) = &*window[0] else {
+        let OptimizingCodeComponent::Label(spot1) = &**window.front()? else {
             return None;
         };
 
@@ -332,18 +361,18 @@ impl PeepholeRewriter for RepeatUntil1 {
             OptimizingPrimitive::SolvedGoto {
                 label: spot2,
                 register,
-            } = &*window[1]
+            } = &**window.get(1)?
         );
 
-        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &*window[2]);
+        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &**window.get(2)?);
 
-        primitive_match!(OptimizingPrimitive::Goto { label } = &*window[3]);
+        primitive_match!(OptimizingPrimitive::Goto { label } = &**window.get(3)?);
 
         if label.name != spot1.name || label.block_id != spot1.maybe_block_id.unwrap() {
             return None;
         }
 
-        let OptimizingCodeComponent::Label(real_spot2) = &*window[4] else {
+        let OptimizingCodeComponent::Label(real_spot2) = &**window.get(4)? else {
             return None;
         };
 
@@ -400,20 +429,20 @@ spot3:
 struct RepeatUntil2;
 
 impl PeepholeRewriter for RepeatUntil2 {
-    const WINDOW_SIZE: usize = 7;
+    const MAX_WINDOW_SIZE: usize = 7;
 
     fn try_match(
         window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
     ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
-        primitive_match!(OptimizingPrimitive::Goto { label: spot2 } = &*window[0]);
+        primitive_match!(OptimizingPrimitive::Goto { label: spot2 } = &**window.front()?);
 
-        let OptimizingCodeComponent::Label(spot1) = &*window[1] else {
+        let OptimizingCodeComponent::Label(spot1) = &**window.get(1)? else {
             return None;
         };
 
-        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &*window[2]);
+        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &**window.get(2)?);
 
-        let OptimizingCodeComponent::Label(real_spot2) = &*window[3] else {
+        let OptimizingCodeComponent::Label(real_spot2) = &**window.get(3)? else {
             return None;
         };
 
@@ -425,16 +454,16 @@ impl PeepholeRewriter for RepeatUntil2 {
             OptimizingPrimitive::SolvedGoto {
                 label: spot3,
                 register,
-            } = &*window[4]
+            } = &**window.get(4)?
         );
 
-        primitive_match!(OptimizingPrimitive::Goto { label: maybe_spot1 } = &*window[5]);
+        primitive_match!(OptimizingPrimitive::Goto { label: maybe_spot1 } = &**window.get(5)?);
 
         if spot1.name != maybe_spot1.name || spot1.maybe_block_id.unwrap() != maybe_spot1.block_id {
             return None;
         }
 
-        let OptimizingCodeComponent::Label(real_spot3) = &*window[6] else {
+        let OptimizingCodeComponent::Label(real_spot3) = &**window.get(6)? else {
             return None;
         };
 
@@ -489,3 +518,89 @@ spot2:
 ```
 */
 struct RepeatUntil3;
+
+impl PeepholeRewriter for RepeatUntil3 {
+    const MAX_WINDOW_SIZE: usize = 7;
+
+    fn try_match(
+        window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
+    ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
+        let OptimizingCodeComponent::Label(spot1) = &**window.front()? else {
+            return None;
+        };
+
+        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &**window.get(1)?);
+
+        let optional_label = usize::from(matches!(&*window[2], OptimizingCodeComponent::Label(_)));
+
+        primitive_match!(
+            OptimizingPrimitive::SolvedGoto {
+                label: spot2,
+                register,
+            } = &**window.get(2 + optional_label)?
+        );
+
+        let maybe_algorithm = match &**window.get(3 + optional_label)? {
+            OptimizingCodeComponent::Instruction(optimizing_primitive, _) => {
+                match &**optimizing_primitive {
+                    OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } => {
+                        Some((puzzle, arch, amts))
+                    }
+                    _ => None,
+                }
+            }
+            OptimizingCodeComponent::Label(_) => None,
+        };
+
+        let is_alg = usize::from(maybe_algorithm.is_some());
+
+        primitive_match!(
+            OptimizingPrimitive::Goto { label: maybe_spot1 } =
+                &**window.get(3 + optional_label + is_alg)?
+        );
+
+        if maybe_spot1.name != spot1.name || maybe_spot1.block_id != spot1.maybe_block_id.unwrap() {
+            return None;
+        }
+
+        let OptimizingCodeComponent::Label(real_spot2) =
+            &**window.get(4 + optional_label + is_alg)?
+        else {
+            return None;
+        };
+
+        if spot2.name != real_spot2.name || spot2.block_id != real_spot2.maybe_block_id.unwrap() {
+            return None;
+        }
+
+        let mut amts = amts.to_owned();
+
+        if let Some((_, _, effect)) = maybe_algorithm {
+            CoalesceAdds::merge_effects(&mut amts, effect);
+        }
+
+        let repeat_until = OptimizingCodeComponent::Instruction(
+            Box::new(OptimizingPrimitive::RepeatUntil {
+                puzzle: *puzzle,
+                arch: Arc::clone(arch),
+                amts,
+                register: register.to_owned(),
+            }),
+            spot2.block_id,
+        );
+
+        let mut out = Vec::new();
+
+        out.extend(window.drain(0..2 + optional_label));
+
+        let span = window
+            .drain(0..2 + is_alg)
+            .map(|v| v.span().clone())
+            .reduce(|a, v| a.merge(&v))
+            .unwrap();
+
+        out.push(span.with(repeat_until));
+
+        Some(out)
+    }
+}
