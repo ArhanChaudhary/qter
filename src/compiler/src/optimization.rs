@@ -26,7 +26,6 @@ macro_rules! primitive_match {
 
 // TODO:
 // IMPORTANT:
-// - Dead code erasure
 // - Removing labels that are never jumped to
 // - `solve` instruction
 //
@@ -150,7 +149,7 @@ pub fn do_optimization(
 /// Any non-label instructions that come immedately after an unconditional goto are unreachable and can be removed
 #[derive(Default)]
 struct RemoveDeadCode {
-    goto: Option<WithSpan<OptimizingCodeComponent>>,
+    diverging: Option<WithSpan<OptimizingCodeComponent>>,
 }
 
 impl Rewriter for RemoveDeadCode {
@@ -158,21 +157,21 @@ impl Rewriter for RemoveDeadCode {
         &mut self,
         component: WithSpan<OptimizingCodeComponent>,
     ) -> Vec<WithSpan<OptimizingCodeComponent>> {
-        match self.goto.take() {
+        match self.diverging.take() {
             Some(goto) => {
                 if matches!(&*component, OptimizingCodeComponent::Label(_)) {
                     return vec![goto, component];
                 }
 
                 // Otherwise throw out the instruction
-                self.goto = Some(goto);
+                self.diverging = Some(goto);
 
                 Vec::new()
             }
             None => {
-                primitive_match!(OptimizingPrimitive::Goto { .. } = &*component; else { return vec![component]; });
+                primitive_match!((OptimizingPrimitive::Goto { .. } | OptimizingPrimitive::Halt { .. }) = &*component; else { return vec![component]; });
 
-                self.goto = Some(component);
+                self.diverging = Some(component);
 
                 Vec::new()
             }
@@ -180,7 +179,7 @@ impl Rewriter for RemoveDeadCode {
     }
 
     fn eof(self) -> Vec<WithSpan<OptimizingCodeComponent>> {
-        match self.goto {
+        match self.diverging {
             Some(goto) => vec![goto],
             None => Vec::new(),
         }

@@ -814,6 +814,9 @@ mod tests {
             spot2:
 
                 halt \"A=\" A
+
+                -- More dead code
+                add A 20
         ";
 
         let program = match compile(&File::from(code), |_| unreachable!()) {
