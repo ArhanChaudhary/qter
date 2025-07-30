@@ -1,6 +1,14 @@
-use std::{collections::VecDeque, iter::from_fn, marker::PhantomData, sync::Arc};
+use std::{
+    collections::{HashSet, VecDeque},
+    iter::from_fn,
+    marker::PhantomData,
+    sync::Arc,
+};
 
-use qter_core::{Int, PuzzleIdx, TheoreticalIdx, U, WithSpan, architectures::Architecture};
+use itertools::Itertools;
+use qter_core::{
+    ByPuzzleType, Int, PuzzleIdx, TheoreticalIdx, U, WithSpan, architectures::Architecture,
+};
 use smol::{
     Executor,
     channel::{Receiver, bounded},
@@ -74,7 +82,8 @@ pub fn do_local_optimization(
     let rx = add_stage::<CoalesceAdds>(&executor, rx, Arc::clone(&global_regs));
     let rx = add_stage::<Peephole<RepeatUntil1>>(&executor, rx, Arc::clone(&global_regs));
     let rx = add_stage::<Peephole<RepeatUntil2>>(&executor, rx, Arc::clone(&global_regs));
-    let rx = add_stage::<Peephole<RepeatUntil3>>(&executor, rx, global_regs);
+    let rx = add_stage::<Peephole<RepeatUntil3>>(&executor, rx, Arc::clone(&global_regs));
+    let rx = add_stage::<TransformSolve>(&executor, rx, global_regs);
 
     from_fn(move || future::block_on(executor.run(rx.recv())).ok())
 }
@@ -642,5 +651,120 @@ impl PeepholeRewriter for RepeatUntil3 {
         out.push(span.with(repeat_until));
 
         Some(out)
+    }
+}
+
+#[derive(Default)]
+struct TransformSolve {
+    instrs: VecDeque<(WithSpan<OptimizingCodeComponent>, Option<usize>)>,
+    puzzle_idx: Option<PuzzleIdx>,
+    guaranteed_zeroed: HashSet<usize>,
+}
+
+impl TransformSolve {
+    fn dump(&mut self) -> Vec<WithSpan<OptimizingCodeComponent>> {
+        self.guaranteed_zeroed = HashSet::new();
+        self.instrs.drain(..).map(|(instr, _)| instr).collect_vec()
+    }
+
+    fn dump_with(
+        &mut self,
+        instr: WithSpan<OptimizingCodeComponent>,
+    ) -> Vec<WithSpan<OptimizingCodeComponent>> {
+        let mut instrs = self.dump();
+        instrs.push(instr);
+        instrs
+    }
+}
+
+impl Rewriter for TransformSolve {
+    fn rewrite(
+        &mut self,
+        component: WithSpan<OptimizingCodeComponent>,
+        global_regs: &GlobalRegs,
+    ) -> Vec<WithSpan<OptimizingCodeComponent>> {
+        let OptimizingCodeComponent::Instruction(instr, block_id) = &*component else {
+            return self.dump_with(component);
+        };
+
+        let OptimizingPrimitive::RepeatUntil {
+            puzzle,
+            arch: _,
+            amts,
+            register,
+        } = &**instr
+        else {
+            return self.dump_with(component);
+        };
+
+        let mut dumped = Vec::new();
+
+        if self.puzzle_idx.is_some() && self.puzzle_idx != Some(*puzzle) {
+            dumped.extend(self.dump());
+        }
+
+        self.puzzle_idx = Some(*puzzle);
+
+        let ByPuzzleType::Puzzle((puzzle_idx, (reg_idx, arch, modulus))) =
+            global_regs.get_reg(register)
+        else {
+            dumped.extend(self.dump_with(component));
+            return dumped;
+        };
+
+        assert_eq!(*puzzle, puzzle_idx);
+
+        let mut broken = HashSet::new();
+
+        for amt in amts {
+            broken.insert(amt.0);
+        }
+
+        if let Some((i, _)) = self
+            .instrs
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|v| v.1.1.is_some_and(|v| broken.contains(&v)))
+        {
+            dumped.extend(self.instrs.drain(0..i).map(|v| v.0));
+        }
+
+        for thingy in broken {
+            self.guaranteed_zeroed.remove(&thingy);
+        }
+
+        // If we have a modulus, then it is possible for the whole register not to be zeroed in the end
+        let zeroes_out = modulus.is_none_or(|modulus| modulus == arch.registers()[reg_idx].order());
+
+        if zeroes_out {
+            self.guaranteed_zeroed.insert(reg_idx);
+        }
+
+        if self.guaranteed_zeroed.len() == arch.registers().len() {
+            let span = self
+                .instrs
+                .drain(..)
+                .map(|v| v.0.span().clone())
+                .reduce(|a, v| a.merge(&v))
+                .unwrap();
+
+            self.guaranteed_zeroed = HashSet::new();
+            dumped.push(span.with(OptimizingCodeComponent::Instruction(
+                Box::new(OptimizingPrimitive::Solve {
+                    puzzle: ByPuzzleType::Puzzle(self.puzzle_idx.unwrap()),
+                }),
+                *block_id,
+            )));
+        } else {
+            self.instrs
+                .push_back((component, zeroes_out.then_some(reg_idx)));
+        }
+
+        dumped
+    }
+
+    fn eof(mut self, _: &GlobalRegs) -> Vec<WithSpan<OptimizingCodeComponent>> {
+        self.dump()
     }
 }

@@ -924,4 +924,74 @@ mod tests {
             assert_eq!(message, expected);
         }
     }
+
+    #[test]
+    fn solve() {
+        let code = "
+            .registers {
+                A, B, C <- 3x3 builtin (30, 30, 30)
+            }
+
+            -- One algorithm
+                add A 20
+                add B 10
+                add C 15
+
+            -- Reduced to one solve instruction
+            spot1:
+                solved-goto A spot2
+                add A 1
+            -- Adding to B will be irrelevant because it will be zeroed out later
+                add B 1
+                goto spot1
+            spot2:
+                solved-goto B spot3
+                add B 1
+                goto spot2
+            spot3:
+                solved-goto C spot4
+                add C 1
+                goto spot3
+            spot4:
+
+                print \"A=\" A
+                print \"B=\" B
+                halt \"C=\" C
+        ";
+
+        let program = match compile(&File::from(code), |_| unreachable!()) {
+            Ok(v) => v,
+            Err(e) => panic!("{e:?}"),
+        };
+
+        // println!("{program:#?}");
+        assert_eq!(program.instructions.len(), 1 + 1 + 3);
+
+        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
+
+        let expected_output = ["A= 0", "B= 0", "C= 0"];
+
+        assert!(matches!(
+            interpreter.step_until_halt(),
+            PausedState::Halt {
+                maybe_puzzle_idx_and_register: Some(ByPuzzleType::Puzzle((PuzzleIdx(0), _, _))),
+            }
+        ));
+
+        assert_eq!(
+            expected_output.len(),
+            interpreter.state_mut().messages().len(),
+            "{:?}",
+            interpreter.state_mut().messages()
+        );
+
+        for (message, expected) in interpreter
+            .state()
+            .messages
+            .iter()
+            .zip(expected_output.iter())
+        {
+            assert_eq!(message, expected);
+        }
+    }
 }
