@@ -96,6 +96,10 @@ impl<T> Cycle<T> {
         self.0.front()
     }
 
+    fn spot_mut(&mut self) -> Option<&mut T> {
+        self.0.front_mut()
+    }
+
     fn remove_spot(&mut self) -> Option<T> {
         self.0.pop_front()
     }
@@ -110,10 +114,6 @@ impl<T> Cycle<T> {
 
     fn len(&self) -> usize {
         self.0.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.0.is_empty()
     }
 
     fn insert_before(&mut self, value: T) {
@@ -180,7 +180,7 @@ pub(crate) fn do_cut<S: CutSurface + ?Sized>(
             break;
         }
 
-        println!("{edges:#?}");
+        recolor_border_edges(&mut edges);
 
         faces.push(take_face_out(&mut edges, surface, face, subspace_info)?);
     }
@@ -188,6 +188,29 @@ pub(crate) fn do_cut<S: CutSurface + ?Sized>(
     faces.retain(|v| v.0.is_valid().is_ok());
 
     Ok(faces)
+}
+
+/// Recolors border edges that are sandwiched between edges of the same color
+///
+/// This is necessary because with the color pattern [Some(A), None, Some(A), None], `take_face_out` will separate that into two faces even though it shouldn't do that.
+fn recolor_border_edges(
+    edges: &mut Cycle<((Vector2<f64>, Vector2<f64>), Option<Option<ArcIntern<str>>>)>,
+) {
+    let mut i = 0;
+
+    while i < edges.len() {
+        if edges.spot().unwrap().1.is_none() {
+            let after = edges.0.iter().find_map(|v| v.1.clone());
+            let before = edges.0.iter().rev().find_map(|v| v.1.clone());
+
+            if after == before {
+                edges.spot_mut().unwrap().1 = after;
+            }
+        }
+
+        edges.go_forward();
+        i += 1;
+    }
 }
 
 fn take_face_out<S: CutSurface + ?Sized>(
@@ -392,12 +415,56 @@ fn take_face_out<S: CutSurface + ?Sized>(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{collections::VecDeque, sync::Arc};
 
     use internment::ArcIntern;
-    use nalgebra::Vector3;
+    use nalgebra::{Vector2, Vector3};
 
     use crate::{Face, Point, PuzzleGeometryDefinition, do_cut, knife::PlaneCut, shapes::CUBE};
+
+    use super::{Cycle, recolor_border_edges};
+
+    #[test]
+    fn recolor() {
+        let mut edges = Cycle(VecDeque::from(vec![
+            ((Vector2::zeros(), Vector2::zeros()), Some(None)),
+            ((Vector2::zeros(), Vector2::zeros()), None),
+            ((Vector2::zeros(), Vector2::zeros()), None),
+            ((Vector2::zeros(), Vector2::zeros()), None),
+            (
+                (Vector2::zeros(), Vector2::zeros()),
+                Some(Some(ArcIntern::from("Green"))),
+            ),
+            ((Vector2::zeros(), Vector2::zeros()), None),
+            ((Vector2::zeros(), Vector2::zeros()), None),
+            ((Vector2::zeros(), Vector2::zeros()), None),
+            (
+                (Vector2::zeros(), Vector2::zeros()),
+                Some(Some(ArcIntern::from("Green"))),
+            ),
+            ((Vector2::zeros(), Vector2::zeros()), Some(None)),
+            ((Vector2::zeros(), Vector2::zeros()), None),
+            ((Vector2::zeros(), Vector2::zeros()), None),
+            ((Vector2::zeros(), Vector2::zeros()), None),
+        ]));
+
+        recolor_border_edges(&mut edges);
+        edges.go_forward();
+
+        println!("{:#?}", edges.0);
+
+        assert_eq!(edges.len(), 13);
+        assert!(edges.0.iter().take(3).all(|v| v.1.is_none()));
+        assert!(
+            edges
+                .0
+                .iter()
+                .skip(3)
+                .take(5)
+                .all(|v| v.1 == Some(Some(ArcIntern::from("Green"))))
+        );
+        assert!(edges.0.iter().skip(8).take(5).all(|v| v.1 == Some(None)));
+    }
 
     #[test]
     fn plane_cut() {
