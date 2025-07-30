@@ -211,7 +211,7 @@ pub fn strip_expanded(expanded: ExpandedCode) -> Result<Program, Vec<Rich<'stati
         })
     });
 
-    let optimized = do_optimization(instructions_iter, Arc::clone(&global_regs));
+    let optimized = do_optimization(instructions_iter, &global_regs);
 
     let mut program_counter = 0;
 

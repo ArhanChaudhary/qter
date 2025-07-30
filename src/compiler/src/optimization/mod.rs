@@ -12,7 +12,7 @@ use crate::{BlockID, Label, LabelReference, RegisterReference, strip_expanded::G
 mod global;
 mod local;
 
-// TODO: Remove when https://doc.rust-lang.org/beta/unstable-book/language-features/deref-patterns.html is stable
+// Remove when https://doc.rust-lang.org/beta/unstable-book/language-features/deref-patterns.html is stable
 #[macro_export]
 macro_rules! primitive_match {
     ($pattern:pat = $val:expr) => {
@@ -25,14 +25,12 @@ macro_rules! primitive_match {
     }
 }
 
-// TODO:
-// IMPORTANT:
-// - `solve` instruction
-//
 // NICETIES:
+// - Dead code removal with real control flow analysis
 // - Coalesce solved-gotos to the same label
 // - Coalesce adjacent labels
 // - Strength reduction of `solved-goto` after a `repeat until` or `solve` that guarantees whether or not it succeeds
+// - If there's a goto immediately after a label, move the label to where the goto goes to
 
 #[derive(Clone, Debug)]
 pub enum OptimizingPrimitive {
@@ -84,7 +82,7 @@ pub enum OptimizingCodeComponent {
 
 pub fn do_optimization(
     instructions: impl Iterator<Item = WithSpan<OptimizingCodeComponent>> + Send + 'static,
-    global_regs: Arc<GlobalRegs>,
+    global_regs: &Arc<GlobalRegs>,
 ) -> Vec<WithSpan<OptimizingCodeComponent>> {
     let iter = do_local_optimization(instructions, Arc::clone(&global_regs));
     let (mut new_code, mut convergence) = do_global_optimization(iter);
