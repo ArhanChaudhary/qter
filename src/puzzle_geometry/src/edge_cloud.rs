@@ -7,65 +7,42 @@ use crate::E;
 
 #[derive(Clone, Debug)]
 pub struct EdgeCloud {
-    sections: Vec<Vec<(Vector3<f64>, Vector3<f64>)>>,
+    edges: Vec<(Vector3<f64>, Vector3<f64>)>,
 }
 
 impl EdgeCloud {
-    pub fn new(mut sections: Vec<Vec<(Vector3<f64>, Vector3<f64>)>>) -> EdgeCloud {
-        for section in &mut sections {
-            sort_edge_cloud(section);
-        }
+    pub fn new(mut edges: Vec<(Vector3<f64>, Vector3<f64>)>) -> EdgeCloud {
+        sort_edge_cloud(&mut edges);
 
-        EdgeCloud { sections }
+        EdgeCloud { edges }
     }
 
     pub fn try_symmetry(&self, into: &mut EdgeCloud, matrix: Matrix3<f64>) -> bool {
+        let cloud: &[(Vector3<f64>, Vector3<f64>)] = &self.edges;
+        let into: &mut [(Vector3<f64>, Vector3<f64>)] = &mut into.edges;
         assert!(
-            self.sections.len() == into.sections.len(),
-            "The temporary buffer must have the same dimensions as the real data"
+            into.len() == cloud.len(),
+            "The temporary buffer must have identical dimensions to the real data"
         );
 
-        self.sections
-            .iter()
-            .zip(into.sections.iter_mut())
-            .all(|(section, into)| try_symmetry(section, into, matrix))
+        into.copy_from_slice(cloud);
+
+        for point in into.iter_mut().flat_map(|(a, b)| [a, b]) {
+            *point = matrix * *point;
+        }
+
+        sort_edge_cloud(into);
+
+        edge_cloud_eq(cloud, into)
     }
 
     pub fn epsilon_eq(&self, other: &EdgeCloud) -> bool {
-        if self.sections.len() != other.sections.len() {
-            return false;
-        }
-
-        self.sections
-            .iter()
-            .zip(other.sections.iter())
-            .all(|(section, other)| edge_cloud_eq(section, other))
+        edge_cloud_eq(&self.edges, &other.edges)
     }
 
-    pub fn sections(&self) -> &[Vec<(Vector3<f64>, Vector3<f64>)>] {
-        &self.sections
+    pub fn edges(&self) -> &[(Vector3<f64>, Vector3<f64>)] {
+        &self.edges
     }
-}
-
-fn try_symmetry(
-    cloud: &[(Vector3<f64>, Vector3<f64>)],
-    into: &mut [(Vector3<f64>, Vector3<f64>)],
-    matrix: Matrix3<f64>,
-) -> bool {
-    assert!(
-        into.len() == cloud.len(),
-        "The temporary buffer must have identical dimensions to the real data"
-    );
-
-    into.copy_from_slice(cloud);
-
-    for point in into.iter_mut().flat_map(|(a, b)| [a, b]) {
-        *point = matrix * *point;
-    }
-
-    sort_edge_cloud(into);
-
-    edge_cloud_eq(cloud, into)
 }
 
 fn sort_edge_cloud(cloud: &mut [(Vector3<f64>, Vector3<f64>)]) {

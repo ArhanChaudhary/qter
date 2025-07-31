@@ -143,7 +143,7 @@ impl Face {
             cloud.push((vertex1.0, vertex2.0));
         }
 
-        EdgeCloud::new(vec![cloud])
+        EdgeCloud::new(cloud)
     }
 
     #[allow(dead_code)] // This is a false positive???
@@ -331,14 +331,7 @@ impl PuzzleGeometryDefinition {
                 let mut edges = stickers
                     .iter()
                     .filter(|v| v.1.contains(&name))
-                    .flat_map(|v| {
-                        v.0.edge_cloud()
-                            .sections()
-                            .iter()
-                            .flatten()
-                            .copied()
-                            .collect::<Vec<_>>()
-                    })
+                    .flat_map(|v| v.0.edge_cloud().edges().to_vec())
                     .collect::<Vec<_>>();
 
                 // The center of mass must be preserved over rotations therefore any axis of symmetry must pass through it.
@@ -350,7 +343,7 @@ impl PuzzleGeometryDefinition {
                     edge.1 -= center_of_mass;
                 }
 
-                let cloud = EdgeCloud::new(vec![edges]);
+                let cloud = EdgeCloud::new(edges);
                 let mut into = cloud.clone();
 
                 // This could be optimized a lot
