@@ -21,6 +21,10 @@ pub trait CutSurface: core::fmt::Debug {
 
     /// Return a series of points that when connected as line segments including A and B, connects A and B through the boundary. A and B are guaranteed to already be on the boundary. `on_boundary` when called on any of the points must return `true`.
     fn join(&self, a: Point, b: Point, subspace_info: FaceSubspaceInfo) -> Vec<Point>;
+
+    /// Return the axes in 3d space about which the regions turn.
+    /// Every region must be included in the list.
+    fn axes(&self) -> Vec<(ArcIntern<str>, Vector3<f64>)>;
 }
 
 #[derive(Clone, Debug)]
@@ -69,6 +73,10 @@ impl CutSurface for PlaneCut {
 
     fn join(&self, _: Point, _: Point, _: FaceSubspaceInfo) -> Vec<Point> {
         vec![]
+    }
+
+    fn axes(&self) -> Vec<(ArcIntern<str>, Vector3<f64>)> {
+        vec![(ArcIntern::clone(&self.name), self.normal)]
     }
 }
 
@@ -354,10 +362,8 @@ fn take_face_out<S: CutSurface + ?Sized>(
 
     edges.go_backward();
 
-    println!("{:#?}", edges.spot().unwrap().1);
     while edges.spot().unwrap().1.is_none() {
         edges.go_backward();
-        println!("{:#?}", edges.spot().unwrap().1);
     }
 
     let mut face_edges = Vec::new();
@@ -415,12 +421,12 @@ fn take_face_out<S: CutSurface + ?Sized>(
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::VecDeque, sync::Arc};
+    use std::collections::VecDeque;
 
     use internment::ArcIntern;
     use nalgebra::{Vector2, Vector3};
 
-    use crate::{Face, Point, PuzzleGeometryDefinition, do_cut, knife::PlaneCut, shapes::CUBE};
+    use crate::{Face, Point, do_cut, knife::PlaneCut};
 
     use super::{Cycle, recolor_border_edges};
 
@@ -521,47 +527,5 @@ mod tests {
             assert!(cutted[0].0.epsilon_eq(&face2));
             assert_eq!(cutted[0].1, None);
         }
-    }
-
-    #[test]
-    fn three_by_three() {
-        let cube = PuzzleGeometryDefinition {
-            polyhedron: CUBE.to_owned(),
-            cut_surfaces: vec![
-                Arc::from(PlaneCut {
-                    spot: Vector3::new(1. / 3., 0., 0.),
-                    normal: Vector3::new(1., 0., 0.),
-                    name: ArcIntern::from("L"),
-                }),
-                Arc::from(PlaneCut {
-                    spot: Vector3::new(-1. / 3., 0., 0.),
-                    normal: Vector3::new(-1., 0., 0.),
-                    name: ArcIntern::from("R"),
-                }),
-                Arc::from(PlaneCut {
-                    spot: Vector3::new(0., 1. / 3., 0.),
-                    normal: Vector3::new(0., 1., 0.),
-                    name: ArcIntern::from("U"),
-                }),
-                Arc::from(PlaneCut {
-                    spot: Vector3::new(0., -1. / 3., 0.),
-                    normal: Vector3::new(0., -1., 0.),
-                    name: ArcIntern::from("D"),
-                }),
-                Arc::from(PlaneCut {
-                    spot: Vector3::new(0., 0., 1. / 3.),
-                    normal: Vector3::new(0., 0., 1.),
-                    name: ArcIntern::from("F"),
-                }),
-                Arc::from(PlaneCut {
-                    spot: Vector3::new(0., 0., -1. / 3.),
-                    normal: Vector3::new(0., 0., -1.),
-                    name: ArcIntern::from("B"),
-                }),
-            ],
-        };
-
-        let geometry = cube.geometry().unwrap();
-        assert_eq!(geometry.stickers().len(), 54);
     }
 }

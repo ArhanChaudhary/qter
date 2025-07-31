@@ -1,5 +1,5 @@
 use std::{
-    num::{NonZeroU8, NonZeroU16},
+    num::{NonZeroU16, NonZeroU8},
     sync::LazyLock,
 };
 use thiserror::Error;

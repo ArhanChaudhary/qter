@@ -20,6 +20,11 @@ impl EdgeCloud {
     }
 
     pub fn try_symmetry(&self, into: &mut EdgeCloud, matrix: Matrix3<f64>) -> bool {
+        assert!(
+            self.sections.len() == into.sections.len(),
+            "The temporary buffer must have the same dimensions as the real data"
+        );
+
         self.sections
             .iter()
             .zip(into.sections.iter_mut())
@@ -47,6 +52,11 @@ fn try_symmetry(
     into: &mut [(Vector3<f64>, Vector3<f64>)],
     matrix: Matrix3<f64>,
 ) -> bool {
+    assert!(
+        into.len() == cloud.len(),
+        "The temporary buffer must have identical dimensions to the real data"
+    );
+
     into.copy_from_slice(cloud);
 
     for point in into.iter_mut().flat_map(|(a, b)| [a, b]) {

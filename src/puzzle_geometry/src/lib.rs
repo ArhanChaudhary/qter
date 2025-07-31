@@ -2,7 +2,10 @@
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::float_cmp)]
 
-use std::sync::Arc;
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::{Arc, OnceLock},
+};
 
 use edge_cloud::EdgeCloud;
 use internment::ArcIntern;
@@ -10,7 +13,10 @@ use itertools::Itertools;
 use knife::{CutSurface, do_cut};
 use ksolve::KSolve;
 use nalgebra::{Matrix2x3, Matrix3, Matrix3x2, Rotation3, Unit, Vector3};
-use qter_core::architectures::PermutationGroup;
+use qter_core::{
+    Span,
+    architectures::{Permutation, PermutationGroup},
+};
 use thiserror::Error;
 
 mod edge_cloud;
@@ -37,12 +43,8 @@ pub enum PuzzleGeometryError {
         "A cut surface has cyclical structure and cannot be cut. Consider re-ordering the cut surfaces. Cut: {0}; Face: {1:?}"
     )]
     CyclicalCutSurface(String, Face),
-    #[error(
-        "The puzzle does not have {1}-fold rotational symmetry as expected by the cut line: {0:?}"
-    )]
-    PuzzleLacksExpectedSymmetry(Vector3<f64>, u8),
-    #[error("The puzzle does not have any rotational symmetry along the cut line: {0:?}")]
-    PuzzleLacksSymmetry(Vector3<f64>),
+    #[error("The slice {0} does not have any rotational symmetry along the cut line: {1:?}")]
+    PuzzleLacksSymmetry(ArcIntern<str>, Vector3<f64>),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -144,6 +146,7 @@ impl Face {
         EdgeCloud::new(vec![cloud])
     }
 
+    #[allow(dead_code)] // This is a false positive???
     fn epsilon_eq(&self, other: &Face) -> bool {
         self.edge_cloud().epsilon_eq(&other.edge_cloud())
     }
@@ -190,18 +193,83 @@ pub struct Polyhedron(pub Vec<Face>);
 pub struct PuzzleGeometryDefinition {
     pub polyhedron: Polyhedron,
     pub cut_surfaces: Vec<Arc<dyn CutSurface>>,
+    pub definition: Span,
 }
 
 #[derive(Clone, Debug)]
 pub struct PuzzleGeometry {
     stickers: Vec<(Face, Vec<ArcIntern<str>>)>,
+    turns: HashMap<ArcIntern<str>, (Vector3<f64>, Matrix3<f64>, u8)>,
+    definition: Span,
+    perm_group: OnceLock<Arc<PermutationGroup>>,
 }
 
 impl PuzzleGeometry {
     /// Get the puzzle as a permutation group over facelets
     #[must_use]
-    pub fn permutation_group(&self) -> &PermutationGroup {
-        todo!()
+    #[expect(clippy::missing_panics_doc)]
+    pub fn permutation_group(&self) -> Arc<PermutationGroup> {
+        Arc::clone(self.perm_group.get_or_init(|| {
+            let clouds = self.stickers()
+                .iter()
+                .map(|v| v.0.edge_cloud())
+                .collect::<Vec<_>>();
+
+            let mut base_generators = Vec::new();
+
+            for (name, turn) in &self.turns {
+                let mut mapping = Vec::new();
+
+                for sticker in self.stickers() {
+                    if !sticker.1.contains(name) {
+                        mapping.push(mapping.len());
+                        continue;
+                    }
+
+                    let mut face = sticker.0.clone();
+                    for point in &mut face.points {
+                        *point = Point(turn.1 * (point.0 - turn.0) + turn.0);
+                    }
+
+                    let cloud = face.edge_cloud();
+
+                    let (spot, _) = clouds
+                        .iter()
+                        .find_position(|test_cloud| cloud.epsilon_eq(test_cloud)).expect("We already verified this turn to work when creating the PuzzleGeometry instance");
+
+                    mapping.push(spot);
+                }
+
+                base_generators.push((name, mapping, turn.2));
+            }
+
+            let to_skip = (0..self.stickers().len()).filter(|i| base_generators.iter().all(|(_, mapping, _)| mapping[*i] == *i)).collect::<BTreeSet<_>>();
+
+            let mut generators = HashMap::new();
+
+            for (name, mapping, symm) in base_generators {
+                let base = Permutation::from_mapping(mapping.into_iter().enumerate().filter(|(i, _)| !to_skip.contains(i)).map(|(_, v)| v - to_skip.range(0..v).count()).collect());
+                let mut current = base.clone();
+
+                let names = turn_names(name, symm);
+
+                for name in names {
+                    generators.insert(name, current.clone());
+                    current.compose_into(&base);
+                }
+            }
+
+            Arc::new(PermutationGroup::new(
+                self.stickers()
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| !to_skip.contains(i))
+                    .map(|(_, v)| ArcIntern::clone(&v.0.color))
+                    .collect(),
+                generators,
+                self.definition.clone(),
+            ))
+        }))
     }
 
     #[must_use]
@@ -226,6 +294,7 @@ impl PuzzleGeometryDefinition {
     ///
     /// If the validity of the faces is not satisfied, or if the puzzle does
     /// not have the expected symmetries, this function will return an error.
+    #[expect(clippy::cast_precision_loss)]
     pub fn geometry(self) -> Result<PuzzleGeometry, PuzzleGeometryError> {
         let mut faces: Vec<(Face, Vec<ArcIntern<str>>)> = vec![];
         for face in self.polyhedron.0 {
@@ -233,11 +302,11 @@ impl PuzzleGeometryDefinition {
             faces.push((face, vec![]));
         }
 
-        for cut_surface in self.cut_surfaces {
+        for cut_surface in &self.cut_surfaces {
             let mut new_faces = Vec::new();
 
             for (face, name_components) in faces {
-                new_faces.extend(do_cut(&*cut_surface, &face)?.into_iter().map(
+                new_faces.extend(do_cut(&**cut_surface, &face)?.into_iter().map(
                     move |(new_face, name_component)| {
                         let mut name_components = name_components.clone();
                         if let Some(component) = name_component {
@@ -253,8 +322,86 @@ impl PuzzleGeometryDefinition {
 
         let stickers = faces;
 
-        Ok(PuzzleGeometry { stickers })
+        let mut turns = HashMap::new();
+
+        for cut_surface in self.cut_surfaces {
+            let axes = cut_surface.axes();
+
+            'next_axis: for (name, axis) in axes {
+                let mut edges = stickers
+                    .iter()
+                    .filter(|v| v.1.contains(&name))
+                    .flat_map(|v| {
+                        v.0.edge_cloud()
+                            .sections()
+                            .iter()
+                            .flatten()
+                            .copied()
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>();
+
+                // The center of mass must be preserved over rotations therefore any axis of symmetry must pass through it.
+                let center_of_mass =
+                    edges.iter().map(|v| v.0 + v.1).sum::<Vector3<f64>>() / 2. / edges.len() as f64;
+
+                for edge in &mut edges {
+                    edge.0 -= center_of_mass;
+                    edge.1 -= center_of_mass;
+                }
+
+                let cloud = EdgeCloud::new(vec![edges]);
+                let mut into = cloud.clone();
+
+                // This could be optimized a lot
+                for symm in (2..=255).rev() {
+                    let matrix = rotation_of_degree(axis, symm);
+                    if cloud.try_symmetry(&mut into, matrix) {
+                        turns.insert(name, (center_of_mass, matrix, symm));
+                        continue 'next_axis;
+                    }
+                }
+
+                return Err(PuzzleGeometryError::PuzzleLacksSymmetry(name, axis));
+            }
+        }
+
+        Ok(PuzzleGeometry {
+            stickers,
+            turns,
+            definition: self.definition,
+            perm_group: OnceLock::new(),
+        })
     }
+}
+
+fn turn_names(base_name: &ArcIntern<str>, symm: u8) -> Vec<ArcIntern<str>> {
+    let mut names_begin = Vec::new();
+    let mut names_end = Vec::new();
+
+    let mut i = 1;
+
+    while names_begin.len() + names_end.len() < symm as usize - 1 {
+        if names_begin.len() == names_end.len() {
+            if i == 1 {
+                names_begin.push(ArcIntern::clone(base_name));
+            } else {
+                names_begin.push(ArcIntern::from(format!("{base_name}{i}")));
+            }
+        } else {
+            if i == 1 {
+                names_end.push(ArcIntern::from(format!("{base_name}'")));
+            } else {
+                names_end.push(ArcIntern::from(format!("{base_name}{i}'")));
+            }
+
+            i += 1;
+        }
+    }
+
+    names_begin.extend(names_end.into_iter().rev());
+
+    names_begin
 }
 
 #[cfg(test)]
@@ -262,11 +409,33 @@ mod tests {
     use std::sync::Arc;
 
     use crate::{
-        Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError, do_cut, knife::PlaneCut,
-        shapes::CUBE,
+        Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError, knife::PlaneCut, shapes::CUBE,
+        turn_names,
     };
     use internment::ArcIntern;
     use nalgebra::Vector3;
+    use qter_core::{Int, Span, U, schreier_sims::StabilizerChain};
+
+    #[test]
+    fn test_turn_names() {
+        assert_eq!(
+            turn_names(&ArcIntern::from("R"), 4),
+            [
+                ArcIntern::from("R"),
+                ArcIntern::from("R2"),
+                ArcIntern::from("R'")
+            ]
+        );
+        assert_eq!(
+            turn_names(&ArcIntern::from("U"), 5),
+            [
+                ArcIntern::from("U"),
+                ArcIntern::from("U2"),
+                ArcIntern::from("U2'"),
+                ArcIntern::from("U'")
+            ]
+        );
+    }
 
     #[test]
     fn degeneracy() {
@@ -340,237 +509,59 @@ mod tests {
         assert!(matches!(valid, Ok(())));
     }
 
-    /*
     #[test]
-    fn symmetries_simple() {
-        let mut one_face = PuzzleGeometryDefinition {
-            polyhedron: Polyhedron(vec![Face {
-                points: vec![
-                    Point(Vector3::new(1., 0., 1.)),
-                    Point(Vector3::new(-1., 0., 1.)),
-                    Point(Vector3::new(-1., 0., -1.)),
-                    Point(Vector3::new(1., 0., -1.)),
-                ],
-                color: ArcIntern::from("bruh"),
-            }]),
-            cut_axes: vec![CutAxis {
-                names: CutAxisNames {
-                    forward_name: "F",
-                    middle_name: "S",
-                    backward_name: "B",
-                },
-                expected_symmetry: None,
-                normal: Unit::new_normalize(Vector3::new(1., 0., 0.)),
-                distances: vec![0.5],
-            }],
-        };
-
-        one_face.find_symmetries().unwrap();
-
-        for cut_axis in one_face.cut_axes {
-            assert_eq!(cut_axis.expected_symmetry, Some(2));
-        }
-    }
-
-    #[test]
-    fn symmetries_3x3() {
-        let mut three_by_three = PuzzleGeometryDefinition {
+    fn three_by_three() {
+        let cube = PuzzleGeometryDefinition {
             polyhedron: CUBE.to_owned(),
-            cut_axes: vec![
-                CutAxis {
-                    names: CutAxisNames {
-                        forward_name: "R",
-                        middle_name: "M",
-                        backward_name: "L",
-                    },
-                    expected_symmetry: None,
-                    normal: Unit::new_normalize(Vector3::new(1., 0., 0.)),
-                    distances: vec![1. / 3.],
-                },
-                CutAxis {
-                    names: CutAxisNames {
-                        forward_name: "U",
-                        middle_name: "E",
-                        backward_name: "D",
-                    },
-                    expected_symmetry: None,
-                    normal: Unit::new_normalize(Vector3::new(0., 1., 0.)),
-                    distances: vec![1. / 3.],
-                },
-                CutAxis {
-                    names: CutAxisNames {
-                        forward_name: "F",
-                        middle_name: "S",
-                        backward_name: "B",
-                    },
-                    expected_symmetry: None,
-                    normal: Unit::new_normalize(Vector3::new(0., 0., 1.)),
-                    distances: vec![1. / 3.],
-                },
+            cut_surfaces: vec![
+                Arc::from(PlaneCut {
+                    spot: Vector3::new(1. / 3., 0., 0.),
+                    normal: Vector3::new(1., 0., 0.),
+                    name: ArcIntern::from("L"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: Vector3::new(-1. / 3., 0., 0.),
+                    normal: Vector3::new(-1., 0., 0.),
+                    name: ArcIntern::from("R"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: Vector3::new(0., 1. / 3., 0.),
+                    normal: Vector3::new(0., 1., 0.),
+                    name: ArcIntern::from("U"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: Vector3::new(0., -1. / 3., 0.),
+                    normal: Vector3::new(0., -1., 0.),
+                    name: ArcIntern::from("D"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: Vector3::new(0., 0., 1. / 3.),
+                    normal: Vector3::new(0., 0., 1.),
+                    name: ArcIntern::from("F"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: Vector3::new(0., 0., -1. / 3.),
+                    normal: Vector3::new(0., 0., -1.),
+                    name: ArcIntern::from("B"),
+                }),
             ],
+            definition: Span::new(ArcIntern::from("3x3"), 0, 3),
         };
 
-        three_by_three.find_symmetries().unwrap();
+        let geometry = cube.geometry().unwrap();
+        assert_eq!(geometry.stickers().len(), 54);
 
-        for cut_axis in three_by_three.cut_axes {
-            assert_eq!(cut_axis.expected_symmetry, Some(4));
+        for turn in &geometry.turns {
+            assert_eq!(turn.1.2, 4);
         }
-    }
+        assert_eq!(geometry.turns.len(), 6);
 
-    #[test]
-    fn symmetries_scuffed_3x3() {
-        let mut three_by_three = PuzzleGeometryDefinition {
-            polyhedron: CUBE.to_owned(),
-            cut_axes: vec![
-                CutAxis {
-                    names: CutAxisNames {
-                        forward_name: "R",
-                        middle_name: "M",
-                        backward_name: "L",
-                    },
-                    expected_symmetry: None,
-                    normal: Unit::new_normalize(Vector3::new(1., 0., 0.)),
-                    distances: vec![1. / 3.],
-                },
-                CutAxis {
-                    names: CutAxisNames {
-                        forward_name: "F",
-                        middle_name: "S",
-                        backward_name: "B",
-                    },
-                    expected_symmetry: None,
-                    normal: Unit::new_normalize(Vector3::new(0., 0., 1.)),
-                    distances: vec![1. / 3.],
-                },
-            ],
-        };
+        let group = geometry.permutation_group();
+        assert_eq!(group.facelet_count(), 48);
 
-        three_by_three.find_symmetries().unwrap();
-
-        for cut_axis in three_by_three.cut_axes {
-            assert_eq!(cut_axis.expected_symmetry, Some(2));
-        }
-    }
-
-    #[test]
-    fn symmetries_skewb() {
-        let mut skewb = PuzzleGeometryDefinition {
-            polyhedron: CUBE.to_owned(),
-            cut_axes: vec![
-                CutAxis {
-                    names: CutAxisNames {
-                        forward_name: "R",
-                        middle_name: "M",
-                        backward_name: "L",
-                    },
-                    expected_symmetry: None,
-                    normal: Unit::new_normalize(Vector3::new(1., 1., 1.)),
-                    distances: vec![0.],
-                },
-                CutAxis {
-                    names: CutAxisNames {
-                        forward_name: "U",
-                        middle_name: "E",
-                        backward_name: "D",
-                    },
-                    expected_symmetry: None,
-                    normal: Unit::new_normalize(Vector3::new(-1., 1., 1.)),
-                    distances: vec![0.],
-                },
-                CutAxis {
-                    names: CutAxisNames {
-                        forward_name: "F",
-                        middle_name: "S",
-                        backward_name: "B",
-                    },
-                    expected_symmetry: None,
-                    normal: Unit::new_normalize(Vector3::new(1., 1., -1.)),
-                    distances: vec![0.],
-                },
-                CutAxis {
-                    names: CutAxisNames {
-                        forward_name: "1",
-                        middle_name: "2",
-                        backward_name: "3",
-                    },
-                    expected_symmetry: None,
-                    normal: Unit::new_normalize(Vector3::new(-1., 1., -1.)),
-                    distances: vec![0.],
-                },
-            ],
-        };
-
-        skewb.find_symmetries().unwrap();
-
-        for cut_axis in skewb.cut_axes {
-            assert_eq!(cut_axis.expected_symmetry, Some(3));
-        }
-    }
-
-    #[test]
-    fn symmetries_pyraminx() {
-        let up = Point(Vector3::new(0., 1., 0.));
-
-        let down_1 = Point(
-            Rotation3::from_axis_angle(
-                &Unit::new_normalize(Vector3::new(1., 0., 0.)),
-                (-1. / 3_f64).acos(),
-            ) * up.0,
+        assert_eq!(
+            StabilizerChain::new(&group).cardinality(),
+            "43252003274489856000".parse::<Int<U>>().unwrap()
         );
-        let down_2 = down_1.rotated(Vector3::new(0., 1., 0.), 3);
-        let down_3 = down_2.rotated(Vector3::new(0., 1., 0.), 3);
-
-        let mut pyraminx = PuzzleGeometryDefinition {
-            polyhedron: TETRAHEDRON.to_owned(),
-            cut_axes: vec![
-                CutAxis {
-                    names: CutAxisNames {
-                        forward_name: "R",
-                        middle_name: "M",
-                        backward_name: "L",
-                    },
-                    expected_symmetry: None,
-                    normal: Unit::new_normalize(up.0),
-                    distances: vec![0., 0.5],
-                },
-                CutAxis {
-                    names: CutAxisNames {
-                        forward_name: "U",
-                        middle_name: "E",
-                        backward_name: "D",
-                    },
-                    expected_symmetry: None,
-                    normal: Unit::new_normalize(down_1.0),
-                    distances: vec![0., 0.5],
-                },
-                CutAxis {
-                    names: CutAxisNames {
-                        forward_name: "F",
-                        middle_name: "S",
-                        backward_name: "B",
-                    },
-                    expected_symmetry: None,
-                    normal: Unit::new_normalize(down_2.0),
-                    distances: vec![0., 0.5],
-                },
-                CutAxis {
-                    names: CutAxisNames {
-                        forward_name: "1",
-                        middle_name: "2",
-                        backward_name: "3",
-                    },
-                    expected_symmetry: None,
-                    normal: Unit::new_normalize(down_3.0),
-                    distances: vec![0., 0.5],
-                },
-            ],
-        };
-
-        pyraminx.find_symmetries().unwrap();
-
-        for cut_axis in pyraminx.cut_axes {
-            assert_eq!(cut_axis.expected_symmetry, Some(3));
-        }
     }
-    */
 }
