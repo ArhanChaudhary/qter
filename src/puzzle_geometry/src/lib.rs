@@ -47,16 +47,16 @@ pub enum PuzzleGeometryError {
 static DEG_180: LazyLock<Vector<2>> = LazyLock::new(|| Vector::new([[-1, 0]]));
 static DEG_120: LazyLock<Vector<2>> = LazyLock::new(|| {
     Vector::new([[
-        Num::from(-1) / &Num::from(2),
-        Num::from(1) / &Num::from(2) * &Num::from(3).sqrt(),
+        Num::from(-1) / Num::from(2),
+        Num::from(1) / Num::from(2) * Num::from(3).sqrt(),
     ]])
 });
 static DEG_90: LazyLock<Vector<2>> = LazyLock::new(|| Vector::new([[0, 1]]));
 static DEG_72: LazyLock<Vector<2>> = LazyLock::new(|| {
-    let fourth = Num::from(1) / &Num::from(4);
+    let fourth = Num::from(1) / Num::from(4);
     Vector::new([[
-        Num::from(5).sqrt() * &fourth - &fourth,
-        (Num::from(2) * &Num::from(5).sqrt() + &Num::from(10)).sqrt() * &fourth,
+        Num::from(5).sqrt() / Num::from(4) - fourth.clone(),
+        (Num::from(2) * Num::from(5).sqrt() + Num::from(10)).sqrt() * fourth,
     ]])
 });
 
@@ -82,11 +82,11 @@ impl Face {
             .iter()
             .circular_tuple_windows()
             .any(|(a, b, c)| {
-                let line = (b.0.clone() - &a.0).normalize();
+                let line = (b.0.clone() - a.0.clone()).normalize();
                 // Projection matrix onto the line spanned by the first two points
-                let line_proj = &line.clone() * &line.transpose();
+                let line_proj = &line * &line.clone().transpose();
 
-                (&line_proj * &(c.0.clone() - &a.0)) == (c.0.clone() - &a.0)
+                (&line_proj * &(c.0.clone() - a.0.clone())) == (c.0.clone() - a.0.clone())
             })
         {
             return Err(PuzzleGeometryError::FaceIsDegenerate(self.to_owned()));
@@ -104,7 +104,7 @@ impl Face {
         let plane_proj = &make_3d * &make_2d;
 
         for point in self.points.iter().skip(3) {
-            let offsetted = point.0.clone() - &offset;
+            let offsetted = point.0.clone() - offset.clone();
             if &plane_proj * &offsetted != offsetted {
                 return Err(PuzzleGeometryError::FaceNotCoplanar(self.to_owned()));
             }
@@ -124,20 +124,17 @@ impl Face {
         }
     }
 
-    fn edge_cloud(&self) -> EdgeCloud {
-        let mut cloud = Vec::new();
-
-        for (vertex1, vertex2) in self
-            .points
+    fn edges(&self) -> impl Iterator<Item = (Vector<3>, Vector<3>)> {
+        self.points
             .iter()
             .cycle()
             .tuple_windows()
             .take(self.points.len())
-        {
-            cloud.push((vertex1.0.clone(), vertex2.0.clone()));
-        }
+            .map(|(a, b)| (a.0.clone(), b.0.clone()))
+    }
 
-        EdgeCloud::new(cloud)
+    fn edge_cloud(&self) -> EdgeCloud {
+        EdgeCloud::new(self.edges().collect())
     }
 
     #[allow(dead_code)] // This is a false positive???
@@ -152,8 +149,8 @@ impl Face {
         let offset = self.points[0].0.clone();
 
         // These two vectors define a 3D subspace that all points in the face should lie in
-        let basis1 = self.points[1].0.clone() - &offset;
-        let basis2 = self.points[2].0.clone() - &offset;
+        let basis1 = self.points[1].0.clone() - offset.clone();
+        let basis2 = self.points[2].0.clone() - offset.clone();
 
         // Transforms a 2D space into the 3D subspace
         // Make it orthogonal because that's nice to have
@@ -223,7 +220,7 @@ impl PuzzleGeometry {
 
                     let mut face = sticker.0.clone();
                     for point in &mut face.points {
-                        *point = Point(&turn.1 * &(point.0.clone() - &turn.0) + &turn.0);
+                        *point = Point(&turn.1 * &(point.0.clone() - turn.0.clone()) + turn.0.clone());
                     }
 
                     let cloud = face.edge_cloud();
@@ -325,26 +322,28 @@ impl PuzzleGeometryDefinition {
                 let mut edges = stickers
                     .iter()
                     .filter(|v| v.1.contains(&name))
-                    .flat_map(|v| v.0.edge_cloud().edges().to_vec())
+                    .flat_map(|v| v.0.edges())
                     .collect::<Vec<_>>();
 
                 // The center of mass must be preserved over rotations therefore any axis of symmetry must pass through it.
-                let center_of_mass = edges.iter().map(|v| v.0.clone() + &v.1).sum::<Vector<3>>()
+                let center_of_mass = edges
+                    .iter()
+                    .map(|v| v.0.clone() + v.1.clone())
+                    .sum::<Vector<3>>()
                     / &Num::from(2)
                     / &Num::from(edges.len());
 
                 for edge in &mut edges {
-                    edge.0 -= &center_of_mass;
-                    edge.1 -= &center_of_mass;
+                    edge.0 -= center_of_mass.clone();
+                    edge.1 -= center_of_mass.clone();
                 }
 
                 let cloud = EdgeCloud::new(edges);
-                let mut into = cloud.clone();
 
                 // TODO: Arbitrary rotation degrees and make it faster
                 for (symm, degree) in [(&DEG_72, 5), (&DEG_90, 4), (&DEG_120, 3), (&DEG_180, 2)] {
                     let matrix = rotation_about(axis.clone(), (*symm).clone());
-                    if cloud.try_symmetry(&mut into, &matrix) {
+                    if cloud.clone().try_symmetry(&matrix) {
                         turns.insert(name, (center_of_mass, matrix, degree));
                         continue 'next_axis;
                     }

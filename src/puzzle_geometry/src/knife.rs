@@ -38,7 +38,12 @@ pub struct PlaneCut {
 
 impl CutSurface for PlaneCut {
     fn region(&self, point: Point) -> Option<ArcIntern<str>> {
-        match self.normal.dot(&(point.0 - &self.spot)).cmp_zero() {
+        match self
+            .normal
+            .clone()
+            .dot(point.0 - self.spot.clone())
+            .cmp_zero()
+        {
             std::cmp::Ordering::Less => None,
             std::cmp::Ordering::Equal => {
                 panic!("Argument to region should not be exactly on the boundary")
@@ -48,26 +53,29 @@ impl CutSurface for PlaneCut {
     }
 
     fn on_boundary(&self, point: Point) -> bool {
-        self.normal.dot(&(point.0 - &self.spot)).is_zero()
+        self.normal
+            .clone()
+            .dot(point.0 - self.spot.clone())
+            .is_zero()
     }
 
     fn boundaries_between(&self, a: Point, b: Point) -> Vec<Point> {
-        let a_dot = self.normal.dot(&(a.0.clone() - &self.spot));
-        let b_dot = self.normal.dot(&(b.0.clone() - &self.spot));
+        let a_dot = self.normal.clone().dot(a.0.clone() - self.spot.clone());
+        let b_dot = self.normal.clone().dot(b.0.clone() - self.spot.clone());
 
         if a_dot.cmp_zero() == b_dot.cmp_zero() {
             return vec![];
         }
 
-        let frac = a_dot.clone().abs() / &(a_dot.abs() + &b_dot.abs());
+        let frac = a_dot.clone().abs() / (a_dot.abs() + b_dot.abs());
 
         let mut point = Point(a.0);
-        point.0 = b.0 * &frac + &(point.0 * &(Num::from(1) - &frac));
+        point.0 = b.0 * &frac + (point.0 * &(Num::from(1) - frac.clone()));
         assert!(
             self.on_boundary(point.clone()),
             "{:?}, {:?}, {frac:?}",
             point.clone(),
-            self.normal.dot(&(point.0 - &self.spot))
+            self.normal.clone().dot(point.0 - self.spot.clone())
         );
 
         vec![point]
@@ -150,12 +158,12 @@ pub(crate) fn do_cut<S: CutSurface + ?Sized>(
             .iter()
             .circular_tuple_windows()
             .map(|(a, b)| {
-                let middle = Point(a.0.clone() / &Num::from(2) + &(b.0.clone() / &Num::from(2)));
+                let middle = Point(a.0.clone() / &Num::from(2) + (b.0.clone() / &Num::from(2)));
 
                 (
                     (
-                        &subspace_info.make_2d * &(a.0.clone() - &subspace_info.offset),
-                        &subspace_info.make_2d * &(b.0.clone() - &subspace_info.offset),
+                        &subspace_info.make_2d * &(a.0.clone() - subspace_info.offset.clone()),
+                        &subspace_info.make_2d * &(b.0.clone() - subspace_info.offset.clone()),
                     ),
                     if surface.on_boundary(middle.clone()) {
                         None
@@ -178,8 +186,8 @@ pub(crate) fn do_cut<S: CutSurface + ?Sized>(
             let a = edges.prev().unwrap();
             let b = edges.spot().unwrap();
             if a.1 == b.1
-                && (&ninety_deg * &(a.0.1.clone() - &a.0.0))
-                    .dot(&(b.0.1.clone() - &a.0.0))
+                && (&ninety_deg * &(a.0.1.clone() - a.0.0.clone()))
+                    .dot(b.0.1.clone() - a.0.0.clone())
                     .is_zero()
             {
                 edges.prev_mut().unwrap().0.1 = b.0.1.clone();
@@ -274,7 +282,7 @@ fn take_face_out<S: CutSurface + ?Sized>(
                 points: mem::replace(edges, Cycle(VecDeque::new()))
                     .0
                     .into_iter()
-                    .map(|v| Point(&subspace_info.make_3d * &v.0.0 + &subspace_info.offset))
+                    .map(|v| Point(&subspace_info.make_3d * &v.0.0 + subspace_info.offset.clone()))
                     .collect_vec(),
                 color: ArcIntern::clone(&face.color),
             },
@@ -393,7 +401,7 @@ fn take_face_out<S: CutSurface + ?Sized>(
         .iter()
         .map(|v| v.0.0.clone())
         .chain(iter::once(face_edges.last().unwrap().0.1.clone()))
-        .map(|v| Point(&subspace_info.make_3d * &v + &subspace_info.offset))
+        .map(|v| Point(&subspace_info.make_3d * &v + subspace_info.offset.clone()))
         .collect_vec();
 
     let first = points.first().unwrap().clone();
@@ -413,8 +421,8 @@ fn take_face_out<S: CutSurface + ?Sized>(
         .map(|(a, b)| {
             (
                 (
-                    &subspace_info.make_2d * &(a.0 - &subspace_info.offset),
-                    &subspace_info.make_2d * &(b.0 - &subspace_info.offset),
+                    &subspace_info.make_2d * &(a.0 - subspace_info.offset.clone()),
+                    &subspace_info.make_2d * &(b.0 - subspace_info.offset.clone()),
                 ),
                 None,
             )
