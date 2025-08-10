@@ -55,4 +55,9 @@ pkgs.mkShell rec {
   SCCACHE_SERVER_PORT = "54226";
 
   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
+
+  
+  shellHook = ''
+    export PATH=$PATH:~/.cargo/bin
+  '';
 }

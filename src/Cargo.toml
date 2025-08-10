@@ -15,5 +15,5 @@ members = [
 type_complexity = "allow"
 disallowed_types = "deny"
 
-# [profile.release]
-# debug = true
+[profile.bench]
+debug = true

@@ -2,9 +2,11 @@ use std::{collections::VecDeque, iter, mem};
 
 use internment::ArcIntern;
 use itertools::Itertools;
-use nalgebra::{Matrix2, Vector2, Vector3};
 
-use crate::{E, Face, FaceSubspaceInfo, Point, PuzzleGeometryError};
+use crate::{
+    Face, FaceSubspaceInfo, Point, PuzzleGeometryError,
+    num::{Matrix, Num, Vector},
+};
 
 /// Defines a generic cut surface; may or may not be planar or have only two regions.
 ///
@@ -24,48 +26,48 @@ pub trait CutSurface: core::fmt::Debug {
 
     /// Return the axes in 3d space about which the regions turn.
     /// Every region must be included in the list.
-    fn axes(&self) -> Vec<(ArcIntern<str>, Vector3<f64>)>;
+    fn axes(&self) -> Vec<(ArcIntern<str>, Vector<3>)>;
 }
 
 #[derive(Clone, Debug)]
 pub struct PlaneCut {
-    pub spot: Vector3<f64>,
-    pub normal: Vector3<f64>,
+    pub spot: Vector<3>,
+    pub normal: Vector<3>,
     pub name: ArcIntern<str>,
 }
 
 impl CutSurface for PlaneCut {
     fn region(&self, point: Point) -> Option<ArcIntern<str>> {
-        let signum = self.normal.dot(&(point.0 - self.spot)).signum();
-        assert!(signum == 1. || signum == -1.);
-        if signum == 1. {
-            Some(ArcIntern::clone(&self.name))
-        } else {
-            None
+        match self.normal.dot(&(point.0 - &self.spot)).cmp_zero() {
+            std::cmp::Ordering::Less => None,
+            std::cmp::Ordering::Equal => {
+                panic!("Argument to region should not be exactly on the boundary")
+            }
+            std::cmp::Ordering::Greater => Some(ArcIntern::clone(&self.name)),
         }
     }
 
     fn on_boundary(&self, point: Point) -> bool {
-        self.normal.dot(&(point.0 - self.spot)).abs() < E
+        self.normal.dot(&(point.0 - &self.spot)).is_zero()
     }
 
     fn boundaries_between(&self, a: Point, b: Point) -> Vec<Point> {
-        let a_dot = self.normal.dot(&(a.0 - self.spot));
-        let b_dot = self.normal.dot(&(b.0 - self.spot));
+        let a_dot = self.normal.dot(&(a.0.clone() - &self.spot));
+        let b_dot = self.normal.dot(&(b.0.clone() - &self.spot));
 
-        if a_dot.signum() == b_dot.signum() {
+        if a_dot.cmp_zero() == b_dot.cmp_zero() {
             return vec![];
         }
 
-        let frac = a_dot.abs() / (a_dot.abs() + b_dot.abs());
+        let frac = a_dot.clone().abs() / &(a_dot.abs() + &b_dot.abs());
 
         let mut point = Point(a.0);
-        point.0.axpy(frac, &b.0, 1.0 - frac);
+        point.0 = b.0 * &frac + &(point.0 * &(Num::from(1) - &frac));
         assert!(
-            self.on_boundary(point),
-            "{:?}, {}, {frac}",
-            point,
-            self.normal.dot(&(point.0 - self.spot))
+            self.on_boundary(point.clone()),
+            "{:?}, {:?}, {frac:?}",
+            point.clone(),
+            self.normal.dot(&(point.0 - &self.spot))
         );
 
         vec![point]
@@ -75,12 +77,10 @@ impl CutSurface for PlaneCut {
         vec![]
     }
 
-    fn axes(&self) -> Vec<(ArcIntern<str>, Vector3<f64>)> {
-        vec![(ArcIntern::clone(&self.name), self.normal)]
+    fn axes(&self) -> Vec<(ArcIntern<str>, Vector<3>)> {
+        vec![(ArcIntern::clone(&self.name), self.normal.clone())]
     }
 }
-
-const I: Matrix2<f64> = Matrix2::new(0., -1., 1., 0.);
 
 #[derive(Debug, Clone)]
 struct Cycle<T>(VecDeque<T>);
@@ -141,22 +141,23 @@ pub(crate) fn do_cut<S: CutSurface + ?Sized>(
     let mut edges = Cycle(
         face.points
             .iter()
-            .copied()
             .circular_tuple_windows()
             .take(face.points.len())
-            .flat_map(|(a, b)| iter::once(a).chain(surface.boundaries_between(a, b)))
+            .flat_map(|(a, b)| {
+                iter::once(a.clone()).chain(surface.boundaries_between(a.clone(), b.clone()))
+            })
             .collect_vec()
             .iter()
             .circular_tuple_windows()
             .map(|(a, b)| {
-                let middle = Point(a.0 / 2. + b.0 / 2.);
+                let middle = Point(a.0.clone() / &Num::from(2) + &(b.0.clone() / &Num::from(2)));
 
                 (
                     (
-                        subspace_info.make_2d * (a.0 - subspace_info.offset),
-                        subspace_info.make_2d * (b.0 - subspace_info.offset),
+                        &subspace_info.make_2d * &(a.0.clone() - &subspace_info.offset),
+                        &subspace_info.make_2d * &(b.0.clone() - &subspace_info.offset),
                     ),
-                    if surface.on_boundary(middle) {
+                    if surface.on_boundary(middle.clone()) {
                         None
                     } else {
                         Some(surface.region(middle))
@@ -168,14 +169,20 @@ pub(crate) fn do_cut<S: CutSurface + ?Sized>(
 
     let mut faces = Vec::new();
 
+    let ninety_deg = Matrix::new([[0, 1], [-1, 0]]);
+
     while edges.len() >= 3 {
         // Merge collinear edges
         let mut i = 0;
         while i < edges.len() && edges.len() > 1 {
             let a = edges.prev().unwrap();
             let b = edges.spot().unwrap();
-            if a.1 == b.1 && (I * (a.0.1 - a.0.0)).dot(&(b.0.1 - a.0.0)) < E {
-                edges.prev_mut().unwrap().0.1 = b.0.1;
+            if a.1 == b.1
+                && (&ninety_deg * &(a.0.1.clone() - &a.0.0))
+                    .dot(&(b.0.1.clone() - &a.0.0))
+                    .is_zero()
+            {
+                edges.prev_mut().unwrap().0.1 = b.0.1.clone();
                 edges.remove_spot();
                 continue;
             }
@@ -190,7 +197,12 @@ pub(crate) fn do_cut<S: CutSurface + ?Sized>(
 
         recolor_border_edges(&mut edges);
 
-        faces.push(take_face_out(&mut edges, surface, face, subspace_info)?);
+        faces.push(take_face_out(
+            &mut edges,
+            surface,
+            face,
+            subspace_info.clone(),
+        )?);
     }
 
     faces.retain(|v| v.0.is_valid().is_ok());
@@ -202,7 +214,7 @@ pub(crate) fn do_cut<S: CutSurface + ?Sized>(
 ///
 /// This is necessary because with the color pattern [Some(A), None, Some(A), None], `take_face_out` will separate that into two faces even though it shouldn't do that.
 fn recolor_border_edges(
-    edges: &mut Cycle<((Vector2<f64>, Vector2<f64>), Option<Option<ArcIntern<str>>>)>,
+    edges: &mut Cycle<((Vector<2>, Vector<2>), Option<Option<ArcIntern<str>>>)>,
 ) {
     let mut i = 0;
 
@@ -222,7 +234,7 @@ fn recolor_border_edges(
 }
 
 fn take_face_out<S: CutSurface + ?Sized>(
-    edges: &mut Cycle<((Vector2<f64>, Vector2<f64>), Option<Option<ArcIntern<str>>>)>,
+    edges: &mut Cycle<((Vector<2>, Vector<2>), Option<Option<ArcIntern<str>>>)>,
     surface: &S,
     face: &Face,
     subspace_info: FaceSubspaceInfo,
@@ -262,7 +274,7 @@ fn take_face_out<S: CutSurface + ?Sized>(
                 points: mem::replace(edges, Cycle(VecDeque::new()))
                     .0
                     .into_iter()
-                    .map(|v| Point(subspace_info.make_3d * v.0.0 + subspace_info.offset))
+                    .map(|v| Point(&subspace_info.make_3d * &v.0.0 + &subspace_info.offset))
                     .collect_vec(),
                 color: ArcIntern::clone(&face.color),
             },
@@ -379,17 +391,18 @@ fn take_face_out<S: CutSurface + ?Sized>(
 
     let mut points = face_edges
         .iter()
-        .map(|v| v.0.0)
-        .chain(iter::once(face_edges.last().unwrap().0.1))
-        .map(|v| Point(subspace_info.make_3d * v + subspace_info.offset))
+        .map(|v| v.0.0.clone())
+        .chain(iter::once(face_edges.last().unwrap().0.1.clone()))
+        .map(|v| Point(&subspace_info.make_3d * &v + &subspace_info.offset))
         .collect_vec();
 
-    let first = *points.first().unwrap();
-    let last = *points.last().unwrap();
+    let first = points.first().unwrap().clone();
+    let last = points.last().unwrap().clone();
 
-    let mut joiner = VecDeque::from(surface.join(last, first, subspace_info));
+    let mut joiner =
+        VecDeque::from(surface.join(last.clone(), first.clone(), subspace_info.clone()));
 
-    points.extend(joiner.iter());
+    points.extend(joiner.iter().cloned());
 
     joiner.push_front(first);
     joiner.push_back(last);
@@ -400,8 +413,8 @@ fn take_face_out<S: CutSurface + ?Sized>(
         .map(|(a, b)| {
             (
                 (
-                    subspace_info.make_2d * (a.0 - subspace_info.offset),
-                    subspace_info.make_2d * (b.0 - subspace_info.offset),
+                    &subspace_info.make_2d * &(a.0 - &subspace_info.offset),
+                    &subspace_info.make_2d * &(b.0 - &subspace_info.offset),
                 ),
                 None,
             )
@@ -424,34 +437,33 @@ mod tests {
     use std::collections::VecDeque;
 
     use internment::ArcIntern;
-    use nalgebra::{Vector2, Vector3};
 
-    use crate::{Face, Point, do_cut, knife::PlaneCut};
+    use crate::{Face, Point, do_cut, knife::PlaneCut, num::Vector};
 
     use super::{Cycle, recolor_border_edges};
 
     #[test]
     fn recolor() {
         let mut edges = Cycle(VecDeque::from(vec![
-            ((Vector2::zeros(), Vector2::zeros()), Some(None)),
-            ((Vector2::zeros(), Vector2::zeros()), None),
-            ((Vector2::zeros(), Vector2::zeros()), None),
-            ((Vector2::zeros(), Vector2::zeros()), None),
+            ((Vector::zero(), Vector::zero()), Some(None)),
+            ((Vector::zero(), Vector::zero()), None),
+            ((Vector::zero(), Vector::zero()), None),
+            ((Vector::zero(), Vector::zero()), None),
             (
-                (Vector2::zeros(), Vector2::zeros()),
+                (Vector::zero(), Vector::zero()),
                 Some(Some(ArcIntern::from("Green"))),
             ),
-            ((Vector2::zeros(), Vector2::zeros()), None),
-            ((Vector2::zeros(), Vector2::zeros()), None),
-            ((Vector2::zeros(), Vector2::zeros()), None),
+            ((Vector::zero(), Vector::zero()), None),
+            ((Vector::zero(), Vector::zero()), None),
+            ((Vector::zero(), Vector::zero()), None),
             (
-                (Vector2::zeros(), Vector2::zeros()),
+                (Vector::zero(), Vector::zero()),
                 Some(Some(ArcIntern::from("Green"))),
             ),
-            ((Vector2::zeros(), Vector2::zeros()), Some(None)),
-            ((Vector2::zeros(), Vector2::zeros()), None),
-            ((Vector2::zeros(), Vector2::zeros()), None),
-            ((Vector2::zeros(), Vector2::zeros()), None),
+            ((Vector::zero(), Vector::zero()), Some(None)),
+            ((Vector::zero(), Vector::zero()), None),
+            ((Vector::zero(), Vector::zero()), None),
+            ((Vector::zero(), Vector::zero()), None),
         ]));
 
         recolor_border_edges(&mut edges);
@@ -476,18 +488,18 @@ mod tests {
     fn plane_cut() {
         let face = Face {
             points: vec![
-                Point(Vector3::new(1., 0., 1.)),
-                Point(Vector3::new(1., 0., -1.)),
-                Point(Vector3::new(-1., 0., -1.)),
-                Point(Vector3::new(-1., 0., 1.)),
+                Point(Vector::new([[1, 0, 1]])),
+                Point(Vector::new([[1, 0, -1]])),
+                Point(Vector::new([[-1, 0, -1]])),
+                Point(Vector::new([[-1, 0, 1]])),
             ],
             color: ArcIntern::from("orange"),
         };
 
         let cutted = do_cut(
             &PlaneCut {
-                spot: Vector3::new(0.5, 0., 0.),
-                normal: Vector3::new(1., 0., 0.),
+                spot: Vector::new_ratios([[(1, 2), (0, 1), (0, 1)]]),
+                normal: Vector::new([[1, 0, 0]]),
                 name: ArcIntern::from("R"),
             },
             &face,
@@ -499,20 +511,20 @@ mod tests {
 
         let face1 = Face {
             points: vec![
-                Point(Vector3::new(1., 0., 1.)),
-                Point(Vector3::new(1., 0., -1.)),
-                Point(Vector3::new(0.5, 0., -1.)),
-                Point(Vector3::new(0.5, 0., 1.)),
+                Point(Vector::new([[1, 0, 1]])),
+                Point(Vector::new([[1, 0, -1]])),
+                Point(Vector::new_ratios([[(1, 2), (0, 1), (-1, 1)]])),
+                Point(Vector::new_ratios([[(1, 2), (0, 1), (1, 1)]])),
             ],
             color: ArcIntern::from("orange"),
         };
 
         let face2 = Face {
             points: vec![
-                Point(Vector3::new(0.5, 0., 1.)),
-                Point(Vector3::new(0.5, 0., -1.)),
-                Point(Vector3::new(-1., 0., -1.)),
-                Point(Vector3::new(-1., 0., 1.)),
+                Point(Vector::new_ratios([[(1, 2), (0, 1), (1, 1)]])),
+                Point(Vector::new_ratios([[(1, 2), (0, 1), (-1, 1)]])),
+                Point(Vector::new([[-1, 0, -1]])),
+                Point(Vector::new([[-1, 0, 1]])),
             ],
             color: ArcIntern::from("orange"),
         };

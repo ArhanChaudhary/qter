@@ -1,31 +1,38 @@
-use crate::{Face, Point, Polyhedron, PuzzleDescriptionString};
+use crate::{
+    DEG_90, Face, Point, Polyhedron, PuzzleDescriptionString,
+    num::{Matrix, Vector, rotate_to},
+    rotation_about,
+};
 use internment::ArcIntern;
-use nalgebra::{Rotation3, Unit, Vector3};
 use std::sync::LazyLock;
 
 pub static TETRAHEDRON: LazyLock<Polyhedron> = LazyLock::new(|| {
-    let up = Point(Vector3::new(0., 1., 0.));
+    let mut up = Point(Vector::new([[1, 1, 1]]).normalize());
+    let mut down_1 = Point(Vector::new([[1, -1, -1]]).normalize());
+    let mut down_2 = Point(Vector::new([[-1, 1, -1]]).normalize());
+    let mut down_3 = Point(Vector::new([[-1, -1, 1]]).normalize());
 
-    let down_1 = Point(
-        Rotation3::from_axis_angle(
-            &Unit::new_normalize(Vector3::new(1., 0., 0.)),
-            (-1. / 3_f64).acos(),
-        ) * up.0,
+    let rotate_to = rotate_to(
+        Matrix::new([[1, 1, 1], [1, -1, -1]]),
+        Matrix::new([[0, 1, 0], [0, 0, 1]]),
     );
-    let down_2 = down_1.rotated(Vector3::new(0., 1., 0.), 3);
-    let down_3 = down_2.rotated(Vector3::new(0., 1., 0.), 3);
+
+    up.0 = &rotate_to * &up.0;
+    down_1.0 = &rotate_to * &down_1.0;
+    down_2.0 = &rotate_to * &down_2.0;
+    down_3.0 = &rotate_to * &down_3.0;
 
     Polyhedron(vec![
         Face {
-            points: vec![up, down_1, down_2],
+            points: vec![up.clone(), down_1.clone(), down_2.clone()],
             color: ArcIntern::from("green"),
         },
         Face {
-            points: vec![up, down_2, down_3],
+            points: vec![up.clone(), down_2.clone(), down_3.clone()],
             color: ArcIntern::from("blue"),
         },
         Face {
-            points: vec![up, down_3, down_1],
+            points: vec![up, down_3.clone(), down_1.clone()],
             color: ArcIntern::from("yellow"),
         },
         Face {
@@ -38,24 +45,28 @@ pub static TETRAHEDRON: LazyLock<Polyhedron> = LazyLock::new(|| {
 pub static CUBE: LazyLock<Polyhedron> = LazyLock::new(|| {
     let up = Face {
         points: vec![
-            Point(Vector3::new(1., 1., 1.)),
-            Point(Vector3::new(-1., 1., 1.)),
-            Point(Vector3::new(-1., 1., -1.)),
-            Point(Vector3::new(1., 1., -1.)),
+            Point(Vector::new([[1, 1, 1]])),
+            Point(Vector::new([[-1, 1, 1]])),
+            Point(Vector::new([[-1, 1, -1]])),
+            Point(Vector::new([[1, 1, -1]])),
         ],
         color: ArcIntern::from("white"),
     };
 
-    let mut right = up.clone().rotated(Vector3::new(1., 0., 0.), 4);
+    let z_rot = rotation_about(Vector::new([[0, 0, -1]]), DEG_90.clone());
+
+    let mut right = up.transformed(&z_rot);
     right.color = ArcIntern::from("red");
-    let mut down = right.clone().rotated(Vector3::new(1., 0., 0.), 4);
+    let mut down = right.transformed(&z_rot);
     down.color = ArcIntern::from("yellow");
-    let mut left = down.clone().rotated(Vector3::new(1., 0., 0.), 4);
+    let mut left = down.transformed(&z_rot);
     left.color = ArcIntern::from("orange");
 
-    let mut front = up.clone().rotated(Vector3::new(0., 0., 1.), 4);
+    let x_rot = rotation_about(Vector::new([[1, 0, 0]]), DEG_90.clone());
+
+    let mut front = up.transformed(&x_rot);
     front.color = ArcIntern::from("green");
-    let mut back = up.clone().rotated(Vector3::new(0., 0., -1.), 4);
+    let mut back = up.transformed(&x_rot.transpose());
     back.color = ArcIntern::from("blue");
 
     Polyhedron(vec![up, right, down, left, front, back])
@@ -140,3 +151,14 @@ pub static PUZZLES: phf::Map<&'static str, PuzzleDescriptionString> = phf::phf_m
     "megaminx + chopasaurus" => "d f 0.61803398875 v 0",
     "starminx combo" => "d f 0.23606797749979 v 0.937962370425399",
 };
+
+#[cfg(test)]
+mod tests {
+    use crate::shapes::*;
+
+    #[test]
+    fn shapes() {
+        println!("{:?}", &*TETRAHEDRON);
+        println!("{:?}", &*CUBE);
+    }
+}

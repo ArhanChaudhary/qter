@@ -126,6 +126,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "algebraics"
+version = "0.3.0"
+source = "git+https://github.com/Xendergo/algebraics#24435551f9c18467c1baf5129cd8dea2ca1f6ffd"
+dependencies = [
+ "lazy_static",
+ "num-bigint",
+ "num-integer",
+ "num-rational",
+ "num-traits",
+ "rand",
+ "rand_pcg",
+]
+
+[[package]]
 name = "allocator-api2"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3176,16 +3190,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "matrixmultiply"
-version = "0.3.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a06de3016e9fae57a36fd14dba131fccf49f74b40b7fbdb472f96e361ec71a08"
-dependencies = [
- "autocfg",
- "rawpointer",
-]
-
-[[package]]
 name = "memchr"
 version = "2.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3330,33 +3334,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nalgebra"
-version = "0.33.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26aecdf64b707efd1310e3544d709c5c0ac61c13756046aaaba41be5c4f66a3b"
-dependencies = [
- "approx",
- "matrixmultiply",
- "nalgebra-macros",
- "num-complex",
- "num-rational",
- "num-traits",
- "simba",
- "typenum",
-]
-
-[[package]]
-name = "nalgebra-macros"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "254a5372af8fc138e36684761d3c0cdb758a4410e938babcff1c860ce14ddbfc"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.104",
-]
-
-[[package]]
 name = "ndk"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3475,15 +3452,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a5e44f723f1133c9deac646763579fdb3ac745e418f2a7af9cd0c431da1f20b9"
 dependencies = [
  "num-integer",
- "num-traits",
-]
-
-[[package]]
-name = "num-complex"
-version = "0.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495"
-dependencies = [
  "num-traits",
 ]
 
@@ -4146,9 +4114,9 @@ dependencies = [
 name = "puzzle_geometry"
 version = "0.1.0"
 dependencies = [
+ "algebraics",
  "internment",
  "itertools 0.14.0",
- "nalgebra",
  "phf",
  "qter_core",
  "thiserror 2.0.12",
@@ -4237,6 +4205,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_pcg"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59cad018caf63deb318e5a4586d99a24424a364f40f1e5778c29aca23f4fc73e"
+dependencies = [
+ "rand_core",
+]
+
+[[package]]
 name = "range-alloc"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4253,12 +4230,6 @@ name = "raw-window-handle"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20675572f6f24e9e76ef639bc5552774ed45f1c30e2951e1e99c59888861c539"
-
-[[package]]
-name = "rawpointer"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60a357793950651c4ed0f3f52338f53b2f809f32d83a07f72909fa13e4c6c1e3"
 
 [[package]]
 name = "read-fonts"
@@ -4472,15 +4443,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
 
 [[package]]
-name = "safe_arch"
-version = "0.7.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96b02de82ddbe1b636e6170c21be622223aea188ef2e139be0a5b219ec215323"
-dependencies = [
- "bytemuck",
-]
-
-[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4580,19 +4542,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9203b8055f63a2a00e2f593bb0510367fe707d7ff1e5c872de2f537b339e5410"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "simba"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3a386a501cd104797982c15ae17aafe8b9261315b5d07e3ec803f2ea26be0fa"
-dependencies = [
- "approx",
- "num-complex",
- "num-traits",
- "paste",
- "wide",
 ]
 
 [[package]]
@@ -5088,12 +5037,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc7d623258602320d5c55d1bc22793b57daff0ec7efc270ea7d55ce1d5f5471c"
 
 [[package]]
-name = "typenum"
-version = "1.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dccffe3ce07af9386bfd29e80c0ab1a8205a2fc34e4bcd40364df902cfa8f3f"
-
-[[package]]
 name = "unicode-bidi"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5544,16 +5487,6 @@ dependencies = [
  "env_home",
  "rustix 1.0.7",
  "winsafe",
-]
-
-[[package]]
-name = "wide"
-version = "0.7.33"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ce5da8ecb62bcd8ec8b7ea19f69a51275e91299be594ea5cc6ef7819e16cd03"
-dependencies = [
- "bytemuck",
- "safe_arch",
 ]
 
 [[package]]

@@ -4,7 +4,7 @@
 
 use std::{
     collections::{BTreeSet, HashMap},
-    sync::{Arc, OnceLock},
+    sync::{Arc, LazyLock, OnceLock},
 };
 
 use edge_cloud::EdgeCloud;
@@ -12,7 +12,7 @@ use internment::ArcIntern;
 use itertools::Itertools;
 use knife::{CutSurface, do_cut};
 use ksolve::KSolve;
-use nalgebra::{Matrix2x3, Matrix3, Matrix3x2, Rotation3, Unit, Vector3};
+use num::{Matrix, Num, Vector, rotation_about};
 use qter_core::{
     Span,
     architectures::{Permutation, PermutationGroup},
@@ -22,14 +22,11 @@ use thiserror::Error;
 mod edge_cloud;
 pub mod knife;
 pub mod ksolve;
+pub mod num;
 pub mod shapes;
 
-// Note... X is considered left-right, Y is considered up-down, and Z is considered front-back
-//
-// (minecraft style)
-
-// Margin of error to consider points "equal"
-const E: f64 = 1e-9;
+// Note... X is left to right, Y is down to up, and Z is forwards to backwards
+// The coordinate system is right-handed
 
 type PuzzleDescriptionString<'a> = &'a str;
 
@@ -44,29 +41,27 @@ pub enum PuzzleGeometryError {
     )]
     CyclicalCutSurface(String, Face),
     #[error("The slice {0} does not have any rotational symmetry along the cut line: {1:?}")]
-    PuzzleLacksSymmetry(ArcIntern<str>, Vector3<f64>),
+    PuzzleLacksSymmetry(ArcIntern<str>, Vector<3>),
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct Point(Vector3<f64>);
+static DEG_180: LazyLock<Vector<2>> = LazyLock::new(|| Vector::new([[-1, 0]]));
+static DEG_120: LazyLock<Vector<2>> = LazyLock::new(|| {
+    Vector::new([[
+        Num::from(-1) / &Num::from(2),
+        Num::from(1) / &Num::from(2) * &Num::from(3).sqrt(),
+    ]])
+});
+static DEG_90: LazyLock<Vector<2>> = LazyLock::new(|| Vector::new([[0, 1]]));
+static DEG_72: LazyLock<Vector<2>> = LazyLock::new(|| {
+    let fourth = Num::from(1) / &Num::from(4);
+    Vector::new([[
+        Num::from(5).sqrt() * &fourth - &fourth,
+        (Num::from(2) * &Num::from(5).sqrt() + &Num::from(10)).sqrt() * &fourth,
+    ]])
+});
 
-impl Point {
-    fn rotated(self, axis: Vector3<f64>, symmetry: u8) -> Point {
-        let rotation = rotation_of_degree(axis, symmetry);
-
-        Point(rotation * self.0)
-    }
-}
-
-fn rotation_of_degree(axis: Vector3<f64>, symm: u8) -> Matrix3<f64> {
-    assert_ne!(symm, 0);
-
-    Rotation3::from_axis_angle(
-        &Unit::new_normalize(axis),
-        core::f64::consts::TAU / f64::from(symm),
-    )
-    .into()
-}
+#[derive(Clone, Debug)]
+pub struct Point(Vector<3>);
 
 #[derive(Clone, Debug)]
 pub struct Face {
@@ -75,18 +70,6 @@ pub struct Face {
 }
 
 impl Face {
-    /// Rotate the face around the origin with the given axis and symmetry
-    #[must_use]
-    pub fn rotated(mut self, axis: Vector3<f64>, symmetry: u8) -> Face {
-        let rotation = rotation_of_degree(axis, symmetry);
-
-        for point in &mut self.points {
-            point.0 = rotation * point.0;
-        }
-
-        self
-    }
-
     fn is_valid(&self) -> Result<(), PuzzleGeometryError> {
         // TEST DEGENERACY
 
@@ -99,11 +82,11 @@ impl Face {
             .iter()
             .circular_tuple_windows()
             .any(|(a, b, c)| {
-                let line = (b.0 - a.0).normalize();
+                let line = (b.0.clone() - &a.0).normalize();
                 // Projection matrix onto the line spanned by the first two points
-                let line_proj = line * line.transpose();
+                let line_proj = &line.clone() * &line.transpose();
 
-                (line_proj * (c.0 - a.0)).metric_distance(&(c.0 - a.0)) < E
+                (&line_proj * &(c.0.clone() - &a.0)) == (c.0.clone() - &a.0)
             })
         {
             return Err(PuzzleGeometryError::FaceIsDegenerate(self.to_owned()));
@@ -118,16 +101,27 @@ impl Face {
         } = self.subspace_info();
 
         // Project points into the subspace
-        let plane_proj = make_3d * make_2d;
+        let plane_proj = &make_3d * &make_2d;
 
         for point in self.points.iter().skip(3) {
-            let offsetted = point.0 - offset;
-            if (plane_proj * offsetted).metric_distance(&offsetted) >= E {
+            let offsetted = point.0.clone() - &offset;
+            if &plane_proj * &offsetted != offsetted {
                 return Err(PuzzleGeometryError::FaceNotCoplanar(self.to_owned()));
             }
         }
 
         Ok(())
+    }
+
+    fn transformed(&self, matrix: &Matrix<3, 3>) -> Self {
+        Self {
+            points: self
+                .points
+                .iter()
+                .map(|point| Point(matrix * &point.0))
+                .collect(),
+            color: ArcIntern::clone(&self.color),
+        }
     }
 
     fn edge_cloud(&self) -> EdgeCloud {
@@ -140,7 +134,7 @@ impl Face {
             .tuple_windows()
             .take(self.points.len())
         {
-            cloud.push((vertex1.0, vertex2.0));
+            cloud.push((vertex1.0.clone(), vertex2.0.clone()));
         }
 
         EdgeCloud::new(cloud)
@@ -155,17 +149,18 @@ impl Face {
     ///
     /// Also returns an origin vector to capture the translation of the face with respect to ⟨0, 0, 0⟩.
     fn subspace_info(&self) -> FaceSubspaceInfo {
-        let offset = self.points[0].0;
+        let offset = self.points[0].0.clone();
 
         // These two vectors define a 3D subspace that all points in the face should lie in
-        let basis1 = self.points[1].0 - offset;
-        let basis2 = self.points[2].0 - offset;
+        let basis1 = self.points[1].0.clone() - &offset;
+        let basis2 = self.points[2].0.clone() - &offset;
 
         // Transforms a 2D space into the 3D subspace
         // Make it orthogonal because that's nice to have
-        let make_3d = Matrix3x2::from_columns(&[basis1, basis2]).qr().q();
+        let make_3d = Matrix::new([basis1.into_inner(), basis2.into_inner()]).mk_orthonormal();
         // Project points in 3D space into the subspace and into the 2D space
-        let make_2d = make_3d.pseudo_inverse(E).unwrap();
+        // The transpose is the pseudo-inverse because `make_3d` is orthonormal and has full column rank
+        let make_2d = make_3d.clone().transpose();
 
         FaceSubspaceInfo {
             make_3d,
@@ -176,14 +171,14 @@ impl Face {
 }
 
 /// Encodes the information about the plane on which a face lies.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct FaceSubspaceInfo {
     /// A matrix that converts a 2D vector to a 3D one in the subspace parallel to the face. To get a point on the face's plane, add `offset`.
-    pub make_3d: Matrix3x2<f64>,
+    pub make_3d: Matrix<3, 2>,
     /// Projects a 3D vector into the subspace parallel to the face. Given a point on the face's plane, subtract `offset` first.
-    pub make_2d: Matrix2x3<f64>,
+    pub make_2d: Matrix<2, 3>,
     /// The offset of the face from the origin. Subspaces must always include the origin due to how subspaces work mathematically so when projecting in/out, it is necessary to take the offset into account.
-    pub offset: Vector3<f64>,
+    pub offset: Vector<3>,
 }
 
 #[derive(Clone, Debug)]
@@ -199,7 +194,7 @@ pub struct PuzzleGeometryDefinition {
 #[derive(Clone, Debug)]
 pub struct PuzzleGeometry {
     stickers: Vec<(Face, Vec<ArcIntern<str>>)>,
-    turns: HashMap<ArcIntern<str>, (Vector3<f64>, Matrix3<f64>, u8)>,
+    turns: HashMap<ArcIntern<str>, (Vector<3>, Matrix<3, 3>, u8)>,
     definition: Span,
     perm_group: OnceLock<Arc<PermutationGroup>>,
 }
@@ -228,7 +223,7 @@ impl PuzzleGeometry {
 
                     let mut face = sticker.0.clone();
                     for point in &mut face.points {
-                        *point = Point(turn.1 * (point.0 - turn.0) + turn.0);
+                        *point = Point(&turn.1 * &(point.0.clone() - &turn.0) + &turn.0);
                     }
 
                     let cloud = face.edge_cloud();
@@ -294,7 +289,6 @@ impl PuzzleGeometryDefinition {
     ///
     /// If the validity of the faces is not satisfied, or if the puzzle does
     /// not have the expected symmetries, this function will return an error.
-    #[expect(clippy::cast_precision_loss)]
     pub fn geometry(self) -> Result<PuzzleGeometry, PuzzleGeometryError> {
         let mut faces: Vec<(Face, Vec<ArcIntern<str>>)> = vec![];
         for face in self.polyhedron.0 {
@@ -335,22 +329,23 @@ impl PuzzleGeometryDefinition {
                     .collect::<Vec<_>>();
 
                 // The center of mass must be preserved over rotations therefore any axis of symmetry must pass through it.
-                let center_of_mass =
-                    edges.iter().map(|v| v.0 + v.1).sum::<Vector3<f64>>() / 2. / edges.len() as f64;
+                let center_of_mass = edges.iter().map(|v| v.0.clone() + &v.1).sum::<Vector<3>>()
+                    / &Num::from(2)
+                    / &Num::from(edges.len());
 
                 for edge in &mut edges {
-                    edge.0 -= center_of_mass;
-                    edge.1 -= center_of_mass;
+                    edge.0 -= &center_of_mass;
+                    edge.1 -= &center_of_mass;
                 }
 
                 let cloud = EdgeCloud::new(edges);
                 let mut into = cloud.clone();
 
-                // This could be optimized a lot
-                for symm in (2..=255).rev() {
-                    let matrix = rotation_of_degree(axis, symm);
-                    if cloud.try_symmetry(&mut into, matrix) {
-                        turns.insert(name, (center_of_mass, matrix, symm));
+                // TODO: Arbitrary rotation degrees and make it faster
+                for (symm, degree) in [(&DEG_72, 5), (&DEG_90, 4), (&DEG_120, 3), (&DEG_180, 2)] {
+                    let matrix = rotation_about(axis.clone(), (*symm).clone());
+                    if cloud.try_symmetry(&mut into, &matrix) {
+                        turns.insert(name, (center_of_mass, matrix, degree));
                         continue 'next_axis;
                     }
                 }
@@ -402,11 +397,10 @@ mod tests {
     use std::sync::Arc;
 
     use crate::{
-        Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError, knife::PlaneCut, shapes::CUBE,
-        turn_names,
+        Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError, knife::PlaneCut, num::Vector,
+        shapes::CUBE, turn_names,
     };
     use internment::ArcIntern;
-    use nalgebra::Vector3;
     use qter_core::{Int, Span, U, schreier_sims::StabilizerChain};
 
     #[test]
@@ -433,7 +427,7 @@ mod tests {
     #[test]
     fn degeneracy() {
         let valid = Face {
-            points: vec![Point(Vector3::new(1., 2., 3.))],
+            points: vec![Point(Vector::new([[1, 2, 3]]))],
             color: ArcIntern::from("aliceblue"),
         }
         .is_valid();
@@ -444,8 +438,8 @@ mod tests {
 
         let valid = Face {
             points: vec![
-                Point(Vector3::new(1., 2., 3.)),
-                Point(Vector3::new(5., 4., 3.)),
+                Point(Vector::new([[1, 2, 3]])),
+                Point(Vector::new([[5, 4, 3]])),
             ],
             color: ArcIntern::from("oklch(1 2 3)"),
         }
@@ -457,9 +451,9 @@ mod tests {
 
         let valid = Face {
             points: vec![
-                Point(Vector3::new(2., 2., 3.)),
-                Point(Vector3::new(3., 4., 6.)),
-                Point(Vector3::new(4., 6., 9.)),
+                Point(Vector::new([[2, 2, 3]])),
+                Point(Vector::new([[3, 4, 6]])),
+                Point(Vector::new([[4, 6, 9]])),
             ],
             color: ArcIntern::from("fuschia"),
         }
@@ -474,10 +468,10 @@ mod tests {
     fn not_coplanar() {
         let valid = Face {
             points: vec![
-                Point(Vector3::new(2., 2., 3.)),
-                Point(Vector3::new(3., 4., 6.)),
-                Point(Vector3::new(4., 6., 11.)),
-                Point(Vector3::new(6., 6., 11.)),
+                Point(Vector::new([[2, 2, 3]])),
+                Point(Vector::new([[3, 4, 6]])),
+                Point(Vector::new([[4, 6, 11]])),
+                Point(Vector::new([[6, 6, 11]])),
             ],
             color: ArcIntern::from("blue"),
         }
@@ -490,10 +484,10 @@ mod tests {
 
         let valid = Face {
             points: vec![
-                Point(Vector3::new(1., 1., 1.)),
-                Point(Vector3::new(1., 1., 0.)),
-                Point(Vector3::new(1., 0., 0.)),
-                Point(Vector3::new(1., 0., 1.)),
+                Point(Vector::new([[1, 1, 1]])),
+                Point(Vector::new([[1, 1, 0]])),
+                Point(Vector::new([[1, 0, 0]])),
+                Point(Vector::new([[1, 0, 1]])),
             ],
             color: ArcIntern::from("bruh"),
         }
@@ -508,33 +502,33 @@ mod tests {
             polyhedron: CUBE.to_owned(),
             cut_surfaces: vec![
                 Arc::from(PlaneCut {
-                    spot: Vector3::new(1. / 3., 0., 0.),
-                    normal: Vector3::new(1., 0., 0.),
-                    name: ArcIntern::from("L"),
-                }),
-                Arc::from(PlaneCut {
-                    spot: Vector3::new(-1. / 3., 0., 0.),
-                    normal: Vector3::new(-1., 0., 0.),
+                    spot: Vector::new_ratios([[(1, 3), (0, 1), (0, 1)]]),
+                    normal: Vector::new([[1, 0, 0]]),
                     name: ArcIntern::from("R"),
                 }),
                 Arc::from(PlaneCut {
-                    spot: Vector3::new(0., 1. / 3., 0.),
-                    normal: Vector3::new(0., 1., 0.),
+                    spot: Vector::new_ratios([[(-1, 3), (0, 1), (0, 1)]]),
+                    normal: Vector::new([[-1, 0, 0]]),
+                    name: ArcIntern::from("L"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: Vector::new_ratios([[(0, 1), (1, 3), (0, 1)]]),
+                    normal: Vector::new([[0, 1, 0]]),
                     name: ArcIntern::from("U"),
                 }),
                 Arc::from(PlaneCut {
-                    spot: Vector3::new(0., -1. / 3., 0.),
-                    normal: Vector3::new(0., -1., 0.),
+                    spot: Vector::new_ratios([[(0, 1), (-1, 3), (0, 1)]]),
+                    normal: Vector::new([[0, -1, 0]]),
                     name: ArcIntern::from("D"),
                 }),
                 Arc::from(PlaneCut {
-                    spot: Vector3::new(0., 0., 1. / 3.),
-                    normal: Vector3::new(0., 0., 1.),
+                    spot: Vector::new_ratios([[(0, 1), (0, 1), (1, 3)]]),
+                    normal: Vector::new([[0, 0, 1]]),
                     name: ArcIntern::from("F"),
                 }),
                 Arc::from(PlaneCut {
-                    spot: Vector3::new(0., 0., -1. / 3.),
-                    normal: Vector3::new(0., 0., -1.),
+                    spot: Vector::new_ratios([[(0, 1), (0, 1), (-1, 3)]]),
+                    normal: Vector::new([[0, 0, -1]]),
                     name: ArcIntern::from("B"),
                 }),
             ],
