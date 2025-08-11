@@ -12,7 +12,7 @@ use super::{
     FACT_UNTIL_19,
     puzzle::{PuzzleDef, PuzzleState},
 };
-use crate::phase2::{
+use crate::{
     orbit_puzzle::{
         OrbitPuzzleConstructors, OrbitPuzzleState, slice_orbit_puzzle::SliceOrbitPuzzle,
     },
@@ -969,7 +969,7 @@ impl<'id, P: PuzzleState<'id>> PruningTables<'id, P> for ZeroTable<'id, P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::phase2::puzzle::{apply_random_moves, cube3::Cube3};
+    use crate::puzzle::{apply_random_moves, cube3::Cube3};
     use generativity::make_guard;
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 

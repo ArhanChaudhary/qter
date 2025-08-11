@@ -162,7 +162,7 @@ impl CanonicalFSM for OrbitCanonicalFSM {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::phase2::puzzle::{PuzzleDef, cube3::Cube3, slice_puzzle::HeapPuzzle};
+    use crate::puzzle::{PuzzleDef, cube3::Cube3, slice_puzzle::HeapPuzzle};
     use generativity::make_guard;
     use puzzle_geometry::ksolve::{KPUZZLE_3X3, KPUZZLE_4X4};
 

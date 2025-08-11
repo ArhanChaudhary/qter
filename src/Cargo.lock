@@ -2154,24 +2154,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
-name = "cycle_combination_solver"
-version = "0.1.0"
-dependencies = [
- "cfg_aliases",
- "fastrand",
- "fxhash",
- "generativity",
- "integer-partitions",
- "itertools 0.14.0",
- "memoize",
- "num-traits",
- "pareto_front",
- "puzzle_geometry",
- "qter_core",
- "thiserror 2.0.12",
-]
-
-[[package]]
 name = "dashmap"
 version = "5.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3906,6 +3888,24 @@ version = "0.1.0"
 dependencies = [
  "puzzle_geometry",
  "qter_core",
+]
+
+[[package]]
+name = "phase2"
+version = "0.1.0"
+dependencies = [
+ "cfg_aliases",
+ "fastrand",
+ "fxhash",
+ "generativity",
+ "integer-partitions",
+ "itertools 0.14.0",
+ "memoize",
+ "num-traits",
+ "pareto_front",
+ "puzzle_geometry",
+ "qter_core",
+ "thiserror 2.0.12",
 ]
 
 [[package]]

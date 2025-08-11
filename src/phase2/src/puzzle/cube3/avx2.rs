@@ -3,7 +3,7 @@
 #![cfg_attr(not(avx2), allow(dead_code, unused_variables))]
 
 use super::common::{CornersTransformation, Cube3Interface, Cube3OrbitType, EdgesTransformation};
-use crate::phase2::{
+use crate::{
     orbit_puzzle::exact_hasher_orbit,
     puzzle::{SortedCycleType, cube3::common::CUBE_3_SORTED_ORBIT_DEFS},
 };
@@ -681,7 +681,7 @@ impl Cube3 {
 mod tests {
     extern crate test;
     use super::*;
-    use crate::phase2::puzzle::{PuzzleDef, apply_moves};
+    use crate::puzzle::{PuzzleDef, apply_moves};
     use generativity::make_guard;
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 

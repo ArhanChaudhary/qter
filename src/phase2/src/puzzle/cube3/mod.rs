@@ -4,7 +4,7 @@
 pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
-    use crate::phase2::puzzle::{
+    use crate::puzzle::{
         BrandedOrbitDef, OrbitDef, OrbitIdentifier, PuzzleState, SortedCycleType,
         SortedOrbitDefsRef, TransformationsMeta, TransformationsMetaError,
     };
@@ -219,8 +219,8 @@ mod common {
     }
 }
 
-pub(in crate::phase2::puzzle) mod avx2;
-pub(in crate::phase2::puzzle) mod simd8and16;
+pub(in crate::puzzle) mod avx2;
+pub(in crate::puzzle) mod simd8and16;
 
 #[cfg(avx2)]
 pub use avx2::Cube3;

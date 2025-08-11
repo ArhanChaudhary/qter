@@ -4,7 +4,7 @@ use super::{
     BrandedOrbitDef, MultiBvInterface, OrbitDef, OrbitIdentifier, PuzzleState, SortedOrbitDefsRef,
     TransformationsMeta, TransformationsMetaError,
 };
-use crate::phase2::{
+use crate::{
     FACT_UNTIL_19,
     orbit_puzzle::slice_orbit_puzzle::{
         induces_sorted_cycle_type_slice_orbit, replace_compose_slice_orbit,
@@ -35,7 +35,7 @@ mod private {
     //! Private module to disallow explicit instantiation of `OrbitBaseSlice`.
 
     use super::{BrandedOrbitDef, OrbitIdentifier};
-    use crate::phase2::puzzle::OrbitDef;
+    use crate::puzzle::OrbitDef;
     use std::slice;
 
     /// A newtyped index into the start of an orbit in a `StackPuzzle` or

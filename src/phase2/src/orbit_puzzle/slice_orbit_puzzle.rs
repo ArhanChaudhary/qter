@@ -2,7 +2,7 @@
 //! generation.
 
 use super::{OrbitPuzzleConstructors, OrbitPuzzleState};
-use crate::phase2::puzzle::{
+use crate::puzzle::{
     BrandedOrbitDef, MultiBvInterface, OrbitDef,
     slice_puzzle::{exact_hasher_orbit_bytes, slice_orbit_size},
 };

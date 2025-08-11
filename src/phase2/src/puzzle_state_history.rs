@@ -188,7 +188,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::phase2::puzzle::{Move, cube3::Cube3};
+    use crate::puzzle::{Move, cube3::Cube3};
     use generativity::{Guard, make_guard};
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
