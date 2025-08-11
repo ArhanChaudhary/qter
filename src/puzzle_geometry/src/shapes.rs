@@ -1,16 +1,18 @@
 use crate::{
     DEG_90, Face, Point, Polyhedron, PuzzleDescriptionString,
-    num::{Matrix, Vector, rotate_to},
+    num::{Matrix, Num, Vector, rotate_to},
     rotation_about,
 };
 use internment::ArcIntern;
 use std::sync::LazyLock;
 
 pub static TETRAHEDRON: LazyLock<Polyhedron> = LazyLock::new(|| {
-    let mut up = Point(Vector::new([[1, 1, 1]]).normalize());
-    let mut down_1 = Point(Vector::new([[1, -1, -1]]).normalize());
-    let mut down_2 = Point(Vector::new([[-1, 1, -1]]).normalize());
-    let mut down_3 = Point(Vector::new([[-1, -1, 1]]).normalize());
+    let scale = Num::from(3).sqrt();
+    // Each of these points has magnitude 3 which aligns with how twizzle works
+    let mut up = Point(Vector::new([[1, 1, 1]]) * &scale);
+    let mut down_1 = Point(Vector::new([[1, -1, -1]]) * &scale);
+    let mut down_2 = Point(Vector::new([[-1, 1, -1]]) * &scale);
+    let mut down_3 = Point(Vector::new([[-1, -1, 1]]) * &scale);
 
     let rotate_to = rotate_to(
         Matrix::new([[1, 1, 1], [1, -1, -1]]),

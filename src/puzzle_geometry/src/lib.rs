@@ -296,6 +296,8 @@ impl PuzzleGeometryDefinition {
         for cut_surface in &self.cut_surfaces {
             let mut new_faces = Vec::new();
 
+            // println!("{}", faces.len());
+            // println!("{faces:?}");
             for (face, name_components) in faces {
                 new_faces.extend(do_cut(&**cut_surface, &face)?.into_iter().map(
                     move |(new_face, name_component)| {
@@ -310,6 +312,8 @@ impl PuzzleGeometryDefinition {
 
             faces = new_faces;
         }
+        // println!("{}", faces.len());
+        // println!("{faces:?}");
 
         let stickers = faces;
 
@@ -396,8 +400,11 @@ mod tests {
     use std::sync::Arc;
 
     use crate::{
-        Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError, knife::PlaneCut, num::Vector,
-        shapes::CUBE, turn_names,
+        Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError,
+        knife::PlaneCut,
+        num::{Num, Vector},
+        shapes::{CUBE, TETRAHEDRON},
+        turn_names,
     };
     use internment::ArcIntern;
     use qter_core::{Int, Span, U, schreier_sims::StabilizerChain};
@@ -548,6 +555,81 @@ mod tests {
         assert_eq!(
             StabilizerChain::new(&group).cardinality(),
             "43252003274489856000".parse::<Int<U>>().unwrap()
+        );
+    }
+
+    #[test]
+    fn pyraminx() {
+        let up = TETRAHEDRON.0[0].points[0].clone().0;
+        let down1 = TETRAHEDRON.0[3].points[0].clone().0;
+        let down2 = TETRAHEDRON.0[3].points[1].clone().0;
+        let down3 = TETRAHEDRON.0[3].points[2].clone().0;
+        println!("{up:?}");
+        println!("{down1:?}");
+        println!("{down2:?}");
+        println!("{down3:?}");
+
+        let pyraminx = PuzzleGeometryDefinition {
+            polyhedron: TETRAHEDRON.to_owned(),
+            cut_surfaces: vec![
+                // Arc::from(PlaneCut {
+                //     spot: up.clone().normalize() / &Num::from(3),
+                //     normal: up.clone(),
+                //     name: ArcIntern::from("A"),
+                // }),
+                // Arc::from(PlaneCut {
+                //     spot: down1.clone().normalize() / &Num::from(3),
+                //     normal: down1.clone(),
+                //     name: ArcIntern::from("B"),
+                // }),
+                // Arc::from(PlaneCut {
+                //     spot: down2.clone().normalize() / &Num::from(3),
+                //     normal: down2.clone(),
+                //     name: ArcIntern::from("C"),
+                // }),
+                // Arc::from(PlaneCut {
+                //     spot: down3.clone().normalize() / &Num::from(3),
+                //     normal: down3.clone(),
+                //     name: ArcIntern::from("D"),
+                // }),
+                Arc::from(PlaneCut {
+                    spot: (up.clone().normalize() / &Num::from(3)) * &Num::from(5),
+                    normal: up.clone(),
+                    name: ArcIntern::from("E"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: (down1.clone().normalize() / &Num::from(3)) * &Num::from(5),
+                    normal: down1.clone(),
+                    name: ArcIntern::from("F"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: (down2.clone().normalize() / &Num::from(3)) * &Num::from(5),
+                    normal: down2.clone(),
+                    name: ArcIntern::from("G"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: (down3.clone().normalize() / &Num::from(3)) * &Num::from(5),
+                    normal: down3.clone(),
+                    name: ArcIntern::from("H"),
+                }),
+            ],
+            definition: Span::new(ArcIntern::from("pyraminx"), 0, 8),
+        };
+
+        let geometry = pyraminx.geometry().unwrap();
+        assert_eq!(geometry.stickers().len(), 16);
+
+        for turn in &geometry.turns {
+            assert_eq!(turn.1.2, 3);
+        }
+        assert_eq!(geometry.turns.len(), 4);
+
+        let group = geometry.permutation_group();
+        assert_eq!(group.facelet_count(), 12);
+
+        assert_eq!(
+            StabilizerChain::new(&group).cardinality(),
+            "81".parse::<Int<U>>().unwrap()
         );
     }
 }

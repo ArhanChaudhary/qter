@@ -128,7 +128,7 @@ dependencies = [
 [[package]]
 name = "algebraics"
 version = "0.3.0"
-source = "git+https://github.com/Xendergo/algebraics?branch=juice-perf#b07f71b2b9363065253dae3005837572d44d5b16"
+source = "git+https://github.com/Xendergo/algebraics?branch=juice-perf#a3f1de4dff5f2dbf542ec1b76ea0e72339d8c543"
 dependencies = [
  "lazy_static",
  "num-bigint",
@@ -4087,9 +4087,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.95"
+version = "1.0.96"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02b3e5e68a3a1a02aad3ec490a98007cbc13c37cbe84a3cd7b8e406d76e7f778"
+checksum = "beef09f85ae72cea1ef96ba6870c51e6382ebfa4f0e85b643459331f3daa5be0"
 dependencies = [
  "unicode-ident",
 ]
