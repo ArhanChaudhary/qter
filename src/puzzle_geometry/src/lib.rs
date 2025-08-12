@@ -4,6 +4,7 @@
 
 use std::{
     collections::{BTreeSet, HashMap},
+    mem,
     sync::{Arc, LazyLock, OnceLock},
 };
 
@@ -12,7 +13,7 @@ use internment::ArcIntern;
 use itertools::Itertools;
 use knife::{CutSurface, do_cut};
 use ksolve::KSolve;
-use num::{Matrix, Num, Vector, rotation_about};
+use num::{Matrix, Num, Vector, rotate_to, rotation_about};
 use qter_core::{
     Span,
     architectures::{Permutation, PermutationGroup},
@@ -40,8 +41,8 @@ pub enum PuzzleGeometryError {
         "A cut surface has cyclical structure and cannot be cut. Consider re-ordering the cut surfaces. Cut: {0}; Face: {1:?}"
     )]
     CyclicalCutSurface(String, Face),
-    #[error("The slice {0} does not have any rotational symmetry along the cut line: {1:?}")]
-    PuzzleLacksSymmetry(ArcIntern<str>, Vector<3>),
+    #[error("The slice {0} does not have any rotational symmetry")]
+    PuzzleLacksSymmetry(ArcIntern<str>),
 }
 
 static DEG_180: LazyLock<Vector<2>> = LazyLock::new(|| Vector::new([[-1, 0]]));
@@ -191,7 +192,7 @@ pub struct PuzzleGeometryDefinition {
 #[derive(Clone, Debug)]
 pub struct PuzzleGeometry {
     stickers: Vec<(Face, Vec<ArcIntern<str>>)>,
-    turns: HashMap<ArcIntern<str>, (Vector<3>, Matrix<3, 3>, u8)>,
+    turns: HashMap<ArcIntern<str>, (Vector<3>, Matrix<3, 3>, usize)>,
     definition: Span,
     perm_group: OnceLock<Arc<PermutationGroup>>,
 }
@@ -286,6 +287,7 @@ impl PuzzleGeometryDefinition {
     ///
     /// If the validity of the faces is not satisfied, or if the puzzle does
     /// not have the expected symmetries, this function will return an error.
+    #[expect(clippy::missing_panics_doc)]
     pub fn geometry(self) -> Result<PuzzleGeometry, PuzzleGeometryError> {
         let mut faces: Vec<(Face, Vec<ArcIntern<str>>)> = vec![];
         for face in self.polyhedron.0 {
@@ -296,8 +298,6 @@ impl PuzzleGeometryDefinition {
         for cut_surface in &self.cut_surfaces {
             let mut new_faces = Vec::new();
 
-            // println!("{}", faces.len());
-            // println!("{faces:?}");
             for (face, name_components) in faces {
                 new_faces.extend(do_cut(&**cut_surface, &face)?.into_iter().map(
                     move |(new_face, name_component)| {
@@ -312,48 +312,92 @@ impl PuzzleGeometryDefinition {
 
             faces = new_faces;
         }
-        // println!("{}", faces.len());
-        // println!("{faces:?}");
 
         let stickers = faces;
 
         let mut turns = HashMap::new();
+        let names = stickers.iter().flat_map(|v| v.1.iter()).unique();
 
-        for cut_surface in self.cut_surfaces {
-            let axes = cut_surface.axes();
+        for name in names {
+            let stickers = stickers
+                .iter()
+                .filter(|v| v.1.contains(name))
+                .map(|(face, centroid)| (face, centroid.clone()))
+                .collect_vec();
 
-            'next_axis: for (name, axis) in axes {
-                let mut edges = stickers
-                    .iter()
-                    .filter(|v| v.1.contains(&name))
-                    .flat_map(|v| v.0.edges())
-                    .collect::<Vec<_>>();
+            // The center of mass must be preserved over rotations therefore any axis of symmetry must pass through it.
+            let center_of_mass = stickers
+                .iter()
+                .flat_map(|v| &v.0.points)
+                .map(|v| v.0.clone())
+                .sum::<Vector<3>>()
+                / &Num::from(stickers.len());
 
-                // The center of mass must be preserved over rotations therefore any axis of symmetry must pass through it.
-                let center_of_mass = edges
-                    .iter()
-                    .map(|v| v.0.clone() + v.1.clone())
-                    .sum::<Vector<3>>()
-                    / &Num::from(2)
-                    / &Num::from(edges.len());
+            let mut edges = stickers.iter().flat_map(|v| v.0.edges()).collect_vec();
 
-                for edge in &mut edges {
-                    edge.0 -= center_of_mass.clone();
-                    edge.1 -= center_of_mass.clone();
+            for edge in &mut edges {
+                edge.0 -= center_of_mass.clone();
+                edge.1 -= center_of_mass.clone();
+            }
+
+            // Narrow down the edges that could potentially map to each other so that we don't have to try all of them
+            let mut edge_classifications: Vec<((Num, Num), Vec<(Matrix<3, 1>, Matrix<3, 1>)>)> =
+                Vec::new();
+
+            'next_edge: for edge in &edges {
+                let mut a = edge.0.clone().norm_squared();
+                let mut b = edge.1.clone().norm_squared();
+                if a > b {
+                    mem::swap(&mut a, &mut b);
                 }
 
-                let cloud = EdgeCloud::new(edges);
-
-                // TODO: Arbitrary rotation degrees and make it faster
-                for (symm, degree) in [(&DEG_72, 5), (&DEG_90, 4), (&DEG_120, 3), (&DEG_180, 2)] {
-                    let matrix = rotation_about(axis.clone(), (*symm).clone());
-                    if cloud.clone().try_symmetry(&matrix) {
-                        turns.insert(name, (center_of_mass, matrix, degree));
-                        continue 'next_axis;
+                for ((maybe_a, maybe_b), list) in &mut edge_classifications {
+                    if a == *maybe_a && b == *maybe_b {
+                        list.push(edge.clone());
+                        continue 'next_edge;
                     }
                 }
 
-                return Err(PuzzleGeometryError::PuzzleLacksSymmetry(name, axis));
+                edge_classifications.push(((a, b), vec![edge.clone()]));
+            }
+
+            let edges_that_might_map_together = edge_classifications
+                .into_iter()
+                .min_by_key(|v| v.1.len())
+                .unwrap()
+                .1;
+
+            let from = Matrix::new([
+                edges_that_might_map_together[0].0.clone().into_inner(),
+                edges_that_might_map_together[0].1.clone().into_inner(),
+            ]);
+
+            let matrices = edges_that_might_map_together
+                .into_iter()
+                .flat_map(|(a, b)| [(a.clone(), b.clone()), (b, a)])
+                .skip(1)
+                .map(|v| {
+                    let to = Matrix::new([v.0.into_inner(), v.1.into_inner()]);
+                    rotate_to(from.clone(), to)
+                });
+
+            let cloud = EdgeCloud::new(edges);
+
+            match matrices
+                .filter_map(|matrix| {
+                    cloud
+                        .clone()
+                        .try_symmetry(&matrix)
+                        .map(|degree| (matrix, degree))
+                })
+                .max_by_key(|v| v.1)
+            {
+                None | Some((_, 1)) => {
+                    return Err(PuzzleGeometryError::PuzzleLacksSymmetry(name.clone()));
+                }
+                Some((matrix, degree)) => {
+                    turns.insert(name.clone(), (center_of_mass, matrix, degree));
+                }
             }
         }
 
@@ -366,13 +410,13 @@ impl PuzzleGeometryDefinition {
     }
 }
 
-fn turn_names(base_name: &ArcIntern<str>, symm: u8) -> Vec<ArcIntern<str>> {
+fn turn_names(base_name: &ArcIntern<str>, symm: usize) -> Vec<ArcIntern<str>> {
     let mut names_begin = Vec::new();
     let mut names_end = Vec::new();
 
     let mut i = 1;
 
-    while names_begin.len() + names_end.len() < symm as usize - 1 {
+    while names_begin.len() + names_end.len() < symm - 1 {
         if names_begin.len() == names_end.len() {
             if i == 1 {
                 names_begin.push(ArcIntern::clone(base_name));

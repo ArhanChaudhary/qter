@@ -139,7 +139,8 @@ impl Neg for Num {
 
 impl Sum for Num {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Num(RealAlgebraicNumber::from(0_i64)), |a, v| a + v)
+        iter.reduce(|a, v| a + v)
+            .unwrap_or_else(|| Num(RealAlgebraicNumber::from(0_i64)))
     }
 }
 
@@ -396,7 +397,7 @@ impl<const O: usize, const M: usize, const I: usize> Mul<&Matrix<M, I>> for &Mat
 
 impl<const O: usize, const I: usize> Sum for Matrix<O, I> {
     fn sum<T: Iterator<Item = Self>>(iter: T) -> Self {
-        iter.fold(Matrix::zero(), |a, v| a + v)
+        iter.reduce(|a, v| a + v).unwrap_or_else(Matrix::zero)
     }
 }
 

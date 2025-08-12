@@ -23,10 +23,6 @@ pub trait CutSurface: core::fmt::Debug {
 
     /// Return a series of points that when connected as line segments including A and B, connects A and B through the boundary. A and B are guaranteed to already be on the boundary. `on_boundary` when called on any of the points must return `true`.
     fn join(&self, a: Point, b: Point, subspace_info: FaceSubspaceInfo) -> Vec<Point>;
-
-    /// Return the axes in 3d space about which the regions turn.
-    /// Every region must be included in the list.
-    fn axes(&self) -> Vec<(ArcIntern<str>, Vector<3>)>;
 }
 
 #[derive(Clone, Debug)]
@@ -83,10 +79,6 @@ impl CutSurface for PlaneCut {
 
     fn join(&self, _: Point, _: Point, _: FaceSubspaceInfo) -> Vec<Point> {
         vec![]
-    }
-
-    fn axes(&self) -> Vec<(ArcIntern<str>, Vector<3>)> {
-        vec![(ArcIntern::clone(&self.name), self.normal.clone())]
     }
 }
 

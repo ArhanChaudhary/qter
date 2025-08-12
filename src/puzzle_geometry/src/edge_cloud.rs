@@ -16,32 +16,43 @@ impl EdgeCloud {
         EdgeCloud { edges }
     }
 
-    pub fn try_symmetry(self, matrix: &Matrix<3, 3>) -> bool {
+    pub fn try_symmetry(self, matrix: &Matrix<3, 3>) -> Option<usize> {
         if self.edges.is_empty() {
-            return true;
+            return None;
         }
 
-        let mut edges = self.edges;
+        let mut edges = self.edges.into_iter().dedup_with_count().collect_vec();
         let mut current_edge = edges[0].clone();
+        let mut max_degree = 1;
+        let mut current_degree = 1;
 
         loop {
-            let (start, end) = &current_edge;
+            let (eq_count, (start, end)) = &current_edge;
             let mut new_start = matrix * start;
             let mut new_end = matrix * end;
             maybe_flip_edge(&mut new_start, &mut new_end);
-            match edges.binary_search_by(|v| edge_compare(&v.0, &v.1, &new_start, &new_end)) {
+            match edges.binary_search_by(|(_, v)| edge_compare(&v.0, &v.1, &new_start, &new_end)) {
                 Ok(idx) => {
+                    if edges[idx].0 != *eq_count {
+                        return None;
+                    }
+
                     if edges.len() == 1 {
-                        return true;
+                        max_degree = max_degree.max(current_degree);
+                        return Some(max_degree);
                     }
 
                     current_edge = edges.remove(idx);
 
                     if idx == 0 {
+                        max_degree = max_degree.max(current_degree);
+                        current_degree = 1;
                         current_edge = edges[0].clone();
+                    } else {
+                        current_degree += 1;
                     }
                 }
-                Err(_) => return false,
+                Err(_) => return None,
             }
         }
     }
@@ -124,14 +135,16 @@ mod tests {
     fn try_symmetry() {
         let tetrahedron = EdgeCloud::new(TETRAHEDRON.0.iter().flat_map(Face::edges).collect());
 
-        assert!(
+        assert_eq!(
             tetrahedron
                 .clone()
-                .try_symmetry(&rotation_about(Vector::new([[0, 1, 0]]), DEG_120.clone()),)
+                .try_symmetry(&rotation_about(Vector::new([[0, 1, 0]]), DEG_120.clone())),
+            Some(3),
         );
 
-        assert!(
-            !tetrahedron.try_symmetry(&rotation_about(Vector::new([[0, 1, 0]]), DEG_72.clone()),)
+        assert_eq!(
+            tetrahedron.try_symmetry(&rotation_about(Vector::new([[0, 1, 0]]), DEG_72.clone())),
+            None
         );
     }
 }
