@@ -9,7 +9,28 @@ pub mod pruning;
 pub mod puzzle;
 pub mod puzzle_state_history;
 pub mod solver;
-pub use generativity;
+pub use generativity::*;
+
+#[macro_export]
+macro_rules! start {
+    ($msg:expr) => {
+        concat!("⏳ ", $msg)
+    };
+}
+
+#[macro_export]
+macro_rules! working {
+    ($msg:expr) => {
+        concat!("🛠  ", $msg)
+    };
+}
+
+#[macro_export]
+macro_rules! success {
+    ($msg:expr) => {
+        concat!("✅ ", $msg)
+    };
+}
 
 // We can do one more however it will overflow when adding more to it which is
 // common in context

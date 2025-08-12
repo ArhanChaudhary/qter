@@ -848,7 +848,6 @@ mod tests {
             let state = apply_moves(&cube3_def, &solved, "L F L' F'", i);
             result.replace_inverse(&state, cube3_def.sorted_orbit_defs_ref());
             let remaining_state = apply_moves(&cube3_def, &solved, "L F L' F'", 6 - i);
-            println!("{result:?}\n{remaining_state:?}\n\n");
             assert_eq!(result, remaining_state);
         }
     }
@@ -1110,7 +1109,7 @@ mod tests {
                 }
                 let other_state = apply_moves(&cube3_def, &solved, other_moves, 1);
                 assert!(!other_state.induces_sorted_cycle_type(
-                    &expected_cts,
+                    expected_cts,
                     cube3_def.sorted_orbit_defs_ref(),
                     multi_bv.reusable_ref()
                 ));

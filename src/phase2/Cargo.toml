@@ -9,12 +9,17 @@ fxhash = "0.2.1"
 generativity = "1.1.0"
 integer-partitions = "0.1.1"
 itertools = "0.14.0"
+log = "0.4.27"
 memoize = "0.4.2"
 num-traits = "0.2.19"
 pareto_front = "1.0.1"
 puzzle_geometry = { version = "0.1.0", path = "../puzzle_geometry" }
 qter_core = { version = "0.1.0", path = "../qter_core" }
 thiserror = "2.0.11"
+
+[dev-dependencies]
+pretty_env_logger = "0.5.0"
+test-log = "0.2.18"
 
 [build-dependencies]
 cfg_aliases = "0.2.1"

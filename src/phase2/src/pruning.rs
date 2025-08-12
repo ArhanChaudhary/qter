@@ -18,12 +18,15 @@ use crate::{
     },
     permutator::pandita2,
     puzzle::{BrandedOrbitDef, MultiBvInterface, OrbitIdentifier, SortedCycleType},
+    start, success, working,
 };
 use generativity::Id;
 use itertools::Itertools;
+use log::{debug, info};
 use std::{
     marker::PhantomData,
     num::{NonZeroU8, NonZeroUsize},
+    time::Instant,
 };
 use thiserror::Error;
 
@@ -39,7 +42,9 @@ pub trait PruningTables<'id, P: PuzzleState<'id>> {
     /// # Errors
     ///
     /// Returns an error if the generation fails
-    fn try_generate(generate_metas: Self::GenerateMetas<'_>) -> Result<Self, Self::GenerateError>
+    fn try_generate_all(
+        generate_metas: Self::GenerateMetas<'_>,
+    ) -> Result<Self, Self::GenerateError>
     where
         Self: Sized;
 
@@ -331,9 +336,12 @@ impl<'id, P: PuzzleState<'id> + 'id> PruningTables<'id, P> for OrbitPruningTable
         'id: 'a;
     type GenerateError = OrbitPruningTableGenerationError;
 
-    fn try_generate(
+    fn try_generate_all(
         generate_metas: OrbitPruningTablesGenerateMeta<'id, '_, P>,
     ) -> Result<OrbitPruningTables<'id, P>, OrbitPruningTableGenerationError> {
+        info!(start!("Generating all orbit pruning tables"));
+        let start = Instant::now();
+
         let mut orbit_pruning_tables =
             Vec::with_capacity(generate_metas.puzzle_def.sorted_orbit_defs.len());
         let mut remaining_size_bytes = generate_metas.max_size_bytes;
@@ -425,9 +433,15 @@ impl<'id, P: PuzzleState<'id> + 'id> PruningTables<'id, P> for OrbitPruningTable
             orbit_pruning_tables.push(orbit_pruning_table);
         }
 
-        Ok(OrbitPruningTables {
+        let orbit_pruning_tables = OrbitPruningTables {
             orbit_pruning_tables: orbit_pruning_tables.into_boxed_slice(),
-        })
+        };
+        info!(
+            success!("Generated all orbit pruning tables in {:?}"),
+            start.elapsed()
+        );
+        debug!("");
+        Ok(orbit_pruning_tables)
     }
 
     fn permissible_heuristic(&self, puzzle_state: &P) -> u8 {
@@ -450,9 +464,20 @@ macro_rules! table_fn {
                 OrbitPruningTableGenerationMeta<'id, 'a, P>,
             ),
         > {
+            info!(start!("Generating {}"), stringify!($table));
+            let start = Instant::now();
             let (table, used_size_bytes) =
                 $table::<$storage<{ $exact }>, P::OrbitIdentifier>::try_generate(generate_meta)?;
-            Ok((Box::new(table), used_size_bytes))
+            let generated = (
+                Box::new(table) as Box<dyn OrbitPruningTable<_>>,
+                used_size_bytes,
+            );
+            info!(
+                success!("Generated {} in {:?}"),
+                stringify!($table),
+                start.elapsed()
+            );
+            Ok(generated)
         }
     };
     ($fn_name:ident, $table:ident) => {
@@ -465,8 +490,19 @@ macro_rules! table_fn {
                 OrbitPruningTableGenerationMeta<'id, 'a, P>,
             ),
         > {
+            info!(start!("Generating {}"), stringify!($table));
+            let start = Instant::now();
             let (table, used_size_bytes) = $table::try_generate(generate_meta)?;
-            Ok((Box::new(table), used_size_bytes))
+            let generated = (
+                Box::new(table) as Box<dyn OrbitPruningTable<_>>,
+                used_size_bytes,
+            );
+            info!(
+                success!("Generated {} in {:?}"),
+                stringify!($table),
+                start.elapsed()
+            );
+            Ok(generated)
         }
     };
 }
@@ -832,7 +868,7 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
         let mut perm = (0..piece_count).collect_vec().into_boxed_slice();
         let mut ori = vec![0; piece_count as usize].into_boxed_slice();
         while let Some(depth_heuristic) = OrbitPruneHeuristic::occupied(depth) {
-            let old = vacant_entry_count;
+            let prev_vacant_entry_count = vacant_entry_count;
             let mut exact_orbit_hash = 0;
             for i in 0..piece_count {
                 perm[i as usize] = i;
@@ -895,7 +931,13 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
                     pandita2(&mut perm);
                 }
             }
-            eprintln!("Depth {depth}: {} filled", old - vacant_entry_count);
+            debug!(working!("Filled {}"), prev_vacant_entry_count - vacant_entry_count);
+            debug!(
+                working!("Pruning table depth {}: {}/{}"),
+                depth,
+                entry_count - vacant_entry_count,
+                entry_count,
+            );
             if vacant_entry_count == 0 {
                 assert_eq!(exact_orbit_hash, entry_count);
                 break;
@@ -957,7 +999,9 @@ impl<'id, P: PuzzleState<'id>> PruningTables<'id, P> for ZeroTable<'id, P> {
         'id: 'a;
     type GenerateError = ();
 
-    fn try_generate((): ()) -> Result<ZeroTable<'id, P>, ()> {
+    fn try_generate_all((): ()) -> Result<ZeroTable<'id, P>, ()> {
+        info!(success!("Generated no pruning table"));
+        debug!("");
         Ok(ZeroTable(PhantomData))
     }
 
@@ -973,7 +1017,7 @@ mod tests {
     use generativity::make_guard;
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
-    #[test]
+    #[test_log::test]
     fn test_orbit_prune_heuristic_invariants() {
         let vacant = OrbitPruneHeuristic::vacant();
         assert!(vacant.is_vacant());
@@ -987,7 +1031,7 @@ mod tests {
         assert!(occupied.is_none());
     }
 
-    #[test]
+    #[test_log::test]
     fn test_exact_uncompressed_storage_backend() {
         let mut storage =
             UncompressedStorageBackend::<true>::initialize_from_meta(MaxSizeBytes(100));
@@ -1001,7 +1045,7 @@ mod tests {
         assert_eq!(storage.permissible_heuristic_hash(5), 3);
     }
 
-    #[test]
+    #[test_log::test]
     fn test_approximate_uncompressed_storage_backend() {
         let mut storage =
             UncompressedStorageBackend::<false>::initialize_from_meta(MaxSizeBytes(100));
@@ -1013,7 +1057,7 @@ mod tests {
         assert_eq!(storage.permissible_heuristic_hash(6), 2);
     }
 
-    #[test]
+    #[test_log::test]
     fn test_zero_orbit_tables() {
         make_guard!(guard);
         let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
@@ -1049,23 +1093,23 @@ mod tests {
             id,
         )
         .unwrap();
-        let orbit_tables = OrbitPruningTables::try_generate(generate_metas).unwrap();
+        let orbit_tables = OrbitPruningTables::try_generate_all(generate_metas).unwrap();
 
         assert_eq!(orbit_tables.permissible_heuristic(&solved), 0);
         assert_eq!(orbit_tables.permissible_heuristic(&u_move.puzzle_state), 0);
     }
 
-    #[test]
+    #[test_log::test]
     fn test_zero_table() {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
-        let zero_table = ZeroTable::try_generate(()).unwrap();
+        let zero_table = ZeroTable::try_generate_all(()).unwrap();
 
         let random_state = apply_random_moves(&cube3_def, &cube3_def.new_solved_state(), 20);
         assert_eq!(zero_table.permissible_heuristic(&random_state), 0);
     }
 
-    #[test]
+    #[test_log::test]
     fn test_not_supported_table_type() {
         make_guard!(guard);
         let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
@@ -1160,7 +1204,7 @@ mod tests {
         )
         .unwrap();
 
-        let orbit_tables = OrbitPruningTables::try_generate(generate_metas);
+        let orbit_tables = OrbitPruningTables::try_generate_all(generate_metas);
         assert!(matches!(
             orbit_tables,
             Err(OrbitPruningTableGenerationError::NotBigEnough)
@@ -1207,7 +1251,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[test_log::test]
     fn test_wip() {
         return;
         make_guard!(guard);
@@ -1225,13 +1269,14 @@ mod tests {
             id,
         )
         .unwrap();
-        let orbit_tables = OrbitPruningTables::try_generate(generate_metas).unwrap();
+        let orbit_tables = OrbitPruningTables::try_generate_all(generate_metas).unwrap();
         assert_eq!(orbit_tables.orbit_pruning_tables.len(), 2);
         assert_eq!(
             orbit_tables.orbit_pruning_tables[0]
                 .permissible_heuristic(&cube3_def.new_solved_state()),
             0
         );
+        panic!();
         // println!(
         //     "{:?}",
         //     orbit_tables.orbit_pruning_tables[1]
@@ -1253,7 +1298,7 @@ mod tests {
         // let orbit_tables: OrbitPruningTables<Cube3> =
         //     bincode::deserialize_from(&mut file).unwrap();
     }
-    // #[test]
+    // #[test_log::test]
     // fn test_exact_orbit_hasher_only_hashes_orbit() {
     //     let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
     //     let solved = cube3_def.new_solved_state();
