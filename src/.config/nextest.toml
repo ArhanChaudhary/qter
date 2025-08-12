@@ -1,0 +1,3 @@
+[[profile.default.overrides]]
+filter = "binary_id(phase2::solver)"
+success-output = "final"
