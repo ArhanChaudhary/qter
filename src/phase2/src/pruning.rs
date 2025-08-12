@@ -130,7 +130,7 @@ pub struct OrbitPruningTablesGenerateMeta<'id, 'a, P: PuzzleState<'id>> {
     puzzle_def: &'a PuzzleDef<'id, P>,
     sorted_cycle_type: &'a SortedCycleType<'id>,
     max_size_bytes: usize,
-    maybe_table_types: Option<Vec<(TableTy, StorageBackendTy)>>,
+    maybe_table_types: Option<Vec<TableTy>>,
     id: Id<'id>,
 }
 
@@ -202,16 +202,16 @@ pub enum TableTypeInstantiationError {
     InvalidOrbitPuzzleTypesLength { expected: usize, actual: usize },
     #[error("Puzzle state cannot be an orbit puzzle")]
     PuzzleStateCannotBeOrbitPuzzle,
-    #[error("Table type ({0:?}, {1:?}) not supported for this orbit puzzle type")]
-    NotSupported(TableTy, StorageBackendTy),
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum TableTy {
-    Approximate,
-    Exact,
-    CycleType,
+    Approximate(StorageBackendTy),
+    Exact(StorageBackendTy),
+    CycleTypeUncompressed,
     Zero,
+    // We need this so users can specify a vec of table types and make some of
+    // them dynamic and some of them not
     Dynamic,
 }
 
@@ -220,8 +220,6 @@ pub enum StorageBackendTy {
     Uncompressed,
     Nxopt,
     Tans,
-    Zero,
-    Dynamic,
 }
 
 pub struct ZeroTable<'id, P: PuzzleState<'id>>(PhantomData<&'id P>);
@@ -303,7 +301,7 @@ impl<'id, 'a, P: PuzzleState<'id>> OrbitPruningTablesGenerateMeta<'id, 'a, P> {
     pub fn new_with_table_types(
         puzzle_def: &'a PuzzleDef<'id, P>,
         sorted_cycle_type: &'a SortedCycleType<'id>,
-        table_types: Vec<(TableTy, StorageBackendTy)>,
+        table_types: Vec<TableTy>,
         max_size_bytes: usize,
         id: Id<'id>,
     ) -> Result<Self, TableTypeInstantiationError> {
@@ -313,15 +311,6 @@ impl<'id, 'a, P: PuzzleState<'id>> OrbitPruningTablesGenerateMeta<'id, 'a, P> {
                 expected: puzzle_def.sorted_orbit_defs.len(),
                 actual: table_types.len(),
             });
-        }
-        if table_types
-            .iter()
-            .any(|table_type| matches!(table_type, (TableTy::CycleType, StorageBackendTy::Tans)))
-        {
-            return Err(TableTypeInstantiationError::NotSupported(
-                TableTy::CycleType,
-                StorageBackendTy::Tans,
-            ));
         }
         generate_metas.maybe_table_types = Some(table_types);
         Ok(generate_metas)
@@ -374,6 +363,8 @@ impl<'id, P: PuzzleState<'id> + 'id> PruningTables<'id, P> for OrbitPruningTable
 
             let sorted_cycle_type_orbit = &generate_metas.sorted_cycle_type.inner[orbit_index];
 
+            // sorted_orbit_defs.len() - orbit_index and then account for zero
+            // table types which are manually ignored
             let unprocessed_orbits_count = NonZeroUsize::new(
                 generate_metas
                     .puzzle_def
@@ -388,22 +379,14 @@ impl<'id, P: PuzzleState<'id> + 'id> PruningTables<'id, P> for OrbitPruningTable
                                 .iter()
                                 .skip(orbit_index)
                                 .copied()
-                                .filter(|&table_type| {
-                                    matches!(
-                                        table_type,
-                                        (TableTy::Zero, _) | (_, StorageBackendTy::Zero)
-                                    )
-                                })
+                                .filter(|&table_type| matches!(table_type, TableTy::Zero))
                                 .count()
                         },
                     ))
                     .unwrap(),
             )
             .unwrap_or_else(|| {
-                assert!(matches!(
-                    maybe_table_type,
-                    Some((TableTy::Zero, _) | (_, StorageBackendTy::Zero))
-                ));
+                assert!(matches!(maybe_table_type, Some(TableTy::Zero)));
                 NonZeroUsize::new(1).unwrap()
             });
 
@@ -417,17 +400,8 @@ impl<'id, P: PuzzleState<'id> + 'id> PruningTables<'id, P> for OrbitPruningTable
                 id,
             };
 
-            let (orbit_pruning_table, used_size_bytes) = match maybe_table_type {
-                Some(table_type)
-                    if !matches!(
-                        table_type,
-                        (TableTy::Dynamic, _) | (_, StorageBackendTy::Dynamic)
-                    ) =>
-                {
-                    try_generate_orbit_pruning_table_with_table_type(generate_meta, table_type)?
-                }
-                _ => generate_orbit_pruning_table(generate_meta),
-            };
+            let (orbit_pruning_table, used_size_bytes) =
+                try_generate_orbit_pruning_table_with_table_type(generate_meta, maybe_table_type)?;
 
             remaining_size_bytes -= used_size_bytes;
             orbit_pruning_tables.push(orbit_pruning_table);
@@ -518,41 +492,32 @@ table_fn! { try_generate_zero_orbit_table,                     ZeroOrbitTable   
 
 fn try_generate_orbit_pruning_table_with_table_type<'id, P: PuzzleState<'id> + 'id>(
     generate_meta: OrbitPruningTableGenerationMeta<'id, '_, P>,
-    table_type: (TableTy, StorageBackendTy),
+    table_type: Option<TableTy>,
 ) -> Result<(Box<dyn OrbitPruningTable<'id, P> + 'id>, usize), OrbitPruningTableGenerationError> {
     match table_type {
-        (TableTy::Exact, StorageBackendTy::Uncompressed) => {
+        Some(TableTy::Exact(StorageBackendTy::Uncompressed)) => {
             try_generate_exact_uncompressed_orbit_table(generate_meta).map_err(|(err, _)| err)
         }
-        (TableTy::Exact, StorageBackendTy::Nxopt) => {
+        Some(TableTy::Exact(StorageBackendTy::Nxopt)) => {
             try_generate_exact_nxopt_orbit_table(generate_meta).map_err(|(err, _)| err)
         }
-        (TableTy::Exact, StorageBackendTy::Tans) => {
+        Some(TableTy::Exact(StorageBackendTy::Tans)) => {
             try_generate_exact_tans_orbit_table(generate_meta).map_err(|(err, _)| err)
         }
-        (TableTy::Approximate, StorageBackendTy::Uncompressed) => {
+        Some(TableTy::Approximate(StorageBackendTy::Uncompressed)) => {
             try_generate_approximate_uncompressed_orbit_table(generate_meta).map_err(|(err, _)| err)
         }
-        (TableTy::Approximate, StorageBackendTy::Nxopt) => {
+        Some(TableTy::Approximate(StorageBackendTy::Nxopt)) => {
             try_generate_approximate_nxopt_orbit_table(generate_meta).map_err(|(err, _)| err)
         }
-        (TableTy::Approximate, StorageBackendTy::Tans) => {
+        Some(TableTy::Approximate(StorageBackendTy::Tans)) => {
             try_generate_approximate_tans_orbit_table(generate_meta).map_err(|(err, _)| err)
         }
-        (TableTy::CycleType, StorageBackendTy::Uncompressed) => {
+        Some(TableTy::CycleTypeUncompressed) => {
             try_generate_cycle_type_uncompressed_orbit_table(generate_meta).map_err(|(err, _)| err)
         }
-        (TableTy::CycleType, storage_backend_ty) => {
-            panic!(
-                "CycleType orbit tables are not supported for storage backend type {storage_backend_ty:?}"
-            )
-        }
-        (TableTy::Zero, _) | (_, StorageBackendTy::Zero) => {
-            Ok(try_generate_zero_orbit_table(generate_meta).unwrap())
-        }
-        (TableTy::Dynamic, _) | (_, StorageBackendTy::Dynamic) => {
-            panic!("Dynamic orbit tables cannot be specified with a table type")
-        }
+        Some(TableTy::Zero) => Ok(try_generate_zero_orbit_table(generate_meta).unwrap()),
+        Some(TableTy::Dynamic) | None => Ok(generate_orbit_pruning_table(generate_meta)),
     }
 }
 
@@ -1090,10 +1055,7 @@ mod tests {
         let generate_metas = OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
             &identity_cycle_type,
-            vec![
-                (TableTy::Exact, StorageBackendTy::Zero),
-                (TableTy::Zero, StorageBackendTy::Tans),
-            ],
+            vec![TableTy::Zero, TableTy::Zero],
             0,
             id,
         )
@@ -1114,47 +1076,6 @@ mod tests {
         assert_eq!(zero_table.permissible_heuristic(&random_state), 0);
     }
 
-    #[test_log::test]
-    fn test_not_supported_table_type() {
-        make_guard!(guard);
-        let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
-        let identity_cycle_type =
-            SortedCycleType::new(vec![vec![], vec![]], cube3_def.sorted_orbit_defs_ref()).unwrap();
-        let generate_metas = OrbitPruningTablesGenerateMeta::new_with_table_types(
-            &cube3_def,
-            &identity_cycle_type,
-            vec![
-                (TableTy::CycleType, StorageBackendTy::Tans),
-                (TableTy::Exact, StorageBackendTy::Uncompressed),
-            ],
-            0,
-            id,
-        );
-        assert!(matches!(
-            generate_metas,
-            Err(TableTypeInstantiationError::NotSupported(
-                TableTy::CycleType,
-                StorageBackendTy::Tans
-            ))
-        ));
-    }
-
-    // #[test]
-    // fn test_custom_orientation_index() {
-    //     let k = 8;
-    //     for orientation_count in 1..=4 {
-    //         for (i, orients) in repeat_n(0..orientation_count, k)
-    //             .multi_cartesian_product()
-    //             .filter(|p| p.iter().sum::<i8>().rem_euclid(orientation_count) == 0)
-    //             .enumerate()
-    //         {
-    //             let left = get_index_of_orientation(&orients, orientation_count as u8);
-    //             let right = i as u16;
-    //             assert_eq!(left, right);
-    //         }
-    //     }
-    // }
-
     #[test]
     fn test_new_orbit_generation_meta() {
         make_guard!(guard);
@@ -1171,7 +1092,7 @@ mod tests {
             OrbitPruningTablesGenerateMeta::new_with_table_types(
                 &cube3_def,
                 &identity_cycle_type,
-                vec![(TableTy::Exact, StorageBackendTy::Uncompressed)],
+                vec![TableTy::Exact(StorageBackendTy::Uncompressed)],
                 1000,
                 id,
             ),
@@ -1184,7 +1105,10 @@ mod tests {
         OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
             &identity_cycle_type,
-            vec![(TableTy::Exact, StorageBackendTy::Uncompressed); 2],
+            vec![
+                TableTy::Exact(StorageBackendTy::Uncompressed),
+                TableTy::Exact(StorageBackendTy::Uncompressed),
+            ],
             1000,
             id,
         )
@@ -1201,8 +1125,8 @@ mod tests {
             &cube3_def,
             &identity_cycle_type,
             vec![
-                (TableTy::Exact, StorageBackendTy::Uncompressed),
-                (TableTy::Zero, StorageBackendTy::Zero),
+                TableTy::Exact(StorageBackendTy::Uncompressed),
+                TableTy::Zero,
             ],
             88_179_839,
             id,
@@ -1267,8 +1191,8 @@ mod tests {
             &cube3_def,
             &identity_cycle_type,
             vec![
-                (TableTy::Exact, StorageBackendTy::Uncompressed),
-                (TableTy::Zero, StorageBackendTy::Zero),
+                TableTy::Exact(StorageBackendTy::Uncompressed),
+                TableTy::Zero,
             ],
             88_179_840,
             id,

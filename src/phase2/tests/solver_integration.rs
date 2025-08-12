@@ -35,10 +35,7 @@ fn test_identity_cycle_type() {
         OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
             &identity_cycle_type,
-            vec![
-                (TableTy::Exact, StorageBackendTy::Zero),
-                (TableTy::Exact, StorageBackendTy::Zero),
-            ],
+            vec![TableTy::Zero, TableTy::Zero],
             0,
             id,
         )
@@ -47,6 +44,7 @@ fn test_identity_cycle_type() {
     .unwrap();
     let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
         &cube3_def,
+        // TODO: some way to FORCE identity_cycle_type to be correlated with pruning_tables
         identity_cycle_type,
         pruning_tables,
         SearchStrategy::AllSolutions,
@@ -127,6 +125,7 @@ fn test_control_optimal_cycle() {
     return;
     make_guard!(guard);
     let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+    // TODO: brand
     let sorted_cycle_type = SortedCycleType::new(
         vec![vec![(1, true), (5, true)], vec![(1, true), (1, true)]],
         cube3_def.sorted_orbit_defs_ref(),
@@ -136,8 +135,8 @@ fn test_control_optimal_cycle() {
         &cube3_def,
         &sorted_cycle_type,
         vec![
-            (TableTy::Exact, StorageBackendTy::Uncompressed),
-            (TableTy::Zero, StorageBackendTy::Zero),
+            TableTy::Exact(StorageBackendTy::Uncompressed),
+            TableTy::Zero,
         ],
         88_179_840,
         id,
@@ -153,13 +152,11 @@ fn test_control_optimal_cycle() {
 
     let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
     for solution in &solutions {
-        for move_ in solution {
-            info!("{} ", &move_.name);
-        }
-        info!("\n");
+        info!("{:?}", solution.iter().map(|move_| &move_.name).format(" "));
     }
     assert_eq!(solutions.len(), 260); // TODO: should be 480
     assert!(solutions.iter().all(|solution| solution.len() == 5));
+    // panic!();
 }
 
 #[allow(dead_code)]
