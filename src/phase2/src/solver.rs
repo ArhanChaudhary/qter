@@ -209,13 +209,16 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
         mutable
             .puzzle_state_history
             .resize_if_needed(depth as usize + 1);
+
+        let mut deth_start;
         while mutable.solutions.is_empty() {
             debug!(working!("Searching depth {}..."), depth);
+            deth_start = Instant::now();
             self.search_for_solution(&mut mutable, CanonicalFSMState::default(), 0, true, depth);
             debug!(
                 working!("Traversed {} nodes in {:.3}s"),
                 mutable.nodes_visited,
-                start.elapsed().as_secs_f64()
+                deth_start.elapsed().as_secs_f64()
             );
             mutable.nodes_visited = 0;
             mutable
