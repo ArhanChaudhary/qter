@@ -63,7 +63,7 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
         entry_index: usize,
         root: bool,
         mut togo: u8,
-    ) -> bool {
+    ) {
         if log_enabled!(Level::Debug) {
             mutable.nodes_visited += 1;
         }
@@ -75,7 +75,7 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
         if est_remaining_cost > togo {
             // TODO: what the heck does this do
             // https://github.com/cubing/twsearch/commit/a86177ac2bd462bb9d7d91af743e883449fbfb6b
-            return false;
+            return;
         }
 
         let mut next_entry_index = entry_index + 1;
@@ -135,7 +135,7 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
             }
 
             // We handle togo==0 inline to save the function call overhead
-            let next_depth_found_solution = if togo == 0 {
+            if togo == 0 {
                 // SAFETY: we just pushed something onto the stack
                 let last_puzzle_state =
                     unsafe { mutable.puzzle_state_history.last_state_unchecked() };
@@ -147,17 +147,16 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
                     mutable
                         .solutions
                         .push(mutable.puzzle_state_history.create_move_history());
-                    true
-                } else {
-                    false
                 }
             } else {
                 // TODO: Actual IDA* takes the min of this bound and uses it; look into?
-                self.search_for_solution(mutable, next_fsm_state, next_entry_index, false, togo)
-            };
+                self.search_for_solution(mutable, next_fsm_state, next_entry_index, false, togo);
+            }
 
-            if next_depth_found_solution && self.search_strategy == SearchStrategy::FirstSolution {
-                return true;
+            if !mutable.solutions.is_empty()
+                && self.search_strategy == SearchStrategy::FirstSolution
+            {
+                return;
             }
 
             mutable.puzzle_state_history.pop_stack();
@@ -171,7 +170,6 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
             //     }
             // }
         }
-        false
     }
 
     pub fn solve<H: PuzzleStateHistoryInterface<'id, P>>(&self) -> SolutionsIntoIter<'id, 'a, P> {

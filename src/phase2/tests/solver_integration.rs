@@ -127,7 +127,7 @@ fn test_control_optimal_cycle() {
     let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
     // TODO: brand
     let sorted_cycle_type = SortedCycleType::new(
-        vec![vec![(1, true), (5, true)], vec![(1, true), (1, true)]],
+        vec![vec![(1, true), (1, true)], vec![(1, true), (5, true)]],
         cube3_def.sorted_orbit_defs_ref(),
     )
     .unwrap();
@@ -152,11 +152,11 @@ fn test_control_optimal_cycle() {
 
     let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
     for solution in &solutions {
-        info!("{:?}", solution.iter().map(|move_| &move_.name).format(" "));
+        info!("{:<2}", solution.iter().map(|move_| &move_.name).format(" "));
     }
     assert_eq!(solutions.len(), 260); // TODO: should be 480
     assert!(solutions.iter().all(|solution| solution.len() == 5));
-    // panic!();
+    panic!();
 }
 
 #[allow(dead_code)]
