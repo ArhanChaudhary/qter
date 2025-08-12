@@ -370,7 +370,7 @@ impl Cube3Interface for Cube3 {
     }
 
     fn replace_inverse(&mut self, a: &Self) {
-        // Benchmarked on a 2025 Mac M4: 3.01ns
+        // Benchmarked on a 2025 Mac M4: 2.51ns
         //
         // See `replace_inverse` in avx2.rs for explanation
 
@@ -399,18 +399,16 @@ impl Cube3Interface for Cube3 {
 
         let pow_3_cp = cp.swizzle_dyn(cp).swizzle_dyn(cp);
         let mut inverse_cp = pow_3_cp.swizzle_dyn(pow_3_cp);
-        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
-        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp).swizzle_dyn(pow_3_cp);
-        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
-        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
-        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
-        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp).swizzle_dyn(cp);
+        let pow_6_cp = inverse_cp;
+        inverse_cp = inverse_cp.swizzle_dyn(cp);
+        let pow_7_cp = inverse_cp;
+        inverse_cp = pow_7_cp.swizzle_dyn(pow_6_cp);
         inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
         inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
         inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
         inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
-        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp).swizzle_dyn(pow_3_cp);
-        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp).swizzle_dyn(cp);
+        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
+        inverse_cp = inverse_cp.swizzle_dyn(inverse_cp).swizzle_dyn(pow_7_cp);
         // see `replace_inverse` in `UncompressedCube3`. Move bits to LSB before
         // the operation
         let mut inverse_co = a.corners >> 3;
