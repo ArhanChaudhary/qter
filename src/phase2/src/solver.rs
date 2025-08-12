@@ -5,7 +5,7 @@ use super::{
     puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryInterface},
 };
 use crate::{puzzle::SortedCycleType, start, success, working};
-use log::{debug, info};
+use log::{Level, debug, info, log_enabled};
 use std::{time::Instant, vec::IntoIter};
 
 pub struct CycleTypeSolver<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> {
@@ -27,6 +27,7 @@ struct CycleTypeSolverMutable<'id, P: PuzzleState<'id>, H: PuzzleStateHistoryInt
     multi_bv: P::MultiBv,
     solutions: Vec<Vec<usize>>,
     first_move_class_index: usize,
+    nodes_visited: u64,
 }
 
 pub struct SolutionsIntoIter<'id, 'a, P: PuzzleState<'id>> {
@@ -63,23 +64,12 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
         root: bool,
         mut togo: u8,
     ) -> bool {
+        if log_enabled!(Level::Debug) {
+            mutable.nodes_visited += 1;
+        }
         // SAFETY: This function calls `pop_stack` for every `push_stack` call.
         // Therefore, the `pop_stack` cannot be called more than `push_stack`.
         let last_puzzle_state = unsafe { mutable.puzzle_state_history.last_state_unchecked() };
-
-        if togo == 0 {
-            if last_puzzle_state.induces_sorted_cycle_type(
-                &self.sorted_cycle_type,
-                self.puzzle_def.sorted_orbit_defs_ref(),
-                mutable.multi_bv.reusable_ref(),
-            ) {
-                mutable
-                    .solutions
-                    .push(mutable.puzzle_state_history.create_move_history());
-                return true;
-            }
-            return false;
-        }
 
         let est_remaining_cost = self.pruning_tables.permissible_heuristic(last_puzzle_state);
         if est_remaining_cost > togo {
@@ -143,12 +133,33 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
                     .puzzle_state_history
                     .push_stack_unchecked(move_index, self.puzzle_def);
             }
-            // TODO: Actual IDA* takes the min of this bound and uses it
-            if self.search_for_solution(mutable, next_fsm_state, next_entry_index, false, togo)
-                && self.search_strategy == SearchStrategy::FirstSolution
-            {
+
+            // We handle togo==0 inline to save the function call overhead
+            let next_depth_found_solution = if togo == 0 {
+                // SAFETY: we just pushed something onto the stack
+                let last_puzzle_state =
+                    unsafe { mutable.puzzle_state_history.last_state_unchecked() };
+                if last_puzzle_state.induces_sorted_cycle_type(
+                    &self.sorted_cycle_type,
+                    self.puzzle_def.sorted_orbit_defs_ref(),
+                    mutable.multi_bv.reusable_ref(),
+                ) {
+                    mutable
+                        .solutions
+                        .push(mutable.puzzle_state_history.create_move_history());
+                    true
+                } else {
+                    false
+                }
+            } else {
+                // TODO: Actual IDA* takes the min of this bound and uses it; look into?
+                self.search_for_solution(mutable, next_fsm_state, next_entry_index, false, togo)
+            };
+
+            if next_depth_found_solution && self.search_strategy == SearchStrategy::FirstSolution {
                 return true;
             }
+
             mutable.puzzle_state_history.pop_stack();
             next_entry_index = 0;
 
@@ -172,25 +183,51 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
             multi_bv: P::new_multi_bv(self.puzzle_def.sorted_orbit_defs_ref()),
             solutions: vec![],
             first_move_class_index: usize::default(),
+            nodes_visited: 0,
         };
-        let mut depth = self.pruning_tables.permissible_heuristic(
-            // SAFETY: `H::initialize` when puzzle_state_history is created
-            // guarantees that the first entry is bound
-            unsafe { mutable.puzzle_state_history.last_state_unchecked() },
-        );
+        // SAFETY: `H::initialize` when puzzle_state_history is created
+        // guarantees that the first entry is bound
+        let last_puzzle_state = unsafe { mutable.puzzle_state_history.last_state_unchecked() };
+        let mut depth = self.pruning_tables.permissible_heuristic(last_puzzle_state);
+        // Manually check depth 0 because the togo == 0 check was moved inside
+        // of the main loop in `search_for_solution`.
+        if depth == 0 {
+            // The return values here don't matter since it's not used in the
+            // below loop so we can get rid of `true` and `false`
+            if last_puzzle_state.induces_sorted_cycle_type(
+                &self.sorted_cycle_type,
+                self.puzzle_def.sorted_orbit_defs_ref(),
+                mutable.multi_bv.reusable_ref(),
+            ) {
+                mutable
+                    .solutions
+                    .push(mutable.puzzle_state_history.create_move_history());
+            }
+            // The loop ends up incrementing `depth` so we do this manually
+            depth = 1;
+        }
         mutable
             .puzzle_state_history
             .resize_if_needed(depth as usize + 1);
         while mutable.solutions.is_empty() {
             debug!(working!("Searching depth {}..."), depth);
             self.search_for_solution(&mut mutable, CanonicalFSMState::default(), 0, true, depth);
+            debug!(
+                working!("Traversed {} nodes in {:.3}s"),
+                mutable.nodes_visited,
+                start.elapsed().as_secs_f64()
+            );
+            mutable.nodes_visited = 0;
             mutable
                 .puzzle_state_history
                 .resize_if_needed(depth as usize + 1);
             depth += 1;
         }
 
-        info!(success!("phase2 solutions found in {:?}"), start.elapsed());
+        info!(
+            success!("phase2 solutions found in {:.3}s"),
+            start.elapsed().as_secs_f64()
+        );
         debug!("");
         SolutionsIntoIter {
             puzzle_def: self.puzzle_def,

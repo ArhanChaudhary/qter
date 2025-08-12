@@ -437,8 +437,8 @@ impl<'id, P: PuzzleState<'id> + 'id> PruningTables<'id, P> for OrbitPruningTable
             orbit_pruning_tables: orbit_pruning_tables.into_boxed_slice(),
         };
         info!(
-            success!("Generated all orbit pruning tables in {:?}"),
-            start.elapsed()
+            success!("Generated all orbit pruning tables in {:.3}s"),
+            start.elapsed().as_secs_f64()
         );
         debug!("");
         Ok(orbit_pruning_tables)
@@ -473,9 +473,9 @@ macro_rules! table_fn {
                 used_size_bytes,
             );
             info!(
-                success!("Generated {} in {:?}"),
+                success!("Generated {} in {:.3}s"),
                 stringify!($table),
-                start.elapsed()
+                start.elapsed().as_secs_f64()
             );
             Ok(generated)
         }
@@ -498,9 +498,9 @@ macro_rules! table_fn {
                 used_size_bytes,
             );
             info!(
-                success!("Generated {} in {:?}"),
+                success!("Generated {} in {:.3}s"),
                 stringify!($table),
-                start.elapsed()
+                start.elapsed().as_secs_f64()
             );
             Ok(generated)
         }
@@ -867,6 +867,7 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
         // TODO: replace first few with IDDFS
         let mut perm = (0..piece_count).collect_vec().into_boxed_slice();
         let mut ori = vec![0; piece_count as usize].into_boxed_slice();
+        let start = Instant::now();
         while let Some(depth_heuristic) = OrbitPruneHeuristic::occupied(depth) {
             let prev_vacant_entry_count = vacant_entry_count;
             let mut exact_orbit_hash = 0;
@@ -931,7 +932,11 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
                     pandita2(&mut perm);
                 }
             }
-            debug!(working!("Filled {}"), prev_vacant_entry_count - vacant_entry_count);
+            debug!(
+                working!("Filled {} entries in {:.3}s"),
+                prev_vacant_entry_count - vacant_entry_count,
+                start.elapsed().as_secs_f64()
+            );
             debug!(
                 working!("Pruning table depth {}: {}/{}"),
                 depth,
