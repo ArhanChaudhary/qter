@@ -46,10 +46,11 @@ impl core::fmt::Debug for Num {
             let many_places = self.clone().0 * RealAlgebraicNumber::from(1_000_000_000_000_u64);
             let int = format!("{:0>13}", many_places.to_integer_trunc());
             let str = format!(
-                "{}.{}{}",
+                "{:0>1}.{}{}",
                 &int[..int.len() - 12],
                 &int[int.len() - 12..],
-                if many_places.is_integer() { "" } else { "..." }
+                // if many_places.is_integer() { "" } else { "..." }
+                ""
             );
             let mut str = str.trim_end_matches('0');
             if str.ends_with('.') && !str.ends_with("...") {

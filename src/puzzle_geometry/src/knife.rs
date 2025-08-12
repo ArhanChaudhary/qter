@@ -144,7 +144,12 @@ pub(crate) fn do_cut<S: CutSurface + ?Sized>(
             .circular_tuple_windows()
             .take(face.points.len())
             .flat_map(|(a, b)| {
-                iter::once(a.clone()).chain(surface.boundaries_between(a.clone(), b.clone()))
+                iter::once(a.clone()).chain(
+                    surface
+                        .boundaries_between(a.clone(), b.clone())
+                        .into_iter()
+                        .filter(|v| v.0 != a.0 && v.0 != b.0),
+                )
             })
             .collect_vec()
             .iter()
@@ -197,12 +202,7 @@ pub(crate) fn do_cut<S: CutSurface + ?Sized>(
 
         recolor_border_edges(&mut edges);
 
-        faces.push(take_face_out(
-            &mut edges,
-            surface,
-            face,
-            subspace_info.clone(),
-        )?);
+        faces.push(take_face_out(&mut edges, surface, face, &subspace_info)?);
     }
 
     faces.retain(|v| v.0.is_valid().is_ok());
@@ -237,7 +237,7 @@ fn take_face_out<S: CutSurface + ?Sized>(
     edges: &mut Cycle<((Vector<2>, Vector<2>), Option<Option<ArcIntern<str>>>)>,
     surface: &S,
     face: &Face,
-    subspace_info: FaceSubspaceInfo,
+    subspace_info: &FaceSubspaceInfo,
 ) -> Result<(Face, Option<ArcIntern<str>>), PuzzleGeometryError> {
     // Find a collection of edges that can be merged
     // This algorithm tries to find a collection of vertices that "peeks out" and comes back to the same region.

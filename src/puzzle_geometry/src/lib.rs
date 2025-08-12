@@ -616,26 +616,26 @@ mod tests {
         let pyraminx = PuzzleGeometryDefinition {
             polyhedron: TETRAHEDRON.to_owned(),
             cut_surfaces: vec![
-                // Arc::from(PlaneCut {
-                //     spot: up.clone().normalize() / &Num::from(3),
-                //     normal: up.clone(),
-                //     name: ArcIntern::from("A"),
-                // }),
-                // Arc::from(PlaneCut {
-                //     spot: down1.clone().normalize() / &Num::from(3),
-                //     normal: down1.clone(),
-                //     name: ArcIntern::from("B"),
-                // }),
-                // Arc::from(PlaneCut {
-                //     spot: down2.clone().normalize() / &Num::from(3),
-                //     normal: down2.clone(),
-                //     name: ArcIntern::from("C"),
-                // }),
-                // Arc::from(PlaneCut {
-                //     spot: down3.clone().normalize() / &Num::from(3),
-                //     normal: down3.clone(),
-                //     name: ArcIntern::from("D"),
-                // }),
+                Arc::from(PlaneCut {
+                    spot: up.clone().normalize() / &Num::from(3),
+                    normal: up.clone(),
+                    name: ArcIntern::from("A"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: down1.clone().normalize() / &Num::from(3),
+                    normal: down1.clone(),
+                    name: ArcIntern::from("B"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: down2.clone().normalize() / &Num::from(3),
+                    normal: down2.clone(),
+                    name: ArcIntern::from("C"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: down3.clone().normalize() / &Num::from(3),
+                    normal: down3.clone(),
+                    name: ArcIntern::from("D"),
+                }),
                 Arc::from(PlaneCut {
                     spot: (up.clone().normalize() / &Num::from(3)) * &Num::from(5),
                     normal: up.clone(),
@@ -661,19 +661,19 @@ mod tests {
         };
 
         let geometry = pyraminx.geometry().unwrap();
-        assert_eq!(geometry.stickers().len(), 16);
+        assert_eq!(geometry.stickers().len(), 36);
 
         for turn in &geometry.turns {
             assert_eq!(turn.1.2, 3);
         }
-        assert_eq!(geometry.turns.len(), 4);
+        assert_eq!(geometry.turns.len(), 8);
 
         let group = geometry.permutation_group();
-        assert_eq!(group.facelet_count(), 12);
+        assert_eq!(group.facelet_count(), 36);
 
         assert_eq!(
             StabilizerChain::new(&group).cardinality(),
-            "81".parse::<Int<U>>().unwrap()
+            "75582720".parse::<Int<U>>().unwrap()
         );
     }
 }
