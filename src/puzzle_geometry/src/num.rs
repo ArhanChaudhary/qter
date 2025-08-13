@@ -5,58 +5,159 @@ use std::{
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use algebraics::{algebraic_numbers::IntoRationalExponent, prelude::*};
+use algebraics::{prelude::*, traits::FloorLog2};
 use itertools::Itertools;
 
+#[expect(clippy::cast_sign_loss)]
+fn approx_float(mut algebraic: RealAlgebraicNumber) -> f64 {
+    let sign = match algebraic.cmp_with_zero() {
+        Ordering::Less => {
+            algebraic = -algebraic;
+            true
+        }
+        Ordering::Equal => return 0.,
+        Ordering::Greater => false,
+    };
+
+    let exponent = algebraic
+        .clone()
+        .into_checked_floor_log2()
+        .unwrap()
+        .max(-1022);
+
+    // One extra so that we have an extra bit so that we know how to round
+    let amt_to_exp = 53 - exponent;
+
+    let mut exponent = (exponent + 1023) as u64;
+    if exponent.ilog2() >= 11 {
+        return if sign { -f64::INFINITY } else { f64::INFINITY };
+    }
+
+    let mantissa_val =
+        (algebraic * RealAlgebraicNumber::from(2).pow((amt_to_exp, 1))).into_integer_floor();
+    let mut mantissa_digits = mantissa_val.to_u64_digits().1;
+    assert_eq!(mantissa_digits.len(), 1);
+    let mut mantissa = mantissa_digits.remove(0);
+
+    if mantissa & 1 != 0 {
+        mantissa >>= 1;
+        mantissa += 1;
+    } else {
+        mantissa >>= 1;
+    }
+
+    let mantissa_log2 = mantissa.floor_log2().unwrap();
+    if mantissa_log2 < 52 {
+        // Subnormal
+        assert_eq!(exponent, 1);
+        exponent = 0;
+    } else {
+        assert_eq!(mantissa_log2, 52);
+        // Delete the leading bit because it's implied
+        mantissa = mantissa - (1 << mantissa.ilog2());
+    }
+
+    f64::from_bits((u64::from(sign) << 63) | (exponent << 52) | mantissa)
+}
+
+const E: f64 = 1e-9;
+
 #[derive(Clone)]
-pub struct Num(RealAlgebraicNumber);
+enum NumVal {
+    Algebraic(RealAlgebraicNumber),
+    Float(f64),
+}
+
+#[derive(Clone)]
+pub struct Num(NumVal);
 
 impl Num {
     #[must_use]
     pub fn is_zero(&self) -> bool {
-        self.0.cmp_with_zero() == Ordering::Equal
+        match &self.0 {
+            NumVal::Algebraic(real_algebraic_number) => real_algebraic_number.is_zero(),
+            NumVal::Float(float) => float.abs() < E,
+        }
     }
 
     #[must_use]
     pub fn cmp_zero(&self) -> Ordering {
-        self.0.cmp_with_zero()
-    }
-
-    #[must_use]
-    pub fn pow<N: IntoRationalExponent>(self, pow: N) -> Num {
-        Num(self.0.pow(pow))
+        match &self.0 {
+            NumVal::Algebraic(real_algebraic_number) => real_algebraic_number.cmp_with_zero(),
+            NumVal::Float(float) => {
+                if float.abs() < E {
+                    Ordering::Equal
+                } else {
+                    float.total_cmp(&0.)
+                }
+            }
+        }
     }
 
     #[must_use]
     pub fn sqrt(self) -> Num {
-        self.pow((1, 2))
+        Num(match self.0 {
+            NumVal::Algebraic(real_algebraic_number) => {
+                NumVal::Algebraic(real_algebraic_number.pow((1, 2)))
+            }
+            NumVal::Float(float) => NumVal::Float(float.sqrt()),
+        })
     }
 
     #[must_use]
     pub fn abs(self) -> Num {
-        if self.cmp_zero().is_lt() { -self } else { self }
+        Num(match self.0 {
+            NumVal::Algebraic(real_algebraic_number) => {
+                NumVal::Algebraic(real_algebraic_number.abs())
+            }
+            NumVal::Float(float) => NumVal::Float(float.abs()),
+        })
+    }
+
+    fn op(
+        &mut self,
+        rhs: Num,
+        algebraic: fn(&mut RealAlgebraicNumber, RealAlgebraicNumber),
+        float: fn(&mut f64, f64),
+    ) {
+        match (&mut self.0, rhs.0) {
+            (NumVal::Algebraic(a), NumVal::Algebraic(b)) => (algebraic)(a, b),
+            (NumVal::Algebraic(a), NumVal::Float(b)) => {
+                let mut new_val = approx_float(a.clone());
+                (float)(&mut new_val, b);
+                *self = Num(NumVal::Float(new_val));
+            }
+            (NumVal::Float(a), NumVal::Algebraic(b)) => (float)(a, approx_float(b)),
+            (NumVal::Float(a), NumVal::Float(b)) => (float)(a, b),
+        }
     }
 }
 
 impl core::fmt::Debug for Num {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if f.alternate() {
-            self.0.fmt(f)
-        } else {
-            let many_places = self.clone().0 * RealAlgebraicNumber::from(1_000_000_000_000_u64);
-            let int = format!("{:0>13}", many_places.to_integer_trunc());
-            let str = format!(
-                "{:0>1}.{}{}",
-                &int[..int.len() - 12],
-                &int[int.len() - 12..],
-                // if many_places.is_integer() { "" } else { "..." }
-                ""
-            );
-            let mut str = str.trim_end_matches('0');
-            if str.ends_with('.') && !str.ends_with("...") {
-                str = str.trim_end_matches('.');
+        match &self.0 {
+            NumVal::Algebraic(real_algebraic_number) => {
+                if f.alternate() {
+                    real_algebraic_number.fmt(f)
+                } else {
+                    let many_places = real_algebraic_number.clone()
+                        * RealAlgebraicNumber::from(1_000_000_000_000_u64);
+                    let int = format!("{:0>13}", many_places.to_integer_trunc());
+                    let str = format!(
+                        "{:0>1}.{}{}",
+                        &int[..int.len() - 12],
+                        &int[int.len() - 12..],
+                        // if many_places.is_integer() { "" } else { "..." }
+                        ""
+                    );
+                    let mut str = str.trim_end_matches('0');
+                    if str.ends_with('.') && !str.ends_with("...") {
+                        str = str.trim_end_matches('.');
+                    }
+                    f.write_str(str)
+                }
             }
-            f.write_str(str)
+            NumVal::Float(float) => float.fmt(f),
         }
     }
 }
@@ -66,13 +167,13 @@ where
     RealAlgebraicNumber: From<T>,
 {
     fn from(value: T) -> Self {
-        Self(RealAlgebraicNumber::from(value))
+        Self(NumVal::Algebraic(RealAlgebraicNumber::from(value)))
     }
 }
 
 impl AddAssign<Num> for Num {
     fn add_assign(&mut self, rhs: Num) {
-        self.0 += rhs.0;
+        self.op(rhs, |a, b| *a += b, |a, b| *a += b);
     }
 }
 
@@ -87,7 +188,7 @@ impl Add<Num> for Num {
 
 impl SubAssign<Num> for Num {
     fn sub_assign(&mut self, rhs: Num) {
-        self.0 -= rhs.0;
+        self.op(rhs, |a, b| *a -= b, |a, b| *a -= b);
     }
 }
 
@@ -102,7 +203,7 @@ impl Sub<Num> for Num {
 
 impl MulAssign<Num> for Num {
     fn mul_assign(&mut self, rhs: Num) {
-        self.0 *= rhs.0;
+        self.op(rhs, |a, b| *a *= b, |a, b| *a *= b);
     }
 }
 
@@ -117,7 +218,7 @@ impl Mul<Num> for Num {
 
 impl DivAssign<Num> for Num {
     fn div_assign(&mut self, rhs: Num) {
-        self.0 /= rhs.0;
+        self.op(rhs, |a, b| *a /= b, |a, b| *a /= b);
     }
 }
 
@@ -134,14 +235,17 @@ impl Neg for Num {
     type Output = Num;
 
     fn neg(self) -> Self::Output {
-        Num(-self.0)
+        Num(match self.0 {
+            NumVal::Algebraic(algebraic) => NumVal::Algebraic(-algebraic),
+            NumVal::Float(float) => NumVal::Float(-float),
+        })
     }
 }
 
 impl Sum for Num {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.reduce(|a, v| a + v)
-            .unwrap_or_else(|| Num(RealAlgebraicNumber::from(0_i64)))
+            .unwrap_or_else(|| Num(NumVal::Algebraic(RealAlgebraicNumber::from(0_i64))))
     }
 }
 
@@ -153,13 +257,39 @@ impl PartialOrd for Num {
 
 impl Ord for Num {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0.cmp(&other.0)
+        match (&self.0, &other.0) {
+            (NumVal::Algebraic(a), NumVal::Algebraic(b)) => a.cmp(b),
+            (NumVal::Algebraic(a), NumVal::Float(b)) => {
+                let a = approx_float(a.clone());
+                if (a - b).abs() < E {
+                    Ordering::Equal
+                } else {
+                    a.total_cmp(b)
+                }
+            }
+            (NumVal::Float(_), NumVal::Algebraic(_)) => other.cmp(self).reverse(),
+            (NumVal::Float(a), NumVal::Float(b)) => {
+                if (a - b).abs() < E {
+                    Ordering::Equal
+                } else {
+                    a.total_cmp(b)
+                }
+            }
+        }
     }
 }
 
 impl PartialEq for Num {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+        match (&self.0, &other.0) {
+            (NumVal::Algebraic(a), NumVal::Algebraic(b)) => a == b,
+            (NumVal::Algebraic(a), NumVal::Float(b)) => {
+                let a = approx_float(a.clone());
+                (a - b).abs() < E
+            }
+            (NumVal::Float(_), NumVal::Algebraic(_)) => other.eq(self),
+            (NumVal::Float(a), NumVal::Float(b)) => (a - b).abs() < E,
+        }
     }
 }
 
@@ -298,7 +428,7 @@ impl<const O: usize, const I: usize> Matrix<O, I> {
     }
 
     pub fn new_ratios<N: Into<RealAlgebraicNumber>>(data: [[(N, N); O]; I]) -> Matrix<O, I> {
-        Matrix(data.map(|v| v.map(|(a, b)| Num(a.into() / b.into()))))
+        Matrix(data.map(|v| v.map(|(a, b)| Num(NumVal::Algebraic(a.into() / b.into())))))
     }
 }
 
@@ -306,7 +436,7 @@ impl<const O: usize, const I: usize> AddAssign<Matrix<O, I>> for Matrix<O, I> {
     fn add_assign(&mut self, rhs: Self) {
         self.0.iter_mut().zip(rhs.0).for_each(|(lhs, rhs)| {
             lhs.iter_mut().zip(rhs).for_each(|(lhs, rhs)| {
-                *lhs = mem::replace(lhs, Num(RealAlgebraicNumber::zero())) + rhs;
+                *lhs = mem::replace(lhs, Num(NumVal::Algebraic(RealAlgebraicNumber::zero()))) + rhs;
             });
         });
     }
@@ -325,7 +455,7 @@ impl<const O: usize, const I: usize> SubAssign<Matrix<O, I>> for Matrix<O, I> {
     fn sub_assign(&mut self, rhs: Self) {
         self.0.iter_mut().zip(rhs.0).for_each(|(lhs, rhs)| {
             lhs.iter_mut().zip(rhs).for_each(|(lhs, rhs)| {
-                *lhs = mem::replace(lhs, Num(RealAlgebraicNumber::zero())) - rhs;
+                *lhs = mem::replace(lhs, Num(NumVal::Algebraic(RealAlgebraicNumber::zero()))) - rhs;
             });
         });
     }
@@ -463,11 +593,14 @@ pub fn rotation_about(axis: Vector<3>, x_axis: Vector<2>) -> Matrix<3, 3> {
 
 #[cfg(test)]
 mod tests {
+    use algebraics::prelude::*;
     use std::cmp::Ordering;
+
+    use algebraics::RealAlgebraicNumber;
 
     use crate::{
         DEG_72, DEG_90, DEG_120, DEG_180,
-        num::{Num, Vector, rotate_to, rotation_about},
+        num::{Num, Vector, approx_float, rotate_to, rotation_about},
     };
 
     use super::Matrix;
@@ -599,6 +732,64 @@ mod tests {
         assert_eq!(
             rotation_about(Vector::new([[0, 0, 1]]), Vector::new([[-1, 0]])),
             Matrix::new([[-1, 0, 0], [0, -1, 0], [0, 0, 1]])
+        );
+    }
+
+    #[test]
+    fn test_float_approx() {
+        assert_eq!(3., approx_float(RealAlgebraicNumber::from(3)));
+        assert_eq!(-3., approx_float(RealAlgebraicNumber::from(-3)));
+        assert_eq!(
+            (2_f64).sqrt(),
+            approx_float(RealAlgebraicNumber::from(2).pow((1, 2)))
+        );
+        assert_eq!(
+            -(2_f64).sqrt(),
+            approx_float(-RealAlgebraicNumber::from(2).pow((1, 2)))
+        );
+        assert_eq!(
+            20000.5,
+            approx_float(RealAlgebraicNumber::from(40001) / RealAlgebraicNumber::from(2))
+        );
+        assert_eq!(
+            -20000.5,
+            approx_float(RealAlgebraicNumber::from(-40001) / RealAlgebraicNumber::from(2))
+        );
+        assert_eq!(0_f64, approx_float(RealAlgebraicNumber::from(0)));
+        assert_eq!(
+            approx_float(RealAlgebraicNumber::from(0)).total_cmp(&-0.),
+            Ordering::Greater
+        );
+
+        // Almost subnormal
+        assert_eq!(
+            f64::from_bits(0x0030_0000_0000_0000),
+            approx_float(
+                RealAlgebraicNumber::from(1) / RealAlgebraicNumber::from(2).pow((1020, 1))
+            ),
+        );
+        assert_eq!(
+            f64::from_bits(0x0020_0000_0000_0000),
+            approx_float(
+                RealAlgebraicNumber::from(1) / RealAlgebraicNumber::from(2).pow((1021, 1))
+            ),
+        );
+        // Subnormal
+        assert_eq!(
+            f64::from_bits(0x0008_0000_0000_0000),
+            approx_float(
+                RealAlgebraicNumber::from(1) / RealAlgebraicNumber::from(2).pow((1023, 1))
+            ),
+        );
+
+        assert_ne!(f64::INFINITY, -f64::INFINITY);
+        assert_eq!(
+            f64::INFINITY,
+            approx_float(RealAlgebraicNumber::from(2).pow((10000, 1)))
+        );
+        assert_eq!(
+            -f64::INFINITY,
+            approx_float(RealAlgebraicNumber::from(-2).pow((10001, 1)))
         );
     }
 }

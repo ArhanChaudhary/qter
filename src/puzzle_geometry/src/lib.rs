@@ -608,10 +608,6 @@ mod tests {
         let down1 = TETRAHEDRON.0[3].points[0].clone().0;
         let down2 = TETRAHEDRON.0[3].points[1].clone().0;
         let down3 = TETRAHEDRON.0[3].points[2].clone().0;
-        println!("{up:?}");
-        println!("{down1:?}");
-        println!("{down2:?}");
-        println!("{down3:?}");
 
         let pyraminx = PuzzleGeometryDefinition {
             polyhedron: TETRAHEDRON.to_owned(),
