@@ -5,7 +5,7 @@
 use super::common::{CornersTransformation, Cube3Interface, Cube3OrbitType, EdgesTransformation};
 use crate::{
     orbit_puzzle::exact_hasher_orbit,
-    puzzle::{SortedCycleType, cube3::common::CUBE_3_SORTED_ORBIT_DEFS},
+    puzzle::{SortedCycleTypeRef, cube3::common::CUBE_3_SORTED_ORBIT_DEFS},
 };
 use std::{
     fmt,
@@ -91,7 +91,7 @@ const PERM_MASK_3: u8x8 = u8x8::splat(0b0000_1111);
 
 /// Extract the orientation bits from the cube state.
 const ORI_MASK: u8x32 = u8x32::splat(0b0011_0000);
-/// The carry constant used to fix orientation bits after permutation.
+/// The carry constant used to fix orientation bits after composition.
 const ORI_CARRY: u8x32 = u8x32::from_array([
     0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
     0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
@@ -297,7 +297,7 @@ impl Cube3Interface for Cube3 {
         replace_inverse_vectorcall(self, a);
     }
 
-    fn induces_sorted_cycle_type(&self, sorted_cycle_type: &SortedCycleType) -> bool {
+    fn induces_sorted_cycle_type(&self, sorted_cycle_type: SortedCycleTypeRef) -> bool {
         // Benchmarked on a 2x Intel Xeon E5-2667 v3: 36.47ns (worst) 7.33ns (average)
         //
         // The cycle type of a state is a sorted list of (int: cycle_length,

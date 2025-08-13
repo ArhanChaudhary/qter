@@ -32,6 +32,21 @@ macro_rules! success {
     };
 }
 
+pub trait SliceView {
+    type Slice<'a>
+    where
+        Self: 'a;
+
+    fn slice_view(&self) -> Self::Slice<'_>;
+}
+pub trait SliceViewMut {
+    type SliceMut<'a>
+    where
+        Self: 'a;
+
+    fn slice_view_mut(&mut self) -> Self::SliceMut<'_>;
+}
+
 // We can do one more however it will overflow when adding more to it which is
 // common in context
 const FACT_UNTIL_19: [u64; 20] = {

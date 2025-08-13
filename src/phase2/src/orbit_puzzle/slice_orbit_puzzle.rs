@@ -2,9 +2,12 @@
 //! generation.
 
 use super::{OrbitPuzzleConstructors, OrbitPuzzleState};
-use crate::puzzle::{
-    BrandedOrbitDef, MultiBvInterface, OrbitDef,
-    slice_puzzle::{exact_hasher_orbit_bytes, slice_orbit_size},
+use crate::{
+    SliceViewMut,
+    puzzle::{
+        BrandedOrbitDef, OrbitDef,
+        slice_puzzle::{exact_hasher_orbit_bytes, slice_orbit_size},
+    },
 };
 use generativity::Id;
 use std::{cmp::Ordering, num::NonZeroU8};
@@ -15,10 +18,10 @@ pub struct SliceOrbitPuzzle<'id>(Box<[u8]>, Id<'id>);
 pub struct SliceOrbitMultiBv(Box<[u8]>);
 pub struct SliceOrbitMultiBvRefMut<'a>(&'a mut [u8]);
 
-impl MultiBvInterface for SliceOrbitMultiBv {
-    type ReusableRef<'a> = SliceOrbitMultiBvRefMut<'a>;
+impl SliceViewMut for SliceOrbitMultiBv {
+    type SliceMut<'a> = SliceOrbitMultiBvRefMut<'a>;
 
-    fn reusable_ref(&mut self) -> Self::ReusableRef<'_> {
+    fn slice_view_mut(&mut self) -> Self::SliceMut<'_> {
         SliceOrbitMultiBvRefMut(&mut self.0)
     }
 }

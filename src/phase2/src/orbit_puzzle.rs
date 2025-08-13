@@ -1,7 +1,8 @@
 use super::{
     FACT_UNTIL_19,
-    puzzle::{BrandedOrbitDef, MultiBvInterface, OrbitDef},
+    puzzle::{BrandedOrbitDef, OrbitDef},
 };
+use crate::SliceViewMut;
 use generativity::Id;
 use std::{
     hash::Hash,
@@ -13,21 +14,21 @@ pub mod cube3;
 pub mod slice_orbit_puzzle;
 
 pub trait OrbitPuzzleState {
-    type MultiBv: MultiBvInterface;
+    type MultiBv: SliceViewMut;
 
     fn replace_compose(&mut self, a: &Self, b: &Self, branded_orbit_def: BrandedOrbitDef);
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
         branded_orbit_def: BrandedOrbitDef,
-        multi_bv: <Self::MultiBv as MultiBvInterface>::ReusableRef<'_>,
+        multi_bv: <Self::MultiBv as SliceViewMut>::SliceMut<'_>,
     ) -> bool;
     fn approximate_hash(&self) -> impl Hash;
     fn exact_hasher(&self, branded_orbit_def: BrandedOrbitDef) -> u64;
 }
 
 pub trait OrbitPuzzleConstructors<'id> {
-    type MultiBv: MultiBvInterface;
+    type MultiBv: SliceViewMut;
 
     fn new_multi_bv(branded_orbit_def: BrandedOrbitDef) -> Self::MultiBv;
     fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(

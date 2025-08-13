@@ -1,16 +1,15 @@
 use super::{
     canonical_fsm::{CanonicalFSM, CanonicalFSMState, PuzzleCanonicalFSM},
     pruning::PruningTables,
-    puzzle::{Move, MultiBvInterface, PuzzleDef, PuzzleState},
+    puzzle::{Move, PuzzleDef, PuzzleState},
     puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryInterface},
 };
-use crate::{puzzle::SortedCycleType, start, success, working};
+use crate::{SliceViewMut, start, success, working};
 use log::{Level, debug, info, log_enabled};
 use std::{time::Instant, vec::IntoIter};
 
 pub struct CycleTypeSolver<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> {
     puzzle_def: &'a PuzzleDef<'id, P>,
-    sorted_cycle_type: SortedCycleType<'id>,
     pruning_tables: T,
     canonical_fsm: PuzzleCanonicalFSM<'id, P>,
     search_strategy: SearchStrategy,
@@ -38,22 +37,16 @@ pub struct SolutionsIntoIter<'id, 'a, P: PuzzleState<'id>> {
 impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, 'a, P, T> {
     pub fn new(
         puzzle_def: &'a PuzzleDef<'id, P>,
-        sorted_cycle_type: SortedCycleType<'id>,
         pruning_tables: T,
         search_strategy: SearchStrategy,
     ) -> Self {
         let canonical_fsm = puzzle_def.into();
         Self {
             puzzle_def,
-            sorted_cycle_type,
             pruning_tables,
             canonical_fsm,
             search_strategy,
         }
-    }
-
-    pub fn set_sorted_cycle_type(&mut self, sorted_cycle_type: SortedCycleType<'id>) {
-        self.sorted_cycle_type = sorted_cycle_type;
     }
 
     fn search_for_solution<H: PuzzleStateHistoryInterface<'id, P>>(
@@ -140,9 +133,9 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
                 let last_puzzle_state =
                     unsafe { mutable.puzzle_state_history.last_state_unchecked() };
                 if last_puzzle_state.induces_sorted_cycle_type(
-                    &self.sorted_cycle_type,
-                    self.puzzle_def.sorted_orbit_defs_ref(),
-                    mutable.multi_bv.reusable_ref(),
+                    self.pruning_tables.sorted_cycle_type_slice_view(),
+                    self.puzzle_def.sorted_orbit_defs_slice_view(),
+                    mutable.multi_bv.slice_view_mut(),
                 ) {
                     mutable
                         .solutions
@@ -178,7 +171,7 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
 
         let mut mutable: CycleTypeSolverMutable<P, H> = CycleTypeSolverMutable {
             puzzle_state_history: self.puzzle_def.into(),
-            multi_bv: P::new_multi_bv(self.puzzle_def.sorted_orbit_defs_ref()),
+            multi_bv: P::new_multi_bv(self.puzzle_def.sorted_orbit_defs_slice_view()),
             solutions: vec![],
             first_move_class_index: usize::default(),
             nodes_visited: 0,
@@ -193,9 +186,9 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
             // The return values here don't matter since it's not used in the
             // below loop so we can get rid of `true` and `false`
             if last_puzzle_state.induces_sorted_cycle_type(
-                &self.sorted_cycle_type,
-                self.puzzle_def.sorted_orbit_defs_ref(),
-                mutable.multi_bv.reusable_ref(),
+                self.pruning_tables.sorted_cycle_type_slice_view(),
+                self.puzzle_def.sorted_orbit_defs_slice_view(),
+                mutable.multi_bv.slice_view_mut(),
             ) {
                 mutable
                     .solutions
@@ -208,15 +201,14 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
             .puzzle_state_history
             .resize_if_needed(depth as usize + 1);
 
-        let mut deth_start;
         while mutable.solutions.is_empty() {
             debug!(working!("Searching depth {}..."), depth);
-            deth_start = Instant::now();
+            let depth_start = Instant::now();
             self.search_for_solution(&mut mutable, CanonicalFSMState::default(), 0, true, depth);
             debug!(
                 working!("Traversed {} nodes in {:.3}s"),
                 mutable.nodes_visited,
-                deth_start.elapsed().as_secs_f64()
+                depth_start.elapsed().as_secs_f64()
             );
             mutable.nodes_visited = 0;
             mutable

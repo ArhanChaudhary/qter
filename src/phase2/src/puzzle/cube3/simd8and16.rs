@@ -8,7 +8,7 @@ use super::common::{
     CUBE_3_SORTED_ORBIT_DEFS, CornersTransformation, Cube3Interface, Cube3OrbitType,
     EdgesTransformation,
 };
-use crate::{orbit_puzzle::exact_hasher_orbit, puzzle::SortedCycleType};
+use crate::{orbit_puzzle::exact_hasher_orbit, puzzle::SortedCycleTypeRef};
 use std::{
     fmt,
     hash::Hash,
@@ -188,7 +188,7 @@ impl Cube3Interface for UncompressedCube3 {
             CO_INV_SWIZZLE.swizzle_dyn(a.co).swizzle_dyn(self.cp);
     }
 
-    fn induces_sorted_cycle_type(&self, sorted_cycle_type: &SortedCycleType) -> bool {
+    fn induces_sorted_cycle_type(&self, sorted_cycle_type: SortedCycleTypeRef) -> bool {
         // Benchmarked on a 2025 Mac M4: 14.88 (worst case) 3.79ns (average)
         induces_sorted_cycle_type(sorted_cycle_type, *self)
     }
@@ -356,7 +356,6 @@ impl Cube3Interface for Cube3 {
         // UncompressedCube3. llvm-mca does not favor this implementation, so
         // it's probably just ARM chip magic
 
-        // Compose edges using the built-in SIMD function
         let mut edges_composed = a.edges.swizzle_dyn(b.edges & EDGE_PERM_MASK);
         // xor is actually just addition modulo two -- exactly what is needed
         edges_composed ^= b.edges & EDGE_ORI_MASK;
@@ -376,6 +375,7 @@ impl Cube3Interface for Cube3 {
 
         let ep = a.edges & EDGE_PERM_MASK;
 
+        // Take 22719th power
         let pow_3_ep = ep.swizzle_dyn(ep).swizzle_dyn(ep);
         let mut inverse_ep = pow_3_ep.swizzle_dyn(pow_3_ep);
         inverse_ep = inverse_ep.swizzle_dyn(inverse_ep);
@@ -397,12 +397,11 @@ impl Cube3Interface for Cube3 {
 
         let cp = a.corners & CORNER_PERM_MASK;
 
+        // Take 839th power (or LCM(1..8) - 1)
         let pow_3_cp = cp.swizzle_dyn(cp).swizzle_dyn(cp);
-        let mut inverse_cp = pow_3_cp.swizzle_dyn(pow_3_cp);
-        let pow_6_cp = inverse_cp;
-        inverse_cp = inverse_cp.swizzle_dyn(cp);
-        let pow_7_cp = inverse_cp;
-        inverse_cp = pow_7_cp.swizzle_dyn(pow_6_cp);
+        let pow_6_cp = pow_3_cp.swizzle_dyn(pow_3_cp);
+        let pow_7_cp = pow_6_cp.swizzle_dyn(cp);
+        let mut inverse_cp = pow_7_cp.swizzle_dyn(pow_6_cp);
         inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
         inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
         inverse_cp = inverse_cp.swizzle_dyn(inverse_cp);
@@ -419,7 +418,7 @@ impl Cube3Interface for Cube3 {
         self.corners = inverse_co | inverse_cp;
     }
 
-    fn induces_sorted_cycle_type(&self, sorted_cycle_type: &SortedCycleType) -> bool {
+    fn induces_sorted_cycle_type(&self, sorted_cycle_type: SortedCycleTypeRef) -> bool {
         // Benchmarked on a 2025 Mac M4: 15.13 (worst case) 3.74ns (average)
         let cp = self.corners & CORNER_PERM_MASK;
         let co = self.corners >> 3;
@@ -487,7 +486,7 @@ impl Cube3Interface for Cube3 {
 
 /// Check if the `UncompressedCube3` induces the given sorted cycle type.
 fn induces_sorted_cycle_type(
-    sorted_cycle_type: &SortedCycleType,
+    sorted_cycle_type: SortedCycleTypeRef,
     uncompressed_cube3: UncompressedCube3,
 ) -> bool {
     let UncompressedCube3 { cp, co, ep, eo } = uncompressed_cube3;

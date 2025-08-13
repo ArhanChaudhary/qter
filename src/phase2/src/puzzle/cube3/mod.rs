@@ -5,7 +5,7 @@ pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
     use crate::puzzle::{
-        BrandedOrbitDef, OrbitDef, OrbitIdentifier, PuzzleState, SortedCycleType,
+        BrandedOrbitDef, OrbitDef, OrbitIdentifier, PuzzleState, SortedCycleTypeRef,
         SortedOrbitDefsRef, TransformationsMeta, TransformationsMetaError,
     };
     use generativity::Id;
@@ -81,7 +81,7 @@ mod common {
         fn replace_inverse(&mut self, a: &Self);
 
         /// Check if the cube induces a sorted cycle type.
-        fn induces_sorted_cycle_type(&self, sorted_cycle_type: &SortedCycleType) -> bool;
+        fn induces_sorted_cycle_type(&self, sorted_cycle_type: SortedCycleTypeRef) -> bool;
 
         /// Convert an orbit of the cube state into a pair of (perm, ori) bytes.
         /// For implementation reasons that should ideally be abstracted away,
@@ -136,7 +136,7 @@ mod common {
             C: 'a + 'id;
         type OrbitIdentifier = Cube3OrbitType;
 
-        fn new_multi_bv(_sorted_orbit_defs: SortedOrbitDefsRef) {
+        fn new_multi_bv(_sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) {
             // Induces cycle type for 3x3 cubes doesn't require auxilliary
             // memory
         }
@@ -187,19 +187,19 @@ mod common {
             }
         }
 
-        fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: SortedOrbitDefsRef) {
+        fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) {
             self.replace_compose(a, b);
         }
 
-        fn replace_inverse(&mut self, a: &Self, _sorted_orbit_defs: SortedOrbitDefsRef) {
+        fn replace_inverse(&mut self, a: &Self, _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) {
             self.replace_inverse(a);
         }
 
         // TODO: validate sorted cycle type is sound
         fn induces_sorted_cycle_type(
             &self,
-            sorted_cycle_type: &SortedCycleType,
-            _sorted_orbit_defs: SortedOrbitDefsRef,
+            sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
+            _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
             _multi_bv: (),
         ) -> bool {
             self.induces_sorted_cycle_type(sorted_cycle_type)

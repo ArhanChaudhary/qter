@@ -1,17 +1,18 @@
 //! The default, generic implementation for representing puzzle states.
 
 use super::{
-    BrandedOrbitDef, MultiBvInterface, OrbitDef, OrbitIdentifier, PuzzleState, SortedOrbitDefsRef,
+    BrandedOrbitDef, OrbitDef, OrbitIdentifier, PuzzleState, SliceViewMut, SortedOrbitDefsRef,
     TransformationsMeta, TransformationsMetaError,
 };
 use crate::{
-    FACT_UNTIL_19,
+    FACT_UNTIL_19, SliceView,
     orbit_puzzle::slice_orbit_puzzle::{
         induces_sorted_cycle_type_slice_orbit, replace_compose_slice_orbit,
     },
-    puzzle::SortedCycleType,
+    puzzle::{SortedCycleType, SortedCycleTypeRef},
 };
 use generativity::Id;
+use std::hint::assert_unchecked;
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct StackPuzzle<'id, const N: usize>([u8; N], Id<'id>);
@@ -22,10 +23,10 @@ pub struct HeapPuzzle<'id>(Box<[u8]>, Id<'id>);
 pub struct SliceMultiBv(Box<[u8]>);
 pub struct SliceMultiBvRefMut<'a>(&'a mut [u8]);
 
-impl MultiBvInterface for SliceMultiBv {
-    type ReusableRef<'a> = SliceMultiBvRefMut<'a>;
+impl SliceViewMut for SliceMultiBv {
+    type SliceMut<'a> = SliceMultiBvRefMut<'a>;
 
-    fn reusable_ref(&mut self) -> Self::ReusableRef<'_> {
+    fn slice_view_mut(&mut self) -> Self::SliceMut<'_> {
         SliceMultiBvRefMut(&mut self.0)
     }
 }
@@ -122,7 +123,7 @@ impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
         Self: 'a;
     type OrbitIdentifier = SliceOrbitIdentifier<'id>;
 
-    fn new_multi_bv(sorted_orbit_defs: SortedOrbitDefsRef) -> Self::MultiBv {
+    fn new_multi_bv(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> Self::MultiBv {
         new_multi_bv_slice(sorted_orbit_defs)
     }
 
@@ -139,21 +140,21 @@ impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
         &mut self,
         a: &StackPuzzle<N>,
         b: &StackPuzzle<N>,
-        sorted_orbit_defs: SortedOrbitDefsRef,
+        sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
     ) {
         unsafe {
             replace_compose_slice(&mut self.0, &a.0, &b.0, sorted_orbit_defs);
         }
     }
 
-    fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: SortedOrbitDefsRef) {
+    fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) {
         unsafe { replace_inverse_slice(&mut self.0, &a.0, sorted_orbit_defs) };
     }
 
     fn induces_sorted_cycle_type(
         &self,
-        sorted_cycle_type: &SortedCycleType,
-        sorted_orbit_defs: SortedOrbitDefsRef,
+        sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
+        sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
         multi_bv: SliceMultiBvRefMut<'_>,
     ) -> bool {
         induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv.0)
@@ -182,7 +183,7 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
         Self: 'a;
     type OrbitIdentifier = SliceOrbitIdentifier<'id>;
 
-    fn new_multi_bv(sorted_orbit_defs: SortedOrbitDefsRef) -> Self::MultiBv {
+    fn new_multi_bv(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> Self::MultiBv {
         new_multi_bv_slice(sorted_orbit_defs)
     }
 
@@ -210,7 +211,7 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
         &mut self,
         a: &HeapPuzzle,
         b: &HeapPuzzle,
-        sorted_orbit_defs: SortedOrbitDefsRef,
+        sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
     ) {
         // SAFETY: the caller guarantees that all arguments correspond to the
         // same orbit defs
@@ -219,25 +220,25 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
         }
     }
 
-    fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: SortedOrbitDefsRef) {
+    fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) {
         unsafe { replace_inverse_slice(&mut self.0, &a.0, sorted_orbit_defs) };
     }
 
     fn induces_sorted_cycle_type(
         &self,
-        sorted_cycle_type: &SortedCycleType,
-        sorted_orbit_defs: SortedOrbitDefsRef,
+        sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
+        sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
         multi_bv: SliceMultiBvRefMut<'_>,
     ) -> bool {
         induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv.0)
     }
 
-    fn orbit_bytes(&self, orbit_identifier: SliceOrbitIdentifier) -> (&[u8], &[u8]) {
+    fn orbit_bytes(&self, orbit_identifier: SliceOrbitIdentifier<'id>) -> (&[u8], &[u8]) {
         orbit_bytes_slice(&self.0, orbit_identifier)
     }
 
     #[allow(refining_impl_trait_reachable)]
-    fn approximate_hash_orbit(&self, orbit_identifier: SliceOrbitIdentifier) -> &[u8] {
+    fn approximate_hash_orbit(&self, orbit_identifier: SliceOrbitIdentifier<'id>) -> &[u8] {
         approximate_hash_orbit_slice(&self.0, orbit_identifier)
     }
 
@@ -268,7 +269,7 @@ fn new_multi_bv_slice(sorted_orbit_defs: SortedOrbitDefsRef) -> SliceMultiBv {
 /// Populate `slice_orbit_states` with `transformation_metas`.
 fn ksolve_move_to_slice(
     slice_orbit_states: &mut [u8],
-    transformations_meta: TransformationsMeta<'_, '_>,
+    transformations_meta: TransformationsMeta,
 ) -> Result<(), TransformationsMetaError> {
     let sorted_orbit_defs = transformations_meta.sorted_orbit_defs();
 
@@ -377,12 +378,16 @@ unsafe fn replace_inverse_slice(
 }
 
 #[inline]
-fn induces_sorted_cycle_type_slice(
+fn induces_sorted_cycle_type_slice<'id>(
     slice_orbit_states: &[u8],
-    sorted_cycle_type: &SortedCycleType,
-    sorted_orbit_defs: SortedOrbitDefsRef,
+    sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
+    sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
+    // TODO
     multi_bv: &mut [u8],
 ) -> bool {
+    unsafe {
+        assert_unchecked(sorted_cycle_type.inner.len() == sorted_cycle_type.inner.len());
+    }
     let mut base = 0;
     for (orbit_def, sorted_cycle_type_orbit) in sorted_orbit_defs
         .branded_copied_iter()
@@ -462,7 +467,7 @@ impl<'id> HeapPuzzle<'id> {
     /// Panics if the generated cycle type is deemed to be invalid because of
     /// bad implementation of the function.
     #[must_use]
-    pub fn cycle_type(
+    pub fn sorted_cycle_type(
         &self,
         sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
         multi_bv: SliceMultiBvRefMut<'_>,
@@ -502,9 +507,13 @@ impl<'id> HeapPuzzle<'id> {
             cycle_type_piece.sort_unstable();
             cycle_type.push(cycle_type_piece);
         }
-        let sorted_cycle_type = SortedCycleType::new(cycle_type, sorted_orbit_defs).unwrap();
+        let sorted_cycle_type = SortedCycleType::new(&cycle_type, sorted_orbit_defs).unwrap();
         // We don't actually need to test this function because we have this
-        assert!(self.induces_sorted_cycle_type(&sorted_cycle_type, sorted_orbit_defs, multi_bv));
+        assert!(self.induces_sorted_cycle_type(
+            sorted_cycle_type.slice_view(),
+            sorted_orbit_defs,
+            multi_bv
+        ));
         sorted_cycle_type
     }
 }
