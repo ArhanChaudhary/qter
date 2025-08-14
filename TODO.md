@@ -1,3 +1,5 @@
+<!-- cspell:disable -->
+
 # TODO
 
 ⭐means it's important to be done before the video series
@@ -7,13 +9,13 @@
 ## SCC
 
 - Phase 2
-  - SortedCycleType creation error and IDA* experiment commits
-  - ⭐branding for OrbitPuzzleStates should be unqiue and happen at a very small level
+  - SortedCycleType creation error
+  - ⭐branding for OrbitPuzzleStates should be unique and happen at a very small level
   - ⭐pruning table
     - cartesian product tables
       - seed only one value
       - <https://discord.com/channels/772576325897945119/1326029986578038784/1347580846647017482>
-    - ⭐fix storage backend initialization meta
+    - fix storage backend initialization meta
     - tANS table compression
     - cycle type pruning table
       - with fewer state spaces, go back to an exact pruning table
@@ -22,7 +24,6 @@
     - ⭐each thread fills in 1024 entires at a time
     - ⭐exact: dfs at low levels instead of scanning
     - dynamic simd detection rather than -Ctarget-cpu=native
-    - ghostcell instead of unsafe replace compose
   - ⭐stabilizer
   - ⭐avoid symmetric moves from the start
   - you NEED to account for parity constraints when calculating orbit size; address this in schreier sims
@@ -31,7 +32,6 @@
   - ⭐standard symmetry
     - ⭐reread kociemba's website and h48.md
   - ⭐antisymmetry
-  - ⭐fix sequence symmetry
   - ⭐multithreading
     - microthreading
   - ⭐make fsm lookup unsafe when pg is done

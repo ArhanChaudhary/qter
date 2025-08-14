@@ -337,7 +337,6 @@ impl<'id> SortedOrbitDefsRef<'id, '_> {
     }
 }
 
-// TODO
 impl<'id> SliceView for SortedCycleType<'id> {
     type Slice<'a>
         = SortedCycleTypeRef<'id, 'a>

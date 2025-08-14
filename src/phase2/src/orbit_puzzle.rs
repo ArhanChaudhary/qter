@@ -30,7 +30,7 @@ pub trait OrbitPuzzleState {
 pub trait OrbitPuzzleConstructors<'id> {
     type MultiBv: SliceViewMut;
 
-    fn new_multi_bv(branded_orbit_def: BrandedOrbitDef) -> Self::MultiBv;
+    fn new_multi_bv(branded_orbit_def: BrandedOrbitDef<'id>) -> Self::MultiBv;
     fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
         perm: B,
         ori: B,

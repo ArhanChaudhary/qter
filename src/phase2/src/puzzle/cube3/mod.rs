@@ -195,7 +195,6 @@ mod common {
             self.replace_inverse(a);
         }
 
-        // TODO: validate sorted cycle type is sound
         fn induces_sorted_cycle_type(
             &self,
             sorted_cycle_type: SortedCycleTypeRef<'id, '_>,

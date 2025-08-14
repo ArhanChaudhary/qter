@@ -15,19 +15,20 @@ use std::{cmp::Ordering, num::NonZeroU8};
 #[derive(Clone, PartialEq, Debug, Hash)]
 pub struct SliceOrbitPuzzle<'id>(Box<[u8]>, Id<'id>);
 
-pub struct SliceOrbitMultiBv(Box<[u8]>);
-pub struct SliceOrbitMultiBvRefMut<'a>(&'a mut [u8]);
+// TODO: brand these
+pub struct MultiBv(Box<[u8]>);
+pub struct MultiBvRefMut<'a>(&'a mut [u8]);
 
-impl SliceViewMut for SliceOrbitMultiBv {
-    type SliceMut<'a> = SliceOrbitMultiBvRefMut<'a>;
+impl SliceViewMut for MultiBv {
+    type SliceMut<'a> = MultiBvRefMut<'a>;
 
     fn slice_view_mut(&mut self) -> Self::SliceMut<'_> {
-        SliceOrbitMultiBvRefMut(&mut self.0)
+        MultiBvRefMut(&mut self.0)
     }
 }
 
 impl OrbitPuzzleState for SliceOrbitPuzzle<'_> {
-    type MultiBv = SliceOrbitMultiBv;
+    type MultiBv = MultiBv;
 
     fn replace_compose(&mut self, a: &Self, b: &Self, branded_orbit_def: BrandedOrbitDef) {
         // SAFETY: `a`, `b`, and `self` are all branded to correspond to
@@ -39,7 +40,7 @@ impl OrbitPuzzleState for SliceOrbitPuzzle<'_> {
         &self,
         sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
         branded_orbit_def: BrandedOrbitDef,
-        multi_bv: SliceOrbitMultiBvRefMut<'_>,
+        multi_bv: MultiBvRefMut<'_>,
     ) -> bool {
         // TODO
         unsafe {
@@ -69,10 +70,10 @@ impl OrbitPuzzleState for SliceOrbitPuzzle<'_> {
 }
 
 impl<'id> OrbitPuzzleConstructors<'id> for SliceOrbitPuzzle<'id> {
-    type MultiBv = SliceOrbitMultiBv;
+    type MultiBv = MultiBv;
 
-    fn new_multi_bv(branded_orbit_def: BrandedOrbitDef) -> SliceOrbitMultiBv {
-        SliceOrbitMultiBv(
+    fn new_multi_bv(branded_orbit_def: BrandedOrbitDef<'id>) -> MultiBv {
+        MultiBv(
             vec![0; branded_orbit_def.inner.piece_count.get().div_ceil(4) as usize]
                 .into_boxed_slice(),
         )
@@ -143,6 +144,8 @@ pub unsafe fn induces_sorted_cycle_type_slice_orbit(
     base: usize,
     sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
     branded_orbit_def: BrandedOrbitDef,
+    // We cannot brand this field because a newtype holding a mutable reference
+    // cannot be moved in a loop
     multi_bv: &mut [u8],
 ) -> bool {
     multi_bv.fill(0);
