@@ -1,7 +1,7 @@
 //! The default, generic implementation for representing puzzle states.
 
 use super::{
-    BrandedOrbitDef, OrbitDef, OrbitIdentifier, PuzzleState, SliceViewMut, SortedOrbitDefsRef,
+    BrandedOrbitDef, OrbitIdentifier, PuzzleState, SliceViewMut, SortedOrbitDefsRef,
     TransformationsMeta, TransformationsMetaError,
 };
 use crate::{
@@ -49,7 +49,6 @@ mod private {
     //! Private module to disallow explicit instantiation of `OrbitBaseSlice`.
 
     use super::{BrandedOrbitDef, OrbitIdentifier};
-    use crate::puzzle::OrbitDef;
     use std::slice;
 
     /// A newtyped index into the start of an orbit in a `StackPuzzle` or
@@ -68,7 +67,10 @@ mod private {
             }
         }
 
-        fn next_orbit_identifier(self, branded_orbit_def: BrandedOrbitDef) -> SliceOrbitIdentifier {
+        fn next_orbit_identifier(
+            self,
+            branded_orbit_def: BrandedOrbitDef<'id>,
+        ) -> SliceOrbitIdentifier<'id> {
             // TODO: panic if out of bounds
             SliceOrbitIdentifier {
                 base_index: self.base_index
@@ -77,8 +79,8 @@ mod private {
             }
         }
 
-        fn orbit_def(&self) -> OrbitDef {
-            self.branded_orbit_def.inner
+        fn branded_orbit_def(&self) -> BrandedOrbitDef<'id> {
+            self.branded_orbit_def
         }
     }
 
@@ -184,7 +186,7 @@ impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
 
     fn exact_hasher_orbit(&self, orbit_identifier: SliceOrbitIdentifier<'id>) -> u64 {
         let (perm, ori) = self.orbit_bytes(orbit_identifier);
-        exact_hasher_orbit_bytes(perm, ori, orbit_identifier.orbit_def())
+        exact_hasher_orbit_bytes(perm, ori, orbit_identifier.branded_orbit_def())
     }
 }
 
@@ -257,7 +259,7 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
 
     fn exact_hasher_orbit(&self, orbit_identifier: SliceOrbitIdentifier<'id>) -> u64 {
         let (perm, ori) = self.orbit_bytes(orbit_identifier);
-        exact_hasher_orbit_bytes(perm, ori, orbit_identifier.orbit_def())
+        exact_hasher_orbit_bytes(perm, ori, orbit_identifier.branded_orbit_def())
     }
 }
 
@@ -441,7 +443,12 @@ fn approximate_hash_orbit_slice<'a>(
 }
 
 // TODO: https://stackoverflow.com/a/24689277 https://freedium.cfd/https://medium.com/@benjamin.botto/sequentially-indexing-permutations-a-linear-algorithm-for-computing-lexicographic-rank-a22220ffd6e3 https://stackoverflow.com/questions/1506078/fast-permutation-number-permutation-mapping-algorithms/1506337#1506337
-pub(crate) fn exact_hasher_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def: OrbitDef) -> u64 {
+pub(crate) fn exact_hasher_orbit_bytes(
+    perm: &[u8],
+    ori: &[u8],
+    branded_orbit_def: BrandedOrbitDef,
+) -> u64 {
+    let orbit_def = branded_orbit_def.inner;
     let piece_count = orbit_def.piece_count.get();
     assert!(piece_count as usize <= FACT_UNTIL_19.len());
 

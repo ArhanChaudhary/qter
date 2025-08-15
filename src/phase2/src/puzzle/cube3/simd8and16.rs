@@ -5,10 +5,12 @@
 #![cfg_attr(any(avx2, not(simd8and16)), allow(dead_code, unused_variables))]
 
 use super::common::{
-    CUBE_3_SORTED_ORBIT_DEFS, CornersTransformation, Cube3Interface, Cube3OrbitType,
-    EdgesTransformation,
+    CUBE_3_SORTED_ORBIT_DEFS, CornersTransformation, Cube3Interface, EdgesTransformation,
 };
-use crate::{orbit_puzzle::exact_hasher_orbit, puzzle::SortedCycleTypeRef};
+use crate::{
+    orbit_puzzle::exact_hasher_orbit,
+    puzzle::{SortedCycleTypeRef, cube3::common::Cube3OrbitType},
+};
 use std::{
     fmt,
     hash::Hash,

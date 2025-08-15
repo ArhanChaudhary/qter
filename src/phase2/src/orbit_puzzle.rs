@@ -1,9 +1,5 @@
-use super::{
-    FACT_UNTIL_19,
-    puzzle::{BrandedOrbitDef, OrbitDef},
-};
+use super::{FACT_UNTIL_19, puzzle::BrandedOrbitDef};
 use crate::SliceViewMut;
-use generativity::Id;
 use std::{
     hash::Hash,
     num::NonZeroU8,
@@ -34,8 +30,7 @@ pub trait OrbitPuzzleConstructors<'id> {
     fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
         perm: B,
         ori: B,
-        orbit_def: OrbitDef,
-        id: Id<'id>,
+        branded_orbit_def: BrandedOrbitDef<'id>,
     ) -> Self;
 }
 

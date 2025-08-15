@@ -81,7 +81,7 @@ pub trait OrbitIdentifier<'id> {
     #[must_use]
     fn next_orbit_identifier(self, branded_orbit_def: BrandedOrbitDef<'id>) -> Self;
 
-    fn orbit_def(&self) -> OrbitDef;
+    fn branded_orbit_def(&self) -> BrandedOrbitDef<'id>;
 }
 
 // TODO: dont make everything public
@@ -128,7 +128,7 @@ pub struct OrbitDef {
 #[derive(Copy, Clone, Debug)]
 pub struct BrandedOrbitDef<'id> {
     pub inner: OrbitDef,
-    _id: Id<'id>,
+    id: Id<'id>,
 }
 
 #[derive(Clone, Copy)]
@@ -272,16 +272,6 @@ impl<'id, 'a> TransformationsMeta<'id, 'a> {
     }
 }
 
-impl<'id> BrandedOrbitDef<'id> {
-    #[must_use]
-    pub fn new(orbit_def: OrbitDef, id: Id<'id>) -> Self {
-        Self {
-            inner: orbit_def,
-            _id: id,
-        }
-    }
-}
-
 impl<'id> SortedCycleType<'id> {
     pub fn new(
         maybe_cycle_type: &[Vec<(u8, bool)>],
@@ -328,12 +318,19 @@ impl<'id> SortedCycleType<'id> {
     }
 }
 
+impl<'id> BrandedOrbitDef<'id> {
+    #[must_use]
+    pub fn id(&self) -> Id<'id> {
+        self.id
+    }
+}
+
 impl<'id> SortedOrbitDefsRef<'id, '_> {
     pub fn branded_copied_iter(&self) -> impl Iterator<Item = BrandedOrbitDef<'id>> {
-        self.inner
-            .iter()
-            .copied()
-            .map(|orbit_def| BrandedOrbitDef::new(orbit_def, self.id))
+        self.inner.iter().copied().map(|orbit_def| BrandedOrbitDef {
+            inner: orbit_def,
+            id: self.id,
+        })
     }
 }
 
@@ -982,11 +979,9 @@ mod tests {
         let solved = cube3_def.new_solved_state();
         let mut multi_bv = P::new_multi_bv(cube3_def.sorted_orbit_defs_slice_view());
 
-        let sorted_cycle_type = SortedCycleType::new(
-            &[vec![], vec![]],
-            cube3_def.sorted_orbit_defs_slice_view(),
-        )
-        .unwrap();
+        let sorted_cycle_type =
+            SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_slice_view())
+                .unwrap();
         assert!(solved.induces_sorted_cycle_type(
             sorted_cycle_type.slice_view(),
             cube3_def.sorted_orbit_defs_slice_view(),

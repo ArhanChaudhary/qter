@@ -18,7 +18,7 @@ use crate::{
         OrbitPuzzleConstructors, OrbitPuzzleState, slice_orbit_puzzle::SliceOrbitPuzzle,
     },
     permutator::pandita2,
-    puzzle::{BrandedOrbitDef, OrbitIdentifier, SortedCycleType, SortedCycleTypeRef},
+    puzzle::{OrbitIdentifier, SortedCycleType, SortedCycleTypeRef},
     start, success, working,
 };
 use generativity::Id;
@@ -130,7 +130,6 @@ struct OrbitPruningTableGenerationMeta<'id, 'a, P: PuzzleState<'id>> {
     sorted_cycle_type_orbit: &'a [(NonZeroU8, bool)],
     orbit_identifier: P::OrbitIdentifier,
     max_size_bytes: usize,
-    id: Id<'id>,
 }
 
 pub struct OrbitPruningTablesGenerateMeta<'id, 'a, P: PuzzleState<'id>> {
@@ -331,14 +330,12 @@ impl<'id, P: PuzzleState<'id> + 'id> PruningTables<'id, P> for OrbitPruningTable
         // the smallest pruning tables while dynamically updating how much space
         // is reserved for the remaining orbit tables.
         let mut maybe_orbit_identifier: Option<P::OrbitIdentifier> = None;
-        for (orbit_index, &orbit_def) in generate_metas
+        for (orbit_index, branded_orbit_def) in generate_metas
             .puzzle_def
-            .sorted_orbit_defs
-            .iter()
+            .sorted_orbit_defs_slice_view()
+            .branded_copied_iter()
             .enumerate()
         {
-            let id = generate_metas.id;
-            let branded_orbit_def = BrandedOrbitDef::new(orbit_def, id);
             maybe_orbit_identifier = Some(if orbit_index == 0 {
                 P::OrbitIdentifier::first_orbit_identifier(branded_orbit_def)
             } else {
@@ -389,7 +386,6 @@ impl<'id, P: PuzzleState<'id> + 'id> PruningTables<'id, P> for OrbitPruningTable
                 sorted_cycle_type_orbit,
                 orbit_identifier,
                 max_size_bytes,
-                id,
             };
 
             let (orbit_pruning_table, used_size_bytes) =
@@ -754,16 +750,14 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
             sorted_cycle_type_orbit,
             orbit_identifier,
             max_size_bytes,
-            id,
         } = generate_meta;
 
-        let orbit_def = orbit_identifier.orbit_def();
-        let branded_orbit_def = BrandedOrbitDef::new(orbit_def, id);
+        let branded_orbit_def = orbit_identifier.branded_orbit_def();
         // TODO: make this common for all pruning tables
-        let piece_count = orbit_def.piece_count.get();
+        let piece_count = branded_orbit_def.inner.piece_count.get();
 
         let orientation_count = u64::pow(
-            u64::from(orbit_def.orientation_count.get()),
+            u64::from(branded_orbit_def.inner.orientation_count.get()),
             u32::from(piece_count) - 1,
         );
         let entry_count = FACT_UNTIL_19[piece_count as usize] * orientation_count;
@@ -779,12 +773,12 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
         let mut table = ExactOrbitPruningTable {
             storage_backend: S::initialize_from_meta(initialization_meta),
             orbit_identifier,
-            _id: id,
+            _id: orbit_identifier.branded_orbit_def().id(),
         };
 
         let puzzle_solved = puzzle_def.new_solved_state();
         let (perm, ori) = puzzle_solved.orbit_bytes(orbit_identifier);
-        let orbit_solved = O::from_orbit_transformation_unchecked(perm, ori, orbit_def, id);
+        let orbit_solved = O::from_orbit_transformation_unchecked(perm, ori, branded_orbit_def);
 
         let orbit_move_class_indicies = puzzle_def
             .move_classes
@@ -795,7 +789,8 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
                 let (perm, ori) = puzzle_def.moves[move_class]
                     .puzzle_state
                     .orbit_bytes(orbit_identifier);
-                if O::from_orbit_transformation_unchecked(perm, ori, orbit_def, id) == orbit_solved
+                if O::from_orbit_transformation_unchecked(perm, ori, branded_orbit_def)
+                    == orbit_solved
                 {
                     None
                 } else {
@@ -811,7 +806,9 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
                 if orbit_move_class_indicies.contains(&move_.move_class_index) {
                     let (perm, ori) = move_.puzzle_state.orbit_bytes(orbit_identifier);
                     Some(O::from_orbit_transformation_unchecked(
-                        perm, ori, orbit_def, id,
+                        perm,
+                        ori,
+                        branded_orbit_def,
                     ))
                 } else {
                     None
@@ -847,7 +844,7 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
                             break;
                         }
                         unsafe {
-                            knuthm(&mut ori, orbit_def.orientation_count);
+                            knuthm(&mut ori, branded_orbit_def.inner.orientation_count);
                         }
                     }
                     if depth != 0
@@ -862,7 +859,7 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
                     }
 
                     let curr_state =
-                        O::from_orbit_transformation_unchecked(&perm, &ori, orbit_def, id);
+                        O::from_orbit_transformation_unchecked(&perm, &ori, branded_orbit_def);
                     if depth == 0 {
                         if curr_state.induces_sorted_cycle_type(
                             sorted_cycle_type_orbit,
@@ -1048,10 +1045,13 @@ mod tests {
             puzzle_def: &cube3_def,
             sorted_cycle_type_orbit: &[],
             orbit_identifier: <Cube3 as PuzzleState>::OrbitIdentifier::first_orbit_identifier(
-                BrandedOrbitDef::new(cube3_def.sorted_orbit_defs[0], id),
+                cube3_def
+                    .sorted_orbit_defs_slice_view()
+                    .branded_copied_iter()
+                    .next()
+                    .unwrap(),
             ),
             max_size_bytes: 0,
-            id,
         };
         let (zero_orbit_table, _) = ZeroOrbitTable::try_generate(generate_meta).unwrap();
         assert_eq!(zero_orbit_table.permissible_heuristic(&solved), 0);

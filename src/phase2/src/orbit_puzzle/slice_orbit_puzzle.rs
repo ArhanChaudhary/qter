@@ -5,7 +5,7 @@ use super::{OrbitPuzzleConstructors, OrbitPuzzleState};
 use crate::{
     SliceViewMut,
     puzzle::{
-        BrandedOrbitDef, OrbitDef,
+        BrandedOrbitDef,
         slice_puzzle::{exact_hasher_orbit_bytes, slice_orbit_size},
     },
 };
@@ -65,7 +65,7 @@ impl OrbitPuzzleState for SliceOrbitPuzzle<'_> {
             self.0
                 .split_at_unchecked(branded_orbit_def.inner.piece_count.get() as usize)
         };
-        exact_hasher_orbit_bytes(perm, ori, branded_orbit_def.inner)
+        exact_hasher_orbit_bytes(perm, ori, branded_orbit_def)
     }
 }
 
@@ -83,17 +83,18 @@ impl<'id> OrbitPuzzleConstructors<'id> for SliceOrbitPuzzle<'id> {
     fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
         perm: B,
         ori: B,
-        orbit_def: OrbitDef,
-        id: Id<'id>,
+        branded_orbit_def: BrandedOrbitDef<'id>,
     ) -> Self {
-        let branded_orbit_def = BrandedOrbitDef::new(orbit_def, id);
         let mut slice_orbit_states = vec![0_u8; slice_orbit_size(branded_orbit_def)];
-        let piece_count = orbit_def.piece_count.get();
+        let piece_count = branded_orbit_def.inner.piece_count.get();
         for i in 0..piece_count {
             slice_orbit_states[(piece_count + i) as usize] = ori.as_ref()[i as usize];
             slice_orbit_states[i as usize] = perm.as_ref()[i as usize];
         }
-        SliceOrbitPuzzle(slice_orbit_states.into_boxed_slice(), id)
+        SliceOrbitPuzzle(
+            slice_orbit_states.into_boxed_slice(),
+            branded_orbit_def.id(),
+        )
     }
 }
 

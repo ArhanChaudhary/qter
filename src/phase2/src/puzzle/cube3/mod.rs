@@ -13,12 +13,18 @@ mod common {
     use std::{fmt::Debug, num::NonZeroU8};
 
     /// An orbit identifier for 3x3 cubes.
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug, Clone, Copy)]
     pub enum Cube3OrbitType {
         /// The corners orbit.
         Corners,
         /// The edges orbit.
         Edges,
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    pub struct Cube3OrbitIdentifier<'id> {
+        orbit_type: Cube3OrbitType,
+        id: Id<'id>,
     }
 
     pub use private::*;
@@ -108,22 +114,33 @@ mod common {
         },
     ];
 
-    impl OrbitIdentifier<'_> for Cube3OrbitType {
-        fn first_orbit_identifier(_branded_orbit_def: BrandedOrbitDef) -> Self {
-            Cube3OrbitType::Corners
-        }
-
-        fn next_orbit_identifier(self, _branded_orbit_def: BrandedOrbitDef) -> Self {
-            match self {
-                Cube3OrbitType::Corners => Cube3OrbitType::Edges,
-                Cube3OrbitType::Edges => panic!("No next orbit identifier for Cube3"),
+    impl<'id> OrbitIdentifier<'id> for Cube3OrbitIdentifier<'id> {
+        fn first_orbit_identifier(branded_orbit_def: BrandedOrbitDef<'id>) -> Self {
+            Cube3OrbitIdentifier {
+                orbit_type: Cube3OrbitType::Corners,
+                id: branded_orbit_def.id(),
             }
         }
 
-        fn orbit_def(&self) -> OrbitDef {
-            match self {
+        fn next_orbit_identifier(self, branded_orbit_def: BrandedOrbitDef<'id>) -> Self {
+            let orbit_type = match self.orbit_type {
+                Cube3OrbitType::Corners => Cube3OrbitType::Edges,
+                Cube3OrbitType::Edges => panic!("No next orbit identifier for Cube3"),
+            };
+            Cube3OrbitIdentifier {
+                orbit_type,
+                id: branded_orbit_def.id(),
+            }
+        }
+
+        fn branded_orbit_def(&self) -> BrandedOrbitDef<'id> {
+            let orbit_def = match self.orbit_type {
                 Cube3OrbitType::Corners => CUBE_3_SORTED_ORBIT_DEFS[0],
                 Cube3OrbitType::Edges => CUBE_3_SORTED_ORBIT_DEFS[1],
+            };
+            BrandedOrbitDef {
+                inner: orbit_def,
+                id: self.id,
             }
         }
     }
@@ -134,7 +151,7 @@ mod common {
             = [u8; 16]
         where
             C: 'a + 'id;
-        type OrbitIdentifier = Cube3OrbitType;
+        type OrbitIdentifier = Cube3OrbitIdentifier<'id>;
 
         fn new_multi_bv(_sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) {
             // Induces cycle type for 3x3 cubes doesn't require auxilliary
@@ -187,7 +204,12 @@ mod common {
             }
         }
 
-        fn replace_compose(&mut self, a: &Self, b: &Self, _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) {
+        fn replace_compose(
+            &mut self,
+            a: &Self,
+            b: &Self,
+            _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
+        ) {
             self.replace_compose(a, b);
         }
 
@@ -204,16 +226,16 @@ mod common {
             self.induces_sorted_cycle_type(sorted_cycle_type)
         }
 
-        fn orbit_bytes(&self, orbit_identifier: Cube3OrbitType) -> ([u8; 16], [u8; 16]) {
-            self.orbit_bytes(orbit_identifier)
+        fn orbit_bytes(&self, orbit_identifier: Cube3OrbitIdentifier<'id>) -> ([u8; 16], [u8; 16]) {
+            self.orbit_bytes(orbit_identifier.orbit_type)
         }
 
-        fn exact_hasher_orbit(&self, orbit_identifier: Cube3OrbitType) -> u64 {
-            self.exact_hasher_orbit(orbit_identifier)
+        fn exact_hasher_orbit(&self, orbit_identifier: Cube3OrbitIdentifier<'id>) -> u64 {
+            self.exact_hasher_orbit(orbit_identifier.orbit_type)
         }
 
         fn approximate_hash_orbit(&self, orbit_identifier: Self::OrbitIdentifier) -> impl Hash {
-            self.approximate_hash_orbit(orbit_identifier)
+            self.approximate_hash_orbit(orbit_identifier.orbit_type)
         }
     }
 }

@@ -14,18 +14,20 @@ use puzzle_geometry::ksolve::{KPUZZLE_3X3, KPUZZLE_4X4};
 #[test_log::test]
 fn test_identity_cycle_type() {
     make_guard!(guard);
-    let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+    let (mut cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
     let identity_cycle_type =
         SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_slice_view()).unwrap();
 
     let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-        &cube3_def,
+        cube3_def,
         ZeroTable::try_generate_all(identity_cycle_type.clone(), ()).unwrap(),
         SearchStrategy::AllSolutions,
     );
     let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
     assert_eq!(solutions.len(), 1);
     assert_eq!(solutions[0].len(), 0);
+
+    cube3_def = solver.into_puzzle_def_and_pruning_tables().0;
 
     let pruning_tables = OrbitPruningTables::try_generate_all(
         identity_cycle_type.clone(),
@@ -39,7 +41,7 @@ fn test_identity_cycle_type() {
     )
     .unwrap();
     let solver: CycleTypeSolver<Cube3, _> =
-        CycleTypeSolver::new(&cube3_def, pruning_tables, SearchStrategy::AllSolutions);
+        CycleTypeSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
     let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
     assert_eq!(solutions.len(), 1);
     assert_eq!(solutions[0].len(), 0);
@@ -49,17 +51,14 @@ fn test_identity_cycle_type() {
 fn test_single_quarter_turn() {
     make_guard!(guard);
     let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
+    let sorted_cycle_type = SortedCycleType::new(
+        &[vec![(4, false)], vec![(4, false)]],
+        cube3_def.sorted_orbit_defs_slice_view(),
+    )
+    .unwrap();
     let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-        &cube3_def,
-        ZeroTable::try_generate_all(
-            SortedCycleType::new(
-                &[vec![(4, false)], vec![(4, false)]],
-                cube3_def.sorted_orbit_defs_slice_view(),
-            )
-            .unwrap(),
-            (),
-        )
-        .unwrap(),
+        cube3_def,
+        ZeroTable::try_generate_all(sorted_cycle_type, ()).unwrap(),
         SearchStrategy::AllSolutions,
     );
     let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
@@ -71,17 +70,14 @@ fn test_single_quarter_turn() {
 fn test_single_half_turn() {
     make_guard!(guard);
     let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
+    let sorted_cycle_type = SortedCycleType::new(
+        &[vec![(2, false), (2, false)], vec![(2, false), (2, false)]],
+        cube3_def.sorted_orbit_defs_slice_view(),
+    )
+    .unwrap();
     let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-        &cube3_def,
-        ZeroTable::try_generate_all(
-            SortedCycleType::new(
-                &[vec![(2, false), (2, false)], vec![(2, false), (2, false)]],
-                cube3_def.sorted_orbit_defs_slice_view(),
-            )
-            .unwrap(),
-            (),
-        )
-        .unwrap(),
+        cube3_def,
+        ZeroTable::try_generate_all(sorted_cycle_type, ()).unwrap(),
         SearchStrategy::AllSolutions,
     );
     let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
@@ -96,17 +92,14 @@ fn test_optimal_subgroup_cycle() {
         PuzzleDef::<Cube3>::new(&KPUZZLE_3X3.clone().with_moves(&["F", "R", "U"]), guard)
             .unwrap()
             .0;
+    let sorted_cycle_type = SortedCycleType::new(
+        &[vec![(3, false), (4, false)], vec![(1, true), (8, true)]],
+        cube3_def.sorted_orbit_defs_slice_view(),
+    )
+    .unwrap();
     let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
-        &cube3_def,
-        ZeroTable::try_generate_all(
-            SortedCycleType::new(
-                &[vec![(3, false), (4, false)], vec![(1, true), (8, true)]],
-                cube3_def.sorted_orbit_defs_slice_view(),
-            )
-            .unwrap(),
-            (),
-        )
-        .unwrap(),
+        cube3_def,
+        ZeroTable::try_generate_all(sorted_cycle_type, ()).unwrap(),
         SearchStrategy::AllSolutions,
     );
     let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
@@ -142,7 +135,7 @@ fn test_control_optimal_cycle() {
     let pruning_tables =
         OrbitPruningTables::try_generate_all(sorted_cycle_type, generate_meta).unwrap();
     let solver: CycleTypeSolver<Cube3, _> =
-        CycleTypeSolver::new(&cube3_def, pruning_tables, SearchStrategy::AllSolutions);
+        CycleTypeSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
 
     let solutions = solver.solve::<[Cube3; 21]>().collect_vec();
     for solution in &solutions {
@@ -166,7 +159,7 @@ struct OptimalCycleTypeTest {
 #[test_log::test]
 fn test_many_optimal_cycles() {
     make_guard!(guard);
-    let cube3_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_3X3, guard).unwrap().0;
+    let mut cube3_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_3X3, guard).unwrap().0;
 
     // Test cases taken from Michael Gottlieb's order table
     // https://mzrg.com/rubik/orders.shtml
@@ -439,7 +432,7 @@ fn test_many_optimal_cycles() {
         let zero_table = ZeroTable::try_generate_all(sorted_cycle_type, ()).unwrap();
 
         let solver: CycleTypeSolver<HeapPuzzle, _> =
-            CycleTypeSolver::new(&cube3_def, zero_table, SearchStrategy::AllSolutions);
+            CycleTypeSolver::new(cube3_def, zero_table, SearchStrategy::AllSolutions);
 
         let solutions = solver.solve::<Vec<_>>().collect_vec();
         assert_eq!(solutions.len(), optimal_cycle_test.expected_partial_count);
@@ -448,13 +441,15 @@ fn test_many_optimal_cycles() {
                 .iter()
                 .all(|solution| solution.len() == move_count)
         );
+
+        cube3_def = solver.into_puzzle_def_and_pruning_tables().0;
     }
 }
 
 #[test_log::test]
 fn test_big_cube_optimal_cycle() {
     make_guard!(guard);
-    let cube4_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_4X4, guard).unwrap().0;
+    let mut cube4_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_4X4, guard).unwrap().0;
 
     // Test cases taken from Michael Gottlieb's order table
     // https://mzrg.com/rubik/orders.shtml
@@ -806,7 +801,7 @@ fn test_big_cube_optimal_cycle() {
         let zero_table = ZeroTable::try_generate_all(sorted_cycle_type, ()).unwrap();
 
         let solver: CycleTypeSolver<HeapPuzzle, _> =
-            CycleTypeSolver::new(&cube4_def, zero_table, SearchStrategy::AllSolutions);
+            CycleTypeSolver::new(cube4_def, zero_table, SearchStrategy::AllSolutions);
 
         // solver.set_sorted_cycle_type(cycle_type);
 
@@ -817,5 +812,7 @@ fn test_big_cube_optimal_cycle() {
                 .iter()
                 .all(|solution| solution.len() == move_count)
         );
+
+        cube4_def = solver.into_puzzle_def_and_pruning_tables().0;
     }
 }

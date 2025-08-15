@@ -8,8 +8,8 @@ use crate::{SliceViewMut, start, success, working};
 use log::{Level, debug, info, log_enabled};
 use std::{time::Instant, vec::IntoIter};
 
-pub struct CycleTypeSolver<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> {
-    puzzle_def: &'a PuzzleDef<'id, P>,
+pub struct CycleTypeSolver<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> {
+    puzzle_def: PuzzleDef<'id, P>,
     pruning_tables: T,
     canonical_fsm: PuzzleCanonicalFSM<'id, P>,
     search_strategy: SearchStrategy,
@@ -34,19 +34,23 @@ pub struct SolutionsIntoIter<'id, 'a, P: PuzzleState<'id>> {
     solutions: IntoIter<Vec<usize>>,
 }
 
-impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, 'a, P, T> {
+impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P, T> {
     pub fn new(
-        puzzle_def: &'a PuzzleDef<'id, P>,
+        puzzle_def: PuzzleDef<'id, P>,
         pruning_tables: T,
         search_strategy: SearchStrategy,
     ) -> Self {
-        let canonical_fsm = puzzle_def.into();
+        let canonical_fsm = (&puzzle_def).into();
         Self {
             puzzle_def,
             pruning_tables,
             canonical_fsm,
             search_strategy,
         }
+    }
+
+    pub fn into_puzzle_def_and_pruning_tables(self) -> (PuzzleDef<'id, P>, T) {
+        (self.puzzle_def, self.pruning_tables)
     }
 
     fn search_for_solution<H: PuzzleStateHistoryInterface<'id, P>>(
@@ -124,7 +128,7 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
             unsafe {
                 mutable
                     .puzzle_state_history
-                    .push_stack_unchecked(move_index, self.puzzle_def);
+                    .push_stack_unchecked(move_index, &self.puzzle_def);
             }
 
             // We handle togo==0 inline to save the function call overhead
@@ -165,12 +169,12 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
         }
     }
 
-    pub fn solve<H: PuzzleStateHistoryInterface<'id, P>>(&self) -> SolutionsIntoIter<'id, 'a, P> {
+    pub fn solve<H: PuzzleStateHistoryInterface<'id, P>>(&self) -> SolutionsIntoIter<'id, '_, P> {
         info!(start!("Searching for phase2 solutions"));
         let start = Instant::now();
 
         let mut mutable: CycleTypeSolverMutable<P, H> = CycleTypeSolverMutable {
-            puzzle_state_history: self.puzzle_def.into(),
+            puzzle_state_history: (&self.puzzle_def).into(),
             multi_bv: P::new_multi_bv(self.puzzle_def.sorted_orbit_defs_slice_view()),
             solutions: vec![],
             first_move_class_index: usize::default(),
@@ -223,7 +227,7 @@ impl<'id, 'a, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id
         );
         debug!("");
         SolutionsIntoIter {
-            puzzle_def: self.puzzle_def,
+            puzzle_def: &self.puzzle_def,
             solutions: mutable.solutions.into_iter(),
         }
     }
