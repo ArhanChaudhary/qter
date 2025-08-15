@@ -773,7 +773,7 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
         let mut table = ExactOrbitPruningTable {
             storage_backend: S::initialize_from_meta(initialization_meta),
             orbit_identifier,
-            _id: orbit_identifier.branded_orbit_def().id(),
+            _id: puzzle_def.id(),
         };
 
         let puzzle_solved = puzzle_def.new_solved_state();
@@ -787,7 +787,7 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
             .enumerate()
             .filter_map(|(i, move_class)| {
                 let (perm, ori) = puzzle_def.moves[move_class]
-                    .puzzle_state
+                    .puzzle_state()
                     .orbit_bytes(orbit_identifier);
                 if O::from_orbit_transformation_unchecked(perm, ori, branded_orbit_def)
                     == orbit_solved
@@ -804,7 +804,7 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
             .iter()
             .filter_map(|move_| {
                 if orbit_move_class_indicies.contains(&move_.move_class_index) {
-                    let (perm, ori) = move_.puzzle_state.orbit_bytes(orbit_identifier);
+                    let (perm, ori) = move_.puzzle_state().orbit_bytes(orbit_identifier);
                     Some(O::from_orbit_transformation_unchecked(
                         perm,
                         ori,
@@ -1034,7 +1034,7 @@ mod tests {
     #[test_log::test]
     fn test_zero_orbit_tables() {
         make_guard!(guard);
-        let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let u_move = cube3_def.find_move("U").unwrap();
         let identity_cycle_type =
@@ -1056,7 +1056,7 @@ mod tests {
         let (zero_orbit_table, _) = ZeroOrbitTable::try_generate(generate_meta).unwrap();
         assert_eq!(zero_orbit_table.permissible_heuristic(&solved), 0);
         assert_eq!(
-            zero_orbit_table.permissible_heuristic(&u_move.puzzle_state),
+            zero_orbit_table.permissible_heuristic(u_move.puzzle_state()),
             0
         );
 
@@ -1064,20 +1064,20 @@ mod tests {
             &cube3_def,
             vec![TableTy::Zero, TableTy::Zero],
             0,
-            id,
+            cube3_def.id(),
         )
         .unwrap();
         let orbit_tables =
             OrbitPruningTables::try_generate_all(identity_cycle_type, generate_metas).unwrap();
 
         assert_eq!(orbit_tables.permissible_heuristic(&solved), 0);
-        assert_eq!(orbit_tables.permissible_heuristic(&u_move.puzzle_state), 0);
+        assert_eq!(orbit_tables.permissible_heuristic(u_move.puzzle_state()), 0);
     }
 
     #[test_log::test]
     fn test_zero_table() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let identity_cycle_type =
             SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_slice_view())
                 .unwrap();
@@ -1090,7 +1090,8 @@ mod tests {
     #[test]
     fn test_new_orbit_generation_meta() {
         make_guard!(guard);
-        let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let id = cube3_def.id();
         let generate_metas = OrbitPruningTablesGenerateMeta::new(&cube3_def, 1000, id);
         assert_eq!(generate_metas.max_size_bytes, 1000);
         assert!(generate_metas.maybe_table_types.is_none());
@@ -1123,7 +1124,8 @@ mod tests {
     #[test]
     fn test_max_bytes_cannot_be_generated() {
         make_guard!(guard);
-        let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let id = cube3_def.id();
         let identity_cycle_type =
             SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_slice_view())
                 .unwrap();
@@ -1190,7 +1192,8 @@ mod tests {
     fn test_wip() {
         return;
         make_guard!(guard);
-        let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+        let id = cube3_def.id();
         let identity_cycle_type =
             SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_slice_view())
                 .unwrap();
@@ -1236,7 +1239,7 @@ mod tests {
     }
     // #[test_log::test]
     // fn test_exact_orbit_hasher_only_hashes_orbit() {
-    //     let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
+    //     let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
     //     let solved = cube3_def.new_solved_state();
     //     let mut result_1 = solved.clone();
     //     let mut result_2 = solved.clone();

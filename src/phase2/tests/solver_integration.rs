@@ -14,7 +14,7 @@ use puzzle_geometry::ksolve::{KPUZZLE_3X3, KPUZZLE_4X4};
 #[test_log::test]
 fn test_identity_cycle_type() {
     make_guard!(guard);
-    let (mut cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+    let mut cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
     let identity_cycle_type =
         SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_slice_view()).unwrap();
 
@@ -35,7 +35,7 @@ fn test_identity_cycle_type() {
             &cube3_def,
             vec![TableTy::Zero, TableTy::Zero],
             0,
-            id,
+            cube3_def.id(),
         )
         .unwrap(),
     )
@@ -50,7 +50,7 @@ fn test_identity_cycle_type() {
 #[test_log::test]
 fn test_single_quarter_turn() {
     make_guard!(guard);
-    let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
+    let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
     let sorted_cycle_type = SortedCycleType::new(
         &[vec![(4, false)], vec![(4, false)]],
         cube3_def.sorted_orbit_defs_slice_view(),
@@ -69,7 +69,7 @@ fn test_single_quarter_turn() {
 #[test_log::test]
 fn test_single_half_turn() {
     make_guard!(guard);
-    let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
+    let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
     let sorted_cycle_type = SortedCycleType::new(
         &[vec![(2, false), (2, false)], vec![(2, false), (2, false)]],
         cube3_def.sorted_orbit_defs_slice_view(),
@@ -89,9 +89,7 @@ fn test_single_half_turn() {
 fn test_optimal_subgroup_cycle() {
     make_guard!(guard);
     let cube3_def =
-        PuzzleDef::<Cube3>::new(&KPUZZLE_3X3.clone().with_moves(&["F", "R", "U"]), guard)
-            .unwrap()
-            .0;
+        PuzzleDef::<Cube3>::new(&KPUZZLE_3X3.clone().with_moves(&["F", "R", "U"]), guard).unwrap();
     let sorted_cycle_type = SortedCycleType::new(
         &[vec![(3, false), (4, false)], vec![(1, true), (8, true)]],
         cube3_def.sorted_orbit_defs_slice_view(),
@@ -116,7 +114,7 @@ fn test_optimal_subgroup_cycle() {
 #[test_log::test]
 fn test_control_optimal_cycle() {
     make_guard!(guard);
-    let (cube3_def, id) = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+    let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
     let sorted_cycle_type = SortedCycleType::new(
         &[vec![(1, true), (5, true)], vec![(1, true), (7, true)]],
         cube3_def.sorted_orbit_defs_slice_view(),
@@ -129,7 +127,7 @@ fn test_control_optimal_cycle() {
             TableTy::Zero,
         ],
         88_179_840,
-        id,
+        cube3_def.id(),
     )
     .unwrap();
     let pruning_tables =
@@ -141,7 +139,7 @@ fn test_control_optimal_cycle() {
     for solution in &solutions {
         info!(
             "{:<2}",
-            solution.iter().map(|move_| &move_.name).format(" ")
+            solution.iter().map(|move_| move_.name()).format(" ")
         );
     }
     assert_eq!(solutions.len(), 260); // TODO: should be 480
@@ -159,7 +157,7 @@ struct OptimalCycleTypeTest {
 #[test_log::test]
 fn test_many_optimal_cycles() {
     make_guard!(guard);
-    let mut cube3_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_3X3, guard).unwrap().0;
+    let mut cube3_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_3X3, guard).unwrap();
 
     // Test cases taken from Michael Gottlieb's order table
     // https://mzrg.com/rubik/orders.shtml
@@ -417,7 +415,7 @@ fn test_many_optimal_cycles() {
             let move_ = cube3_def.find_move(name).unwrap();
             result_2.replace_compose(
                 &result_1,
-                &move_.puzzle_state,
+                move_.puzzle_state(),
                 cube3_def.sorted_orbit_defs_slice_view(),
             );
             std::mem::swap(&mut result_1, &mut result_2);
@@ -449,7 +447,7 @@ fn test_many_optimal_cycles() {
 #[test_log::test]
 fn test_big_cube_optimal_cycle() {
     make_guard!(guard);
-    let mut cube4_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_4X4, guard).unwrap().0;
+    let mut cube4_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_4X4, guard).unwrap();
 
     // Test cases taken from Michael Gottlieb's order table
     // https://mzrg.com/rubik/orders.shtml
@@ -786,7 +784,7 @@ fn test_big_cube_optimal_cycle() {
             let move_ = cube4_def.find_move(name).unwrap();
             result_2.replace_compose(
                 &result_1,
-                &move_.puzzle_state,
+                move_.puzzle_state(),
                 cube4_def.sorted_orbit_defs_slice_view(),
             );
             std::mem::swap(&mut result_1, &mut result_2);

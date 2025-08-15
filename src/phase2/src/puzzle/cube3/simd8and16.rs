@@ -810,9 +810,7 @@ mod tests {
     #[cfg_attr(not(simd8and16), ignore)]
     fn test_uncompressed_brute_force_inversion() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<UncompressedCube3>::new(&KPUZZLE_3X3, guard)
-            .unwrap()
-            .0;
+        let cube3_def = PuzzleDef::<UncompressedCube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved;
 
@@ -854,7 +852,7 @@ mod tests {
     #[cfg_attr(not(simd8and16), ignore)]
     fn test_compressed_brute_force_inversion() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
 
@@ -896,9 +894,7 @@ mod tests {
     #[cfg_attr(not(simd8and16), ignore)]
     fn test_uncompressed_raw_inversion() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<UncompressedCube3>::new(&KPUZZLE_3X3, guard)
-            .unwrap()
-            .0;
+        let cube3_def = PuzzleDef::<UncompressedCube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved;
 
@@ -940,7 +936,7 @@ mod tests {
     #[cfg_attr(not(simd8and16), ignore)]
     fn test_compressed_raw_inversion() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
 
@@ -982,9 +978,7 @@ mod tests {
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_uncompressed_brute_force_inversion(b: &mut test::Bencher) {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<UncompressedCube3>::new(&KPUZZLE_3X3, guard)
-            .unwrap()
-            .0;
+        let cube3_def = PuzzleDef::<UncompressedCube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved;
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 100);
@@ -997,9 +991,7 @@ mod tests {
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_uncompressed_raw_inversion(b: &mut test::Bencher) {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<UncompressedCube3>::new(&KPUZZLE_3X3, guard)
-            .unwrap()
-            .0;
+        let cube3_def = PuzzleDef::<UncompressedCube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved;
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 100);
@@ -1012,7 +1004,7 @@ mod tests {
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_compressed_brute_force_inversion(b: &mut test::Bencher) {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 100);
@@ -1025,7 +1017,7 @@ mod tests {
     #[cfg_attr(not(simd8and16), ignore)]
     fn bench_compressed_raw_inversion(b: &mut test::Bencher) {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 100);

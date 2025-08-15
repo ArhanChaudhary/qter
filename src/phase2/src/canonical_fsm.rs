@@ -3,6 +3,7 @@
 //! <https://github.com/cubing/twsearch/blob/main/src/rs/_internal/canonical_fsm/canonical_fsm.rs>
 
 use super::puzzle::{PuzzleDef, PuzzleState};
+use generativity::Id;
 use std::{collections::HashMap, marker::PhantomData, num::NonZeroUsize};
 
 pub trait CanonicalFSM {
@@ -37,7 +38,8 @@ struct StateToMask(Vec<MoveClassMask>);
 #[derive(Debug)]
 pub struct PuzzleCanonicalFSM<'id, P: PuzzleState<'id>> {
     next_state_lookup: Vec<Vec<CanonicalFSMState>>,
-    _marker: PhantomData<&'id P>,
+    _id: Id<'id>,
+    _marker: PhantomData<P>,
 }
 
 pub struct OrbitCanonicalFSM {
@@ -140,6 +142,7 @@ impl<'id, P: PuzzleState<'id>> From<&PuzzleDef<'id, P>> for PuzzleCanonicalFSM<'
 
         Self {
             next_state_lookup,
+            _id: puzzle_def.id(),
             _marker: PhantomData,
         }
     }
@@ -169,7 +172,7 @@ mod tests {
     #[test]
     fn test_canonical_fsm_puzzle_initially_all_legal() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let canonical_fsm: PuzzleCanonicalFSM<Cube3> = (&cube3_def).into();
 
         for move_class_index in 0..cube3_def.move_classes.len() {
@@ -184,7 +187,7 @@ mod tests {
     #[test]
     fn test_canonical_fsm_puzzle_prevents_self() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let canonical_fsm: PuzzleCanonicalFSM<Cube3> = (&cube3_def).into();
         for move_class_index in 0..cube3_def.move_classes.len() {
             assert!(
@@ -205,7 +208,7 @@ mod tests {
     #[test]
     fn test_canonical_fsm_puzzle_prevents_self_and_antipode() {
         make_guard!(guard);
-        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let canonical_fsm: PuzzleCanonicalFSM<Cube3> = (&cube3_def).into();
 
         let mut result_1 = cube3_def.new_solved_state();
@@ -264,7 +267,7 @@ mod tests {
     #[test]
     fn test_big_cube_prevents_move_class() {
         make_guard!(guard);
-        let cube4_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_4X4, guard).unwrap().0;
+        let cube4_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_4X4, guard).unwrap();
         let canonical_fsm: PuzzleCanonicalFSM<HeapPuzzle> = (&cube4_def).into();
 
         let mut result_1 = cube4_def.new_solved_state();
@@ -322,7 +325,7 @@ mod tests {
     #[test]
     fn test_big_cube_optimization() {
         make_guard!(guard);
-        let cube4_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_4X4, guard).unwrap().0;
+        let cube4_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_4X4, guard).unwrap();
         let canonical_fsm: PuzzleCanonicalFSM<HeapPuzzle> = (&cube4_def).into();
 
         // - 1 to discount the initial FSM state

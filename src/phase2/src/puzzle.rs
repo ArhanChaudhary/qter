@@ -87,12 +87,12 @@ pub trait OrbitIdentifier<'id> {
 // TODO: dont make everything public
 #[derive(Debug)]
 pub struct PuzzleDef<'id, P: PuzzleState<'id>> {
-    pub moves: Box<[Move<'id, P>]>,
+    pub(crate) moves: Box<[Move<'id, P>]>,
     // indicies into moves
-    pub move_classes: Box<[usize]>,
-    pub symmetries: Box<[Move<'id, P>]>,
-    pub sorted_orbit_defs: Box<[OrbitDef]>,
-    pub name: String,
+    pub(crate) move_classes: Box<[usize]>,
+    pub(crate) symmetries: Box<[Move<'id, P>]>,
+    pub(crate) sorted_orbit_defs: Box<[OrbitDef]>,
+    name: String,
     id: Id<'id>,
 }
 
@@ -112,11 +112,10 @@ pub enum KSolveConversionError {
 
 #[derive(Debug, Clone)]
 pub struct Move<'id, P: PuzzleState<'id>> {
-    pub puzzle_state: P,
-    pub move_class_index: usize,
-    pub name: String,
-    #[allow(dead_code)]
-    id: Id<'id>,
+    puzzle_state: P,
+    pub(crate) move_class_index: usize,
+    name: String,
+    _id: Id<'id>,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -363,6 +362,14 @@ impl<'id, P: PuzzleState<'id>> Move<'id, P> {
         result_2.replace_compose(&other.puzzle_state, &self.puzzle_state, sorted_orbit_defs);
         result_1 == result_2
     }
+
+    pub fn puzzle_state(&self) -> &P {
+        &self.puzzle_state
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 fn solved_state_from_sorted_orbit_defs<'id, P: PuzzleState<'id>>(
@@ -412,6 +419,16 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
         }
     }
 
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    #[must_use]
+    pub fn id(&self) -> Id<'id> {
+        self.id
+    }
+
     // pub fn brand_orbit_def(&self, orbit_def: OrbitDef) -> BrandedOrbitDef<'id> {
     //     BrandedOrbitDef::new(orbit_def, self.id)
     // }
@@ -423,10 +440,7 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
     ///
     /// The `KSolve` definition could not be converted to a `PuzzleDef`. See
     /// `KSolveConversionError`.
-    pub fn new(
-        ksolve: &KSolve,
-        guard: Guard<'id>,
-    ) -> Result<(Self, Id<'id>), KSolveConversionError> {
+    pub fn new(ksolve: &KSolve, guard: Guard<'id>) -> Result<Self, KSolveConversionError> {
         let id = guard.into();
         let ksolve_orbit_defs: Vec<OrbitDef> = ksolve
             .sets()
@@ -513,7 +527,7 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
                     name: ksolve_move.name().to_owned(),
                     move_class_index: 0,
                     puzzle_state,
-                    id,
+                    _id: id,
                 };
                 symmetries.push(base_move);
                 continue;
@@ -528,7 +542,7 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
                 name: ksolve_move.name().to_owned(),
                 move_class_index,
                 puzzle_state,
-                id,
+                _id: id,
             };
 
             let solved: P = solved_state_from_sorted_orbit_defs(&sorted_orbit_defs, id);
@@ -572,22 +586,19 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
                     puzzle_state: expanded_puzzle_state,
                     move_class_index,
                     name: expanded_name,
-                    id,
+                    _id: id,
                 });
             }
         }
 
-        Ok((
-            PuzzleDef {
-                moves: moves.into_boxed_slice(),
-                move_classes: move_classes.into_boxed_slice(),
-                symmetries: symmetries.into_boxed_slice(),
-                sorted_orbit_defs: sorted_orbit_defs.into_boxed_slice(),
-                name: ksolve.name().to_owned(),
-                id,
-            },
+        Ok(PuzzleDef {
+            moves: moves.into_boxed_slice(),
+            move_classes: move_classes.into_boxed_slice(),
+            symmetries: symmetries.into_boxed_slice(),
+            sorted_orbit_defs: sorted_orbit_defs.into_boxed_slice(),
+            name: ksolve.name().to_owned(),
             id,
-        ))
+        })
     }
 }
 
@@ -660,7 +671,7 @@ mod tests {
     type StackCube3<'id> = StackPuzzle<'id, 40>;
 
     fn commutes_with<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let mut result_1 = cube3_def.new_solved_state();
         let mut result_2 = result_1.clone();
 
@@ -745,7 +756,7 @@ mod tests {
     }
 
     pub fn many_compositions<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let also_solved = apply_moves(&cube3_def, &solved, "R F", 105);
         assert_eq!(also_solved, solved);
@@ -772,7 +783,7 @@ mod tests {
     }
 
     pub fn s_u4_symmetry<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let s_u4_symmetry = cube3_def.find_symmetry("S_U4").unwrap();
         let solved = cube3_def.new_solved_state();
 
@@ -811,7 +822,7 @@ mod tests {
     }
 
     pub fn expanded_move<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let actual_solved = cube3_def.new_solved_state();
         let expected_solved = apply_moves(
             &cube3_def,
@@ -843,7 +854,7 @@ mod tests {
     }
 
     pub fn inversion<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
 
@@ -888,7 +899,7 @@ mod tests {
     }
 
     pub fn random_inversion<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
 
         for _ in 0..50 {
@@ -927,7 +938,7 @@ mod tests {
     }
 
     pub fn induces_sorted_cycle_type_within_cycle<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_slice_view());
 
@@ -975,7 +986,7 @@ mod tests {
     }
 
     pub fn induces_sorted_cycle_type_many<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_slice_view());
 
@@ -1158,7 +1169,7 @@ mod tests {
     }
 
     fn exact_hasher_orbit<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
 
         for (test_state, exp_hashes) in [
@@ -1239,7 +1250,7 @@ mod tests {
     }
 
     pub fn bench_compose_helper<'id, P: PuzzleState<'id>>(guard: Guard<'id>, b: &mut Bencher) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let mut solved = cube3_def.new_solved_state();
         let r_move = cube3_def.find_move("R").unwrap();
         let f_move = cube3_def.find_move("F").unwrap();
@@ -1253,7 +1264,7 @@ mod tests {
     }
 
     pub fn bench_inverse_helper<'id, P: PuzzleState<'id>>(guard: Guard<'id>, b: &mut Bencher) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut result = solved.clone();
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 100);
@@ -1269,7 +1280,7 @@ mod tests {
         guard: Guard<'id>,
         b: &mut Bencher,
     ) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let sorted_cycle_type = SortedCycleType::new(
             &[
                 vec![(3, true), (5, true)],
@@ -1293,7 +1304,7 @@ mod tests {
         guard: Guard<'id>,
         b: &mut Bencher,
     ) {
-        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
+        let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
 
         // let sorted_cycle_types = [
