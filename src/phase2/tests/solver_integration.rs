@@ -407,7 +407,7 @@ fn test_many_optimal_cycles() {
     ];
 
     let solved = cube3_def.new_solved_state();
-    let mut multi_bv = HeapPuzzle::new_multi_bv(cube3_def.sorted_orbit_defs_slice_view());
+    let mut aux_mem = HeapPuzzle::new_aux_mem(cube3_def.sorted_orbit_defs_slice_view());
 
     for optimal_cycle_test in optimal_cycle_type_tests {
         let mut result_1 = solved.clone();
@@ -426,7 +426,7 @@ fn test_many_optimal_cycles() {
 
         let sorted_cycle_type = result_1.sorted_cycle_type(
             cube3_def.sorted_orbit_defs_slice_view(),
-            multi_bv.slice_view_mut(),
+            aux_mem.slice_view_mut(),
         );
 
         let zero_table = ZeroTable::try_generate_all(sorted_cycle_type, ()).unwrap();
@@ -776,7 +776,7 @@ fn test_big_cube_optimal_cycle() {
     let optimal_cycle_type_tests = &optimal_cycle_type_tests[0..5];
 
     let solved = cube4_def.new_solved_state();
-    let mut multi_bv = HeapPuzzle::new_multi_bv(cube4_def.sorted_orbit_defs_slice_view());
+    let mut aux_mem = HeapPuzzle::new_aux_mem(cube4_def.sorted_orbit_defs_slice_view());
 
     for optimal_cycle_test in optimal_cycle_type_tests {
         let mut result_1 = solved.clone();
@@ -795,7 +795,7 @@ fn test_big_cube_optimal_cycle() {
 
         let sorted_cycle_type = result_1.sorted_cycle_type(
             cube4_def.sorted_orbit_defs_slice_view(),
-            multi_bv.slice_view_mut(),
+            aux_mem.slice_view_mut(),
         );
 
         let zero_table = ZeroTable::try_generate_all(sorted_cycle_type, ()).unwrap();

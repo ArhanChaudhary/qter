@@ -14,14 +14,14 @@ pub mod slice_puzzle;
 pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
     /// A reusable multi bit vector type to hold temporary storage in
     /// `induces_sorted_cycle_type`.
-    type MultiBv: SliceViewMut;
+    type AuxMem: SliceViewMut;
     type OrbitBytesBuf<'a>: AsRef<[u8]>
     where
         Self: 'a + 'id;
     type OrbitIdentifier: OrbitIdentifier<'id> + Copy + Debug;
 
     /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
-    fn new_multi_bv(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> Self::MultiBv;
+    fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> Self::AuxMem;
 
     /// Create a puzzle state from a sorted transformation and sorted
     /// orbit defs. `sorted_transformations` must to correspond to
@@ -51,7 +51,7 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
         &self,
         sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
         sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
-        multi_bv: <Self::MultiBv as SliceViewMut>::SliceMut<'_>,
+        aux_mem: <Self::AuxMem as SliceViewMut>::SliceMut<'_>,
     ) -> bool;
 
     /// Get the bytes of the specified orbit index in the form (permutation
@@ -929,7 +929,7 @@ mod tests {
     pub fn induces_sorted_cycle_type_within_cycle<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
         let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solved = cube3_def.new_solved_state();
-        let mut multi_bv = P::new_multi_bv(cube3_def.sorted_orbit_defs_slice_view());
+        let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_slice_view());
 
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 1);
         let sorted_cycle_type = SortedCycleType::new(
@@ -943,14 +943,14 @@ mod tests {
         assert!(order_1260.induces_sorted_cycle_type(
             sorted_cycle_type.slice_view(),
             cube3_def.sorted_orbit_defs_slice_view(),
-            multi_bv.slice_view_mut(),
+            aux_mem.slice_view_mut(),
         ));
 
         let order_1260_in_cycle = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 209);
         assert!(order_1260_in_cycle.induces_sorted_cycle_type(
             sorted_cycle_type.slice_view(),
             cube3_def.sorted_orbit_defs_slice_view(),
-            multi_bv.slice_view_mut(),
+            aux_mem.slice_view_mut(),
         ));
     }
 
@@ -977,7 +977,7 @@ mod tests {
     pub fn induces_sorted_cycle_type_many<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
         let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap().0;
         let solved = cube3_def.new_solved_state();
-        let mut multi_bv = P::new_multi_bv(cube3_def.sorted_orbit_defs_slice_view());
+        let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_slice_view());
 
         let sorted_cycle_type =
             SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_slice_view())
@@ -985,7 +985,7 @@ mod tests {
         assert!(solved.induces_sorted_cycle_type(
             sorted_cycle_type.slice_view(),
             cube3_def.sorted_orbit_defs_slice_view(),
-            multi_bv.slice_view_mut(),
+            aux_mem.slice_view_mut(),
         ));
 
         let tests = [
@@ -1114,13 +1114,13 @@ mod tests {
             assert!(random_state.induces_sorted_cycle_type(
                 expected_cts.slice_view(),
                 cube3_def.sorted_orbit_defs_slice_view(),
-                multi_bv.slice_view_mut(),
+                aux_mem.slice_view_mut(),
             ));
 
             assert!(!solved.induces_sorted_cycle_type(
                 expected_cts.slice_view(),
                 cube3_def.sorted_orbit_defs_slice_view(),
-                multi_bv.slice_view_mut(),
+                aux_mem.slice_view_mut(),
             ));
 
             for (j, &(other_moves, _)) in tests.iter().enumerate() {
@@ -1131,7 +1131,7 @@ mod tests {
                 assert!(!other_state.induces_sorted_cycle_type(
                     expected_cts.slice_view(),
                     cube3_def.sorted_orbit_defs_slice_view(),
-                    multi_bv.slice_view_mut()
+                    aux_mem.slice_view_mut()
                 ));
             }
         }
@@ -1279,12 +1279,12 @@ mod tests {
         )
         .unwrap();
         let order_1260 = apply_moves(&cube3_def, &cube3_def.new_solved_state(), "R U2 D' B D'", 1);
-        let mut multi_bv = P::new_multi_bv(cube3_def.sorted_orbit_defs_slice_view());
+        let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_slice_view());
         b.iter(|| {
             test::black_box(&order_1260).induces_sorted_cycle_type(
                 test::black_box(sorted_cycle_type.slice_view()),
                 cube3_def.sorted_orbit_defs_slice_view(),
-                multi_bv.slice_view_mut(),
+                aux_mem.slice_view_mut(),
             );
         });
     }
@@ -1363,7 +1363,7 @@ mod tests {
             .collect();
         let mut random_iter = random_1000.iter().cycle();
 
-        let mut multi_bv = P::new_multi_bv(cube3_def.sorted_orbit_defs_slice_view());
+        let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_slice_view());
         b.iter(|| {
             test::black_box(unsafe { random_iter.next().unwrap_unchecked() })
                 .induces_sorted_cycle_type(
@@ -1374,7 +1374,7 @@ mod tests {
                             .slice_view()
                     }),
                     cube3_def.sorted_orbit_defs_slice_view(),
-                    multi_bv.slice_view_mut(),
+                    aux_mem.slice_view_mut(),
                 );
         });
     }

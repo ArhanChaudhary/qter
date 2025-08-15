@@ -10,23 +10,23 @@ pub mod cube3;
 pub mod slice_orbit_puzzle;
 
 pub trait OrbitPuzzleState {
-    type MultiBv: SliceViewMut;
+    type AuxMem: SliceViewMut;
 
     fn replace_compose(&mut self, a: &Self, b: &Self, branded_orbit_def: BrandedOrbitDef);
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
         branded_orbit_def: BrandedOrbitDef,
-        multi_bv: <Self::MultiBv as SliceViewMut>::SliceMut<'_>,
+        aux_mem: <Self::AuxMem as SliceViewMut>::SliceMut<'_>,
     ) -> bool;
     fn approximate_hash(&self) -> impl Hash;
     fn exact_hasher(&self, branded_orbit_def: BrandedOrbitDef) -> u64;
 }
 
 pub trait OrbitPuzzleConstructors<'id> {
-    type MultiBv: SliceViewMut;
+    type AuxMem: SliceViewMut;
 
-    fn new_multi_bv(branded_orbit_def: BrandedOrbitDef<'id>) -> Self::MultiBv;
+    fn new_aux_mem(branded_orbit_def: BrandedOrbitDef<'id>) -> Self::AuxMem;
     fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
         perm: B,
         ori: B,

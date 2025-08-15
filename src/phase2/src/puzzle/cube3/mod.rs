@@ -146,14 +146,14 @@ mod common {
     }
 
     impl<'id, C: Cube3Interface> PuzzleState<'id> for C {
-        type MultiBv = ();
+        type AuxMem = ();
         type OrbitBytesBuf<'a>
             = [u8; 16]
         where
             C: 'a + 'id;
         type OrbitIdentifier = Cube3OrbitIdentifier<'id>;
 
-        fn new_multi_bv(_sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) {
+        fn new_aux_mem(_sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) {
             // Induces cycle type for 3x3 cubes doesn't require auxilliary
             // memory
         }
@@ -221,7 +221,7 @@ mod common {
             &self,
             sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
             _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
-            _multi_bv: (),
+            _aux_mem: (),
         ) -> bool {
             self.induces_sorted_cycle_type(sorted_cycle_type)
         }

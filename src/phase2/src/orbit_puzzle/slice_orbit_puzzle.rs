@@ -16,19 +16,19 @@ use std::{cmp::Ordering, num::NonZeroU8};
 pub struct SliceOrbitPuzzle<'id>(Box<[u8]>, Id<'id>);
 
 // TODO: brand these
-pub struct MultiBv(Box<[u8]>);
-pub struct MultiBvRefMut<'a>(&'a mut [u8]);
+pub struct AuxMem(Box<[u8]>);
+pub struct AuxMemRefMut<'a>(&'a mut [u8]);
 
-impl SliceViewMut for MultiBv {
-    type SliceMut<'a> = MultiBvRefMut<'a>;
+impl SliceViewMut for AuxMem {
+    type SliceMut<'a> = AuxMemRefMut<'a>;
 
     fn slice_view_mut(&mut self) -> Self::SliceMut<'_> {
-        MultiBvRefMut(&mut self.0)
+        AuxMemRefMut(&mut self.0)
     }
 }
 
 impl OrbitPuzzleState for SliceOrbitPuzzle<'_> {
-    type MultiBv = MultiBv;
+    type AuxMem = AuxMem;
 
     fn replace_compose(&mut self, a: &Self, b: &Self, branded_orbit_def: BrandedOrbitDef) {
         // SAFETY: `a`, `b`, and `self` are all branded to correspond to
@@ -40,7 +40,7 @@ impl OrbitPuzzleState for SliceOrbitPuzzle<'_> {
         &self,
         sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
         branded_orbit_def: BrandedOrbitDef,
-        multi_bv: MultiBvRefMut<'_>,
+        aux_mem: AuxMemRefMut<'_>,
     ) -> bool {
         // TODO
         unsafe {
@@ -49,7 +49,7 @@ impl OrbitPuzzleState for SliceOrbitPuzzle<'_> {
                 0,
                 sorted_cycle_type_orbit,
                 branded_orbit_def,
-                multi_bv.0,
+                aux_mem.0,
             )
         }
     }
@@ -70,10 +70,10 @@ impl OrbitPuzzleState for SliceOrbitPuzzle<'_> {
 }
 
 impl<'id> OrbitPuzzleConstructors<'id> for SliceOrbitPuzzle<'id> {
-    type MultiBv = MultiBv;
+    type AuxMem = AuxMem;
 
-    fn new_multi_bv(branded_orbit_def: BrandedOrbitDef<'id>) -> MultiBv {
-        MultiBv(
+    fn new_aux_mem(branded_orbit_def: BrandedOrbitDef<'id>) -> AuxMem {
+        AuxMem(
             vec![0; branded_orbit_def.inner.piece_count.get().div_ceil(4) as usize]
                 .into_boxed_slice(),
         )
@@ -147,21 +147,21 @@ pub unsafe fn induces_sorted_cycle_type_slice_orbit(
     branded_orbit_def: BrandedOrbitDef,
     // We cannot brand this field because a newtype holding a mutable reference
     // cannot be moved in a loop
-    multi_bv: &mut [u8],
+    aux_mem: &mut [u8],
 ) -> bool {
-    multi_bv.fill(0);
+    aux_mem.fill(0);
     let mut covered_cycles_count = 0;
     let piece_count = branded_orbit_def.inner.piece_count.get() as usize;
     for i in 0..piece_count {
         let (div, rem) = (i / 4, i % 4);
-        // SAFETY: default_multi_bv_slice ensures that (i / 4) always fits
-        // in multi_bv
-        if unsafe { *multi_bv.get_unchecked(div) } & (1 << rem) != 0 {
+        // SAFETY: default_aux_mem_slice ensures that (i / 4) always fits
+        // in aux_mem
+        if unsafe { *aux_mem.get_unchecked(div) } & (1 << rem) != 0 {
             continue;
         }
         // SAFETY: see above
         unsafe {
-            *multi_bv.get_unchecked_mut(div) |= 1 << rem;
+            *aux_mem.get_unchecked_mut(div) |= 1 << rem;
         }
         let mut actual_cycle_length = 1;
         // SAFETY: sorted_orbit_defs guarantees that base (the orbit state
@@ -175,10 +175,10 @@ pub unsafe fn induces_sorted_cycle_type_slice_orbit(
         while piece != i {
             actual_cycle_length += 1;
             let (div, rem) = (piece / 4, piece % 4);
-            // SAFETY: default_multi_bv_slice ensures that (piece / 4)
-            // always in fits in multi_bv
+            // SAFETY: default_aux_mem_slice ensures that (piece / 4)
+            // always in fits in aux_mem
             unsafe {
-                *multi_bv.get_unchecked_mut(div) |= 1 << rem;
+                *aux_mem.get_unchecked_mut(div) |= 1 << rem;
             }
             // SAFETY: sorted_orbit_defs guarantees that base (the orbit
             // state base pointer) + piece (a permutation vector element) is
@@ -207,9 +207,9 @@ pub unsafe fn induces_sorted_cycle_type_slice_orbit(
                 Ordering::Equal => {
                     let (div, rem) = (j / 4, j % 4);
                     if expected_orients == actual_orients
-                        // SAFETY: default_multi_bv_slice ensures that (j / 4)
-                        // always fits in multi_bv
-                        && unsafe { *multi_bv.get_unchecked(div) } & (1 << (rem + 4)) == 0
+                        // SAFETY: default_aux_mem_slice ensures that (j / 4)
+                        // always fits in aux_mem
+                        && unsafe { *aux_mem.get_unchecked(div) } & (1 << (rem + 4)) == 0
                     {
                         valid_cycle_index = Some(j);
                         break;
@@ -222,10 +222,10 @@ pub unsafe fn induces_sorted_cycle_type_slice_orbit(
             return false;
         };
         let (div, rem) = (valid_cycle_index / 4, valid_cycle_index % 4);
-        // SAFETY: default_multi_bv_slice ensures that
-        // (valid_cycle_index / 4) always fits in multi_bv
+        // SAFETY: default_aux_mem_slice ensures that
+        // (valid_cycle_index / 4) always fits in aux_mem
         unsafe {
-            *multi_bv.get_unchecked_mut(div) |= 1 << (rem + 4);
+            *aux_mem.get_unchecked_mut(div) |= 1 << (rem + 4);
         }
         covered_cycles_count += 1;
         // cannot possibly return true if this runs

@@ -818,7 +818,7 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
 
         let mut orbit_result = orbit_solved.clone();
 
-        let mut multi_bv = O::new_multi_bv(branded_orbit_def);
+        let mut aux_mem = O::new_aux_mem(branded_orbit_def);
         let mut depth = 0;
         let mut vacant_entry_count = entry_count;
 
@@ -864,7 +864,7 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
                         if curr_state.induces_sorted_cycle_type(
                             sorted_cycle_type_orbit,
                             branded_orbit_def,
-                            multi_bv.slice_view_mut(),
+                            aux_mem.slice_view_mut(),
                         ) {
                             table
                                 .storage_backend

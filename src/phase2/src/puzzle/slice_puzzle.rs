@@ -20,24 +20,24 @@ pub struct StackPuzzle<'id, const N: usize>([u8; N], Id<'id>);
 #[derive(Clone, PartialEq, Debug)]
 pub struct HeapPuzzle<'id>(Box<[u8]>, Id<'id>);
 
-pub struct MultiBv<'id> {
+pub struct AuxMem<'id> {
     inner: Box<[u8]>,
     id: Id<'id>,
 }
 
-pub struct MultiBvRefMut<'id, 'a> {
-    pub inner: &'a mut [u8],
+pub struct AuxMemRefMut<'id, 'a> {
+    inner: &'a mut [u8],
     _id: Id<'id>,
 }
 
-impl<'id> SliceViewMut for MultiBv<'id> {
+impl<'id> SliceViewMut for AuxMem<'id> {
     type SliceMut<'a>
-        = MultiBvRefMut<'id, 'a>
+        = AuxMemRefMut<'id, 'a>
     where
         Self: 'a;
 
     fn slice_view_mut(&mut self) -> Self::SliceMut<'_> {
-        MultiBvRefMut {
+        AuxMemRefMut {
             inner: &mut self.inner,
             _id: self.id,
         }
@@ -131,15 +131,15 @@ pub fn slice_orbit_size(branded_orbit_def: BrandedOrbitDef) -> usize {
 }
 
 impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
-    type MultiBv = MultiBv<'id>;
+    type AuxMem = AuxMem<'id>;
     type OrbitBytesBuf<'a>
         = &'a [u8]
     where
         Self: 'a;
     type OrbitIdentifier = SliceOrbitIdentifier<'id>;
 
-    fn new_multi_bv(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> Self::MultiBv {
-        new_multi_bv_slice(sorted_orbit_defs)
+    fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> Self::AuxMem {
+        new_aux_mem_slice(sorted_orbit_defs)
     }
 
     fn try_from_transformations_meta(
@@ -170,9 +170,9 @@ impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
         &self,
         sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
         sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
-        multi_bv: MultiBvRefMut<'id, '_>,
+        aux_mem: AuxMemRefMut<'id, '_>,
     ) -> bool {
-        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
+        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, aux_mem)
     }
 
     fn orbit_bytes(&self, orbit_identifier: SliceOrbitIdentifier<'id>) -> (&[u8], &[u8]) {
@@ -191,15 +191,15 @@ impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
 }
 
 impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
-    type MultiBv = MultiBv<'id>;
+    type AuxMem = AuxMem<'id>;
     type OrbitBytesBuf<'a>
         = &'a [u8]
     where
         Self: 'a;
     type OrbitIdentifier = SliceOrbitIdentifier<'id>;
 
-    fn new_multi_bv(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> Self::MultiBv {
-        new_multi_bv_slice(sorted_orbit_defs)
+    fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> Self::AuxMem {
+        new_aux_mem_slice(sorted_orbit_defs)
     }
 
     fn try_from_transformations_meta(
@@ -243,9 +243,9 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
         &self,
         sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
         sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
-        multi_bv: MultiBvRefMut<'id, '_>,
+        aux_mem: AuxMemRefMut<'id, '_>,
     ) -> bool {
-        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, multi_bv)
+        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, aux_mem)
     }
 
     fn orbit_bytes(&self, orbit_identifier: SliceOrbitIdentifier<'id>) -> (&[u8], &[u8]) {
@@ -265,8 +265,8 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
 
 /// Create a new multi-bit vector for slice puzzles in
 /// `induces_sorted_cycle_type`.
-fn new_multi_bv_slice<'id>(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> MultiBv<'id> {
-    MultiBv {
+fn new_aux_mem_slice<'id>(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id> {
+    AuxMem {
         inner: vec![
             0;
             sorted_orbit_defs
@@ -399,7 +399,7 @@ fn induces_sorted_cycle_type_slice<'id>(
     slice_orbit_states: &[u8],
     sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
     sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
-    multi_bv: MultiBvRefMut<'id, '_>,
+    aux_mem: AuxMemRefMut<'id, '_>,
 ) -> bool {
     unsafe {
         assert_unchecked(sorted_cycle_type.inner.len() == sorted_cycle_type.inner.len());
@@ -415,7 +415,7 @@ fn induces_sorted_cycle_type_slice<'id>(
                 base,
                 sorted_cycle_type_orbit,
                 orbit_def,
-                multi_bv.inner,
+                aux_mem.inner,
             ) {
                 return false;
             }
@@ -491,21 +491,21 @@ impl<'id> HeapPuzzle<'id> {
     pub fn sorted_cycle_type(
         &self,
         sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
-        multi_bv: MultiBvRefMut<'id, '_>,
+        aux_mem: AuxMemRefMut<'id, '_>,
     ) -> SortedCycleType<'id> {
         let mut cycle_type = vec![];
         let mut base = 0;
         for branded_orbit_def in sorted_orbit_defs.branded_copied_iter() {
             let mut cycle_type_piece = vec![];
-            multi_bv.inner.fill(0);
+            aux_mem.inner.fill(0);
             let piece_count = branded_orbit_def.inner.piece_count.get() as usize;
             for i in 0..piece_count {
                 let (div, rem) = (i / 4, i % 4);
-                if multi_bv.inner[div] & (1 << rem) != 0 {
+                if aux_mem.inner[div] & (1 << rem) != 0 {
                     continue;
                 }
 
-                multi_bv.inner[div] |= 1 << rem;
+                aux_mem.inner[div] |= 1 << rem;
                 let mut actual_cycle_length = 1;
                 let mut piece = self.0[base + i] as usize;
                 let mut orientation_sum = self.0[base + piece + piece_count];
@@ -513,7 +513,7 @@ impl<'id> HeapPuzzle<'id> {
                 while piece != i {
                     actual_cycle_length += 1;
                     let (div, rem) = (piece / 4, piece % 4);
-                    multi_bv.inner[div] |= 1 << rem;
+                    aux_mem.inner[div] |= 1 << rem;
                     piece = self.0[base + piece] as usize;
                     orientation_sum += self.0[base + piece + piece_count];
                 }
@@ -533,7 +533,7 @@ impl<'id> HeapPuzzle<'id> {
         assert!(self.induces_sorted_cycle_type(
             sorted_cycle_type.slice_view(),
             sorted_orbit_defs,
-            multi_bv
+            aux_mem
         ));
         sorted_cycle_type
     }

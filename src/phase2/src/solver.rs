@@ -23,7 +23,7 @@ pub enum SearchStrategy {
 
 struct CycleTypeSolverMutable<'id, P: PuzzleState<'id>, H: PuzzleStateHistoryInterface<'id, P>> {
     puzzle_state_history: PuzzleStateHistory<'id, P, H>,
-    multi_bv: P::MultiBv,
+    aux_mem: P::AuxMem,
     solutions: Vec<Vec<usize>>,
     first_move_class_index: usize,
     nodes_visited: u64,
@@ -139,7 +139,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                 if last_puzzle_state.induces_sorted_cycle_type(
                     self.pruning_tables.sorted_cycle_type_slice_view(),
                     self.puzzle_def.sorted_orbit_defs_slice_view(),
-                    mutable.multi_bv.slice_view_mut(),
+                    mutable.aux_mem.slice_view_mut(),
                 ) {
                     mutable
                         .solutions
@@ -175,7 +175,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
 
         let mut mutable: CycleTypeSolverMutable<P, H> = CycleTypeSolverMutable {
             puzzle_state_history: (&self.puzzle_def).into(),
-            multi_bv: P::new_multi_bv(self.puzzle_def.sorted_orbit_defs_slice_view()),
+            aux_mem: P::new_aux_mem(self.puzzle_def.sorted_orbit_defs_slice_view()),
             solutions: vec![],
             first_move_class_index: usize::default(),
             nodes_visited: 0,
@@ -192,7 +192,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             if last_puzzle_state.induces_sorted_cycle_type(
                 self.pruning_tables.sorted_cycle_type_slice_view(),
                 self.puzzle_def.sorted_orbit_defs_slice_view(),
-                mutable.multi_bv.slice_view_mut(),
+                mutable.aux_mem.slice_view_mut(),
             ) {
                 mutable
                     .solutions
