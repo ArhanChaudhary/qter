@@ -136,7 +136,7 @@ pub struct OrbitPruningTablesGenerateMeta<'id, 'a, P: PuzzleState<'id>> {
     puzzle_def: &'a PuzzleDef<'id, P>,
     max_size_bytes: usize,
     maybe_table_types: Option<Vec<TableTy>>,
-    id: Id<'id>,
+    _id: Id<'id>,
 }
 
 pub struct UncompressedStorageBackend<const EXACT: bool> {
@@ -144,6 +144,7 @@ pub struct UncompressedStorageBackend<const EXACT: bool> {
     depth_traversed: u8,
 }
 
+#[allow(unused)]
 pub struct NxoptStorageBackend<const EXACT: bool> {
     data: Box<[u8]>,
     base: u8,
@@ -154,6 +155,7 @@ struct TANSStorageEncodingTable {
     // silly things here
 }
 
+#[allow(unused)]
 pub struct TANSStorageBackend<const EXACT: bool> {
     data: Box<[u8]>,
     counts_by_depth: Box<[u64]>,
@@ -179,6 +181,7 @@ pub struct ExactOrbitPruningTable<'id, S: StorageBackend<true>, O: OrbitIdentifi
     _id: Id<'id>,
 }
 
+#[allow(unused)]
 pub struct CycleTypeOrbitPruningTable<'id, O: OrbitIdentifier<'id>> {
     data: Box<[OrbitPruneHeuristic]>,
     orbit_identifier: O,
@@ -280,7 +283,7 @@ impl<'id, 'a, P: PuzzleState<'id>> OrbitPruningTablesGenerateMeta<'id, 'a, P> {
             puzzle_def,
             max_size_bytes,
             maybe_table_types: None,
-            id,
+            _id: id,
         }
     }
 
@@ -601,6 +604,7 @@ impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend<EXA
     }
 }
 
+#[allow(unused)]
 impl<const EXACT: bool> StorageBackend<EXACT> for NxoptStorageBackend<EXACT> {
     type InitializationMeta = MaxSizeBytes;
 
@@ -639,6 +643,7 @@ impl<const EXACT: bool> StorageBackend<EXACT> for NxoptStorageBackend<EXACT> {
     }
 }
 
+#[allow(unused)]
 impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend<EXACT> {
     type InitializationMeta = TANSDistributionEstimation;
 
@@ -803,7 +808,7 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
             .moves
             .iter()
             .filter_map(|move_| {
-                if orbit_move_class_indicies.contains(&move_.move_class_index) {
+                if orbit_move_class_indicies.contains(&move_.move_class_index()) {
                     let (perm, ori) = move_.puzzle_state().orbit_bytes(orbit_identifier);
                     Some(O::from_orbit_transformation_unchecked(
                         perm,
@@ -917,6 +922,7 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
     }
 }
 
+#[allow(unused)]
 impl<'id, P: PuzzleState<'id>> OrbitPruningTable<'id, P>
     for CycleTypeOrbitPruningTable<'id, P::OrbitIdentifier>
 {

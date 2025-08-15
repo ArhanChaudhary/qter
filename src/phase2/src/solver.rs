@@ -101,7 +101,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             // if self.search_strategy == SearchStrategy::FirstSolution && move_index == 2 && root {
             //     return false;
             // }
-            let move_class_index = move_.move_class_index;
+            let move_class_index = move_.move_class_index();
             // branches should have high predictability
             if root {
                 mutable.first_move_class_index = move_class_index;

@@ -9,6 +9,7 @@
 ## SCC
 
 - Phase 2
+  - replace pub(crate) with getters
   - SortedCycleType creation error
   - ⭐branding for OrbitPuzzleStates should be unique and happen at a very small level
   - ⭐pruning table

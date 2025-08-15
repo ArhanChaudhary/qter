@@ -84,7 +84,6 @@ pub trait OrbitIdentifier<'id> {
     fn branded_orbit_def(&self) -> BrandedOrbitDef<'id>;
 }
 
-// TODO: dont make everything public
 #[derive(Debug)]
 pub struct PuzzleDef<'id, P: PuzzleState<'id>> {
     pub(crate) moves: Box<[Move<'id, P>]>,
@@ -113,7 +112,7 @@ pub enum KSolveConversionError {
 #[derive(Debug, Clone)]
 pub struct Move<'id, P: PuzzleState<'id>> {
     puzzle_state: P,
-    pub(crate) move_class_index: usize,
+    move_class_index: usize,
     name: String,
     _id: Id<'id>,
 }
@@ -361,6 +360,10 @@ impl<'id, P: PuzzleState<'id>> Move<'id, P> {
         result_1.replace_compose(&self.puzzle_state, &other.puzzle_state, sorted_orbit_defs);
         result_2.replace_compose(&other.puzzle_state, &self.puzzle_state, sorted_orbit_defs);
         result_1 == result_2
+    }
+
+    pub fn move_class_index(&self) -> usize {
+        self.move_class_index
     }
 
     pub fn puzzle_state(&self) -> &P {
