@@ -12,5 +12,6 @@ phf = { version = "0.11.3", features = ["macros"] }
 internment = { version = "0.8", features = ["arc"] }
 thiserror = "2.0"
 itertools = "0.14"
-algebraics = { git = "https://github.com/Xendergo/algebraics", branch = "juice-perf" }
+algebraics = { git = "https://github.com/Xendergo/algebraics", branch = "prevent-exploding-ranges" }
+# algebraics = { git = "https://github.com/Xendergo/algebraics" }
 # algebraics = { path = "../../../algebraics" }

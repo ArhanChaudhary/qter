@@ -12,11 +12,12 @@ use edge_cloud::EdgeCloud;
 use internment::ArcIntern;
 use itertools::Itertools;
 use knife::{CutSurface, do_cut};
-use ksolve::KSolve;
+use ksolve::{KSolve, KSolveMove, KSolveSet};
 use num::{Matrix, Num, Vector, rotate_to, rotation_about};
 use qter_core::{
     Span,
     architectures::{Permutation, PermutationGroup},
+    union_find::UnionFind,
 };
 use thiserror::Error;
 
@@ -194,15 +195,19 @@ pub struct PuzzleGeometry {
     stickers: Vec<(Face, Vec<ArcIntern<str>>)>,
     turns: HashMap<ArcIntern<str>, (Vector<3>, Matrix<3, 3>, usize)>,
     definition: Span,
-    perm_group: OnceLock<Arc<PermutationGroup>>,
+    perm_group: OnceLock<(Arc<PermutationGroup>, BTreeSet<usize>)>,
+    non_fixed_stickers: OnceLock<Vec<(Face, Vec<ArcIntern<str>>)>>,
+    ksolve: OnceLock<Arc<KSolve>>,
 }
 
 impl PuzzleGeometry {
     /// Get the puzzle as a permutation group over facelets
-    #[must_use]
-    #[expect(clippy::missing_panics_doc)]
-    pub fn permutation_group(&self) -> Arc<PermutationGroup> {
-        Arc::clone(self.perm_group.get_or_init(|| {
+    fn permutation_group(&self) -> Arc<PermutationGroup> {
+        Arc::clone(&self.calc_permutation_group().0)
+    }
+
+    fn calc_permutation_group(&self) -> &(Arc<PermutationGroup>, BTreeSet<usize>) {
+        self.perm_group.get_or_init(|| {
             let clouds = self.stickers()
                 .iter()
                 .map(|v| v.0.edge_cloud())
@@ -252,7 +257,7 @@ impl PuzzleGeometry {
                 }
             }
 
-            Arc::new(PermutationGroup::new(
+            (Arc::new(PermutationGroup::new(
                 self.stickers()
                     .iter()
                     .enumerate()
@@ -261,8 +266,8 @@ impl PuzzleGeometry {
                     .collect(),
                 generators,
                 self.definition.clone(),
-            ))
-        }))
+            )), to_skip)
+        })
     }
 
     #[must_use]
@@ -270,13 +275,122 @@ impl PuzzleGeometry {
         &self.stickers
     }
 
+    pub fn non_fixed_stickers(&self) -> &[(Face, Vec<ArcIntern<str>>)] {
+        self.non_fixed_stickers.get_or_init(|| {
+            let (_, fixed) = self.calc_permutation_group();
+
+            self.stickers
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| !fixed.contains(i))
+                .map(|(_, v)| v.clone())
+                .collect()
+        })
+    }
+
     /// Get the puzzle in its `KSolve` representation
+    ///
+    /// # Panics
+    ///
+    /// May panic if calculated numbers fall outside of the bit width of the fields of `KSolve`
     #[must_use]
-    pub fn ksolve(&self) -> &KSolve {
+    pub fn ksolve(&self) -> Arc<KSolve> {
         // Note: the KSolve permutation vector is **1-indexed**. See the test
         // cases for examples. It also exposes `zero_indexed_transformation` as
         // a convenience method.
-        todo!()
+        Arc::clone(self.ksolve.get_or_init(|| {
+            let group = self.permutation_group();
+
+            let mut sticker_orbits = UnionFind::<()>::new(group.facelet_count());
+
+            for (_, generator) in group.generators() {
+                for (a, b) in generator.mapping().iter().enumerate() {
+                    sticker_orbits.union(a, *b, ());
+                }
+            }
+
+            let mut pieces: HashMap<Vec<ArcIntern<str>>, Vec<usize>> = HashMap::new();
+
+            for (sticker, (_, regions)) in self.non_fixed_stickers().iter().enumerate() {
+                pieces
+                    .entry(regions.iter().sorted_unstable().cloned().collect())
+                    .or_default()
+                    .push(sticker);
+            }
+
+            let mut orbits: Vec<Vec<Vec<usize>>> = Vec::new();
+
+            'next_piece: for (_, piece) in pieces {
+                let orbit_rep = sticker_orbits.find(piece[0]).root_idx();
+                for maybe_orbit in &mut orbits {
+                    if maybe_orbit[0].len() != piece.len() {
+                        continue;
+                    }
+
+                    for facelet in &maybe_orbit[0] {
+                        if sticker_orbits.find(*facelet).root_idx() == orbit_rep {
+                            maybe_orbit.push(piece);
+                            continue 'next_piece;
+                        }
+                    }
+                }
+
+                orbits.push(vec![piece]);
+            }
+
+            let mut sets: Vec<KSolveSet> = Vec::new();
+
+            for (i, orbit) in orbits.iter().enumerate() {
+                let mut amt_in_same_orbit = 1;
+                let first_rep = sticker_orbits.find(orbit[0][0]).root_idx();
+                for sticker in orbit[0].iter().skip(1) {
+                    if sticker_orbits.find(*sticker).root_idx() == first_rep {
+                        amt_in_same_orbit += 1;
+                    }
+                }
+
+                // TODO: Reasonable names?
+
+                sets.push(KSolveSet {
+                    name: i.to_string(),
+                    piece_count: u16::try_from(orbit.len()).unwrap().try_into().unwrap(),
+                    orientation_count: (u8::try_from(amt_in_same_orbit))
+                        .unwrap()
+                        .try_into()
+                        .unwrap(),
+                });
+            }
+
+            // The first sticker in the list for each piece is considered the signature facelet
+
+            let mut moves: Vec<KSolveMove> = Vec::new();
+
+            for (name, perm) in group.generators() {
+                let mut transformation = Vec::new();
+
+                for orbit in &orbits {
+                    let mut this_orbit_transform = Vec::new();
+
+                    for piece in orbit {
+                        let first_one_goes_to = perm.mapping()[piece[0]];
+                    }
+
+                    transformation.push(this_orbit_transform);
+                }
+
+                moves.push(KSolveMove {
+                    transformation,
+                    name: name.to_string(),
+                });
+            }
+
+            Arc::new(KSolve {
+                name: self.definition.to_string(),
+                sets,
+                moves,
+                symmetries: Vec::new(),
+            })
+        }))
     }
 }
 
@@ -406,6 +520,8 @@ impl PuzzleGeometryDefinition {
             turns,
             definition: self.definition,
             perm_group: OnceLock::new(),
+            ksolve: OnceLock::new(),
+            non_fixed_stickers: OnceLock::new(),
         })
     }
 }

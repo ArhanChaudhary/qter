@@ -47,7 +47,6 @@
 - ⭐Calculate orientations and parities of the puzzle
 - ⭐Calculate the symmetries of the puzzle
 - ⭐Parse our modified puzzlegeometry definition string
-- Use quadratic numbers instead of floats
 - Reorganize parts of qter_core into here, rename `puzzle_theory` or something, and release as a crate on crates.io
 
 ## QAT

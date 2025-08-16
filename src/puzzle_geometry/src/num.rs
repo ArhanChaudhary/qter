@@ -114,6 +114,14 @@ impl Num {
         })
     }
 
+    #[must_use]
+    pub fn approx_f64(self) -> f64 {
+        match self.0 {
+            NumVal::Algebraic(algebraic) => approx_float(algebraic),
+            NumVal::Float(float) => float,
+        }
+    }
+
     fn op(
         &mut self,
         rhs: Num,
@@ -168,6 +176,9 @@ where
 {
     fn from(value: T) -> Self {
         Self(NumVal::Algebraic(RealAlgebraicNumber::from(value)))
+        // Self(NumVal::Float(approx_float(RealAlgebraicNumber::from(
+        //     value,
+        // ))))
     }
 }
 

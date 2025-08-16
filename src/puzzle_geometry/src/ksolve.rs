@@ -1,5 +1,5 @@
 use std::{
-    num::{NonZeroU16, NonZeroU8},
+    num::{NonZeroU8, NonZeroU16},
     sync::LazyLock,
 };
 use thiserror::Error;
@@ -10,19 +10,19 @@ use thiserror::Error;
 /// puzzle software suite, also uses the `KSolve` format.
 #[derive(Clone, Debug, PartialEq)]
 pub struct KSolve {
-    name: String,
-    sets: Vec<KSolveSet>,
-    moves: Vec<KSolveMove>,
-    symmetries: Vec<KSolveMove>,
+    pub(crate) name: String,
+    pub(crate) sets: Vec<KSolveSet>,
+    pub(crate) moves: Vec<KSolveMove>,
+    pub(crate) symmetries: Vec<KSolveMove>,
 }
 
 /// A piece orbit of a `KSolve` puzzle, or "Set" to remain consistent with the
 /// `KSolve` terminology
 #[derive(Clone, Debug, PartialEq)]
 pub struct KSolveSet {
-    name: String,
-    piece_count: NonZeroU16,
-    orientation_count: NonZeroU8,
+    pub(crate) name: String,
+    pub(crate) piece_count: NonZeroU16,
+    pub(crate) orientation_count: NonZeroU8,
 }
 
 /// A transformation of a `KSolve` puzzle. A list of (permutation vector,
@@ -31,8 +31,8 @@ pub type KSolveTransformation = Vec<Vec<(NonZeroU16, u8)>>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct KSolveMove {
-    transformation: KSolveTransformation,
-    name: String,
+    pub(crate) transformation: KSolveTransformation,
+    pub(crate) name: String,
 }
 
 impl KSolve {
