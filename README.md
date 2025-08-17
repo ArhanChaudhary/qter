@@ -408,13 +408,13 @@ This section assumes moderate familiarity with an existing programming language,
 
 ## Your first QAT program
 
-If you have experience working with a compiled programming language, you know that to run a program, you compile your source code into machine code that the computer processor then interprets and executes. The qter compilation pipeline works similarly.
+Q would be very difficult to create programs with by hand, similarly to how it is difficult to write programs in machine code directly. Therefore, we created a high-level programming language called _QAT_ (Qter Assembly Text) that is designed to make it easy to write meaningful Qter programs. To run a program in a traditional programming language, you compile your source code into machine code that the computer processor then interprets and executes. The qter compilation pipeline works similarly.
 
 <p align="center">
   <img src="media/CompilationPipelineVert.svg" width="360" alt="A diagram of the qter compilation pipeline">
 </p>
 
-Qter's high level programming language is called QAT, or Qter Assembly Text. To run your first QAT program, you will first need to install Cargo (talk about installing Cargo) and then the qter compiler executable through the command line: `cargo install qter`. Once set up, create a file named `average.qat` with the following program code.
+To run your first QAT program, you will first need to install Cargo (talk about installing Cargo) and then the qter compiler executable through the command line: `cargo install qter`. Once set up, create a file named `average.qat` with the following program code.
 
 ```janet
 .registers {
@@ -465,7 +465,7 @@ The `.registers` statement is also used to declare memory tapes, which help faci
 
 ## Basic instructions
 
-The basic instructions of the QAT programming language mimic an assembly-like language. If you have already read [The Q file format](#the-q-file-format), notice the similarities with QAT.
+The basic instructions of the QAT programming language mimic an assembly-like language. Every instruction in Q has a direct analogue in QAT, with the exception of `repeat until` and `solve`. The compiler will automatically analyze your code and emit `repeat until` and `solve` whenever possible.
 
 - `add <variable> <number>`
 
@@ -522,13 +522,279 @@ Terminate the program with a message, optionally followed by a variable's value.
 
 ## Metaprogramming
 
-WIP
+As described, QAT is not much higher level than Q... Ideally we need some kind of construction to allow abstraction and code reuse. Due to the fact that rubik's cubes have extremely limited memory, we cannot maintain a call stack in the way that a classical computer would. Therefore, we cannot incorporate functions into QAT. Instead, we have a rust-inspired macro system that operates through inlining. Note that this macro system is unimplemented at the time of writing.
 
-Talking points:
+### Defines
 
-- macros
-- .define
-- lua
+The simplest form of this provided by QAT is the simple `.define` statement, allowing you to define a variety of global constants.
+
+```janet
+.define PI 3          -- Global Integer
+.define ALSO_PI $PI   -- Reference a previous define statement
+.define ALSO_A A      -- Save an identifier
+.define DO_ADDITION { -- Name a whole code block
+    add A 10
+}
+
+add A $PI
+add $ALSO_A $ALSO_PI
+$DO_ADDITION
+-- `A` will store the number 16
+```
+
+However, this is most likely too simple for your usecase...
+
+### Macros
+
+Macros roughly have the following syntax:
+
+```janet
+.macro <name> {
+    (<pattern>) => <expansion>
+    (<pattern>) => <expansion>
+    ...
+}
+```
+
+As a simple example, consider a macro to increment a register:
+
+```janet
+.macro inc {
+    ($R:reg) => add $R 1
+}
+```
+
+You would invoke it like
+
+```janet
+inc A
+```
+
+and it would be transformed at compile time to
+
+```janet
+add A 1
+```
+
+In the macro definition, `$R` represents a placeholder that any register could take the place of.
+
+Now consider a more complicated macro, one to move the value of one register into another:
+
+```janet
+.macro move {
+    ($R1:reg to $R2:reg) => {
+        loop:
+            solved-goto $R1 finished
+            dec $R1
+            inc $R2
+            goto loop
+        finished:
+    }
+}
+```
+
+You would invoke it like
+
+```janet
+move A to B
+```
+
+The word `to` is simply an identifier that must be matched for the macro invocation to compile. It allows you to make your macros read like english. This invocation would be expanded to
+
+```janet
+loop:
+    solved-goto A finished
+    dec A
+    inc B
+    goto loop
+finished:
+```
+
+which would be expanded again to
+
+```janet
+loop:
+    solved-goto A finished
+    sub A 1
+    add B 1
+    goto loop
+finished:
+```
+
+The expansion of `sub` will depend on the size of register A, and we'll see how to define the `sub` macro later.
+
+Labels in macros will also be unique-ified so that if you invoke `move` twice, the labels will not conflict. This will also prevent you from jumping inside the macro invocation from outside:
+
+```janet
+move A to B
+goto finished -- Error: the `finished` label is undefined
+```
+
+Already, we have created a powerful system for encapsulating and abstracting code, but we still have to perform control flow using manual labels and jumping. Can we extend our macro system to allow defining control flow? In fact, we can! We can define an `if` macro like
+
+```janet
+.macro if {
+    (solved $R:reg $code:block) => {
+            solved-goto $R do_if
+            goto after_if
+        do_if:
+            $code
+        after_if:
+    }
+}
+```
+
+and we can invoke it like
+
+```janet
+if solved A {
+    -- Do something
+}
+```
+
+which would be expanded to
+
+```janet
+    solved-goto A do_if
+    goto after_if
+do_if:
+    -- Do something
+after_if:
+```
+
+Here, `$code` is a placeholder for an arbitrary block of code, which allows defining custom control flow. The unique-ification of labels also covers code blocks, so the following wouldn't compile:
+
+```janet
+if solved A {
+    goto do_if -- Error: the `do_if` label is undefined
+}
+```
+
+Let's try defining a macro that executes a code block in an infinite loop:
+
+```janet
+.macro loop {
+    ($code:block) => {
+        continue:
+            $code
+            goto continue
+        break:
+    }
+}
+```
+
+We can invoke it like
+
+```janet
+loop {
+    inc A
+}
+```
+
+but how can we break out of the loop? It would clearly be desirable to be able to `goto` the `continue` and `break` labels that are in the macro definition, but we can't do that. The solution is to mark the labels public, like
+
+```janet
+.macro loop {
+    ($code:block) => {
+        !continue:
+            $code
+            goto continue
+        !break:
+    }
+}
+```
+
+The exclamation mark tells the compiler that the label should be accessible to code blocks inside the macro definition, so the following would be allowed:
+
+```janet
+loop {
+    inc A
+
+    if solved A {
+        goto break
+    }
+}
+```
+
+However, the labels are not public to the surroundings of the macro to preserve encapsulation.
+
+```janet
+loop {
+    -- Stuff
+}
+goto break -- Error: the `break` label is undefined
+```
+
+## Lua Macros
+
+For situations where macros as described before aren't expressive enough, you can embed programs written in Lua into your QAT code to enable compile-time code generation. Lets see how the `sub` macro can be defined:
+
+```janet
+.start-lua
+    function subtract_order_relative(r1, n)
+        return { { "add", r1, order_of_reg(r1) - n } }
+    end
+end-lua
+
+.macro sub {
+    ($R:reg $N:int) => lua subtract_order_relative($R, $N)
+}
+```
+
+Here, invoking the `sub` macro will invoke the lua code at compile time to calculate what the `sub` macro should actually emit. Lua macros should return a list of instructions, each of which is itself a list of the instruction name and arguments. In this example, the lua macro accesses the size of the register passed in to calculate which addition would cause it to overflow and wrap around, having the effect of subtraction. It would be impossible to do that with simple template-replacing macros.
+
+In general, you can write any lua code that you need to in order to make what you need to happen, happen. There are a handful of extra functions that QAT gives Lua access to.
+
+```lua
+big(number) -> bigint -- Inputs a standard lua number and returns a custom bigint type that is used for register orders and instructions
+order_of_reg(register) -> bigint -- Inputs an opaque reference to a register and returns the order of the register
+```
+
+If the lua code throws an error, compilation will fail.
+
+You can also invoke lua code in define statements:
+
+```janet
+.start-lua
+    function bruh()
+        return 5
+    end
+end-lua
+
+.define FIVE lua bruh()
+```
+
+### Importing
+
+Finally, it is typically desirable to separate code between multiple files. QAT provides an `import` statement that brings all defines and macros of a different QAT file into scope, and splices any code defined in that file to the call site.
+
+```janet
+-- file-a.qat
+
+.registers {
+    A <- 3x3 builtin (1260)
+}
+
+add A 1
+import "./file-b.qat"
+thingy A
+
+halt A
+```
+
+```janet
+-- file-b.qat
+
+add A 12
+
+.macro thingy {
+    ($R:reg) => {
+        add $R 10
+    }
+}
+```
+
+Compiling and executing `file-a.qat` would print `23`.
 
 ## Prelude
 

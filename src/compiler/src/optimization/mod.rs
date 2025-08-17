@@ -31,6 +31,7 @@ macro_rules! primitive_match {
 // - Coalesce adjacent labels
 // - Strength reduction of `solved-goto` after a `repeat until` or `solve` that guarantees whether or not it succeeds
 // - If there's a goto immediately after a label, move the label to where the goto goes to
+// - Be able to actually shuffle code around to minimize branching
 
 #[derive(Clone, Debug)]
 pub enum OptimizingPrimitive {
