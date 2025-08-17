@@ -21,13 +21,20 @@ pub struct StackPuzzle<'id, const N: usize>([u8; N], Id<'id>);
 pub struct HeapPuzzle<'id>(Box<[u8]>, Id<'id>);
 
 pub struct AuxMem<'id> {
-    inner: Box<[u8]>,
+    inner: Option<Box<[u8]>>,
     id: Id<'id>,
 }
 
 pub struct AuxMemRefMut<'id, 'a> {
-    inner: &'a mut [u8],
+    inner: Option<&'a mut [u8]>,
     _id: Id<'id>,
+}
+
+impl<'id> AuxMem<'id> {
+    #[must_use]
+    pub fn new(inner: Option<Box<[u8]>>, id: Id<'id>) -> Self {
+        AuxMem { inner, id }
+    }
 }
 
 impl<'id> SliceViewMut for AuxMem<'id> {
@@ -38,7 +45,7 @@ impl<'id> SliceViewMut for AuxMem<'id> {
 
     fn slice_view_mut(&mut self) -> Self::SliceMut<'_> {
         AuxMemRefMut {
-            inner: &mut self.inner,
+            inner: self.inner.as_mut().map(AsMut::as_mut),
             _id: self.id,
         }
     }
@@ -131,14 +138,13 @@ pub fn slice_orbit_size(branded_orbit_def: BrandedOrbitDef) -> usize {
 }
 
 impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
-    type AuxMem = AuxMem<'id>;
     type OrbitBytesBuf<'a>
         = &'a [u8]
     where
         Self: 'a;
     type OrbitIdentifier = SliceOrbitIdentifier<'id>;
 
-    fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> Self::AuxMem {
+    fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id> {
         new_aux_mem_slice(sorted_orbit_defs)
     }
 
@@ -172,7 +178,9 @@ impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
         sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
         aux_mem: AuxMemRefMut<'id, '_>,
     ) -> bool {
-        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, aux_mem)
+        unsafe {
+            induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, aux_mem)
+        }
     }
 
     fn orbit_bytes(&self, orbit_identifier: SliceOrbitIdentifier<'id>) -> (&[u8], &[u8]) {
@@ -191,14 +199,13 @@ impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
 }
 
 impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
-    type AuxMem = AuxMem<'id>;
     type OrbitBytesBuf<'a>
         = &'a [u8]
     where
         Self: 'a;
     type OrbitIdentifier = SliceOrbitIdentifier<'id>;
 
-    fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> Self::AuxMem {
+    fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id> {
         new_aux_mem_slice(sorted_orbit_defs)
     }
 
@@ -245,7 +252,9 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
         sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
         aux_mem: AuxMemRefMut<'id, '_>,
     ) -> bool {
-        induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, aux_mem)
+        unsafe {
+            induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, aux_mem)
+        }
     }
 
     fn orbit_bytes(&self, orbit_identifier: SliceOrbitIdentifier<'id>) -> (&[u8], &[u8]) {
@@ -267,17 +276,19 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
 /// `induces_sorted_cycle_type`.
 fn new_aux_mem_slice<'id>(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id> {
     AuxMem {
-        inner: vec![
-            0;
-            sorted_orbit_defs
-                .inner
-                .last()
-                .unwrap()
-                .piece_count
-                .get()
-                .div_ceil(4) as usize
-        ]
-        .into_boxed_slice(),
+        inner: Some(
+            vec![
+                0;
+                sorted_orbit_defs
+                    .inner
+                    .last()
+                    .unwrap()
+                    .piece_count
+                    .get()
+                    .div_ceil(4) as usize
+            ]
+            .into_boxed_slice(),
+        ),
         id: sorted_orbit_defs.id,
     }
 }
@@ -395,11 +406,12 @@ unsafe fn replace_inverse_slice(
 
 #[allow(clippy::needless_pass_by_value)]
 #[inline]
-fn induces_sorted_cycle_type_slice<'id>(
+unsafe fn induces_sorted_cycle_type_slice<'id>(
     slice_orbit_states: &[u8],
     sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
     sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
-    aux_mem: AuxMemRefMut<'id, '_>,
+    // `inner` cannot be None
+    mut aux_mem: AuxMemRefMut<'id, '_>,
 ) -> bool {
     unsafe {
         assert_unchecked(sorted_cycle_type.inner.len() == sorted_cycle_type.inner.len());
@@ -415,7 +427,7 @@ fn induces_sorted_cycle_type_slice<'id>(
                 base,
                 sorted_cycle_type_orbit,
                 orbit_def,
-                aux_mem.inner,
+                aux_mem.inner.as_mut().unwrap_unchecked(),
             ) {
                 return false;
             }
@@ -491,21 +503,22 @@ impl<'id> HeapPuzzle<'id> {
     pub fn sorted_cycle_type(
         &self,
         sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
-        aux_mem: AuxMemRefMut<'id, '_>,
+        aux_mem: &mut AuxMem<'id>,
     ) -> SortedCycleType<'id> {
+        let aux_mem_inner = aux_mem.inner.as_mut().unwrap().as_mut();
         let mut cycle_type = vec![];
         let mut base = 0;
         for branded_orbit_def in sorted_orbit_defs.branded_copied_iter() {
             let mut cycle_type_piece = vec![];
-            aux_mem.inner.fill(0);
+            aux_mem_inner.fill(0);
             let piece_count = branded_orbit_def.inner.piece_count.get() as usize;
             for i in 0..piece_count {
                 let (div, rem) = (i / 4, i % 4);
-                if aux_mem.inner[div] & (1 << rem) != 0 {
+                if aux_mem_inner[div] & (1 << rem) != 0 {
                     continue;
                 }
 
-                aux_mem.inner[div] |= 1 << rem;
+                aux_mem_inner[div] |= 1 << rem;
                 let mut actual_cycle_length = 1;
                 let mut piece = self.0[base + i] as usize;
                 let mut orientation_sum = self.0[base + piece + piece_count];
@@ -513,7 +526,7 @@ impl<'id> HeapPuzzle<'id> {
                 while piece != i {
                     actual_cycle_length += 1;
                     let (div, rem) = (piece / 4, piece % 4);
-                    aux_mem.inner[div] |= 1 << rem;
+                    aux_mem_inner[div] |= 1 << rem;
                     piece = self.0[base + piece] as usize;
                     orientation_sum += self.0[base + piece + piece_count];
                 }
@@ -533,7 +546,7 @@ impl<'id> HeapPuzzle<'id> {
         assert!(self.induces_sorted_cycle_type(
             sorted_cycle_type.slice_view(),
             sorted_orbit_defs,
-            aux_mem
+            aux_mem.slice_view_mut()
         ));
         sorted_cycle_type
     }

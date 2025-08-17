@@ -1,4 +1,7 @@
-use crate::{SliceView, SliceViewMut};
+use crate::{
+    SliceView, SliceViewMut,
+    puzzle::slice_puzzle::{AuxMem, AuxMemRefMut},
+};
 use generativity::{Guard, Id};
 use itertools::Itertools;
 use puzzle_geometry::ksolve::KSolve;
@@ -12,16 +15,13 @@ pub mod slice_puzzle;
 /// Users may either use the generic `HeapPuzzle` implementor for any `KSolve`
 /// definition or define fast puzzle-specific implementations, like Cube3.
 pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
-    /// A reusable multi bit vector type to hold temporary storage in
-    /// `induces_sorted_cycle_type`.
-    type AuxMem: SliceViewMut;
     type OrbitBytesBuf<'a>: AsRef<[u8]>
     where
         Self: 'a + 'id;
     type OrbitIdentifier: OrbitIdentifier<'id> + Copy + Debug;
 
     /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
-    fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> Self::AuxMem;
+    fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id>;
 
     /// Create a puzzle state from a sorted transformation and sorted
     /// orbit defs. `sorted_transformations` must to correspond to
@@ -51,7 +51,7 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
         &self,
         sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
         sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
-        aux_mem: <Self::AuxMem as SliceViewMut>::SliceMut<'_>,
+        aux_mem: AuxMemRefMut<'id, '_>,
     ) -> bool;
 
     /// Get the bytes of the specified orbit index in the form (permutation
@@ -329,6 +329,11 @@ impl<'id> SortedOrbitDefsRef<'id, '_> {
             inner: orbit_def,
             id: self.id,
         })
+    }
+
+    #[must_use]
+    pub fn id(&self) -> Id<'id> {
+        self.id
     }
 }
 

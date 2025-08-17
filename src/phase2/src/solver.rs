@@ -4,7 +4,7 @@ use super::{
     puzzle::{Move, PuzzleDef, PuzzleState},
     puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryInterface},
 };
-use crate::{SliceViewMut, start, success, working};
+use crate::{SliceViewMut, puzzle::slice_puzzle::AuxMem, start, success, working};
 use log::{Level, debug, info, log_enabled};
 use std::{time::Instant, vec::IntoIter};
 
@@ -23,7 +23,7 @@ pub enum SearchStrategy {
 
 struct CycleTypeSolverMutable<'id, P: PuzzleState<'id>, H: PuzzleStateHistoryInterface<'id, P>> {
     puzzle_state_history: PuzzleStateHistory<'id, P, H>,
-    aux_mem: P::AuxMem,
+    aux_mem: AuxMem<'id>,
     solutions: Vec<Vec<usize>>,
     first_move_class_index: usize,
     nodes_visited: u64,

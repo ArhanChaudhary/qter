@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use log::info;
 use phase2::{
-    SliceViewMut, make_guard,
+    make_guard,
     pruning::{
         OrbitPruningTables, OrbitPruningTablesGenerateMeta, PruningTables, StorageBackendTy,
         TableTy, ZeroTable,
@@ -422,10 +422,8 @@ fn test_many_optimal_cycles() {
             move_count += 1;
         }
 
-        let sorted_cycle_type = result_1.sorted_cycle_type(
-            cube3_def.sorted_orbit_defs_slice_view(),
-            aux_mem.slice_view_mut(),
-        );
+        let sorted_cycle_type =
+            result_1.sorted_cycle_type(cube3_def.sorted_orbit_defs_slice_view(), &mut aux_mem);
 
         let zero_table = ZeroTable::try_generate_all(sorted_cycle_type, ()).unwrap();
 
@@ -791,10 +789,8 @@ fn test_big_cube_optimal_cycle() {
             move_count += 1;
         }
 
-        let sorted_cycle_type = result_1.sorted_cycle_type(
-            cube4_def.sorted_orbit_defs_slice_view(),
-            aux_mem.slice_view_mut(),
-        );
+        let sorted_cycle_type =
+            result_1.sorted_cycle_type(cube4_def.sorted_orbit_defs_slice_view(), &mut aux_mem);
 
         let zero_table = ZeroTable::try_generate_all(sorted_cycle_type, ()).unwrap();
 

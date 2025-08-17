@@ -4,6 +4,7 @@
 pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
+    use crate::puzzle::slice_puzzle::{AuxMem, AuxMemRefMut};
     use crate::puzzle::{
         BrandedOrbitDef, OrbitDef, OrbitIdentifier, PuzzleState, SortedCycleTypeRef,
         SortedOrbitDefsRef, TransformationsMeta, TransformationsMetaError,
@@ -146,16 +147,14 @@ mod common {
     }
 
     impl<'id, C: Cube3Interface> PuzzleState<'id> for C {
-        type AuxMem = ();
         type OrbitBytesBuf<'a>
             = [u8; 16]
         where
             C: 'a + 'id;
         type OrbitIdentifier = Cube3OrbitIdentifier<'id>;
 
-        fn new_aux_mem(_sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) {
-            // Induces cycle type for 3x3 cubes doesn't require auxilliary
-            // memory
+        fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id> {
+            AuxMem::new(None, sorted_orbit_defs.id())
         }
 
         fn try_from_transformations_meta(
@@ -221,7 +220,7 @@ mod common {
             &self,
             sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
             _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
-            _aux_mem: (),
+            _aux_mem: AuxMemRefMut<'id, '_>,
         ) -> bool {
             self.induces_sorted_cycle_type(sorted_cycle_type)
         }
