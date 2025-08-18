@@ -461,17 +461,24 @@ You can choose to use larger register sizes at the cost of requiring more puzzle
 }
 ```
 
-The `.registers` statement is also used to declare memory tapes, which help facilitate local variables, call stacks, and heap memory. This idea will be expanded upon in [Memory tapes](#memory-tapes).
+You can also define _theoretical_ registers, which allows you to write programs using fake puzzles that don't exist, allowing you to experiment with what might be possible without having to find real registers.
+
+```janet
+.registers {
+    A <- theoretical 12345
+    B <- theoretical 67910
+}
+```
 
 ## Basic instructions
 
 The basic instructions of the QAT programming language mimic an assembly-like language. Every instruction in Q has a direct analogue in QAT, with the exception of `repeat until` and `solve`. The compiler will automatically analyze your code and emit `repeat until` and `solve` whenever possible.
 
-- `add <variable> <number>`
+- `add <register> <number>`
 
 <ul>
 
-Add a constant number to a variable. This is the only way to change the value of a variable.
+Add a constant number to a register. This is the only way to change the value of a register.
 
 </ul>
 
@@ -488,35 +495,35 @@ infinite_loop:
 
 </ul>
 
-- `solved-goto <variable> <label>`
+- `solved-goto <register> <label>`
 
 <ul>
 
-Jump to a label if the specified variable is zero. The name of this instruction is significant in the Q file format.
+Jump to a label if the specified register is zero.
 
 </ul>
 
-- `input <message> <variable>`
+- `input <message> <register>`
 
 <ul>
 
-Ask the user for numeric input, which will be added to the given variable.
+Ask the user for numeric input, which will be added to the given register.
 
 </ul>
 
-- `print <message> [<variable>]`
+- `print <message> [<register>]`
 
 <ul>
 
-Output a message, optionally followed by a variable's value.
+Output a message, optionally followed by a register's value.
 
 </ul>
 
-- `halt <message> [<variable>]`
+- `halt <message> [<register>]`
 
 <ul>
 
-Terminate the program with a message, optionally followed by a variable's value.
+Terminate the program with a message, optionally followed by a register's value.
 
 </ul>
 
@@ -741,13 +748,15 @@ end-lua
 }
 ```
 
-Here, invoking the `sub` macro will invoke the lua code at compile time to calculate what the `sub` macro should actually emit. Lua macros should return a list of instructions, each of which is itself a list of the instruction name and arguments. In this example, the lua macro accesses the size of the register passed in to calculate which addition would cause it to overflow and wrap around, having the effect of subtraction. It would be impossible to do that with simple template-replacing macros.
+`lua` is a special statement that allows you to call a lua function at compile-time, and the code returned by the function will be spliced in its place. Lua macros should return a list of instructions, each of which is itself a list of the instruction name and arguments.
+
+Here, invoking the `sub` macro will invoke the lua code to calculate what the `sub` macro should actually emit. In this example, the lua macro accesses the size of the register to calculate which addition would cause it to overflow and wrap around, having the effect of subtraction. It would be impossible to do that with simple template-replacing macros.
 
 In general, you can write any lua code that you need to in order to make what you need to happen, happen. There are a handful of extra functions that QAT gives Lua access to.
 
 ```lua
-big(number) -> bigint -- Inputs a standard lua number and returns a custom bigint type that is used for register orders and instructions
-order_of_reg(register) -> bigint -- Inputs an opaque reference to a register and returns the order of the register
+big(number) -> bigint -- Takes in a standard lua number and returns a custom bigint type that is used for register orders and instructions
+order_of_reg(register) -> bigint -- Inputs an opaque reference to a register and returns the order of that register
 ```
 
 If the lua code throws an error, compilation will fail.
@@ -798,12 +807,136 @@ Compiling and executing `file-a.qat` would print `23`.
 
 ## Prelude
 
-WIP
+Lucky for you, you get a lot of macros built into the language! The QAT standard library is defined at [src/qter_core/prelude.qat](src/qter_core/prelude.qat) and you can reference it if you like.
 
-Talking points:
+```janet
+sub <register> <number>
+```
+Subtract a number from a register
 
-- convenience macros like `inc`, `dec`, and control flow
-- [Link to prelude](src/qter_core/prelude.qat) and encourage its reference
+```janet
+inc <register>
+```
+Increment a register
+
+```janet
+dec <register>
+```
+Decrement a register
+
+```janet
+move <register1> to <register2>
+```
+Zero out the first register and add its contents to the second register
+
+```janet
+set <register1> to <register2>
+```
+Set the contents of the first register to the contents of the second while zeroing out the contents of the second
+
+```janet
+set <number> to <number>
+```
+Set the contents of the first register to the number specified
+
+```janet
+if solved <register> <{}> [else <{}>]
+```
+Execute the code block if the register is zero, otherwise execute the `else` block if supplied
+
+```janet
+if not-solved <register> <{}> [else <{}>]
+```
+Execute the code block if the register is _not_ zero, otherwise execute the `else` block if supplied
+
+```janet
+if equals <register> <number> <{}> [else <{}>]
+```
+Execute the code block if the register equals the number supplied, otherwise execute the `else` block if supplied
+
+```janet
+if not-equals <register> <number> <{}> [else <{}>]
+```
+Execute the code block if the register does not equal the number supplied, otherwise execute the `else` block if supplied
+
+```janet
+if equals <register1> <register2> using <register3> <{}> [else <{}>]
+```
+Execute the code block if the first two registers are equal, while passing in a third register to use as bookkeeping that will be set to zero. Otherwise executes the `else` block if supplied. All three registers must have equal order. This is validated at compile-time.
+
+```janet
+if not-equals <register1> <register2> using <register3> <{}> [else <{}>]
+```
+Execute the code block if the first two registers are _not_ equal, while passing in a third register to use as bookkeeping that will be set to zero. Otherwise executes the `else` block if supplied. All three registers must have equal order. This is validated at compile-time.
+
+```janet
+loop <{}>
+!continue
+!break
+```
+Executes a code block in a loop forever until the `break` label or a label outside of the block is jumped to. The `break` label will exit the loop and the `continue` label will jump back to the beginning of the code block
+
+```janet
+while solved <register> <{}>
+!continue
+!break
+```
+Execute the block in a loop while the register is zero
+
+```janet
+while not-solved <register> <{}>
+!continue
+!break
+```
+Execute the block in a loop while the register is _not_ zero
+
+```janet
+while equals <register> <number> <{}>
+!continue
+!break
+```
+Execute the block in a loop while the register is equal to the number provided
+
+```janet
+while not-equals <register> <number> <{}>
+!continue
+!break
+```
+Execute the block in a loop while the register is _not_ equal to the number provided
+
+```janet
+while equals <register1> <register2> using <register3> <{}>
+!continue
+!break
+```
+Execute the block in a loop while the two registers are equal, using a third register for bookkeeping that will be zeroed out at the start of each iteration.
+
+```janet
+while not-equals <register1> <register2> using <register3> <{}>
+!continue
+!break
+```
+Execute the block in a loop while the two registers are _not_ equal, using a third register for bookkeeping that will be zeroed out at the start of each iteration.
+
+```janet
+repeat <number> [<ident>] <{}>
+```
+Repeat the code block the number of times supplied, optionally providing a loop index with the name specified. The index will be emitted as a `.define` statement.
+
+```janet
+repeat <number> <ident> from <number1> to <number2> <{}>
+```
+Repeat the code block for each number in the range [number1, number2)
+
+```janet
+multiply <register1> <number> at <register2>
+```
+Add the result of multiplying the first register with the number provided to the second register, while zeroing out the first register
+
+```janet
+multiply <register1> <register2> using <register3>
+```
+Multiply the first two registers, storing the result in the first register and zeroing out the second, while using the third register for bookkeeping. The third register will be zeroed out. All three registers must be the same order, which is checked at compile time.
 
 # Memory tapes
 

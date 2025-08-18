@@ -300,7 +300,6 @@ end-lua
         lua multiply($R1, $R2, $R3)
     }
     ($R1:reg $N:int at $R2:reg) => {
-            set $R2 to 0
         multiply_loop:
             solved-goto $R1 multiply_done
             add $R2 N
