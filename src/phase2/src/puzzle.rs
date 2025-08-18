@@ -1,4 +1,4 @@
-use crate::{Rebrand, SliceView, SliceViewMut, orbit_puzzle::OrbitPuzzleStateImplementor};
+use crate::{SliceView, SliceViewMut, orbit_puzzle::OrbitPuzzleStateImplementor};
 use generativity::{Guard, Id};
 use itertools::Itertools;
 use puzzle_geometry::ksolve::KSolve;
@@ -15,7 +15,7 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
     type OrbitBytesBuf<'a>: AsRef<[u8]>
     where
         Self: 'a + 'id;
-    type OrbitIdentifier<'a>: OrbitIdentifier<'a> + Copy + Debug;
+    type OrbitIdentifier: OrbitIdentifier<'id> + Copy + Debug;
 
     /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
     fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id>;
@@ -55,33 +55,32 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
     /// vector, orientation vector).
     fn orbit_bytes(
         &self,
-        orbit_identifier: Self::OrbitIdentifier<'id>,
+        orbit_identifier: Self::OrbitIdentifier,
     ) -> (Self::OrbitBytesBuf<'_>, Self::OrbitBytesBuf<'_>);
 
     /// Return an integer that corresponds to a bijective mapping of the orbit
     /// identifier's states.
-    fn exact_hasher_orbit(&self, orbit_identifier: Self::OrbitIdentifier<'id>) -> u64;
+    fn exact_hasher_orbit(&self, orbit_identifier: Self::OrbitIdentifier) -> u64;
 
     /// Return a representation of the puzzle state that can be soundly hashed.
-    fn approximate_hash_orbit(&self, orbit_identifier: Self::OrbitIdentifier<'id>) -> impl Hash;
+    fn approximate_hash_orbit(&self, orbit_identifier: Self::OrbitIdentifier) -> impl Hash;
 
-    fn pick_orbit_puzzle<'id2>(
-        orbit_identifier: <Self::OrbitIdentifier<'id2> as Rebrand<'id2>>::Rebranded<'id2>,
-    ) -> OrbitPuzzleStateImplementor<'id2>;
+    fn pick_orbit_puzzle(
+        orbit_identifier: Self::OrbitIdentifier,
+    ) -> OrbitPuzzleStateImplementor;
 }
 
 /// Get a usize that "identifies" an orbit. This is implementor-specific.
 /// For slice puzzles, the identifier is the starting index of the orbit data
 /// in the puzzle state buffer. For specific puzzles the identifier is the
 /// index of the orbit in the orbit definition.
-pub trait OrbitIdentifier<'id>: Rebrand<'id>
-{
+pub trait OrbitIdentifier<'id> {
     fn first_orbit_identifier(branded_orbit_def: BrandedOrbitDef<'id>) -> Self;
 
     #[must_use]
     fn next_orbit_identifier(self, branded_orbit_def: BrandedOrbitDef<'id>) -> Self;
 
-    fn branded_orbit_def(&self) -> BrandedOrbitDef<'id>;
+    fn orbit_def(&self) -> OrbitDef;
 }
 
 #[derive(Debug)]
@@ -202,17 +201,6 @@ impl<'id> AuxMem<'id> {
     #[must_use]
     pub fn new(inner: Option<Box<[u8]>>, id: Id<'id>) -> Self {
         AuxMem { inner, id }
-    }
-}
-
-impl<'id> Rebrand<'id> for AuxMem<'id> {
-    type Rebranded<'id2> = AuxMem<'id2>;
-
-    fn rebrand<'id2>(self, id: Id<'id2>) -> Self::Rebranded<'id2> {
-        AuxMem {
-            inner: self.inner,
-            id,
-        }
     }
 }
 
@@ -368,6 +356,7 @@ impl<'id> SortedCycleType<'id> {
 
 impl<'id> BrandedOrbitDef<'id> {
     #[must_use]
+    // TODO: needed?
     pub fn id(&self) -> Id<'id> {
         self.id
     }
@@ -1267,7 +1256,7 @@ mod tests {
                 [79_925_404, 38_328_854_695],
             ),
         ] {
-            let mut maybe_orbit_identifier: Option<P::OrbitIdentifier<'id>> = None;
+            let mut maybe_orbit_identifier: Option<P::OrbitIdentifier> = None;
             for (i, branded_orbit_def) in cube3_def
                 .sorted_orbit_defs_slice_view()
                 .branded_copied_iter()

@@ -5,22 +5,21 @@ use super::OrbitPuzzleState;
 use crate::{
     orbit_puzzle::{OrbitPuzzleConstructor, OrbitPuzzleStateImplementor},
     puzzle::{
-        AuxMemRefMut, BrandedOrbitDef,
+        AuxMemRefMut, OrbitDef,
         slice_puzzle::{exact_hasher_orbit_bytes, slice_orbit_size},
     },
 };
-use generativity::Id;
 use std::{cmp::Ordering, hint::unreachable_unchecked, num::NonZeroU8};
 
 #[derive(Clone, PartialEq, Debug, Hash)]
-pub struct SliceOrbitPuzzle<'id2>(Box<[u8]>, Id<'id2>);
+pub struct SliceOrbitPuzzle(Box<[u8]>);
 
-impl<'id2> OrbitPuzzleState<'id2> for SliceOrbitPuzzle<'id2> {
+impl OrbitPuzzleState for SliceOrbitPuzzle {
     unsafe fn replace_compose(
         &mut self,
-        a: &OrbitPuzzleStateImplementor<'id2>,
-        b: &OrbitPuzzleStateImplementor<'id2>,
-        branded_orbit_def: BrandedOrbitDef<'id2>,
+        a: &OrbitPuzzleStateImplementor,
+        b: &OrbitPuzzleStateImplementor,
+        orbit_def: OrbitDef,
     ) {
         let OrbitPuzzleStateImplementor::SliceOrbitPuzzle(a) = a else {
             unsafe { unreachable_unchecked() };
@@ -30,14 +29,14 @@ impl<'id2> OrbitPuzzleState<'id2> for SliceOrbitPuzzle<'id2> {
         };
         // SAFETY: `a`, `b`, and `self` are all branded to correspond to
         // `orbit_def`.
-        unsafe { replace_compose_slice_orbit(&mut self.0, 0, &a.0, &b.0, branded_orbit_def) };
+        unsafe { replace_compose_slice_orbit(&mut self.0, 0, &a.0, &b.0, orbit_def) };
     }
 
-    fn induces_sorted_cycle_type(
+    unsafe fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
-        branded_orbit_def: BrandedOrbitDef,
-        aux_mem: AuxMemRefMut<'id2, '_>,
+        orbit_def: OrbitDef,
+        aux_mem: AuxMemRefMut,
     ) -> bool {
         // TODO
         unsafe {
@@ -45,39 +44,35 @@ impl<'id2> OrbitPuzzleState<'id2> for SliceOrbitPuzzle<'id2> {
                 &self.0,
                 0,
                 sorted_cycle_type_orbit,
-                branded_orbit_def,
+                orbit_def,
                 aux_mem.inner.unwrap_unchecked(),
             )
         }
     }
 
-    fn exact_hasher(&self, branded_orbit_def: BrandedOrbitDef) -> u64 {
+    unsafe fn exact_hasher(&self, orbit_def: OrbitDef) -> u64 {
         // TODO
         let (perm, ori) = unsafe {
             self.0
-                .split_at_unchecked(branded_orbit_def.inner.piece_count.get() as usize)
+                .split_at_unchecked(orbit_def.piece_count.get() as usize)
         };
-        exact_hasher_orbit_bytes(perm, ori, branded_orbit_def)
+        unsafe { exact_hasher_orbit_bytes(perm, ori, orbit_def) }
     }
 }
 
-impl<'id2> OrbitPuzzleConstructor<'id2> for SliceOrbitPuzzle<'id2> {
-    // TODO: make this unsafe
-    fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
+impl OrbitPuzzleConstructor for SliceOrbitPuzzle {
+    unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
         perm: B,
         ori: B,
-        branded_orbit_def: BrandedOrbitDef<'id2>,
+        orbit_def: OrbitDef,
     ) -> Self {
-        let mut slice_orbit_states = vec![0_u8; slice_orbit_size(branded_orbit_def)];
-        let piece_count = branded_orbit_def.inner.piece_count.get();
+        let mut slice_orbit_states = vec![0_u8; slice_orbit_size(orbit_def)];
+        let piece_count = orbit_def.piece_count.get();
         for i in 0..piece_count {
             slice_orbit_states[(piece_count + i) as usize] = ori.as_ref()[i as usize];
             slice_orbit_states[i as usize] = perm.as_ref()[i as usize];
         }
-        SliceOrbitPuzzle(
-            slice_orbit_states.into_boxed_slice(),
-            branded_orbit_def.id(),
-        )
+        SliceOrbitPuzzle(slice_orbit_states.into_boxed_slice())
     }
 
     #[allow(refining_impl_trait)]
@@ -93,10 +88,10 @@ pub unsafe fn replace_compose_slice_orbit(
     base: usize,
     a: &[u8],
     b: &[u8],
-    branded_orbit_def: BrandedOrbitDef,
+    orbit_def: OrbitDef,
 ) {
-    let piece_count = branded_orbit_def.inner.piece_count.get() as usize;
-    let orientation_count = branded_orbit_def.inner.orientation_count.get();
+    let piece_count = orbit_def.piece_count.get() as usize;
+    let orientation_count = orbit_def.orientation_count.get();
     // [1] https://github.com/cubing/twsearch
     if orientation_count == 1 {
         for i in 0..piece_count {
@@ -132,14 +127,14 @@ pub unsafe fn induces_sorted_cycle_type_slice_orbit(
     slice_orbit_state: &[u8],
     base: usize,
     sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
-    branded_orbit_def: BrandedOrbitDef,
+    orbit_def: OrbitDef,
     // We cannot brand this field because a newtype holding a mutable reference
     // cannot be moved in a loop
     aux_mem: &mut [u8],
 ) -> bool {
     aux_mem.fill(0);
     let mut covered_cycles_count = 0;
-    let piece_count = branded_orbit_def.inner.piece_count.get() as usize;
+    let piece_count = orbit_def.piece_count.get() as usize;
     for i in 0..piece_count {
         let (div, rem) = (i / 4, i % 4);
         // SAFETY: default_aux_mem_slice ensures that (i / 4) always fits
@@ -182,7 +177,7 @@ pub unsafe fn induces_sorted_cycle_type_slice_orbit(
             }
         }
 
-        let actual_orients = orientation_sum % branded_orbit_def.inner.orientation_count != 0;
+        let actual_orients = orientation_sum % orbit_def.orientation_count != 0;
         if actual_cycle_length == 1 && !actual_orients {
             continue;
         }

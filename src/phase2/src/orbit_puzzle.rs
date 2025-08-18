@@ -1,10 +1,10 @@
-use super::{FACT_UNTIL_19, puzzle::BrandedOrbitDef};
+use super::FACT_UNTIL_19;
 use crate::{
     orbit_puzzle::{
         cube3::{Cube3Corners, Cube3Edges},
         slice_orbit_puzzle::SliceOrbitPuzzle,
     },
-    puzzle::AuxMemRefMut,
+    puzzle::{AuxMemRefMut, OrbitDef},
 };
 use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
@@ -18,74 +18,67 @@ pub mod cube3;
 pub mod slice_orbit_puzzle;
 
 #[enum_dispatch(OrbitPuzzleStateImplementors)]
-// TODO: OrbitPuzzleConstructor<'id2> +
-pub trait OrbitPuzzleState<'id2>: Clone {
+// TODO: OrbitPuzzleConstructor +
+pub trait OrbitPuzzleState: Clone {
     unsafe fn replace_compose(
         &mut self,
-        a: &OrbitPuzzleStateImplementor<'id2>,
-        b: &OrbitPuzzleStateImplementor<'id2>,
-        branded_orbit_def: BrandedOrbitDef<'id2>,
+        a: &OrbitPuzzleStateImplementor,
+        b: &OrbitPuzzleStateImplementor,
+        orbit_def: OrbitDef,
     );
-    fn induces_sorted_cycle_type(
+    unsafe fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
-        branded_orbit_def: BrandedOrbitDef<'id2>,
-        aux_mem: AuxMemRefMut<'id2, '_>,
+        branded_orbit_def: OrbitDef,
+        aux_mem: AuxMemRefMut,
     ) -> bool;
-    fn exact_hasher(&self, branded_orbit_def: BrandedOrbitDef<'id2>) -> u64;
+    unsafe fn exact_hasher(&self, branded_orbit_def: OrbitDef) -> u64;
 }
 
-pub trait OrbitPuzzleConstructor<'id2> {
+pub trait OrbitPuzzleConstructor {
     fn approximate_hash(&self) -> impl Hash;
-    fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
+    unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
         perm: B,
         ori: B,
-        branded_orbit_def: BrandedOrbitDef<'id2>,
+        orbit_def: OrbitDef,
     ) -> Self;
 
-    fn new_solved_state(branded_orbit_def: BrandedOrbitDef<'id2>) -> Self
+    unsafe fn new_solved_state(orbit_def: OrbitDef) -> Self
     where
         Self: Sized,
     {
-        let perm = (0..branded_orbit_def.inner.piece_count.get()).collect_vec();
-        let ori = vec![0; branded_orbit_def.inner.orientation_count.get() as usize];
-        Self::from_orbit_transformation_unchecked(perm, ori, branded_orbit_def)
+        let perm = (0..orbit_def.piece_count.get()).collect_vec();
+        let ori = vec![0; orbit_def.piece_count.get() as usize];
+        unsafe { Self::from_orbit_transformation_unchecked(perm, ori, orbit_def) }
     }
 }
 
 #[enum_dispatch(OrbitPuzzleState)]
 #[derive(PartialEq, Clone)]
-pub enum OrbitPuzzleStateImplementor<'id2> {
-    SliceOrbitPuzzle(SliceOrbitPuzzle<'id2>),
+pub enum OrbitPuzzleStateImplementor {
+    SliceOrbitPuzzle(SliceOrbitPuzzle),
     Cube3Edges(Cube3Edges),
     Cube3Corners(Cube3Corners),
 }
 
-impl<'id2> OrbitPuzzleStateImplementor<'id2> {
+impl OrbitPuzzleStateImplementor {
+    #[allow(clippy::wrong_self_convention)]
     pub fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
         &self,
         perm: B,
         ori: B,
-        branded_orbit_def: BrandedOrbitDef<'id2>,
+        orbit_def: OrbitDef,
     ) -> Self {
         match self {
-            OrbitPuzzleStateImplementor::SliceOrbitPuzzle(_) => {
-                OrbitPuzzleStateImplementor::SliceOrbitPuzzle(
-                    SliceOrbitPuzzle::from_orbit_transformation_unchecked(
-                        perm,
-                        ori,
-                        branded_orbit_def,
-                    ),
-                )
-            }
-            OrbitPuzzleStateImplementor::Cube3Edges(_) => OrbitPuzzleStateImplementor::Cube3Edges(
-                Cube3Edges::from_orbit_transformation_unchecked(perm, ori, branded_orbit_def),
-            ),
-            OrbitPuzzleStateImplementor::Cube3Corners(_) => {
-                OrbitPuzzleStateImplementor::Cube3Corners(
-                    Cube3Corners::from_orbit_transformation_unchecked(perm, ori, branded_orbit_def),
-                )
-            }
+            OrbitPuzzleStateImplementor::SliceOrbitPuzzle(_) => unsafe {
+                SliceOrbitPuzzle::from_orbit_transformation_unchecked(perm, ori, orbit_def).into()
+            },
+            OrbitPuzzleStateImplementor::Cube3Edges(_) => unsafe {
+                Cube3Edges::from_orbit_transformation_unchecked(perm, ori, orbit_def).into()
+            },
+            OrbitPuzzleStateImplementor::Cube3Corners(_) => unsafe {
+                Cube3Corners::from_orbit_transformation_unchecked(perm, ori, orbit_def).into()
+            },
         }
     }
 

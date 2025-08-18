@@ -3,7 +3,7 @@
 
 use crate::{
     orbit_puzzle::{OrbitPuzzleConstructor, OrbitPuzzleState, OrbitPuzzleStateImplementor},
-    puzzle::{AuxMemRefMut, BrandedOrbitDef},
+    puzzle::{AuxMemRefMut, OrbitDef},
 };
 use std::{hash::Hash, num::NonZeroU8};
 
@@ -17,81 +17,81 @@ pub struct Cube3Edges;
 pub struct Cube3Corners;
 
 #[allow(unused)]
-impl<'id2> OrbitPuzzleState<'id2> for Cube3Corners {
+impl OrbitPuzzleState for Cube3Corners {
     unsafe fn replace_compose(
         &mut self,
-        a: &OrbitPuzzleStateImplementor<'id2>,
-        b: &OrbitPuzzleStateImplementor<'id2>,
-        branded_orbit_def: BrandedOrbitDef<'id2>,
+        a: &OrbitPuzzleStateImplementor,
+        b: &OrbitPuzzleStateImplementor,
+        orbit_def: OrbitDef,
     ) {
         todo!()
     }
 
-    fn induces_sorted_cycle_type(
+    unsafe fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
-        branded_orbit_def: BrandedOrbitDef<'id2>,
-        aux_mem: AuxMemRefMut<'id2, '_>,
+        branded_orbit_def: OrbitDef,
+        aux_mem: AuxMemRefMut,
     ) -> bool {
         todo!()
     }
 
-    fn exact_hasher(&self, branded_orbit_def: BrandedOrbitDef<'id2>) -> u64 {
+    unsafe fn exact_hasher(&self, branded_orbit_def: OrbitDef) -> u64 {
         todo!()
     }
 }
 
 #[allow(unused)]
-impl<'id2> OrbitPuzzleConstructor<'id2> for Cube3Corners {
-    fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
-        perm: B,
-        ori: B,
-        branded_orbit_def: BrandedOrbitDef<'id2>,
-    ) -> Self {
-        todo!()
-    }
-
+impl OrbitPuzzleConstructor for Cube3Corners {
     fn approximate_hash(&self) -> impl Hash {
         todo!()
     }
+
+    unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
+        perm: B,
+        ori: B,
+        orbit_def: OrbitDef,
+    ) -> Self {
+        todo!()
+    }
 }
 
 #[allow(unused)]
-impl<'id2> OrbitPuzzleState<'id2> for Cube3Edges {
+impl OrbitPuzzleState for Cube3Edges {
     unsafe fn replace_compose(
         &mut self,
-        a: &OrbitPuzzleStateImplementor<'id2>,
-        b: &OrbitPuzzleStateImplementor<'id2>,
-        branded_orbit_def: BrandedOrbitDef<'id2>,
+        a: &OrbitPuzzleStateImplementor,
+        b: &OrbitPuzzleStateImplementor,
+        orbit_def: OrbitDef,
     ) {
         todo!()
     }
 
-    fn induces_sorted_cycle_type(
+    unsafe fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
-        branded_orbit_def: BrandedOrbitDef<'id2>,
-        aux_mem: AuxMemRefMut<'id2, '_>,
+        branded_orbit_def: OrbitDef,
+        aux_mem: AuxMemRefMut,
     ) -> bool {
         todo!()
     }
 
-    fn exact_hasher(&self, branded_orbit_def: BrandedOrbitDef<'id2>) -> u64 {
+    unsafe fn exact_hasher(&self, branded_orbit_def: OrbitDef) -> u64 {
         todo!()
     }
 }
 
 #[allow(unused)]
-impl<'id2> OrbitPuzzleConstructor<'id2> for Cube3Edges {
-    fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
-        perm: B,
-        ori: B,
-        branded_orbit_def: BrandedOrbitDef<'id2>,
-    ) -> Self {
+impl OrbitPuzzleConstructor for Cube3Edges {
+    fn approximate_hash(&self) -> impl Hash {
         todo!()
     }
 
-    fn approximate_hash(&self) -> impl Hash {
+    unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
+        perm: B,
+        ori: B,
+        orbit_def: OrbitDef,
+    ) -> Self {
         todo!()
     }
 }
