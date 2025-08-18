@@ -2,7 +2,7 @@
 //! generation.
 
 use crate::{
-    orbit_puzzle::{OrbitPuzzleConstructor, OrbitPuzzleState, OrbitPuzzleStateImplementor},
+    orbit_puzzle::{OrbitPuzzleState, OrbitPuzzleStateExtra, OrbitPuzzleStateImplementor},
     puzzle::{AuxMemRefMut, OrbitDef},
 };
 use std::{hash::Hash, num::NonZeroU8};
@@ -30,19 +30,19 @@ impl OrbitPuzzleState for Cube3Corners {
     unsafe fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
-        branded_orbit_def: OrbitDef,
+        orbit_def: OrbitDef,
         aux_mem: AuxMemRefMut,
     ) -> bool {
         todo!()
     }
 
-    unsafe fn exact_hasher(&self, branded_orbit_def: OrbitDef) -> u64 {
+    unsafe fn exact_hasher(&self, orbit_def: OrbitDef) -> u64 {
         todo!()
     }
 }
 
 #[allow(unused)]
-impl OrbitPuzzleConstructor for Cube3Corners {
+impl OrbitPuzzleStateExtra for Cube3Corners {
     fn approximate_hash(&self) -> impl Hash {
         todo!()
     }
@@ -70,19 +70,19 @@ impl OrbitPuzzleState for Cube3Edges {
     unsafe fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
-        branded_orbit_def: OrbitDef,
+        orbit_def: OrbitDef,
         aux_mem: AuxMemRefMut,
     ) -> bool {
         todo!()
     }
 
-    unsafe fn exact_hasher(&self, branded_orbit_def: OrbitDef) -> u64 {
+    unsafe fn exact_hasher(&self, orbit_def: OrbitDef) -> u64 {
         todo!()
     }
 }
 
 #[allow(unused)]
-impl OrbitPuzzleConstructor for Cube3Edges {
+impl OrbitPuzzleStateExtra for Cube3Edges {
     fn approximate_hash(&self) -> impl Hash {
         todo!()
     }

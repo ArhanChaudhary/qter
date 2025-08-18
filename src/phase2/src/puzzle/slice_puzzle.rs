@@ -7,7 +7,7 @@ use super::{
 use crate::{
     FACT_UNTIL_19, SliceView,
     orbit_puzzle::{
-        OrbitPuzzleConstructor, OrbitPuzzleStateImplementor,
+        OrbitPuzzleStateExtra, OrbitPuzzleStateImplementor,
         slice_orbit_puzzle::{
             SliceOrbitPuzzle, induces_sorted_cycle_type_slice_orbit, replace_compose_slice_orbit,
         },

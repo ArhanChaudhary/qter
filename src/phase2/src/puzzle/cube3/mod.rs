@@ -5,7 +5,7 @@ pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
     use crate::orbit_puzzle::cube3::{Cube3Corners, Cube3Edges};
-    use crate::orbit_puzzle::{OrbitPuzzleConstructor, OrbitPuzzleStateImplementor};
+    use crate::orbit_puzzle::{OrbitPuzzleStateExtra, OrbitPuzzleStateImplementor};
     use crate::puzzle::{
         AuxMem, AuxMemRefMut, BrandedOrbitDef, OrbitDef, OrbitIdentifier, PuzzleState,
         SortedCycleTypeRef, SortedOrbitDefsRef, TransformationsMeta, TransformationsMetaError,

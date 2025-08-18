@@ -18,8 +18,7 @@ pub mod cube3;
 pub mod slice_orbit_puzzle;
 
 #[enum_dispatch(OrbitPuzzleStateImplementors)]
-// TODO: OrbitPuzzleConstructor +
-pub trait OrbitPuzzleState: Clone {
+pub trait OrbitPuzzleState: OrbitPuzzleStateExtra + Clone {
     unsafe fn replace_compose(
         &mut self,
         a: &OrbitPuzzleStateImplementor,
@@ -29,13 +28,13 @@ pub trait OrbitPuzzleState: Clone {
     unsafe fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
-        branded_orbit_def: OrbitDef,
+        orbit_def: OrbitDef,
         aux_mem: AuxMemRefMut,
     ) -> bool;
-    unsafe fn exact_hasher(&self, branded_orbit_def: OrbitDef) -> u64;
+    unsafe fn exact_hasher(&self, orbit_def: OrbitDef) -> u64;
 }
 
-pub trait OrbitPuzzleConstructor {
+pub trait OrbitPuzzleStateExtra {
     fn approximate_hash(&self) -> impl Hash;
     unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
         perm: B,
@@ -61,6 +60,28 @@ pub enum OrbitPuzzleStateImplementor {
     Cube3Corners(Cube3Corners),
 }
 
+impl OrbitPuzzleStateExtra for OrbitPuzzleStateImplementor {
+    fn approximate_hash(&self) -> impl Hash {
+        match self {
+            OrbitPuzzleStateImplementor::SliceOrbitPuzzle(s) => {
+                fxhash::hash64(s.approximate_hash())
+            }
+            OrbitPuzzleStateImplementor::Cube3Edges(e) => fxhash::hash64(&e.approximate_hash()),
+            OrbitPuzzleStateImplementor::Cube3Corners(c) => fxhash::hash64(&c.approximate_hash()),
+        }
+    }
+
+    unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
+        _perm: B,
+        _ori: B,
+        _orbit_def: OrbitDef,
+    ) -> Self {
+        unimplemented!(
+            "Please use <Self as OrbitPuzzleStateImplementor>::from_orbit_transformation_unchecked"
+        )
+    }
+}
+
 impl OrbitPuzzleStateImplementor {
     #[allow(clippy::wrong_self_convention)]
     pub fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
@@ -79,16 +100,6 @@ impl OrbitPuzzleStateImplementor {
             OrbitPuzzleStateImplementor::Cube3Corners(_) => unsafe {
                 Cube3Corners::from_orbit_transformation_unchecked(perm, ori, orbit_def).into()
             },
-        }
-    }
-
-    pub fn approximate_hasher(&self) -> impl Hash {
-        match self {
-            OrbitPuzzleStateImplementor::SliceOrbitPuzzle(s) => {
-                fxhash::hash64(s.approximate_hash())
-            }
-            OrbitPuzzleStateImplementor::Cube3Edges(e) => fxhash::hash64(&e.approximate_hash()),
-            OrbitPuzzleStateImplementor::Cube3Corners(c) => fxhash::hash64(&c.approximate_hash()),
         }
     }
 }
