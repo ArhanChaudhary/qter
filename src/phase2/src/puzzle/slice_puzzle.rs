@@ -5,14 +5,14 @@ use super::{
     TransformationsMeta, TransformationsMetaError,
 };
 use crate::{
-    FACT_UNTIL_19, SliceView,
-    orbit_puzzle::slice_orbit_puzzle::{
-        induces_sorted_cycle_type_slice_orbit, replace_compose_slice_orbit,
-    },
-    puzzle::{SortedCycleType, SortedCycleTypeRef},
+    orbit_puzzle::{
+        slice_orbit_puzzle::{
+            induces_sorted_cycle_type_slice_orbit, replace_compose_slice_orbit, SliceOrbitPuzzle
+        }, OrbitPuzzleConstructor, OrbitPuzzleStateImplementor
+    }, puzzle::{AuxMem, AuxMemRefMut, SortedCycleType, SortedCycleTypeRef}, Rebrand, SliceView, FACT_UNTIL_19
 };
 use generativity::Id;
-use std::hint::assert_unchecked;
+use std::{hint::assert_unchecked, slice};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct StackPuzzle<'id, const N: usize>([u8; N], Id<'id>);
@@ -20,113 +20,88 @@ pub struct StackPuzzle<'id, const N: usize>([u8; N], Id<'id>);
 #[derive(Clone, PartialEq, Debug)]
 pub struct HeapPuzzle<'id>(Box<[u8]>, Id<'id>);
 
-pub struct AuxMem<'id> {
-    inner: Option<Box<[u8]>>,
-    id: Id<'id>,
+/// A newtyped index into the start of an orbit in a `StackPuzzle` or
+/// `HeapPuzzle`.
+#[derive(Clone, Copy, Debug)]
+pub struct SliceOrbitIdentifier<'id> {
+    base_index: usize,
+    pub(crate) branded_orbit_def: BrandedOrbitDef<'id>,
 }
 
-pub struct AuxMemRefMut<'id, 'a> {
-    inner: Option<&'a mut [u8]>,
-    _id: Id<'id>,
-}
-
-impl<'id> AuxMem<'id> {
-    #[must_use]
-    pub fn new(inner: Option<Box<[u8]>>, id: Id<'id>) -> Self {
-        AuxMem { inner, id }
-    }
-}
-
-impl<'id> SliceViewMut for AuxMem<'id> {
-    type SliceMut<'a>
-        = AuxMemRefMut<'id, 'a>
-    where
-        Self: 'a;
-
-    fn slice_view_mut(&mut self) -> Self::SliceMut<'_> {
-        AuxMemRefMut {
-            inner: self.inner.as_mut().map(AsMut::as_mut),
-            _id: self.id,
+impl<'id> OrbitIdentifier<'id> for SliceOrbitIdentifier<'id> {
+    fn first_orbit_identifier(branded_orbit_def: BrandedOrbitDef<'id>) -> Self {
+        SliceOrbitIdentifier {
+            base_index: 0,
+            branded_orbit_def,
         }
     }
-}
 
-pub use private::*;
-mod private {
-    //! Private module to disallow explicit instantiation of `OrbitBaseSlice`.
-
-    use super::{BrandedOrbitDef, OrbitIdentifier};
-    use std::slice;
-
-    /// A newtyped index into the start of an orbit in a `StackPuzzle` or
-    /// `HeapPuzzle`.
-    #[derive(Clone, Copy, Debug)]
-    pub struct SliceOrbitIdentifier<'id> {
-        base_index: usize,
+    fn next_orbit_identifier(
+        self,
         branded_orbit_def: BrandedOrbitDef<'id>,
-    }
-
-    impl<'id> OrbitIdentifier<'id> for SliceOrbitIdentifier<'id> {
-        fn first_orbit_identifier(branded_orbit_def: BrandedOrbitDef<'id>) -> Self {
-            SliceOrbitIdentifier {
-                base_index: 0,
-                branded_orbit_def,
-            }
-        }
-
-        fn next_orbit_identifier(
-            self,
-            branded_orbit_def: BrandedOrbitDef<'id>,
-        ) -> SliceOrbitIdentifier<'id> {
-            // TODO: panic if out of bounds
-            SliceOrbitIdentifier {
-                base_index: self.base_index
-                    + self.branded_orbit_def.inner.piece_count.get() as usize * 2,
-                branded_orbit_def,
-            }
-        }
-
-        fn branded_orbit_def(&self) -> BrandedOrbitDef<'id> {
-            self.branded_orbit_def
+    ) -> SliceOrbitIdentifier<'id> {
+        // TODO: panic if out of bounds
+        SliceOrbitIdentifier {
+            base_index: self.base_index
+                + self.branded_orbit_def.inner.piece_count.get() as usize * 2,
+            branded_orbit_def,
         }
     }
 
-    // TODO: should this be unsafe
-    impl SliceOrbitIdentifier<'_> {
-        #[must_use]
-        pub fn base_index(self) -> usize {
-            self.base_index
-        }
+    fn branded_orbit_def(&self) -> BrandedOrbitDef<'id> {
+        self.branded_orbit_def
+    }
+}
 
-        #[must_use]
-        pub fn perm_slice(self, slice_orbit_states: &[u8]) -> &[u8] {
-            unsafe {
-                slice::from_raw_parts(
-                    slice_orbit_states.as_ptr().add(self.base_index),
-                    self.branded_orbit_def.inner.piece_count.get() as usize,
-                )
-            }
-        }
+impl<'id> Rebrand<'id> for SliceOrbitIdentifier<'id> {
+    type Rebranded<'id2> = SliceOrbitIdentifier<'id2>;
 
-        #[must_use]
-        pub fn ori_slice(self, slice_orbit_states: &[u8]) -> &[u8] {
-            let start = self.base_index + self.branded_orbit_def.inner.piece_count.get() as usize;
-            unsafe {
-                slice::from_raw_parts(
-                    slice_orbit_states.as_ptr().add(start),
-                    self.branded_orbit_def.inner.piece_count.get() as usize,
-                )
-            }
+    fn rebrand<'id2>(self, id: Id<'id2>) -> Self::Rebranded<'id2> {
+        SliceOrbitIdentifier {
+            base_index: self.base_index,
+            branded_orbit_def: BrandedOrbitDef {
+                inner: self.branded_orbit_def.inner,
+                id,
+            },
         }
+    }
+}
 
-        #[must_use]
-        pub fn orbit_slice(self, slice_orbit_states: &[u8]) -> &[u8] {
-            let start = self.base_index;
-            let end = self
-                .next_orbit_identifier(self.branded_orbit_def)
-                .base_index();
-            unsafe { slice::from_raw_parts(slice_orbit_states.as_ptr().add(start), end - start) }
+// TODO: should this be unsafe
+impl SliceOrbitIdentifier<'_> {
+    #[must_use]
+    pub fn base_index(self) -> usize {
+        self.base_index
+    }
+
+    #[must_use]
+    pub fn perm_slice(self, slice_orbit_states: &[u8]) -> &[u8] {
+        unsafe {
+            slice::from_raw_parts(
+                slice_orbit_states.as_ptr().add(self.base_index),
+                self.branded_orbit_def.inner.piece_count.get() as usize,
+            )
         }
+    }
+
+    #[must_use]
+    pub fn ori_slice(self, slice_orbit_states: &[u8]) -> &[u8] {
+        let start = self.base_index + self.branded_orbit_def.inner.piece_count.get() as usize;
+        unsafe {
+            slice::from_raw_parts(
+                slice_orbit_states.as_ptr().add(start),
+                self.branded_orbit_def.inner.piece_count.get() as usize,
+            )
+        }
+    }
+
+    #[must_use]
+    pub fn orbit_slice(self, slice_orbit_states: &[u8]) -> &[u8] {
+        let start = self.base_index;
+        let end = self
+            .next_orbit_identifier(self.branded_orbit_def)
+            .base_index();
+        unsafe { slice::from_raw_parts(slice_orbit_states.as_ptr().add(start), end - start) }
     }
 }
 
@@ -142,7 +117,7 @@ impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
         = &'a [u8]
     where
         Self: 'a;
-    type OrbitIdentifier = SliceOrbitIdentifier<'id>;
+    type OrbitIdentifier<'a> = SliceOrbitIdentifier<'a>;
 
     fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id> {
         new_aux_mem_slice(sorted_orbit_defs)
@@ -179,7 +154,12 @@ impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
         aux_mem: AuxMemRefMut<'id, '_>,
     ) -> bool {
         unsafe {
-            induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, aux_mem)
+            induces_sorted_cycle_type_slice(
+                &self.0,
+                sorted_cycle_type,
+                sorted_orbit_defs,
+                aux_mem.inner.unwrap_unchecked(),
+            )
         }
     }
 
@@ -196,6 +176,12 @@ impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
         let (perm, ori) = self.orbit_bytes(orbit_identifier);
         exact_hasher_orbit_bytes(perm, ori, orbit_identifier.branded_orbit_def())
     }
+
+    fn pick_orbit_puzzle(
+        orbit_identifier: Self::OrbitIdentifier<'_>,
+    ) -> OrbitPuzzleStateImplementor<'_> {
+        pick_orbit_puzzle_slice(orbit_identifier)
+    }
 }
 
 impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
@@ -203,7 +189,7 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
         = &'a [u8]
     where
         Self: 'a;
-    type OrbitIdentifier = SliceOrbitIdentifier<'id>;
+    type OrbitIdentifier<'a> = SliceOrbitIdentifier<'a>;
 
     fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id> {
         new_aux_mem_slice(sorted_orbit_defs)
@@ -253,7 +239,12 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
         aux_mem: AuxMemRefMut<'id, '_>,
     ) -> bool {
         unsafe {
-            induces_sorted_cycle_type_slice(&self.0, sorted_cycle_type, sorted_orbit_defs, aux_mem)
+            induces_sorted_cycle_type_slice(
+                &self.0,
+                sorted_cycle_type,
+                sorted_orbit_defs,
+                aux_mem.inner.unwrap_unchecked(),
+            )
         }
     }
 
@@ -269,6 +260,12 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
     fn exact_hasher_orbit(&self, orbit_identifier: SliceOrbitIdentifier<'id>) -> u64 {
         let (perm, ori) = self.orbit_bytes(orbit_identifier);
         exact_hasher_orbit_bytes(perm, ori, orbit_identifier.branded_orbit_def())
+    }
+
+    fn pick_orbit_puzzle(
+        orbit_identifier: Self::OrbitIdentifier<'_>,
+    ) -> OrbitPuzzleStateImplementor<'_> {
+        pick_orbit_puzzle_slice(orbit_identifier)
     }
 }
 
@@ -290,6 +287,18 @@ fn new_aux_mem_slice<'id>(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> Aux
             .into_boxed_slice(),
         ),
         id: sorted_orbit_defs.id,
+    }
+}
+
+impl<'id> From<BrandedOrbitDef<'id>> for AuxMem<'id> {
+    fn from(branded_orbit_def: BrandedOrbitDef<'id>) -> Self {
+        AuxMem {
+            inner: Some(
+                vec![0; branded_orbit_def.inner.piece_count.get().div_ceil(4) as usize]
+                    .into_boxed_slice(),
+            ),
+            id: branded_orbit_def.id(),
+        }
     }
 }
 
@@ -410,8 +419,8 @@ unsafe fn induces_sorted_cycle_type_slice<'id>(
     slice_orbit_states: &[u8],
     sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
     sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
-    // `inner` cannot be None
-    mut aux_mem: AuxMemRefMut<'id, '_>,
+    // must be from `new_aux_mem` and inner cannot be None
+    aux_mem: &mut [u8],
 ) -> bool {
     unsafe {
         assert_unchecked(sorted_cycle_type.inner.len() == sorted_cycle_type.inner.len());
@@ -427,7 +436,7 @@ unsafe fn induces_sorted_cycle_type_slice<'id>(
                 base,
                 sorted_cycle_type_orbit,
                 orbit_def,
-                aux_mem.inner.as_mut().unwrap_unchecked(),
+                aux_mem,
             ) {
                 return false;
             }
@@ -490,6 +499,14 @@ pub(crate) fn exact_hasher_orbit_bytes(
             u32::from(piece_count) - 1,
         )
         + exact_ori_hash
+}
+
+fn pick_orbit_puzzle_slice(
+    orbit_identifier: SliceOrbitIdentifier<'_>,
+) -> OrbitPuzzleStateImplementor<'_> {
+    OrbitPuzzleStateImplementor::SliceOrbitPuzzle(SliceOrbitPuzzle::new_solved_state(
+        orbit_identifier.branded_orbit_def(),
+    ))
 }
 
 impl<'id> HeapPuzzle<'id> {

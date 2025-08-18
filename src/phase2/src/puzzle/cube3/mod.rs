@@ -4,10 +4,12 @@
 pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
-    use crate::puzzle::slice_puzzle::{AuxMem, AuxMemRefMut};
+    use crate::Rebrand;
+    use crate::orbit_puzzle::cube3::{Cube3Corners, Cube3Edges};
+    use crate::orbit_puzzle::{OrbitPuzzleConstructor, OrbitPuzzleStateImplementor};
     use crate::puzzle::{
-        BrandedOrbitDef, OrbitDef, OrbitIdentifier, PuzzleState, SortedCycleTypeRef,
-        SortedOrbitDefsRef, TransformationsMeta, TransformationsMetaError,
+        AuxMem, AuxMemRefMut, BrandedOrbitDef, OrbitDef, OrbitIdentifier, PuzzleState,
+        SortedCycleTypeRef, SortedOrbitDefsRef, TransformationsMeta, TransformationsMetaError,
     };
     use generativity::Id;
     use std::hash::Hash;
@@ -146,12 +148,24 @@ mod common {
         }
     }
 
+    impl<'id> Rebrand<'id> for Cube3OrbitIdentifier<'id> {
+        type Rebranded<'id2> = Cube3OrbitIdentifier<'id2>;
+
+        fn rebrand<'id2>(self, guard: Id<'id2>) -> Self::Rebranded<'id2> {
+            let id = guard.into();
+            Cube3OrbitIdentifier {
+                orbit_type: self.orbit_type,
+                id,
+            }
+        }
+    }
+
     impl<'id, C: Cube3Interface> PuzzleState<'id> for C {
         type OrbitBytesBuf<'a>
             = [u8; 16]
         where
             C: 'a + 'id;
-        type OrbitIdentifier = Cube3OrbitIdentifier<'id>;
+        type OrbitIdentifier<'a> = Cube3OrbitIdentifier<'a>;
 
         fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id> {
             AuxMem::new(None, sorted_orbit_defs.id())
@@ -233,8 +247,24 @@ mod common {
             self.exact_hasher_orbit(orbit_identifier.orbit_type)
         }
 
-        fn approximate_hash_orbit(&self, orbit_identifier: Self::OrbitIdentifier) -> impl Hash {
+        fn approximate_hash_orbit(
+            &self,
+            orbit_identifier: Self::OrbitIdentifier<'id>,
+        ) -> impl Hash {
             self.approximate_hash_orbit(orbit_identifier.orbit_type)
+        }
+
+        fn pick_orbit_puzzle(
+            orbit_identifier: Self::OrbitIdentifier<'_>,
+        ) -> OrbitPuzzleStateImplementor<'_> {
+            match orbit_identifier.orbit_type {
+                Cube3OrbitType::Corners => OrbitPuzzleStateImplementor::Cube3Corners(
+                    Cube3Corners::new_solved_state(orbit_identifier.branded_orbit_def()),
+                ),
+                Cube3OrbitType::Edges => OrbitPuzzleStateImplementor::Cube3Edges(
+                    Cube3Edges::new_solved_state(orbit_identifier.branded_orbit_def()),
+                ),
+            }
         }
     }
 }

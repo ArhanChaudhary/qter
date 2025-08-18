@@ -10,8 +10,8 @@
 
 - Phase 2
   - replace pub(crate) with getters
-  - SortedCycleType creation error
   - ⭐branding for OrbitPuzzleStates should be unique and happen at a very small level
+  - dont pack bit vector for AuxMem
   - ⭐pruning table
     - cartesian product tables
       - seed only one value

@@ -4,7 +4,7 @@ use super::{
     puzzle::{Move, PuzzleDef, PuzzleState},
     puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryInterface},
 };
-use crate::{SliceViewMut, puzzle::slice_puzzle::AuxMem, start, success, working};
+use crate::{SliceViewMut, puzzle::AuxMem, start, success, working};
 use log::{Level, debug, info, log_enabled};
 use std::{time::Instant, vec::IntoIter};
 

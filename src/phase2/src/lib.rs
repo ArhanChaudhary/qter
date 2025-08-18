@@ -47,6 +47,12 @@ pub trait SliceViewMut {
     fn slice_view_mut(&mut self) -> Self::SliceMut<'_>;
 }
 
+pub trait Rebrand<'id> {
+    type Rebranded<'id2>: Rebrand<'id2>;
+
+    fn rebrand<'id2>(self, id: Id<'id2>) -> Self::Rebranded<'id2>;
+}
+
 // We can do one more however it will overflow when adding more to it which is
 // common in context
 const FACT_UNTIL_19: [u64; 20] = {

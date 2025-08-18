@@ -1,36 +1,33 @@
 //! The default and fallback implementation for 3x3 orbits during pruning table
 //! generation.
 
-use super::{OrbitPuzzleConstructors, OrbitPuzzleState};
+use super::OrbitPuzzleState;
 use crate::{
-    SliceViewMut,
+    orbit_puzzle::{OrbitPuzzleConstructor, OrbitPuzzleStateImplementor},
     puzzle::{
-        BrandedOrbitDef,
+        AuxMemRefMut, BrandedOrbitDef,
         slice_puzzle::{exact_hasher_orbit_bytes, slice_orbit_size},
     },
 };
 use generativity::Id;
-use std::{cmp::Ordering, num::NonZeroU8};
+use std::{cmp::Ordering, hint::unreachable_unchecked, num::NonZeroU8};
 
 #[derive(Clone, PartialEq, Debug, Hash)]
-pub struct SliceOrbitPuzzle<'id>(Box<[u8]>, Id<'id>);
+pub struct SliceOrbitPuzzle<'id2>(Box<[u8]>, Id<'id2>);
 
-// TODO: brand these
-pub struct AuxMem(Box<[u8]>);
-pub struct AuxMemRefMut<'a>(&'a mut [u8]);
-
-impl SliceViewMut for AuxMem {
-    type SliceMut<'a> = AuxMemRefMut<'a>;
-
-    fn slice_view_mut(&mut self) -> Self::SliceMut<'_> {
-        AuxMemRefMut(&mut self.0)
-    }
-}
-
-impl OrbitPuzzleState for SliceOrbitPuzzle<'_> {
-    type AuxMem = AuxMem;
-
-    fn replace_compose(&mut self, a: &Self, b: &Self, branded_orbit_def: BrandedOrbitDef) {
+impl<'id2> OrbitPuzzleState<'id2> for SliceOrbitPuzzle<'id2> {
+    unsafe fn replace_compose(
+        &mut self,
+        a: &OrbitPuzzleStateImplementor<'id2>,
+        b: &OrbitPuzzleStateImplementor<'id2>,
+        branded_orbit_def: BrandedOrbitDef<'id2>,
+    ) {
+        let OrbitPuzzleStateImplementor::SliceOrbitPuzzle(a) = a else {
+            unsafe { unreachable_unchecked() };
+        };
+        let OrbitPuzzleStateImplementor::SliceOrbitPuzzle(b) = b else {
+            unsafe { unreachable_unchecked() };
+        };
         // SAFETY: `a`, `b`, and `self` are all branded to correspond to
         // `orbit_def`.
         unsafe { replace_compose_slice_orbit(&mut self.0, 0, &a.0, &b.0, branded_orbit_def) };
@@ -40,7 +37,7 @@ impl OrbitPuzzleState for SliceOrbitPuzzle<'_> {
         &self,
         sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
         branded_orbit_def: BrandedOrbitDef,
-        aux_mem: AuxMemRefMut<'_>,
+        aux_mem: AuxMemRefMut<'id2, '_>,
     ) -> bool {
         // TODO
         unsafe {
@@ -49,14 +46,9 @@ impl OrbitPuzzleState for SliceOrbitPuzzle<'_> {
                 0,
                 sorted_cycle_type_orbit,
                 branded_orbit_def,
-                aux_mem.0,
+                aux_mem.inner.unwrap_unchecked(),
             )
         }
-    }
-
-    #[allow(refining_impl_trait)]
-    fn approximate_hash(&self) -> &Self {
-        self
     }
 
     fn exact_hasher(&self, branded_orbit_def: BrandedOrbitDef) -> u64 {
@@ -69,21 +61,12 @@ impl OrbitPuzzleState for SliceOrbitPuzzle<'_> {
     }
 }
 
-impl<'id> OrbitPuzzleConstructors<'id> for SliceOrbitPuzzle<'id> {
-    type AuxMem = AuxMem;
-
-    fn new_aux_mem(branded_orbit_def: BrandedOrbitDef<'id>) -> AuxMem {
-        AuxMem(
-            vec![0; branded_orbit_def.inner.piece_count.get().div_ceil(4) as usize]
-                .into_boxed_slice(),
-        )
-    }
-
+impl<'id2> OrbitPuzzleConstructor<'id2> for SliceOrbitPuzzle<'id2> {
     // TODO: make this unsafe
     fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
         perm: B,
         ori: B,
-        branded_orbit_def: BrandedOrbitDef<'id>,
+        branded_orbit_def: BrandedOrbitDef<'id2>,
     ) -> Self {
         let mut slice_orbit_states = vec![0_u8; slice_orbit_size(branded_orbit_def)];
         let piece_count = branded_orbit_def.inner.piece_count.get();
@@ -95,6 +78,11 @@ impl<'id> OrbitPuzzleConstructors<'id> for SliceOrbitPuzzle<'id> {
             slice_orbit_states.into_boxed_slice(),
             branded_orbit_def.id(),
         )
+    }
+
+    #[allow(refining_impl_trait)]
+    fn approximate_hash(&self) -> &Self {
+        self
     }
 }
 

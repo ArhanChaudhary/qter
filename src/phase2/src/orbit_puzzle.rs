@@ -1,5 +1,13 @@
 use super::{FACT_UNTIL_19, puzzle::BrandedOrbitDef};
-use crate::SliceViewMut;
+use crate::{
+    orbit_puzzle::{
+        cube3::{Cube3Corners, Cube3Edges},
+        slice_orbit_puzzle::SliceOrbitPuzzle,
+    },
+    puzzle::AuxMemRefMut,
+};
+use enum_dispatch::enum_dispatch;
+use itertools::Itertools;
 use std::{
     hash::Hash,
     num::NonZeroU8,
@@ -9,29 +17,87 @@ use std::{
 pub mod cube3;
 pub mod slice_orbit_puzzle;
 
-pub trait OrbitPuzzleState {
-    type AuxMem: SliceViewMut;
-
-    fn replace_compose(&mut self, a: &Self, b: &Self, branded_orbit_def: BrandedOrbitDef);
+#[enum_dispatch(OrbitPuzzleStateImplementors)]
+// TODO: OrbitPuzzleConstructor<'id2> +
+pub trait OrbitPuzzleState<'id2>: Clone {
+    unsafe fn replace_compose(
+        &mut self,
+        a: &OrbitPuzzleStateImplementor<'id2>,
+        b: &OrbitPuzzleStateImplementor<'id2>,
+        branded_orbit_def: BrandedOrbitDef<'id2>,
+    );
     fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
-        branded_orbit_def: BrandedOrbitDef,
-        aux_mem: <Self::AuxMem as SliceViewMut>::SliceMut<'_>,
+        branded_orbit_def: BrandedOrbitDef<'id2>,
+        aux_mem: AuxMemRefMut<'id2, '_>,
     ) -> bool;
-    fn approximate_hash(&self) -> impl Hash;
-    fn exact_hasher(&self, branded_orbit_def: BrandedOrbitDef) -> u64;
+    fn exact_hasher(&self, branded_orbit_def: BrandedOrbitDef<'id2>) -> u64;
 }
 
-pub trait OrbitPuzzleConstructors<'id> {
-    type AuxMem: SliceViewMut;
-
-    fn new_aux_mem(branded_orbit_def: BrandedOrbitDef<'id>) -> Self::AuxMem;
+pub trait OrbitPuzzleConstructor<'id2> {
+    fn approximate_hash(&self) -> impl Hash;
     fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
         perm: B,
         ori: B,
-        branded_orbit_def: BrandedOrbitDef<'id>,
+        branded_orbit_def: BrandedOrbitDef<'id2>,
     ) -> Self;
+
+    fn new_solved_state(branded_orbit_def: BrandedOrbitDef<'id2>) -> Self
+    where
+        Self: Sized,
+    {
+        let perm = (0..branded_orbit_def.inner.piece_count.get()).collect_vec();
+        let ori = vec![0; branded_orbit_def.inner.orientation_count.get() as usize];
+        Self::from_orbit_transformation_unchecked(perm, ori, branded_orbit_def)
+    }
+}
+
+#[enum_dispatch(OrbitPuzzleState)]
+#[derive(PartialEq, Clone)]
+pub enum OrbitPuzzleStateImplementor<'id2> {
+    SliceOrbitPuzzle(SliceOrbitPuzzle<'id2>),
+    Cube3Edges(Cube3Edges),
+    Cube3Corners(Cube3Corners),
+}
+
+impl<'id2> OrbitPuzzleStateImplementor<'id2> {
+    pub fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
+        &self,
+        perm: B,
+        ori: B,
+        branded_orbit_def: BrandedOrbitDef<'id2>,
+    ) -> Self {
+        match self {
+            OrbitPuzzleStateImplementor::SliceOrbitPuzzle(_) => {
+                OrbitPuzzleStateImplementor::SliceOrbitPuzzle(
+                    SliceOrbitPuzzle::from_orbit_transformation_unchecked(
+                        perm,
+                        ori,
+                        branded_orbit_def,
+                    ),
+                )
+            }
+            OrbitPuzzleStateImplementor::Cube3Edges(_) => OrbitPuzzleStateImplementor::Cube3Edges(
+                Cube3Edges::from_orbit_transformation_unchecked(perm, ori, branded_orbit_def),
+            ),
+            OrbitPuzzleStateImplementor::Cube3Corners(_) => {
+                OrbitPuzzleStateImplementor::Cube3Corners(
+                    Cube3Corners::from_orbit_transformation_unchecked(perm, ori, branded_orbit_def),
+                )
+            }
+        }
+    }
+
+    pub fn approximate_hasher(&self) -> impl Hash {
+        match self {
+            OrbitPuzzleStateImplementor::SliceOrbitPuzzle(s) => {
+                fxhash::hash64(s.approximate_hash())
+            }
+            OrbitPuzzleStateImplementor::Cube3Edges(e) => fxhash::hash64(&e.approximate_hash()),
+            OrbitPuzzleStateImplementor::Cube3Corners(c) => fxhash::hash64(&c.approximate_hash()),
+        }
+    }
 }
 
 /// Efficently exactly hash an orbit into a u64, panicking at compile-time if

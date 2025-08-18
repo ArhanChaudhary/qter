@@ -107,10 +107,10 @@ impl<'id, P: PuzzleState<'id>> From<&PuzzleDef<'id, P>> for PuzzleCanonicalFSM<'
                 }
 
                 let mut next_state_mask = dequeue_move_class_mask.clone();
-                for (next_state, commute) in
+                for (next_state, &commute) in
                     next_state_mask.iter_mut().zip(&commutes[move_class_index])
                 {
-                    *next_state &= *commute;
+                    *next_state &= commute;
                 }
                 next_state_mask[move_class_index] = true;
 

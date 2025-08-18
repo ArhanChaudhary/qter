@@ -1,7 +1,4 @@
-use crate::{
-    SliceView, SliceViewMut,
-    puzzle::slice_puzzle::{AuxMem, AuxMemRefMut},
-};
+use crate::{Rebrand, SliceView, SliceViewMut, orbit_puzzle::OrbitPuzzleStateImplementor};
 use generativity::{Guard, Id};
 use itertools::Itertools;
 use puzzle_geometry::ksolve::KSolve;
@@ -18,7 +15,7 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
     type OrbitBytesBuf<'a>: AsRef<[u8]>
     where
         Self: 'a + 'id;
-    type OrbitIdentifier: OrbitIdentifier<'id> + Copy + Debug;
+    type OrbitIdentifier<'a>: OrbitIdentifier<'a> + Copy + Debug;
 
     /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
     fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id>;
@@ -58,24 +55,27 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
     /// vector, orientation vector).
     fn orbit_bytes(
         &self,
-        orbit_identifier: Self::OrbitIdentifier,
+        orbit_identifier: Self::OrbitIdentifier<'id>,
     ) -> (Self::OrbitBytesBuf<'_>, Self::OrbitBytesBuf<'_>);
 
     /// Return an integer that corresponds to a bijective mapping of the orbit
     /// identifier's states.
-    fn exact_hasher_orbit(&self, orbit_identifier: Self::OrbitIdentifier) -> u64;
+    fn exact_hasher_orbit(&self, orbit_identifier: Self::OrbitIdentifier<'id>) -> u64;
 
     /// Return a representation of the puzzle state that can be soundly hashed.
-    fn approximate_hash_orbit(&self, orbit_identifier: Self::OrbitIdentifier) -> impl Hash;
+    fn approximate_hash_orbit(&self, orbit_identifier: Self::OrbitIdentifier<'id>) -> impl Hash;
+
+    fn pick_orbit_puzzle<'id2>(
+        orbit_identifier: <Self::OrbitIdentifier<'id2> as Rebrand<'id2>>::Rebranded<'id2>,
+    ) -> OrbitPuzzleStateImplementor<'id2>;
 }
 
-// /// Get a usize that "identifies" an orbit. This is implementor-specific.
-// /// For slice puzzles, the identifier is the starting index of the orbit data
-// /// in the puzzle state buffer. For specific puzzles the identifier is the
-// /// index of the orbit in the orbit definition.
-// fn next_orbit_identifer(orbit_identifier: Self::OrbitIdentifier, orbit_def: BrandedOrbitDef) -> usize;
-
-pub trait OrbitIdentifier<'id> {
+/// Get a usize that "identifies" an orbit. This is implementor-specific.
+/// For slice puzzles, the identifier is the starting index of the orbit data
+/// in the puzzle state buffer. For specific puzzles the identifier is the
+/// index of the orbit in the orbit definition.
+pub trait OrbitIdentifier<'id>: Rebrand<'id>
+{
     fn first_orbit_identifier(branded_orbit_def: BrandedOrbitDef<'id>) -> Self;
 
     #[must_use]
@@ -188,6 +188,48 @@ pub enum TransformationsMetaError {
     InvalidTransformation(Vec<Vec<(u8, u8)>>),
 }
 
+pub struct AuxMem<'id> {
+    inner: Option<Box<[u8]>>,
+    id: Id<'id>,
+}
+
+pub struct AuxMemRefMut<'id, 'a> {
+    pub(crate) inner: Option<&'a mut [u8]>,
+    _id: Id<'id>,
+}
+
+impl<'id> AuxMem<'id> {
+    #[must_use]
+    pub fn new(inner: Option<Box<[u8]>>, id: Id<'id>) -> Self {
+        AuxMem { inner, id }
+    }
+}
+
+impl<'id> Rebrand<'id> for AuxMem<'id> {
+    type Rebranded<'id2> = AuxMem<'id2>;
+
+    fn rebrand<'id2>(self, id: Id<'id2>) -> Self::Rebranded<'id2> {
+        AuxMem {
+            inner: self.inner,
+            id,
+        }
+    }
+}
+
+impl<'id> SliceViewMut for AuxMem<'id> {
+    type SliceMut<'a>
+        = AuxMemRefMut<'id, 'a>
+    where
+        Self: 'a;
+
+    fn slice_view_mut(&mut self) -> Self::SliceMut<'_> {
+        AuxMemRefMut {
+            inner: self.inner.as_mut().map(AsMut::as_mut),
+            _id: self.id,
+        }
+    }
+}
+
 impl<'id, 'a> TransformationsMeta<'id, 'a> {
     /// Create a `TransformationMeta` from `sorted_transformations` and
     /// `sorted_orbit_defs`.
@@ -271,6 +313,11 @@ impl<'id, 'a> TransformationsMeta<'id, 'a> {
 }
 
 impl<'id> SortedCycleType<'id> {
+    /// Create a new `SortedCycleType`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the creation fails.
     pub fn new(
         maybe_cycle_type: &[Vec<(u8, bool)>],
         sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
@@ -282,32 +329,35 @@ impl<'id> SortedCycleType<'id> {
             });
         }
 
-        let mut sorted_cycle_type = Vec::with_capacity(maybe_cycle_type.len());
-        for (cycle_type, &orbit_def) in maybe_cycle_type.iter().zip(sorted_orbit_defs.inner) {
-            let max_piece_count_sum = orbit_def.piece_count.get() as usize;
-            let mut cycle_type_checked = Vec::with_capacity(cycle_type.len());
-            let mut piece_count_sum = 0;
-            for &(length, oriented) in cycle_type {
-                if length == 1 && !oriented {
-                    continue;
-                }
-                match NonZeroU8::new(length) {
-                    Some(length) => {
-                        piece_count_sum += length.get() as usize;
-                        cycle_type_checked.push((length, oriented));
+        let sorted_cycle_type = maybe_cycle_type
+            .iter()
+            .zip(sorted_orbit_defs.inner)
+            .map(|(cycle_type, &orbit_def)| {
+                let max_piece_count_sum = orbit_def.piece_count.get() as usize;
+                let mut cycle_type_checked = Vec::with_capacity(cycle_type.len());
+                let mut piece_count_sum = 0;
+                for &(length, oriented) in cycle_type {
+                    if length == 1 && !oriented {
+                        continue;
                     }
-                    None => return Err(SortedCycleTypeCreationError::ZeroLengthCycle),
+                    match NonZeroU8::new(length) {
+                        Some(length) => {
+                            piece_count_sum += length.get() as usize;
+                            cycle_type_checked.push((length, oriented));
+                        }
+                        None => return Err(SortedCycleTypeCreationError::ZeroLengthCycle),
+                    }
                 }
-            }
-            if piece_count_sum > max_piece_count_sum {
-                return Err(SortedCycleTypeCreationError::TooManyPieces {
-                    expected: max_piece_count_sum,
-                    actual: piece_count_sum,
-                });
-            }
-            cycle_type_checked.sort_unstable();
-            sorted_cycle_type.push(cycle_type_checked);
-        }
+                if piece_count_sum > max_piece_count_sum {
+                    return Err(SortedCycleTypeCreationError::TooManyPieces {
+                        expected: max_piece_count_sum,
+                        actual: piece_count_sum,
+                    });
+                }
+                cycle_type_checked.sort_unstable();
+                Ok(cycle_type_checked)
+            })
+            .collect::<Result<Vec<_>, SortedCycleTypeCreationError>>()?;
 
         Ok(Self {
             inner: sorted_cycle_type,
@@ -1217,7 +1267,7 @@ mod tests {
                 [79_925_404, 38_328_854_695],
             ),
         ] {
-            let mut maybe_orbit_identifier: Option<P::OrbitIdentifier> = None;
+            let mut maybe_orbit_identifier: Option<P::OrbitIdentifier<'id>> = None;
             for (i, branded_orbit_def) in cube3_def
                 .sorted_orbit_defs_slice_view()
                 .branded_copied_iter()

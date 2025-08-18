@@ -13,15 +13,13 @@ use super::{
     puzzle::{PuzzleDef, PuzzleState},
 };
 use crate::{
-    SliceView, SliceViewMut,
-    orbit_puzzle::{
-        OrbitPuzzleConstructors, OrbitPuzzleState, slice_orbit_puzzle::SliceOrbitPuzzle,
-    },
+    Rebrand, SliceView, SliceViewMut,
+    orbit_puzzle::OrbitPuzzleState,
     permutator::pandita2,
     puzzle::{OrbitIdentifier, SortedCycleType, SortedCycleTypeRef},
     start, success, working,
 };
-use generativity::Id;
+use generativity::{Id, make_guard};
 use itertools::Itertools;
 use log::{debug, info};
 use std::{
@@ -128,7 +126,7 @@ pub struct OrbitPruningTables<'id, P: PuzzleState<'id>> {
 struct OrbitPruningTableGenerationMeta<'id, 'a, P: PuzzleState<'id>> {
     puzzle_def: &'a PuzzleDef<'id, P>,
     sorted_cycle_type_orbit: &'a [(NonZeroU8, bool)],
-    orbit_identifier: P::OrbitIdentifier,
+    orbit_identifier: P::OrbitIdentifier<'id>,
     max_size_bytes: usize,
 }
 
@@ -332,7 +330,7 @@ impl<'id, P: PuzzleState<'id> + 'id> PruningTables<'id, P> for OrbitPruningTable
         // smallest to largest which makes this work. This essentially populates
         // the smallest pruning tables while dynamically updating how much space
         // is reserved for the remaining orbit tables.
-        let mut maybe_orbit_identifier: Option<P::OrbitIdentifier> = None;
+        let mut maybe_orbit_identifier: Option<P::OrbitIdentifier<'id>> = None;
         for (orbit_index, branded_orbit_def) in generate_metas
             .puzzle_def
             .sorted_orbit_defs_slice_view()
@@ -437,7 +435,9 @@ macro_rules! table_fn {
             info!(start!("Generating {}"), stringify!($table));
             let start = Instant::now();
             let (table, used_size_bytes) =
-                $table::<$storage<{ $exact }>, P::OrbitIdentifier>::try_generate(generate_meta)?;
+                $table::<$storage<{ $exact }>, P::OrbitIdentifier<'id>>::try_generate(
+                    generate_meta,
+                )?;
             let generated = (
                 Box::new(table) as Box<dyn OrbitPruningTable<_>>,
                 used_size_bytes,
@@ -685,14 +685,15 @@ impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend<EXACT> {
     }
 }
 
+#[allow(unused)]
 impl<'id, P: PuzzleState<'id>, S: StorageBackend<false>> OrbitPruningTable<'id, P>
-    for ApproximateOrbitPruningTable<'id, S, P::OrbitIdentifier>
+    for ApproximateOrbitPruningTable<'id, S, P::OrbitIdentifier<'id>>
 {
     fn try_generate<'a>(
         generate_meta: OrbitPruningTableGenerationMeta<'id, 'a, P>,
     ) -> Result<
         (
-            ApproximateOrbitPruningTable<'id, S, P::OrbitIdentifier>,
+            ApproximateOrbitPruningTable<'id, S, P::OrbitIdentifier<'id>>,
             usize,
         ),
         (
@@ -736,19 +737,22 @@ unsafe fn knuthm(ori: &mut [u8], orientation_count: NonZeroU8) {
 }
 
 impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<'id, P>
-    for ExactOrbitPruningTable<'id, S, P::OrbitIdentifier>
+    for ExactOrbitPruningTable<'id, S, P::OrbitIdentifier<'id>>
 {
     fn try_generate<'a>(
         generate_meta: OrbitPruningTableGenerationMeta<'id, 'a, P>,
     ) -> Result<
-        (ExactOrbitPruningTable<'id, S, P::OrbitIdentifier>, usize),
+        (
+            ExactOrbitPruningTable<'id, S, P::OrbitIdentifier<'id>>,
+            usize,
+        ),
         (
             OrbitPruningTableGenerationError,
             OrbitPruningTableGenerationMeta<'id, 'a, P>,
         ),
     > {
-        // TODO: properly pick an orbit puzzle type
-        type O<'id> = SliceOrbitPuzzle<'id>;
+        make_guard!(orbit_guard);
+        let id = orbit_guard.into();
 
         let OrbitPruningTableGenerationMeta {
             puzzle_def,
@@ -757,7 +761,11 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
             max_size_bytes,
         } = generate_meta;
 
-        let branded_orbit_def = orbit_identifier.branded_orbit_def();
+        let rebranded_orbit_identifier: <<P as PuzzleState<'_>>::OrbitIdentifier<'_> as Rebrand<'_>>::Rebranded<'_> = orbit_identifier.rebrand(id);
+
+        let orbit_puzzle = P::pick_orbit_puzzle(rebranded_orbit_identifier);
+
+        let branded_orbit_def = rebranded_orbit_identifier.branded_orbit_def();
         // TODO: make this common for all pruning tables
         let piece_count = branded_orbit_def.inner.piece_count.get();
 
@@ -783,7 +791,8 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
 
         let puzzle_solved = puzzle_def.new_solved_state();
         let (perm, ori) = puzzle_solved.orbit_bytes(orbit_identifier);
-        let orbit_solved = O::from_orbit_transformation_unchecked(perm, ori, branded_orbit_def);
+        let orbit_solved =
+            orbit_puzzle.from_orbit_transformation_unchecked(perm, ori, branded_orbit_def);
 
         let orbit_move_class_indicies = puzzle_def
             .move_classes
@@ -794,7 +803,7 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
                 let (perm, ori) = puzzle_def.moves[move_class]
                     .puzzle_state()
                     .orbit_bytes(orbit_identifier);
-                if O::from_orbit_transformation_unchecked(perm, ori, branded_orbit_def)
+                if orbit_puzzle.from_orbit_transformation_unchecked(perm, ori, branded_orbit_def)
                     == orbit_solved
                 {
                     None
@@ -810,7 +819,7 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
             .filter_map(|move_| {
                 if orbit_move_class_indicies.contains(&move_.move_class_index()) {
                     let (perm, ori) = move_.puzzle_state().orbit_bytes(orbit_identifier);
-                    Some(O::from_orbit_transformation_unchecked(
+                    Some(orbit_puzzle.from_orbit_transformation_unchecked(
                         perm,
                         ori,
                         branded_orbit_def,
@@ -823,7 +832,7 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
 
         let mut orbit_result = orbit_solved.clone();
 
-        let mut aux_mem = O::new_aux_mem(branded_orbit_def);
+        let mut aux_mem = P::new_aux_mem(puzzle_def.sorted_orbit_defs_slice_view()).rebrand(id);
         let mut depth = 0;
         let mut vacant_entry_count = entry_count;
 
@@ -863,8 +872,11 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
                         continue;
                     }
 
-                    let curr_state =
-                        O::from_orbit_transformation_unchecked(&perm, &ori, branded_orbit_def);
+                    let curr_state = orbit_solved.from_orbit_transformation_unchecked(
+                        &perm,
+                        &ori,
+                        branded_orbit_def,
+                    );
                     if depth == 0 {
                         if curr_state.induces_sorted_cycle_type(
                             sorted_cycle_type_orbit,
@@ -881,7 +893,9 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
                     }
 
                     for move_ in &orbit_moves {
-                        orbit_result.replace_compose(&curr_state, move_, branded_orbit_def);
+                        unsafe {
+                            orbit_result.replace_compose(&curr_state, move_, branded_orbit_def)
+                        };
                         let new_hash = orbit_result.exact_hasher(branded_orbit_def);
                         if table.storage_backend.heuristic_hash(new_hash).is_vacant() {
                             table
@@ -924,12 +938,15 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
 
 #[allow(unused)]
 impl<'id, P: PuzzleState<'id>> OrbitPruningTable<'id, P>
-    for CycleTypeOrbitPruningTable<'id, P::OrbitIdentifier>
+    for CycleTypeOrbitPruningTable<'id, P::OrbitIdentifier<'id>>
 {
     fn try_generate<'a>(
         generate_meta: OrbitPruningTableGenerationMeta<'id, 'a, P>,
     ) -> Result<
-        (CycleTypeOrbitPruningTable<'id, P::OrbitIdentifier>, usize),
+        (
+            CycleTypeOrbitPruningTable<'id, P::OrbitIdentifier<'id>>,
+            usize,
+        ),
         (
             OrbitPruningTableGenerationError,
             OrbitPruningTableGenerationMeta<'id, 'a, P>,
