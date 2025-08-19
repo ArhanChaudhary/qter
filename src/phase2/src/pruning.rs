@@ -753,7 +753,7 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
             max_size_bytes,
         } = generate_meta;
 
-        let orbit_puzzle = P::pick_orbit_puzzle(orbit_identifier);
+        let orbit_puzzle_solved = P::pick_orbit_puzzle(orbit_identifier);
 
         let orbit_def = orbit_identifier.orbit_def();
         // TODO: make this common for all pruning tables
@@ -779,10 +779,6 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
             _id: puzzle_def.id(),
         };
 
-        let puzzle_solved = puzzle_def.new_solved_state();
-        let (perm, ori) = puzzle_solved.orbit_bytes(orbit_identifier);
-        let orbit_solved = orbit_puzzle.from_orbit_transformation_unchecked(perm, ori, orbit_def);
-
         let orbit_move_class_indicies = puzzle_def
             .move_classes
             .iter()
@@ -792,8 +788,8 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
                 let (perm, ori) = puzzle_def.moves[move_class]
                     .puzzle_state()
                     .orbit_bytes(orbit_identifier);
-                if orbit_puzzle.from_orbit_transformation_unchecked(perm, ori, orbit_def)
-                    == orbit_solved
+                if orbit_puzzle_solved.from_orbit_transformation_unchecked(perm, ori, orbit_def)
+                    == orbit_puzzle_solved
                 {
                     None
                 } else {
@@ -808,14 +804,17 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
             .filter_map(|move_| {
                 if orbit_move_class_indicies.contains(&move_.move_class_index()) {
                     let (perm, ori) = move_.puzzle_state().orbit_bytes(orbit_identifier);
-                    Some(orbit_puzzle.from_orbit_transformation_unchecked(perm, ori, orbit_def))
+                    Some(
+                        orbit_puzzle_solved
+                            .from_orbit_transformation_unchecked(perm, ori, orbit_def),
+                    )
                 } else {
                     None
                 }
             })
             .collect_vec();
 
-        let mut orbit_result = orbit_solved.clone();
+        let mut orbit_result = orbit_puzzle_solved.clone();
 
         let mut aux_mem = P::new_aux_mem(puzzle_def.sorted_orbit_defs_slice_view());
         let mut depth = 0;
@@ -857,8 +856,8 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
                         continue;
                     }
 
-                    let curr_state =
-                        orbit_solved.from_orbit_transformation_unchecked(&perm, &ori, orbit_def);
+                    let curr_state = orbit_puzzle_solved
+                        .from_orbit_transformation_unchecked(&perm, &ori, orbit_def);
                     if depth == 0 {
                         if unsafe {
                             curr_state.induces_sorted_cycle_type(
@@ -902,7 +901,7 @@ impl<'id, P: PuzzleState<'id> + 'id, S: StorageBackend<true>> OrbitPruningTable<
             #[allow(clippy::cast_precision_loss)]
             let percent = (entry_count - vacant_entry_count) as f64 / entry_count as f64 * 100.0;
             debug!(
-                working!("Pruning table depth {}: {}\t/{} ({:.2}%)"),
+                working!("Pruning table depth {}: {}\tof {} ({:.2}%)"),
                 depth,
                 entry_count - vacant_entry_count,
                 entry_count,

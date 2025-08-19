@@ -1,21 +1,15 @@
-//! SIMD optimized implementations for 3x3 orbits during pruning table
-//! generation.
-
 use crate::orbit_puzzle::{OrbitPuzzleStateImplementor, SpecializedOrbitPuzzleState};
 use std::{hint::unreachable_unchecked, num::NonZeroU8};
 
-pub mod avx2;
-pub mod simd8and16;
-
 #[derive(PartialEq, Clone, Hash)]
-pub struct Cube3Edges;
+pub struct CubeNCorners;
 
-impl SpecializedOrbitPuzzleState for Cube3Edges {
+impl SpecializedOrbitPuzzleState for CubeNCorners {
     unsafe fn from_implementor_enum_unchecked(
         implementor_enum: &OrbitPuzzleStateImplementor,
     ) -> &Self {
         match implementor_enum {
-            OrbitPuzzleStateImplementor::Cube3Edges(e) => e,
+            OrbitPuzzleStateImplementor::CubeNCorners(c) => c,
             _ => unsafe { unreachable_unchecked() },
         }
     }

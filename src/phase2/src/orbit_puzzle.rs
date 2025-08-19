@@ -1,9 +1,6 @@
 use super::FACT_UNTIL_19;
 use crate::{
-    orbit_puzzle::{
-        cube3::{Cube3Corners, Cube3Edges},
-        slice_orbit_puzzle::SliceOrbitPuzzle,
-    },
+    orbit_puzzle::{cube3::Cube3Edges, cubeN::CubeNCorners, slice_orbit_puzzle::SliceOrbitPuzzle},
     puzzle::{AuxMemRefMut, OrbitDef},
 };
 use enum_dispatch::enum_dispatch;
@@ -15,10 +12,12 @@ use std::{
 };
 
 pub mod cube3;
+#[allow(non_snake_case)]
+pub mod cubeN;
 pub mod slice_orbit_puzzle;
 
 #[enum_dispatch(OrbitPuzzleStateImplementors)]
-pub trait OrbitPuzzleState: OrbitPuzzleStateExtra + Clone {
+pub trait OrbitPuzzleState: Clone {
     unsafe fn replace_compose(
         &mut self,
         a: &OrbitPuzzleStateImplementor,
@@ -34,13 +33,15 @@ pub trait OrbitPuzzleState: OrbitPuzzleStateExtra + Clone {
     unsafe fn exact_hasher(&self, orbit_def: OrbitDef) -> u64;
 }
 
-pub trait OrbitPuzzleStateExtra {
+pub trait SpecializedOrbitPuzzleState {
+    unsafe fn from_implementor_enum_unchecked(
+        implementor_enum: &OrbitPuzzleStateImplementor,
+    ) -> &Self;
+    unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(perm: B, ori: B) -> Self;
+    fn replace_compose(&mut self, a: &Self, b: &Self);
+    fn induces_sorted_cycle_type(&self, sorted_cycle_type_orbit: &[(NonZeroU8, bool)]) -> bool;
+    fn exact_hasher(&self) -> u64;
     fn approximate_hash(&self) -> impl Hash;
-    unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
-        perm: B,
-        ori: B,
-        orbit_def: OrbitDef,
-    ) -> Self;
 
     unsafe fn new_solved_state(orbit_def: OrbitDef) -> Self
     where
@@ -48,7 +49,7 @@ pub trait OrbitPuzzleStateExtra {
     {
         let perm = (0..orbit_def.piece_count.get()).collect_vec();
         let ori = vec![0; orbit_def.piece_count.get() as usize];
-        unsafe { Self::from_orbit_transformation_unchecked(perm, ori, orbit_def) }
+        unsafe { Self::from_orbit_transformation_unchecked(perm, ori) }
     }
 }
 
@@ -57,32 +58,20 @@ pub trait OrbitPuzzleStateExtra {
 pub enum OrbitPuzzleStateImplementor {
     SliceOrbitPuzzle(SliceOrbitPuzzle),
     Cube3Edges(Cube3Edges),
-    Cube3Corners(Cube3Corners),
+    CubeNCorners(CubeNCorners),
 }
 
-impl OrbitPuzzleStateExtra for OrbitPuzzleStateImplementor {
-    fn approximate_hash(&self) -> impl Hash {
+impl OrbitPuzzleStateImplementor {
+    pub fn approximate_hash(&self) -> impl Hash {
         match self {
             OrbitPuzzleStateImplementor::SliceOrbitPuzzle(s) => {
                 fxhash::hash64(s.approximate_hash())
             }
-            OrbitPuzzleStateImplementor::Cube3Edges(e) => fxhash::hash64(&e.approximate_hash()),
-            OrbitPuzzleStateImplementor::Cube3Corners(c) => fxhash::hash64(&c.approximate_hash()),
+            OrbitPuzzleStateImplementor::Cube3Edges(e) => fxhash::hash64(e.approximate_hash()),
+            OrbitPuzzleStateImplementor::CubeNCorners(c) => fxhash::hash64(c.approximate_hash()),
         }
     }
 
-    unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
-        _perm: B,
-        _ori: B,
-        _orbit_def: OrbitDef,
-    ) -> Self {
-        unimplemented!(
-            "Please use <Self as OrbitPuzzleStateImplementor>::from_orbit_transformation_unchecked"
-        )
-    }
-}
-
-impl OrbitPuzzleStateImplementor {
     #[allow(clippy::wrong_self_convention)]
     pub fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
         &self,
@@ -95,12 +84,38 @@ impl OrbitPuzzleStateImplementor {
                 SliceOrbitPuzzle::from_orbit_transformation_unchecked(perm, ori, orbit_def).into()
             },
             OrbitPuzzleStateImplementor::Cube3Edges(_) => unsafe {
-                Cube3Edges::from_orbit_transformation_unchecked(perm, ori, orbit_def).into()
+                Cube3Edges::from_orbit_transformation_unchecked(perm, ori).into()
             },
-            OrbitPuzzleStateImplementor::Cube3Corners(_) => unsafe {
-                Cube3Corners::from_orbit_transformation_unchecked(perm, ori, orbit_def).into()
+            OrbitPuzzleStateImplementor::CubeNCorners(_) => unsafe {
+                CubeNCorners::from_orbit_transformation_unchecked(perm, ori).into()
             },
         }
+    }
+}
+
+impl<C: SpecializedOrbitPuzzleState + Clone> OrbitPuzzleState for C {
+    unsafe fn replace_compose(
+        &mut self,
+        a: &OrbitPuzzleStateImplementor,
+        b: &OrbitPuzzleStateImplementor,
+        _orbit_def: OrbitDef,
+    ) {
+        let a = unsafe { Self::from_implementor_enum_unchecked(a) };
+        let b = unsafe { Self::from_implementor_enum_unchecked(b) };
+        self.replace_compose(a, b);
+    }
+
+    unsafe fn induces_sorted_cycle_type(
+        &self,
+        sorted_cycle_type: &[(NonZeroU8, bool)],
+        _orbit_def: OrbitDef,
+        _aux_mem: AuxMemRefMut<'_, '_>,
+    ) -> bool {
+        self.induces_sorted_cycle_type(sorted_cycle_type)
+    }
+
+    unsafe fn exact_hasher(&self, _orbit_def: OrbitDef) -> u64 {
+        self.exact_hasher()
     }
 }
 

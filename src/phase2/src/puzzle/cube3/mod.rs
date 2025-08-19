@@ -4,8 +4,9 @@
 pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
-    use crate::orbit_puzzle::cube3::{Cube3Corners, Cube3Edges};
-    use crate::orbit_puzzle::{OrbitPuzzleStateExtra, OrbitPuzzleStateImplementor};
+    use crate::orbit_puzzle::cube3::Cube3Edges;
+    use crate::orbit_puzzle::cubeN::CubeNCorners;
+    use crate::orbit_puzzle::{OrbitPuzzleStateImplementor, SpecializedOrbitPuzzleState};
     use crate::puzzle::{
         AuxMem, AuxMemRefMut, BrandedOrbitDef, OrbitDef, OrbitIdentifier, PuzzleState,
         SortedCycleTypeRef, SortedOrbitDefsRef, TransformationsMeta, TransformationsMetaError,
@@ -226,7 +227,7 @@ mod common {
         ) -> OrbitPuzzleStateImplementor {
             match orbit_identifier {
                 Cube3OrbitType::Corners => unsafe {
-                    Cube3Corners::new_solved_state(orbit_identifier.orbit_def()).into()
+                    CubeNCorners::new_solved_state(orbit_identifier.orbit_def()).into()
                 },
                 Cube3OrbitType::Edges => unsafe {
                     Cube3Edges::new_solved_state(orbit_identifier.orbit_def()).into()

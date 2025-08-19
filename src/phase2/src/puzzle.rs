@@ -65,9 +65,7 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
     /// Return a representation of the puzzle state that can be soundly hashed.
     fn approximate_hash_orbit(&self, orbit_identifier: Self::OrbitIdentifier) -> impl Hash;
 
-    fn pick_orbit_puzzle(
-        orbit_identifier: Self::OrbitIdentifier,
-    ) -> OrbitPuzzleStateImplementor;
+    fn pick_orbit_puzzle(orbit_identifier: Self::OrbitIdentifier) -> OrbitPuzzleStateImplementor;
 }
 
 /// Get a usize that "identifies" an orbit. This is implementor-specific.

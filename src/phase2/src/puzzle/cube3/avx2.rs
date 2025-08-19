@@ -576,7 +576,6 @@ impl Cube3Interface for Cube3 {
         }
     }
 
-    #[allow(refining_impl_trait_reachable)]
     fn approximate_hash_orbit(&self, orbit_type: Cube3OrbitType) -> u8x16 {
         // TODO: is it faster to use an enum?
         match orbit_type {

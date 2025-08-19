@@ -7,7 +7,7 @@ use super::{
 use crate::{
     FACT_UNTIL_19, SliceView,
     orbit_puzzle::{
-        OrbitPuzzleStateExtra, OrbitPuzzleStateImplementor,
+        OrbitPuzzleStateImplementor,
         slice_orbit_puzzle::{
             SliceOrbitPuzzle, induces_sorted_cycle_type_slice_orbit, replace_compose_slice_orbit,
         },
@@ -15,6 +15,7 @@ use crate::{
     puzzle::{AuxMem, AuxMemRefMut, OrbitDef, SortedCycleType, SortedCycleTypeRef},
 };
 use generativity::Id;
+use itertools::Itertools;
 use std::{hint::assert_unchecked, slice};
 
 #[derive(Clone, PartialEq, Debug)]
@@ -154,7 +155,6 @@ impl<'id, const N: usize> PuzzleState<'id> for StackPuzzle<'id, N> {
         orbit_bytes_slice(&self.0, orbit_identifier)
     }
 
-    #[allow(refining_impl_trait_reachable)]
     fn approximate_hash_orbit(&self, orbit_identifier: SliceOrbitIdentifier<'id>) -> &[u8] {
         approximate_hash_orbit_slice(&self.0, orbit_identifier)
     }
@@ -237,7 +237,6 @@ impl<'id> PuzzleState<'id> for HeapPuzzle<'id> {
         orbit_bytes_slice(&self.0, orbit_identifier)
     }
 
-    #[allow(refining_impl_trait_reachable)]
     fn approximate_hash_orbit(&self, orbit_identifier: SliceOrbitIdentifier<'id>) -> &[u8] {
         approximate_hash_orbit_slice(&self.0, orbit_identifier)
     }
@@ -486,8 +485,10 @@ pub(crate) unsafe fn exact_hasher_orbit_bytes(perm: &[u8], ori: &[u8], orbit_def
 }
 
 fn pick_orbit_puzzle_slice(orbit_identifier: SliceOrbitIdentifier) -> OrbitPuzzleStateImplementor {
-    let ret = unsafe { SliceOrbitPuzzle::new_solved_state(orbit_identifier.orbit_def()) };
-    ret.into()
+    let orbit_def = orbit_identifier.orbit_def();
+    let perm = (0..orbit_def.piece_count.get()).collect_vec();
+    let ori = vec![0; orbit_def.piece_count.get() as usize];
+    unsafe { SliceOrbitPuzzle::from_orbit_transformation_unchecked(perm, ori, orbit_def).into() }
 }
 
 impl<'id> HeapPuzzle<'id> {

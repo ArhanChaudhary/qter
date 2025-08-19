@@ -3,7 +3,7 @@
 
 use super::OrbitPuzzleState;
 use crate::{
-    orbit_puzzle::{OrbitPuzzleStateExtra, OrbitPuzzleStateImplementor},
+    orbit_puzzle::OrbitPuzzleStateImplementor,
     puzzle::{
         AuxMemRefMut, OrbitDef,
         slice_puzzle::{exact_hasher_orbit_bytes, slice_orbit_size},
@@ -60,8 +60,8 @@ impl OrbitPuzzleState for SliceOrbitPuzzle {
     }
 }
 
-impl OrbitPuzzleStateExtra for SliceOrbitPuzzle {
-    unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
+impl SliceOrbitPuzzle {
+    pub unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
         perm: B,
         ori: B,
         orbit_def: OrbitDef,
@@ -75,8 +75,7 @@ impl OrbitPuzzleStateExtra for SliceOrbitPuzzle {
         SliceOrbitPuzzle(slice_orbit_states.into_boxed_slice())
     }
 
-    #[allow(refining_impl_trait)]
-    fn approximate_hash(&self) -> &Self {
+    pub fn approximate_hash(&self) -> &Self {
         self
     }
 }
