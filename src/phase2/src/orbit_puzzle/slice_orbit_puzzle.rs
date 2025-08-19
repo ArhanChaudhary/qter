@@ -61,7 +61,7 @@ impl OrbitPuzzleState for SliceOrbitPuzzle {
 }
 
 impl SliceOrbitPuzzle {
-    pub unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(
+    pub unsafe fn from_orbit_transformation_and_def_unchecked<B: AsRef<[u8]>>(
         perm: B,
         ori: B,
         orbit_def: OrbitDef,

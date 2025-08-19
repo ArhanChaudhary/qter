@@ -488,7 +488,9 @@ fn pick_orbit_puzzle_slice(orbit_identifier: SliceOrbitIdentifier) -> OrbitPuzzl
     let orbit_def = orbit_identifier.orbit_def();
     let perm = (0..orbit_def.piece_count.get()).collect_vec();
     let ori = vec![0; orbit_def.piece_count.get() as usize];
-    unsafe { SliceOrbitPuzzle::from_orbit_transformation_unchecked(perm, ori, orbit_def).into() }
+    unsafe {
+        SliceOrbitPuzzle::from_orbit_transformation_and_def_unchecked(perm, ori, orbit_def).into()
+    }
 }
 
 impl<'id> HeapPuzzle<'id> {

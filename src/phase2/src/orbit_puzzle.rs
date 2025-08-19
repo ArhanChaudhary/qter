@@ -43,6 +43,16 @@ pub trait SpecializedOrbitPuzzleState {
     fn exact_hasher(&self) -> u64;
     fn approximate_hash(&self) -> impl Hash;
 
+    unsafe fn from_orbit_transformation_and_def_unchecked<B: AsRef<[u8]>>(
+        perm: B,
+        ori: B,
+        _orbit_def: OrbitDef,
+    ) -> Self
+    where
+        Self: Sized,
+    {
+        unsafe { Self::from_orbit_transformation_unchecked(perm, ori) }
+    }
     unsafe fn new_solved_state(orbit_def: OrbitDef) -> Self
     where
         Self: Sized,
@@ -56,9 +66,9 @@ pub trait SpecializedOrbitPuzzleState {
 #[enum_dispatch(OrbitPuzzleState)]
 #[derive(PartialEq, Clone)]
 pub enum OrbitPuzzleStateImplementor {
-    SliceOrbitPuzzle(SliceOrbitPuzzle),
-    Cube3Edges(Cube3Edges),
-    CubeNCorners(CubeNCorners),
+    SliceOrbitPuzzle,
+    Cube3Edges,
+    CubeNCorners,
 }
 
 impl OrbitPuzzleStateImplementor {
@@ -81,13 +91,15 @@ impl OrbitPuzzleStateImplementor {
     ) -> Self {
         match self {
             OrbitPuzzleStateImplementor::SliceOrbitPuzzle(_) => unsafe {
-                SliceOrbitPuzzle::from_orbit_transformation_unchecked(perm, ori, orbit_def).into()
+                SliceOrbitPuzzle::from_orbit_transformation_and_def_unchecked(perm, ori, orbit_def)
+                    .into()
             },
             OrbitPuzzleStateImplementor::Cube3Edges(_) => unsafe {
-                Cube3Edges::from_orbit_transformation_unchecked(perm, ori).into()
+                Cube3Edges::from_orbit_transformation_and_def_unchecked(perm, ori, orbit_def).into()
             },
             OrbitPuzzleStateImplementor::CubeNCorners(_) => unsafe {
-                CubeNCorners::from_orbit_transformation_unchecked(perm, ori).into()
+                CubeNCorners::from_orbit_transformation_and_def_unchecked(perm, ori, orbit_def)
+                    .into()
             },
         }
     }
