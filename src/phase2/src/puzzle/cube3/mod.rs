@@ -71,7 +71,7 @@ mod common {
     }
 
     /// The interface for a 3x3 cube puzzle state
-    pub trait Cube3Interface: Clone + PartialEq + Debug {
+    pub trait Cube3Interface: Clone + PartialEq + Debug + 'static {
         fn from_corner_and_edge_transformations(
             corners_transformation: CornersTransformation<'_>,
             edges_transformation: EdgesTransformation<'_>,
@@ -135,7 +135,7 @@ mod common {
         type OrbitBytesBuf<'a>
             = [u8; 16]
         where
-            C: 'a + 'id;
+            C: 'a;
         type OrbitIdentifier = Cube3OrbitType;
 
         fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id> {

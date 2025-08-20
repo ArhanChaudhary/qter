@@ -11,10 +11,10 @@ pub mod slice_puzzle;
 /// The puzzle state interface at the heart of the cycle combination solver.
 /// Users may either use the generic `HeapPuzzle` implementor for any `KSolve`
 /// definition or define fast puzzle-specific implementations, like Cube3.
-pub trait PuzzleState<'id>: Clone + PartialEq + Debug {
+pub trait PuzzleState<'id>: Clone + PartialEq + Debug + 'id {
     type OrbitBytesBuf<'a>: AsRef<[u8]>
     where
-        Self: 'a + 'id;
+        Self: 'a;
     type OrbitIdentifier: OrbitIdentifier<'id> + Copy + Debug;
 
     /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
