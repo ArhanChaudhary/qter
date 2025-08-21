@@ -178,6 +178,8 @@ impl fmt::Debug for Cube3 {
 }
 
 impl Cube3Interface for Cube3 {
+    type OrbitBytesBuf = u8x16;
+
     fn from_corner_and_edge_transformations(
         corners_transformation: CornersTransformation,
         edges_transformation: EdgesTransformation,
@@ -541,14 +543,14 @@ impl Cube3Interface for Cube3 {
             && edge_cycle_type_pointer == sorted_edges_cycle_type.len().wrapping_sub(1)
     }
 
-    fn orbit_bytes(&self, orbit_type: Cube3OrbitType) -> ([u8; 16], [u8; 16]) {
+    fn orbit_bytes(&self, orbit_type: Cube3OrbitType) -> (u8x16, u8x16) {
         let orbit = match orbit_type {
             Cube3OrbitType::Corners => self.0.extract::<CORNER_START, 16>(),
             Cube3OrbitType::Edges => self.0.extract::<EDGE_START, 16>(),
         };
         let perm = orbit & PERM_MASK_2;
         let ori = orbit >> 4;
-        (perm.to_array(), ori.to_array())
+        (perm, ori)
     }
 
     fn exact_hasher_orbit(&self, orbit_type: Cube3OrbitType) -> u64 {

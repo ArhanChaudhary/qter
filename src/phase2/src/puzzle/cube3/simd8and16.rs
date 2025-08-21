@@ -62,6 +62,8 @@ const CORNER_PERM_MASK: u8x8 = u8x8::splat(0b0000_0111);
 const BLANK_EP: u8x16 = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15]);
 
 impl Cube3Interface for UncompressedCube3 {
+    type OrbitBytesBuf = u8x16;
+
     fn from_corner_and_edge_transformations(
         corners_transformation: CornersTransformation,
         edges_transformation: EdgesTransformation,
@@ -195,16 +197,10 @@ impl Cube3Interface for UncompressedCube3 {
         induces_sorted_cycle_type(sorted_cycle_type, *self)
     }
 
-    fn orbit_bytes(&self, orbit_type: Cube3OrbitType) -> ([u8; 16], [u8; 16]) {
+    fn orbit_bytes(&self, orbit_type: Cube3OrbitType) -> (u8x16, u8x16) {
         match orbit_type {
-            Cube3OrbitType::Corners => {
-                let mut perm = [0; 16];
-                let mut ori = [0; 16];
-                self.cp.copy_to_slice(&mut perm);
-                self.co.copy_to_slice(&mut ori);
-                (perm, ori)
-            }
-            Cube3OrbitType::Edges => (self.ep.to_array(), self.eo.to_array()),
+            Cube3OrbitType::Corners => (self.cp.resize::<16>(0), self.co.resize::<16>(0)),
+            Cube3OrbitType::Edges => (self.ep, self.eo),
         }
     }
 
@@ -327,6 +323,8 @@ impl Debug for Cube3 {
 }
 
 impl Cube3Interface for Cube3 {
+    type OrbitBytesBuf = u8x16;
+
     fn from_corner_and_edge_transformations(
         corners_transformation: CornersTransformation,
         edges_transformation: EdgesTransformation,
@@ -428,21 +426,17 @@ impl Cube3Interface for Cube3 {
         induces_sorted_cycle_type(sorted_cycle_type, UncompressedCube3 { ep, eo, cp, co })
     }
 
-    fn orbit_bytes(&self, orbit_type: Cube3OrbitType) -> ([u8; 16], [u8; 16]) {
+    fn orbit_bytes(&self, orbit_type: Cube3OrbitType) -> (u8x16, u8x16) {
         match orbit_type {
             Cube3OrbitType::Corners => {
                 let perm = self.corners & CORNER_PERM_MASK;
                 let ori = self.corners >> 3;
-                let mut perm_arr = [0; 16];
-                let mut ori_arr = [0; 16];
-                perm.copy_to_slice(&mut perm_arr);
-                ori.copy_to_slice(&mut ori_arr);
-                (perm_arr, ori_arr)
+                (perm.resize::<16>(0), ori.resize::<16>(0))
             }
             Cube3OrbitType::Edges => {
                 let perm = self.edges & EDGE_PERM_MASK;
                 let ori = self.edges >> 4;
-                (perm.to_array(), ori.to_array())
+                (perm, ori)
             }
         }
     }

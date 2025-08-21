@@ -73,6 +73,8 @@ mod common {
 
     /// The interface for a 3x3 cube puzzle state
     pub trait Cube3Interface: Clone + PartialEq + Debug + 'static {
+        type OrbitBytesBuf: AsRef<[u8]>;
+
         fn from_corner_and_edge_transformations(
             corners_transformation: CornersTransformation<'_>,
             edges_transformation: EdgesTransformation<'_>,
@@ -90,7 +92,10 @@ mod common {
         /// Convert an orbit of the cube state into a pair of (perm, ori) bytes.
         /// For implementation reasons that should ideally be abstracted away,
         /// we have to make the arrays length 16.
-        fn orbit_bytes(&self, orbit_type: Cube3OrbitType) -> ([u8; 16], [u8; 16]);
+        fn orbit_bytes(
+            &self,
+            orbit_type: Cube3OrbitType,
+        ) -> (Self::OrbitBytesBuf, Self::OrbitBytesBuf);
 
         /// Exact hasher for an orbit. Note that this is different from a
         /// "hash", which in Rust terminology is something that implements Hash
@@ -134,8 +139,10 @@ mod common {
 
     macro_rules! impl_puzzle_state_for_cube3 {
         ($($cube3:path),* $(,)?) => {$(
-            impl<'id> PuzzleState<'id> for $cube3 {
-                type OrbitBytesBuf<'a> = [u8; 16];
+            impl<'id> PuzzleState<'id> for $cube3
+                where $cube3: Cube3Interface
+            {
+                type OrbitBytesBuf<'a> = <$cube3 as Cube3Interface>::OrbitBytesBuf;
                 type OrbitIdentifier = Cube3OrbitType;
 
                 fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id> {
@@ -210,7 +217,7 @@ mod common {
                     Cube3Interface::induces_sorted_cycle_type(self, sorted_cycle_type)
                 }
 
-                fn orbit_bytes(&self, orbit_identifier: Cube3OrbitType) -> ([u8; 16], [u8; 16]) {
+                fn orbit_bytes(&self, orbit_identifier: Cube3OrbitType) -> (Self::OrbitBytesBuf<'_>, Self::OrbitBytesBuf<'_>) {
                     Cube3Interface::orbit_bytes(self, orbit_identifier)
                 }
 

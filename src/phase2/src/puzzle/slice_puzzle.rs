@@ -5,7 +5,7 @@ use super::{
     TransformationsMetaError,
 };
 use crate::{
-     FACT_UNTIL_19, SliceView,
+    FACT_UNTIL_19, SliceView,
     orbit_puzzle::{
         OrbitPuzzleStateImplementor,
         slice_orbit_puzzle::{
