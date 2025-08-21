@@ -4,6 +4,8 @@
 pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
 
 mod common {
+    //! Common traits and types for the parent module.
+
     use crate::orbit_puzzle::cube3::Cube3Edges;
     use crate::orbit_puzzle::cubeN::CubeNCorners;
     use crate::orbit_puzzle::{OrbitPuzzleStateImplementor, SpecializedOrbitPuzzleState};
@@ -75,6 +77,11 @@ mod common {
     pub trait Cube3Interface: Clone + PartialEq + Debug + 'static {
         type OrbitBytesBuf: AsRef<[u8]>;
 
+        /// Create a Cube3 state from a corners and edges transformation. We
+        /// go through the hassle of newtyping for an important reason. The
+        /// safety of many implementations relies on the transformation's
+        /// permutation and orientation vectors being valid. Newtyping makes the
+        /// construction of an invalid state impossible.
         fn from_corner_and_edge_transformations(
             corners_transformation: CornersTransformation<'_>,
             edges_transformation: EdgesTransformation<'_>,

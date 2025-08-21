@@ -24,12 +24,16 @@ use std::{
 
 /// An uncompressed 3x3 cube representation. This is a combination of
 /// (edge permutation, edge orientation, corner permutation, corner orientation)
-/// which uniquely identifies any cube state
+/// which uniquely identifies any cube state.
 #[derive(Copy, Clone, Debug, PartialEq, Hash)]
 pub struct UncompressedCube3 {
+    /// The edge permutation, of which the first 12 bytes only are used.
     ep: u8x16,
+    /// The edge orientation, of which the first 12 bytes only are used.
     eo: u8x16,
+    /// The corner permutation.
     cp: u8x8,
+    /// The corner orientation.
     co: u8x8,
 }
 
@@ -42,7 +46,7 @@ pub enum UncompressedCube3Orbit {
     Edges((u8x16, u8x16)),
 }
 
-/// A lookup table used to correct orientation during composition
+/// A lookup table used to correct orientation during composition.
 const CO_MOD_SWIZZLE: u8x8 = u8x8::from_array([0, 1, 2, 0, 1, 0, 0, 0]);
 /// A lookup table used to inverse a corner orientation.
 const CO_INV_SWIZZLE: u8x8 = u8x8::from_array([0, 2, 1, 0, 0, 0, 0, 0]);
@@ -51,14 +55,15 @@ const EP_IDENTITY: u8x16 =
     u8x16::from_array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
 /// The identity permutation for corners.
 const CP_IDENTITY: u8x8 = u8x8::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
-
-/// Masks for edge and corner orientations and permutations.
+/// The edge orientation mask for `Cube3`.
 const EDGE_ORI_MASK: u8x16 = u8x16::splat(0b0001_0000);
+/// The edge permutation mask for `Cube3`.
 const EDGE_PERM_MASK: u8x16 = u8x16::splat(0b0000_1111);
+/// The corner orientation mask for `Cube3`.
 const CORNER_ORI_MASK: u8x8 = u8x8::splat(0b0001_1000);
+/// The corner permutation mask for `Cube3`.
 const CORNER_PERM_MASK: u8x8 = u8x8::splat(0b0000_0111);
-
-/// An unitialized vector of edge permutation
+/// An unitialized vector of edge permutation.
 const BLANK_EP: u8x16 = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15]);
 
 impl Cube3Interface for UncompressedCube3 {
@@ -286,13 +291,18 @@ impl Cube3Interface for UncompressedCube3 {
 /// swizzling to permute the values in place.
 #[derive(PartialEq, Clone)]
 pub struct Cube3 {
+    /// The edges of a 3x3 cube. The bit layout is described above.
     edges: u8x16,
+    /// The corners of a 3x3 cube. The bit layout is described above.
     corners: u8x8,
 }
 
+/// A `Cube3` orbit data type.
 #[derive(Hash)]
 pub enum Cube3Orbit {
+    /// The edges orbit data for `Cube3`.
     Edges(u8x16),
+    /// The corner orbit data for `Cube3`.
     Corners(u8x8),
 }
 
@@ -627,6 +637,8 @@ fn induces_sorted_cycle_type(
 
 #[allow(dead_code)]
 impl UncompressedCube3 {
+    /// An alternative to `replace_inverse` that uses a brute force approach to
+    /// find the inverse of the cube. Not really useful as it is slower.
     fn replace_inverse_brute(&mut self, a: &Self) {
         // Benchmarked on a 2025 Mac M4: 4.25ns
         self.ep = BLANK_EP;
@@ -675,11 +687,14 @@ impl UncompressedCube3 {
         self.co = CO_INV_SWIZZLE.swizzle_dyn(a.co).swizzle_dyn(self.cp);
     }
 
+    /// An alternative to `replace_inverse` that uses a raw permutation
+    /// inversion algorithm. Not really useful as it is slower.
     fn replace_inverse_raw(&mut self, a: &Self) {
         // Benchmarked on a 2025 Mac M4: 3.97ns
 
         for i in 0..12 {
-            // SAFETY: ep is length 12, so i is always in bounds
+            // SAFETY: the permutation vector is guaranteed to be valid indicies
+            // for swizzling
             unsafe {
                 *self
                     .ep
@@ -687,7 +702,8 @@ impl UncompressedCube3 {
                     .get_unchecked_mut(a.ep[i as usize] as usize) = i;
             }
             if i < 8 {
-                // SAFETY: cp is length 8, so i is always in bounds
+                // SAFETY: the permutation vector is guaranteed to be valid
+                // indicies for swizzling
                 unsafe {
                     *self
                         .cp
@@ -703,6 +719,8 @@ impl UncompressedCube3 {
 }
 
 impl Cube3 {
+    /// An alternative to `replace_inverse` that uses a brute force approach to
+    /// find the inverse of the cube. Not really useful as it is slower.
     pub fn replace_inverse_brute(&mut self, a: &Self) {
         // Benchmarked on a 2025 Mac M4: 4.69ns
         let other_ep = a.edges & EDGE_PERM_MASK;
@@ -759,6 +777,8 @@ impl Cube3 {
         self.corners = cp | co;
     }
 
+    /// An alternative to `replace_inverse` that uses a raw permutation
+    /// inversion algorithm. Not really useful as it is slower.
     pub fn replace_inverse_raw(&mut self, a: &Self) {
         // Benchmarked on a 2025 Mac M4: 6.54ns
         let mut ep = BLANK_EP;
@@ -768,11 +788,15 @@ impl Cube3 {
         let other_cp = a.corners & CORNER_PERM_MASK;
 
         for i in 0..12 {
+            // SAFETY: the permutation vector is guaranteed to be valid indices
+            // for swizzling
             unsafe {
                 *ep.as_mut_array()
                     .get_unchecked_mut(other_ep[i as usize] as usize) = i;
             }
             if i < 8 {
+                // SAFETY: the permutation vector is guaranteed to be valid indices
+                // for swizzling
                 unsafe {
                     *cp.as_mut_array()
                         .get_unchecked_mut(other_cp[i as usize] as usize) = i;

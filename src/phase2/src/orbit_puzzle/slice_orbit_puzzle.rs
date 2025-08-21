@@ -11,6 +11,9 @@ use crate::{
 };
 use std::{cmp::Ordering, hint::unreachable_unchecked, num::NonZeroU8};
 
+/// An orbit state of a puzzle that is represented as a slice of bytes. The
+/// memory layout is a permutation vector directly followed by an orientation
+/// vector.
 #[derive(Clone, PartialEq, Debug, Hash)]
 pub struct SliceOrbitPuzzle(Box<[u8]>);
 
@@ -36,7 +39,7 @@ impl OrbitPuzzleState for SliceOrbitPuzzle {
         &self,
         sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
         orbit_def: OrbitDef,
-        aux_mem: AuxMemRefMut,
+        mut aux_mem: AuxMemRefMut,
     ) -> bool {
         // TODO
         unsafe {
@@ -45,7 +48,7 @@ impl OrbitPuzzleState for SliceOrbitPuzzle {
                 0,
                 sorted_cycle_type_orbit,
                 orbit_def,
-                aux_mem.inner.unwrap_unchecked(),
+                aux_mem.aux_mem_unchecked(),
             )
         }
     }
@@ -80,6 +83,13 @@ impl SliceOrbitPuzzle {
     }
 }
 
+/// Compose orbits in two slice puzzle states, `a` and `b`, into
+/// `slice_orbit_states_mut` at the given `base` index.
+///
+/// # Safety
+///
+/// 1) `slice_orbit_states_mut`, `a`, and `b` must all correspond to `orbit_def`
+/// 2) `base` must be a valid index to the start of an orbit
 #[allow(clippy::missing_panics_doc)]
 #[inline]
 pub unsafe fn replace_compose_slice_orbit(
@@ -91,6 +101,9 @@ pub unsafe fn replace_compose_slice_orbit(
 ) {
     let piece_count = orbit_def.piece_count.get() as usize;
     let orientation_count = orbit_def.orientation_count.get();
+    // Permutation vectors and orientation vectors are shuffled
+    // around, based on code from twsearch [1].
+    //
     // [1] https://github.com/cubing/twsearch
     if orientation_count == 1 {
         for i in 0..piece_count {
@@ -121,6 +134,15 @@ pub unsafe fn replace_compose_slice_orbit(
     }
 }
 
+/// Check if a slice puzzle state induces a sorted cycle type.
+///
+/// # Safety
+///
+/// 1) `slice_orbit_states` must correspond to `orbit_def`
+/// 2) `base` must be a valid index to the start of an orbit
+/// 3) `sorted_cycle_type_orbit` must be sorted by cycle length and then by
+///    `is_oriented`
+/// 4) `multi_bv` must be the result of `new_multi_bv` on the same `orbit_def`
 #[inline]
 pub unsafe fn induces_sorted_cycle_type_slice_orbit(
     slice_orbit_state: &[u8],

@@ -84,11 +84,12 @@ use core::arch::x86_64::_mm256_shuffle_epi8;
 #[derive(Clone, Hash)]
 pub struct Cube3(u8x32);
 
-/// Extract the permutation bits from the cube state.
+/// Extract the permutation bits from the cube state for u8x32.
 const PERM_MASK_1: u8x32 = u8x32::splat(0b0000_1111);
+/// Extract the permutation bits from the cube state for u8x16.
 const PERM_MASK_2: u8x16 = u8x16::splat(0b0000_1111);
+/// Extract the permutation bits from the cube state for u8x8.
 const PERM_MASK_3: u8x8 = u8x8::splat(0b0000_1111);
-
 /// Extract the orientation bits from the cube state.
 const ORI_MASK: u8x32 = u8x32::splat(0b0011_0000);
 /// The carry constant used to fix orientation bits after composition.
@@ -111,11 +112,12 @@ const BLANK: u8x32 = u8x32::from_array([
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 8, 9, 10, 11, 12,
     13, 14, 15,
 ]);
-/// The starting index for edge bits
+/// The starting index for edge bits.
 const EDGE_START: usize = 0;
-/// The starting index for corner bits
+/// The starting index for corner bits.
 const CORNER_START: usize = 16;
 
+/// A zero-cost wrapper around `_mm256_shuffle_epi8`.
 fn avx2_swizzle_lo(a: u8x32, b: u8x32) -> u8x32 {
     #[cfg(avx2)]
     // SAFETY: cfg guarantees that AVX2 is available
@@ -579,7 +581,6 @@ impl Cube3Interface for Cube3 {
     }
 
     fn approximate_hash_orbit(&self, orbit_type: Cube3OrbitType) -> u8x16 {
-        // TODO: is it faster to use an enum?
         match orbit_type {
             Cube3OrbitType::Corners => self.0.extract::<CORNER_START, 16>(),
             Cube3OrbitType::Edges => self.0.extract::<EDGE_START, 16>(),
@@ -648,7 +649,10 @@ impl Cube3 {
         // Benchmarked on a 2x Intel Xeon E5-2667 v3: 13.2ns
         fn inner(dst: &mut Cube3, a: &Cube3) {
             let mut perm = BLANK;
+            // LLVM unrolls this loop
             for i in 0..12 {
+                // SAFETY: the permutation vector is guaranteed to be valid
+                // indicies for swizzling
                 unsafe {
                     *perm
                         .as_mut_array()

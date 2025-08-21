@@ -29,9 +29,13 @@ trait SlicePuzzle<'id>: PartialEq + Debug + Clone + 'id {
         Self: Sized;
 }
 
+/// A puzzle state represented as a slice of bytes on the stack. Each orbit is
+/// represented as a permutation vector followed by an orientation vector.
 #[derive(Clone, PartialEq, Debug)]
 pub struct StackPuzzle<'id, const N: usize>([u8; N], Id<'id>);
 
+/// A puzzle state represented as a slice of bytes on the heap. Each orbit is
+/// represented as a permutation vector followed by an orientation vector.
 #[derive(Clone, PartialEq, Debug)]
 pub struct HeapPuzzle<'id>(Box<[u8]>, Id<'id>);
 

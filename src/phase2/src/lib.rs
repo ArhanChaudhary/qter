@@ -1,3 +1,5 @@
+//! Phase 2 of the cycle combination solver.
+
 #![feature(test, slice_index_methods, portable_simd, abi_vectorcall)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::similar_names, clippy::too_many_lines, refining_impl_trait)]
@@ -47,8 +49,9 @@ pub trait SliceViewMut {
     fn slice_view_mut(&mut self) -> Self::SliceMut<'_>;
 }
 
-// We can do one more however it will overflow when adding more to it which is
-// common in context
+/// A precomputed factorial table for u8 0! to 19!, where index[i] is i!. We can
+/// do one more however it will overflow when adding more to it which is common
+/// in context.
 const FACT_UNTIL_19: [u64; 20] = {
     let mut arr = [0; 20];
     arr[0] = 1;

@@ -191,14 +191,24 @@ pub struct AuxMem<'id> {
 }
 
 pub struct AuxMemRefMut<'id, 'a> {
-    pub(crate) inner: Option<&'a mut [u8]>,
+    inner: Option<&'a mut [u8]>,
     _id: Id<'id>,
 }
 
 impl<'id> AuxMem<'id> {
-    #[must_use]
-    pub fn new(inner: Option<Box<[u8]>>, id: Id<'id>) -> Self {
+    fn new(inner: Option<Box<[u8]>>, id: Id<'id>) -> Self {
         AuxMem { inner, id }
+    }
+}
+
+impl AuxMemRefMut<'_, '_> {
+    /// Get a mutable reference to the auxiliary memory.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that auxilliary memory exists.
+    pub unsafe fn aux_mem_unchecked(&mut self) -> &mut [u8] {
+        unsafe { self.inner.as_mut().unwrap_unchecked() }
     }
 }
 
@@ -353,9 +363,7 @@ impl<'id> SortedCycleType<'id> {
 }
 
 impl<'id> BrandedOrbitDef<'id> {
-    #[must_use]
-    // TODO: needed?
-    pub fn id(&self) -> Id<'id> {
+    fn id(self) -> Id<'id> {
         self.id
     }
 }
@@ -368,8 +376,7 @@ impl<'id> SortedOrbitDefsRef<'id, '_> {
         })
     }
 
-    #[must_use]
-    pub fn id(&self) -> Id<'id> {
+    fn id(&self) -> Id<'id> {
         self.id
     }
 }

@@ -16,20 +16,29 @@ pub mod cube3;
 pub mod cubeN;
 pub mod slice_orbit_puzzle;
 
+/// A puzzle state interface for manipulating orbits during pruning table
+/// generation. Users may either use the generic `SliceOrbitPuzzle` or define
+/// fast puzzle-specific implementations for their orbits.
 #[enum_dispatch(OrbitPuzzleStateImplementors)]
 pub trait OrbitPuzzleState: Clone {
+    /// Compose two orbit puzzle states in place
     unsafe fn replace_compose(
         &mut self,
         a: &OrbitPuzzleStateImplementor,
         b: &OrbitPuzzleStateImplementor,
         orbit_def: OrbitDef,
     );
+
+    /// Check if the orbit puzzle state induces a sorted cycle type.
     unsafe fn induces_sorted_cycle_type(
         &self,
         sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
         orbit_def: OrbitDef,
         aux_mem: AuxMemRefMut,
     ) -> bool;
+
+    /// An exact hasher for the orbit puzzle state used for exact pruning
+    /// tables.
     unsafe fn exact_hasher(&self, orbit_def: OrbitDef) -> u64;
 }
 
@@ -41,6 +50,8 @@ pub trait SpecializedOrbitPuzzleState {
     fn replace_compose(&mut self, a: &Self, b: &Self);
     fn induces_sorted_cycle_type(&self, sorted_cycle_type_orbit: &[(NonZeroU8, bool)]) -> bool;
     fn exact_hasher(&self) -> u64;
+    /// An approximate hash of the orbit puzzle state used for approximate
+    /// pruning tables.
     fn approximate_hash(&self) -> impl Hash;
 
     unsafe fn from_orbit_transformation_and_def_unchecked<B: AsRef<[u8]>>(
