@@ -17,8 +17,6 @@ use std::{
 
 /// A lookup table used to correct corner orientation during composition
 const CO_MOD_SWIZZLE: u8x8 = u8x8::from_array([0, 1, 2, 0, 1, 0, 0, 0]);
-/// A lookup table used to inverse a corner orientation.
-const CO_INV_SWIZZLE: u8x8 = u8x8::from_array([0, 2, 1, 0, 0, 0, 0, 0]);
 /// The identity permutation for corners.
 const CP_IDENTITY: u8x8 = u8x8::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
 
@@ -44,13 +42,9 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
 
     unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(perm: B, ori: B) -> Self {
         let perm = perm.as_ref();
-        let perm = unsafe {
-            std::ptr::read(perm.as_ptr().cast::<[u8; 8]>())
-        };
+        let perm = unsafe { std::ptr::read(perm.as_ptr().cast::<[u8; 8]>()) };
         let ori = ori.as_ref();
-        let ori = unsafe {
-            std::ptr::read(ori.as_ptr().cast::<[u8; 8]>())
-        };
+        let ori = unsafe { std::ptr::read(ori.as_ptr().cast::<[u8; 8]>()) };
 
         CubeNCorners {
             cp: u8x8::from_array(perm),

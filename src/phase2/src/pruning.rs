@@ -1196,7 +1196,6 @@ mod tests {
 
     #[test_log::test]
     fn test_wip() {
-        return;
         make_guard!(guard);
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let id = cube3_def.id();

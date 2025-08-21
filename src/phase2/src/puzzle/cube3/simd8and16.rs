@@ -12,7 +12,7 @@ use crate::{
     puzzle::{SortedCycleTypeRef, cube3::common::Cube3OrbitType},
 };
 use std::{
-    fmt,
+    fmt::{self, Debug, Formatter},
     hash::Hash,
     num::NonZeroU8,
     simd::{
@@ -300,8 +300,8 @@ pub enum Cube3Orbit {
     Corners(u8x8),
 }
 
-impl fmt::Debug for Cube3 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Debug for Cube3 {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut ep = [0; 16];
         let mut eo = [0; 16];
         let mut cp = [0; 8];

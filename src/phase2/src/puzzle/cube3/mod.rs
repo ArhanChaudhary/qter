@@ -10,6 +10,7 @@ mod common {
     use crate::puzzle::{
         AuxMem, AuxMemRefMut, BrandedOrbitDef, OrbitDef, OrbitIdentifier, PuzzleState,
         SortedCycleTypeRef, SortedOrbitDefsRef, TransformationsMeta, TransformationsMetaError,
+        cube3,
     };
     use generativity::Id;
     use std::hash::Hash;
@@ -131,110 +132,117 @@ mod common {
         }
     }
 
-    impl<'id, C: Cube3Interface> PuzzleState<'id> for C {
-        type OrbitBytesBuf<'a>
-            = [u8; 16]
-        where
-            C: 'a;
-        type OrbitIdentifier = Cube3OrbitType;
+    macro_rules! impl_puzzle_state_for_cube3 {
+        ($($cube3:path),* $(,)?) => {$(
+            impl<'id> PuzzleState<'id> for $cube3 {
+                type OrbitBytesBuf<'a> = [u8; 16];
+                type OrbitIdentifier = Cube3OrbitType;
 
-        fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id> {
-            AuxMem::new(None, sorted_orbit_defs.id())
-        }
+                fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id> {
+                    AuxMem::new(None, sorted_orbit_defs.id())
+                }
 
-        fn try_from_transformations_meta(
-            transformations_meta: TransformationsMeta<'id, '_>,
-            _id: Id<'id>,
-        ) -> Result<C, TransformationsMetaError> {
-            let sorted_orbit_defs = transformations_meta.sorted_orbit_defs().inner;
-            if sorted_orbit_defs == CUBE_3_SORTED_ORBIT_DEFS {
-                let sorted_transformations = transformations_meta.sorted_transformations();
-                // SAFETY: `TransformationMeta` guarantees that the sorted
-                // transformations have the same length as its sorted orbit
-                // definitions, which we just proved to be 2.
-                let sorted_transformations: &[Vec<(u8, u8)>; 2] =
-                    unsafe { sorted_transformations.try_into().unwrap_unchecked() };
-                // SAFETY: `TransformationMeta` guarantees that the first orbit
-                // corresponds to the first sorted orbit definition, which we
-                // have just proven to be the corners orbit.
-                let corners_transformation = unsafe {
-                    sorted_transformations[0]
-                        .as_slice()
-                        .try_into()
-                        .unwrap_unchecked()
-                };
-                // SAFETY: `TransformationMeta` guarantees that the second orbit
-                // corresponds to the second sorted orbit definition, which we
-                // have just proven to be the edges orbit.
-                let edges_transformation = unsafe {
-                    sorted_transformations[1]
-                        .as_slice()
-                        .try_into()
-                        .unwrap_unchecked()
-                };
-                Ok(Self::from_corner_and_edge_transformations(
-                    // SAFETY: `corner_transformation` is from a
-                    // `TransformationMeta`
-                    unsafe { CornersTransformation::new_unchecked(corners_transformation) },
-                    // SAFETY: `edges_transformation` is from a
-                    // `TransformationMeta`
-                    unsafe { EdgesTransformation::new_unchecked(edges_transformation) },
-                ))
-            } else {
-                Err(TransformationsMetaError::InvalidOrbitDefs {
-                    expected: CUBE_3_SORTED_ORBIT_DEFS.to_vec(),
-                    actual: sorted_orbit_defs.to_vec(),
-                })
+                fn try_from_transformations_meta(
+                    transformations_meta: TransformationsMeta<'id, '_>,
+                    _id: Id<'id>,
+                ) -> Result<Self, TransformationsMetaError> {
+                    let sorted_orbit_defs = transformations_meta.sorted_orbit_defs().inner;
+                    if sorted_orbit_defs == CUBE_3_SORTED_ORBIT_DEFS {
+                        let sorted_transformations = transformations_meta.sorted_transformations();
+                        // SAFETY: `TransformationMeta` guarantees that the sorted
+                        // transformations have the same length as its sorted orbit
+                        // definitions, which we just proved to be 2.
+                        let sorted_transformations: &[Vec<(u8, u8)>; 2] =
+                            unsafe { sorted_transformations.try_into().unwrap_unchecked() };
+                        // SAFETY: `TransformationMeta` guarantees that the first orbit
+                        // corresponds to the first sorted orbit definition, which we
+                        // have just proven to be the corners orbit.
+                        let corners_transformation = unsafe {
+                            sorted_transformations[0]
+                                .as_slice()
+                                .try_into()
+                                .unwrap_unchecked()
+                        };
+                        // SAFETY: `TransformationMeta` guarantees that the second orbit
+                        // corresponds to the second sorted orbit definition, which we
+                        // have just proven to be the edges orbit.
+                        let edges_transformation = unsafe {
+                            sorted_transformations[1]
+                                .as_slice()
+                                .try_into()
+                                .unwrap_unchecked()
+                        };
+                        Ok(Self::from_corner_and_edge_transformations(
+                            // SAFETY: `corner_transformation` is from a
+                            // `TransformationMeta`
+                            unsafe { CornersTransformation::new_unchecked(corners_transformation) },
+                            // SAFETY: `edges_transformation` is from a
+                            // `TransformationMeta`
+                            unsafe { EdgesTransformation::new_unchecked(edges_transformation) },
+                        ))
+                    } else {
+                        Err(TransformationsMetaError::InvalidOrbitDefs {
+                            expected: CUBE_3_SORTED_ORBIT_DEFS.to_vec(),
+                            actual: sorted_orbit_defs.to_vec(),
+                        })
+                    }
+                }
+
+                fn replace_compose(
+                    &mut self,
+                    a: &Self,
+                    b: &Self,
+                    _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
+                ) {
+                    Cube3Interface::replace_compose(self, a, b);
+                }
+
+                fn replace_inverse(&mut self, a: &Self, _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) {
+                    Cube3Interface::replace_inverse(self, a);
+                }
+
+                fn induces_sorted_cycle_type(
+                    &self,
+                    sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
+                    _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
+                    _aux_mem: AuxMemRefMut<'id, '_>,
+                ) -> bool {
+                    Cube3Interface::induces_sorted_cycle_type(self, sorted_cycle_type)
+                }
+
+                fn orbit_bytes(&self, orbit_identifier: Cube3OrbitType) -> ([u8; 16], [u8; 16]) {
+                    Cube3Interface::orbit_bytes(self, orbit_identifier)
+                }
+
+                fn exact_hasher_orbit(&self, orbit_identifier: Cube3OrbitType) -> u64 {
+                    Cube3Interface::exact_hasher_orbit(self, orbit_identifier)
+                }
+
+                fn approximate_hash_orbit(&self, orbit_identifier: Cube3OrbitType) -> impl Hash {
+                    Cube3Interface::approximate_hash_orbit(self, orbit_identifier)
+                }
+
+                fn pick_orbit_puzzle(
+                    orbit_identifier: Self::OrbitIdentifier,
+                ) -> OrbitPuzzleStateImplementor {
+                    match orbit_identifier {
+                        Cube3OrbitType::Corners => unsafe {
+                            CubeNCorners::new_solved_state(orbit_identifier.orbit_def()).into()
+                        },
+                        Cube3OrbitType::Edges => unsafe {
+                            Cube3Edges::new_solved_state(orbit_identifier.orbit_def()).into()
+                        },
+                    }
+                }
             }
-        }
-
-        fn replace_compose(
-            &mut self,
-            a: &Self,
-            b: &Self,
-            _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
-        ) {
-            self.replace_compose(a, b);
-        }
-
-        fn replace_inverse(&mut self, a: &Self, _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) {
-            self.replace_inverse(a);
-        }
-
-        fn induces_sorted_cycle_type(
-            &self,
-            sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
-            _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
-            _aux_mem: AuxMemRefMut<'id, '_>,
-        ) -> bool {
-            self.induces_sorted_cycle_type(sorted_cycle_type)
-        }
-
-        fn orbit_bytes(&self, orbit_identifier: Cube3OrbitType) -> ([u8; 16], [u8; 16]) {
-            self.orbit_bytes(orbit_identifier)
-        }
-
-        fn exact_hasher_orbit(&self, orbit_identifier: Cube3OrbitType) -> u64 {
-            self.exact_hasher_orbit(orbit_identifier)
-        }
-
-        fn approximate_hash_orbit(&self, orbit_identifier: Cube3OrbitType) -> impl Hash {
-            self.approximate_hash_orbit(orbit_identifier)
-        }
-
-        fn pick_orbit_puzzle(
-            orbit_identifier: Self::OrbitIdentifier,
-        ) -> OrbitPuzzleStateImplementor {
-            match orbit_identifier {
-                Cube3OrbitType::Corners => unsafe {
-                    CubeNCorners::new_solved_state(orbit_identifier.orbit_def()).into()
-                },
-                Cube3OrbitType::Edges => unsafe {
-                    Cube3Edges::new_solved_state(orbit_identifier.orbit_def()).into()
-                },
-            }
-        }
+        )*}
     }
+
+    impl_puzzle_state_for_cube3!(
+        cube3::simd8and16::UncompressedCube3,
+        cube3::simd8and16::Cube3,
+        cube3::avx2::Cube3
+    );
 }
 
 pub(in crate::puzzle) mod avx2;

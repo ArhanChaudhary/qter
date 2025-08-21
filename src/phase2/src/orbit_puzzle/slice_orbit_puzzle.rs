@@ -6,7 +6,7 @@ use crate::{
     orbit_puzzle::OrbitPuzzleStateImplementor,
     puzzle::{
         AuxMemRefMut, OrbitDef,
-        slice_puzzle::{exact_hasher_orbit_bytes, slice_orbit_size},
+        slice_puzzle::{exact_hasher_slice_orbit_bytes, slice_orbit_size},
     },
 };
 use std::{cmp::Ordering, hint::unreachable_unchecked, num::NonZeroU8};
@@ -56,7 +56,7 @@ impl OrbitPuzzleState for SliceOrbitPuzzle {
             self.0
                 .split_at_unchecked(orbit_def.piece_count.get() as usize)
         };
-        unsafe { exact_hasher_orbit_bytes(perm, ori, orbit_def) }
+        unsafe { exact_hasher_slice_orbit_bytes(perm, ori, orbit_def) }
     }
 }
 

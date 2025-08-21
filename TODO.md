@@ -10,6 +10,7 @@
 
 - Phase 2
   - replace pub(crate) with getters
+  - spam debug_assert!()
   - ⭐branding for OrbitPuzzleStates should be unique and happen at a very small level
   - dont pack bit vector for AuxMem
   - ⭐pruning table
@@ -36,6 +37,7 @@
   - ⭐multithreading
     - microthreading
   - ⭐make fsm lookup unsafe when pg is done
+  - can we use move tables? look into at the end
 - ⭐Phase 1
 - Look into fixing a corner for even cubes/other puzzles
 - Schreier Sims & generating algs using it
