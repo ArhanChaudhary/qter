@@ -74,7 +74,7 @@ mod common {
     }
 
     /// The interface for a 3x3 cube puzzle state
-    pub trait Cube3Interface: Clone + PartialEq + Debug + 'static {
+    pub trait Cube3State: Clone + PartialEq + Debug + 'static {
         type OrbitBytesBuf: AsRef<[u8]>;
 
         /// Create a Cube3 state from a corners and edges transformation. We
@@ -147,9 +147,9 @@ mod common {
     macro_rules! impl_puzzle_state_for_cube3 {
         ($($cube3:path),* $(,)?) => {$(
             impl<'id> PuzzleState<'id> for $cube3
-                where $cube3: Cube3Interface
+                where $cube3: Cube3State
             {
-                type OrbitBytesBuf<'a> = <$cube3 as Cube3Interface>::OrbitBytesBuf;
+                type OrbitBytesBuf<'a> = <$cube3 as Cube3State>::OrbitBytesBuf;
                 type OrbitIdentifier = Cube3OrbitType;
 
                 fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id> {
@@ -208,11 +208,11 @@ mod common {
                     b: &Self,
                     _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
                 ) {
-                    Cube3Interface::replace_compose(self, a, b);
+                    Cube3State::replace_compose(self, a, b);
                 }
 
                 fn replace_inverse(&mut self, a: &Self, _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) {
-                    Cube3Interface::replace_inverse(self, a);
+                    Cube3State::replace_inverse(self, a);
                 }
 
                 fn induces_sorted_cycle_type(
@@ -221,19 +221,19 @@ mod common {
                     _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
                     _aux_mem: AuxMemRefMut<'id, '_>,
                 ) -> bool {
-                    Cube3Interface::induces_sorted_cycle_type(self, sorted_cycle_type)
+                    Cube3State::induces_sorted_cycle_type(self, sorted_cycle_type)
                 }
 
                 fn orbit_bytes(&self, orbit_identifier: Cube3OrbitType) -> (Self::OrbitBytesBuf<'_>, Self::OrbitBytesBuf<'_>) {
-                    Cube3Interface::orbit_bytes(self, orbit_identifier)
+                    Cube3State::orbit_bytes(self, orbit_identifier)
                 }
 
                 fn exact_hasher_orbit(&self, orbit_identifier: Cube3OrbitType) -> u64 {
-                    Cube3Interface::exact_hasher_orbit(self, orbit_identifier)
+                    Cube3State::exact_hasher_orbit(self, orbit_identifier)
                 }
 
                 fn approximate_hash_orbit(&self, orbit_identifier: Cube3OrbitType) -> impl Hash {
-                    Cube3Interface::approximate_hash_orbit(self, orbit_identifier)
+                    Cube3State::approximate_hash_orbit(self, orbit_identifier)
                 }
 
                 fn pick_orbit_puzzle(

@@ -5,7 +5,7 @@
 #![cfg_attr(any(avx2, not(simd8and16)), allow(dead_code, unused_variables))]
 
 use super::common::{
-    CUBE_3_SORTED_ORBIT_DEFS, CornersTransformation, Cube3Interface, EdgesTransformation,
+    CUBE_3_SORTED_ORBIT_DEFS, CornersTransformation, Cube3State, EdgesTransformation,
 };
 use crate::{
     orbit_puzzle::exact_hasher_orbit,
@@ -66,7 +66,7 @@ const CORNER_PERM_MASK: u8x8 = u8x8::splat(0b0000_0111);
 /// An unitialized vector of edge permutation.
 const BLANK_EP: u8x16 = u8x16::from_array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 13, 14, 15]);
 
-impl Cube3Interface for UncompressedCube3 {
+impl Cube3State for UncompressedCube3 {
     type OrbitBytesBuf = u8x16;
 
     fn from_corner_and_edge_transformations(
@@ -332,7 +332,7 @@ impl Debug for Cube3 {
     }
 }
 
-impl Cube3Interface for Cube3 {
+impl Cube3State for Cube3 {
     type OrbitBytesBuf = u8x16;
 
     fn from_corner_and_edge_transformations(

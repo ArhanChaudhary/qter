@@ -2,7 +2,7 @@
 
 #![cfg_attr(not(avx2), allow(dead_code, unused_variables))]
 
-use super::common::{CornersTransformation, Cube3Interface, Cube3OrbitType, EdgesTransformation};
+use super::common::{CornersTransformation, Cube3OrbitType, Cube3State, EdgesTransformation};
 use crate::{
     orbit_puzzle::exact_hasher_orbit,
     puzzle::{SortedCycleTypeRef, cube3::common::CUBE_3_SORTED_ORBIT_DEFS},
@@ -179,7 +179,7 @@ impl fmt::Debug for Cube3 {
     }
 }
 
-impl Cube3Interface for Cube3 {
+impl Cube3State for Cube3 {
     type OrbitBytesBuf = u8x16;
 
     fn from_corner_and_edge_transformations(

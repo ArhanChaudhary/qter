@@ -41,7 +41,6 @@ impl OrbitPuzzleState for SliceOrbitPuzzle {
         orbit_def: OrbitDef,
         mut aux_mem: AuxMemRefMut,
     ) -> bool {
-        // TODO
         unsafe {
             induces_sorted_cycle_type_slice_orbit(
                 &self.0,
@@ -54,7 +53,6 @@ impl OrbitPuzzleState for SliceOrbitPuzzle {
     }
 
     unsafe fn exact_hasher(&self, orbit_def: OrbitDef) -> u64 {
-        // TODO
         let (perm, ori) = unsafe {
             self.0
                 .split_at_unchecked(orbit_def.piece_count.get() as usize)

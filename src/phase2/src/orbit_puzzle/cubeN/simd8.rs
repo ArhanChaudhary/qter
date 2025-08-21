@@ -1,7 +1,7 @@
 //! A SIMD optimized implementation for N-cube corners for platforms that support
-//! 8 and 16 byte SIMD.
+//! 8 and 16 byte SIMD. This file was derived from `puzzle/cube3/simd8and16.rs`
 
-#![cfg_attr(any(avx2, not(simd8and16)), allow(dead_code, unused_variables))]
+#![cfg_attr(any(avx2, not(simd8)), allow(dead_code, unused_variables))]
 
 use crate::orbit_puzzle::{
     OrbitPuzzleStateImplementor, SpecializedOrbitPuzzleState, exact_hasher_orbit,
@@ -15,18 +15,18 @@ use std::{
     },
 };
 
-/// A lookup table used to correct corner orientation during composition
+/// A lookup table used to correct corner orientation during composition.
 const CO_MOD_SWIZZLE: u8x8 = u8x8::from_array([0, 1, 2, 0, 1, 0, 0, 0]);
 /// The identity permutation for corners.
 const CP_IDENTITY: u8x8 = u8x8::from_array([0, 1, 2, 3, 4, 5, 6, 7]);
 
-/// A SIMD-optimized N-cube corners representation. All cubes have exactly 8 corners.
-/// This uses the same SIMD optimization as the 3x3 cube corners.
+/// An uncompressed N-cube corners representation. All cubes have exactly 8
+/// corners.
 #[derive(PartialEq, Clone, Hash)]
 pub struct CubeNCorners {
-    /// Corner permutation using u8x8 SIMD vector
+    /// The corner permutation.
     cp: u8x8,
-    /// Corner orientation using u8x8 SIMD vector
+    /// The corner orientation.
     co: u8x8,
 }
 
@@ -41,10 +41,8 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
     }
 
     unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(perm: B, ori: B) -> Self {
-        let perm = perm.as_ref();
-        let perm = unsafe { std::ptr::read(perm.as_ptr().cast::<[u8; 8]>()) };
-        let ori = ori.as_ref();
-        let ori = unsafe { std::ptr::read(ori.as_ptr().cast::<[u8; 8]>()) };
+        let perm = unsafe { perm.as_ref().try_into().unwrap_unchecked() };
+        let ori = unsafe { ori.as_ref().try_into().unwrap_unchecked() };
 
         CubeNCorners {
             cp: u8x8::from_array(perm),

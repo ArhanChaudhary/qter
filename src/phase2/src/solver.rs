@@ -2,7 +2,7 @@ use super::{
     canonical_fsm::{CanonicalFSM, CanonicalFSMState, PuzzleCanonicalFSM},
     pruning::PruningTables,
     puzzle::{Move, PuzzleDef, PuzzleState},
-    puzzle_state_history::{PuzzleStateHistory, PuzzleStateHistoryInterface},
+    puzzle_state_history::{PuzzleStateHistory, StackedPuzzleStateHistory},
 };
 use crate::{SliceViewMut, puzzle::AuxMem, start, success, working};
 use log::{Level, debug, info, log_enabled};
@@ -21,8 +21,8 @@ pub enum SearchStrategy {
     AllSolutions,
 }
 
-struct CycleTypeSolverMutable<'id, P: PuzzleState<'id>, H: PuzzleStateHistoryInterface<'id, P>> {
-    puzzle_state_history: PuzzleStateHistory<'id, P, H>,
+struct CycleTypeSolverMutable<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'id, P>> {
+    puzzle_state_history: StackedPuzzleStateHistory<'id, P, H>,
     aux_mem: AuxMem<'id>,
     solutions: Vec<Vec<usize>>,
     first_move_class_index: usize,
@@ -53,7 +53,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
         (self.puzzle_def, self.pruning_tables)
     }
 
-    fn search_for_solution<H: PuzzleStateHistoryInterface<'id, P>>(
+    fn search_for_solution<H: PuzzleStateHistory<'id, P>>(
         &self,
         mutable: &mut CycleTypeSolverMutable<'id, P, H>,
         current_fsm_state: CanonicalFSMState,
@@ -169,7 +169,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
         }
     }
 
-    pub fn solve<H: PuzzleStateHistoryInterface<'id, P>>(&self) -> SolutionsIntoIter<'id, '_, P> {
+    pub fn solve<H: PuzzleStateHistory<'id, P>>(&self) -> SolutionsIntoIter<'id, '_, P> {
         info!(start!("Searching for phase2 solutions"));
         let start = Instant::now();
 
