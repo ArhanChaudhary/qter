@@ -503,10 +503,10 @@ fn induces_sorted_cycle_type(
         (oriented_one_cycle_corner_mask.to_bitmask().count_ones() as usize).wrapping_sub(1);
     // Check oriented one cycles
     if cycle_type_pointer == usize::MAX {
-        if let Some(&first_cycle) = sorted_corners_cycle_type.first() {
-            if first_cycle == (1.try_into().unwrap(), true) {
-                return false;
-            }
+        if let Some(&first_cycle) = sorted_corners_cycle_type.first()
+            && first_cycle == (1.try_into().unwrap(), true)
+        {
+            return false;
         }
     } else if cycle_type_pointer >= sorted_corners_cycle_type.len()
         || sorted_corners_cycle_type[cycle_type_pointer] != (1.try_into().unwrap(), true)
@@ -573,10 +573,10 @@ fn induces_sorted_cycle_type(
         (oriented_one_cycle_edge_mask.to_bitmask().count_ones() as usize).wrapping_sub(1);
     // Check oriented one cycles
     if cycle_type_pointer == usize::MAX {
-        if let Some(&first_cycle) = sorted_edges_cycle_type.first() {
-            if first_cycle == (1.try_into().unwrap(), true) {
-                return false;
-            }
+        if let Some(&first_cycle) = sorted_edges_cycle_type.first()
+            && first_cycle == (1.try_into().unwrap(), true)
+        {
+            return false;
         }
     } else if cycle_type_pointer >= sorted_edges_cycle_type.len()
         || sorted_edges_cycle_type[cycle_type_pointer] != (1.try_into().unwrap(), true)

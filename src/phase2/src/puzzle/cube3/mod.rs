@@ -27,49 +27,23 @@ mod common {
         Edges,
     }
 
-    pub use private::*;
-    mod private {
-        //! Private module to disallow explicit instantiation of
-        //! `CornersTransformation` and `EdgesTransformation`.
+    /// A valid transformation for the corners and edges of a 3x3 cube.
+    pub struct CornersTransformation<'a>(&'a [(u8, u8); 8]);
 
-        /// A valid transformation for the corners and edges of a 3x3 cube.
-        pub struct CornersTransformation<'a>(&'a [(u8, u8); 8]);
+    /// A valid transformation for the edges of a 3x3 cube.
+    pub struct EdgesTransformation<'a>(&'a [(u8, u8); 12]);
 
-        /// A valid transformation for the edges of a 3x3 cube.
-        pub struct EdgesTransformation<'a>(&'a [(u8, u8); 12]);
-
-        impl<'a> CornersTransformation<'a> {
-            /// Create a new `CornersTransformation`
-            ///
-            /// # Safety
-            ///
-            /// The caller must ensure that `corners_transformation` is from a
-            /// `TransformationMeta`,
-            pub unsafe fn new_unchecked(corners_transformation: &'a [(u8, u8); 8]) -> Self {
-                Self(corners_transformation)
-            }
-
-            /// Get the corners transformation as a slice.
-            pub fn get(&self) -> &'a [(u8, u8); 8] {
-                self.0
-            }
+    impl<'a> CornersTransformation<'a> {
+        /// Get the corners transformation as a slice.
+        pub fn get(&self) -> &'a [(u8, u8); 8] {
+            self.0
         }
+    }
 
-        impl<'a> EdgesTransformation<'a> {
-            /// Create a new `EdgesTransformation`
-            ///
-            /// # Safety
-            ///
-            /// The caller must ensure that `edges_transformation` is from a
-            /// `TransformationMeta`.
-            pub unsafe fn new_unchecked(edges_transformation: &'a [(u8, u8); 12]) -> Self {
-                Self(edges_transformation)
-            }
-
-            /// Get the edges transformation as a slice.
-            pub fn get(&self) -> &'a [(u8, u8); 12] {
-                self.0
-            }
+    impl<'a> EdgesTransformation<'a> {
+        /// Get the edges transformation as a slice.
+        pub fn get(&self) -> &'a [(u8, u8); 12] {
+            self.0
         }
     }
 
@@ -163,36 +137,25 @@ mod common {
                     let sorted_orbit_defs = transformations_meta.sorted_orbit_defs().inner;
                     if sorted_orbit_defs == CUBE_3_SORTED_ORBIT_DEFS {
                         let sorted_transformations = transformations_meta.sorted_transformations();
-                        // SAFETY: `TransformationMeta` guarantees that the sorted
-                        // transformations have the same length as its sorted orbit
-                        // definitions, which we just proved to be 2.
-                        let sorted_transformations: &[Vec<(u8, u8)>; 2] =
-                            unsafe { sorted_transformations.try_into().unwrap_unchecked() };
-                        // SAFETY: `TransformationMeta` guarantees that the first orbit
-                        // corresponds to the first sorted orbit definition, which we
-                        // have just proven to be the corners orbit.
-                        let corners_transformation = unsafe {
-                            sorted_transformations[0]
-                                .as_slice()
-                                .try_into()
-                                .unwrap_unchecked()
-                        };
-                        // SAFETY: `TransformationMeta` guarantees that the second orbit
-                        // corresponds to the second sorted orbit definition, which we
-                        // have just proven to be the edges orbit.
-                        let edges_transformation = unsafe {
-                            sorted_transformations[1]
-                                .as_slice()
-                                .try_into()
-                                .unwrap_unchecked()
-                        };
+                        // `TransformationMeta` guarantees that the first orbit
+                        // corresponds to the first sorted orbit definition,
+                        // which we have just proven to be the corners orbit.
+                        let corners_transformation: &[(u8, u8); 8] = sorted_transformations[0]
+                            .as_slice()
+                            .try_into()
+                            .unwrap();
+                        // `TransformationMeta` guarantees that the second orbit
+                        // corresponds to the second sorted orbit definition,
+                        // which we have just proven to be the edges orbit.
+                        let edges_transformation: &[(u8, u8); 12] = sorted_transformations[1]
+                            .as_slice()
+                            .try_into()
+                            .unwrap();
                         Ok(Self::from_corner_and_edge_transformations(
-                            // SAFETY: `corner_transformation` is from a
-                            // `TransformationMeta`
-                            unsafe { CornersTransformation::new_unchecked(corners_transformation) },
-                            // SAFETY: `edges_transformation` is from a
-                            // `TransformationMeta`
-                            unsafe { EdgesTransformation::new_unchecked(edges_transformation) },
+                            // We have just done a bunch of work to prove these
+                            // transformations valid. We may construct them now.
+                            CornersTransformation(corners_transformation),
+                            EdgesTransformation(edges_transformation),
                         ))
                     } else {
                         Err(TransformationsMetaError::InvalidOrbitDefs {

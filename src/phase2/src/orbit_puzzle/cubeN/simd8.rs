@@ -41,8 +41,14 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
     }
 
     unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(perm: B, ori: B) -> Self {
-        let perm = unsafe { perm.as_ref().try_into().unwrap_unchecked() };
-        let ori = unsafe { ori.as_ref().try_into().unwrap_unchecked() };
+        // dbg!(perm.as_ref(), ori.as_ref());
+        // let perm = unsafe { perm.as_ref().try_into().unwrap_unchecked() };
+        // let ori = unsafe { ori.as_ref().try_into().unwrap_unchecked() };
+        // TODO: fix
+        let perm = perm.as_ref();
+        let perm = unsafe { std::ptr::read(perm.as_ptr().cast::<[u8; 8]>()) };
+        let ori = ori.as_ref();
+        let ori = unsafe { std::ptr::read(ori.as_ptr().cast::<[u8; 8]>()) };
 
         CubeNCorners {
             cp: u8x8::from_array(perm),
@@ -69,10 +75,10 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
 
         // Check oriented one cycles
         if cycle_type_pointer == usize::MAX {
-            if let Some(&first_cycle) = sorted_cycle_type_orbit.first() {
-                if first_cycle == (1.try_into().unwrap(), true) {
-                    return false;
-                }
+            if let Some(&first_cycle) = sorted_cycle_type_orbit.first()
+                && first_cycle == (1.try_into().unwrap(), true)
+            {
+                return false;
             }
         } else if cycle_type_pointer >= sorted_cycle_type_orbit.len()
             || sorted_cycle_type_orbit[cycle_type_pointer] != (1.try_into().unwrap(), true)

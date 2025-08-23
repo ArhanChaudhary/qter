@@ -48,9 +48,9 @@ pub trait PruningTables<'id, P: PuzzleState<'id>> {
     where
         Self: Sized;
 
-    /// Get a permissible heuristic for a puzzle state. It is a soundness error
+    /// Get an admissible heuristic for a puzzle state. It is a soundness error
     /// if this is not the case.
-    fn permissible_heuristic(&self, puzzle_state: &P) -> u8;
+    fn admissible_heuristic(&self, puzzle_state: &P) -> u8;
 
     /// The pruning table is expected to hold the sorted cycle type so the
     /// instance can be tied to it and not some other foreign cycle type.
@@ -71,15 +71,15 @@ pub trait StorageBackend<const EXACT: bool>: 'static {
 
     fn initialization_meta_from_max_size_bytes(max_size_bytes: usize) -> Self::InitializationMeta;
 
-    /// Get a **permissible** heuristic from a hash. This is expected to be
+    /// Get a **admissible** heuristic from a hash. This is expected to be
     /// implemented as a light wrapper around `heuristic_hash`.
-    fn permissible_heuristic_hash(&self, hash: u64) -> u8;
+    fn admissible_heuristic_hash(&self, hash: u64) -> u8;
 
     /// Get a raw heuristic from a hash. The separation is necessary or else
     /// there would otherwise be no way to check if an entry is vacant before
     /// setting it to a value during pruning table generation. A raw getter is
     /// also faster because it avoids the `depth_traversed` overhead with
-    /// `permissible_heuristic_hash`.
+    /// `admissible_heuristic_hash`.
     fn heuristic_hash(&self, hash: u64) -> OrbitPruneHeuristic;
 
     /// Set the heuristic for a hash.
@@ -105,10 +105,10 @@ trait OrbitPruningTable<'id, P: PuzzleState<'id>>: 'id {
     where
         Self: Sized;
 
-    /// Get a permissible heuristic for a puzzle state for a target orbit. It
+    /// Get an admissible heuristic for a puzzle state for a target orbit. It
     /// is a soundness error if this is not the case. Implementors are expected
     /// to have a mechanism to identify the table's target orbit.
-    fn permissible_heuristic(&self, puzzle_state: &P) -> u8;
+    fn admissible_heuristic(&self, puzzle_state: &P) -> u8;
 }
 
 // Not completely sure what this trait should look like; Henry change this if
@@ -408,11 +408,11 @@ impl<'id, P: PuzzleState<'id>> PruningTables<'id, P> for OrbitPruningTables<'id,
         Ok(orbit_pruning_tables)
     }
 
-    fn permissible_heuristic(&self, puzzle_state: &P) -> u8 {
+    fn admissible_heuristic(&self, puzzle_state: &P) -> u8 {
         self.orbit_pruning_tables
             .iter()
             .fold(0, |best_bound, orbit_pruning_table| {
-                best_bound.max(orbit_pruning_table.permissible_heuristic(puzzle_state))
+                best_bound.max(orbit_pruning_table.admissible_heuristic(puzzle_state))
             })
     }
 
@@ -558,7 +558,7 @@ impl<const EXACT: bool> StorageBackend<EXACT> for UncompressedStorageBackend<EXA
         MaxSizeBytes(max_size_bytes)
     }
 
-    fn permissible_heuristic_hash(&self, hash: u64) -> u8 {
+    fn admissible_heuristic_hash(&self, hash: u64) -> u8 {
         self.heuristic_hash(hash)
             .get_occupied()
             .unwrap_or(self.depth_traversed)
@@ -620,7 +620,7 @@ impl<const EXACT: bool> StorageBackend<EXACT> for NxoptStorageBackend<EXACT> {
         todo!();
     }
 
-    fn permissible_heuristic_hash(&self, hash: u64) -> u8 {
+    fn admissible_heuristic_hash(&self, hash: u64) -> u8 {
         todo!();
     }
 
@@ -662,7 +662,7 @@ impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend<EXACT> {
         TANSDistributionEstimation { max_size_bytes }
     }
 
-    fn permissible_heuristic_hash(&self, hash: u64) -> u8 {
+    fn admissible_heuristic_hash(&self, hash: u64) -> u8 {
         todo!();
     }
 
@@ -703,9 +703,9 @@ impl<'id, P: PuzzleState<'id>, S: StorageBackend<false>> OrbitPruningTable<'id, 
         todo!();
     }
 
-    fn permissible_heuristic(&self, puzzle_state: &P) -> u8 {
+    fn admissible_heuristic(&self, puzzle_state: &P) -> u8 {
         self.storage_backend
-            .permissible_heuristic_hash(fxhash::hash64(
+            .admissible_heuristic_hash(fxhash::hash64(
                 &puzzle_state.approximate_hash_orbit(self.orbit_identifier),
             ))
     }
@@ -916,9 +916,9 @@ impl<'id, P: PuzzleState<'id>, S: StorageBackend<true>> OrbitPruningTable<'id, P
         Ok((table, used_size_bytes))
     }
 
-    fn permissible_heuristic(&self, puzzle_state: &P) -> u8 {
+    fn admissible_heuristic(&self, puzzle_state: &P) -> u8 {
         self.storage_backend
-            .permissible_heuristic_hash(puzzle_state.exact_hasher_orbit(self.orbit_identifier))
+            .admissible_heuristic_hash(puzzle_state.exact_hasher_orbit(self.orbit_identifier))
     }
 }
 
@@ -938,7 +938,7 @@ impl<'id, P: PuzzleState<'id>> OrbitPruningTable<'id, P>
         todo!();
     }
 
-    fn permissible_heuristic(&self, puzzle_state: &P) -> u8 {
+    fn admissible_heuristic(&self, puzzle_state: &P) -> u8 {
         let hash = todo!();
     }
 }
@@ -956,7 +956,7 @@ impl<'id, P: PuzzleState<'id>> OrbitPruningTable<'id, P> for ZeroOrbitTable {
         Ok((ZeroOrbitTable, 0))
     }
 
-    fn permissible_heuristic(&self, _puzzle_state: &P) -> u8 {
+    fn admissible_heuristic(&self, _puzzle_state: &P) -> u8 {
         0
     }
 }
@@ -981,7 +981,7 @@ impl<'id, P: PuzzleState<'id>> PruningTables<'id, P> for ZeroTable<'id, P> {
         })
     }
 
-    fn permissible_heuristic(&self, _puzzle_state: &P) -> u8 {
+    fn admissible_heuristic(&self, _puzzle_state: &P) -> u8 {
         0
     }
 
@@ -1017,12 +1017,12 @@ mod tests {
             UncompressedStorageBackend::<true>::initialize_from_meta(MaxSizeBytes(100));
 
         storage.set_heuristic_hash(5, OrbitPruneHeuristic::occupied(3).unwrap());
-        assert_eq!(storage.permissible_heuristic_hash(5), 3);
+        assert_eq!(storage.admissible_heuristic_hash(5), 3);
 
-        assert_eq!(storage.permissible_heuristic_hash(6), 0);
+        assert_eq!(storage.admissible_heuristic_hash(6), 0);
         storage.commit_depth_traversed(4);
-        assert_eq!(storage.permissible_heuristic_hash(6), 4);
-        assert_eq!(storage.permissible_heuristic_hash(5), 3);
+        assert_eq!(storage.admissible_heuristic_hash(6), 4);
+        assert_eq!(storage.admissible_heuristic_hash(5), 3);
     }
 
     #[test_log::test]
@@ -1031,10 +1031,10 @@ mod tests {
             UncompressedStorageBackend::<false>::initialize_from_meta(MaxSizeBytes(100));
 
         storage.set_heuristic_hash(6, OrbitPruneHeuristic::occupied(3).unwrap());
-        assert_eq!(storage.permissible_heuristic_hash(6), 3);
+        assert_eq!(storage.admissible_heuristic_hash(6), 3);
 
         storage.set_heuristic_hash(6, OrbitPruneHeuristic::occupied(2).unwrap());
-        assert_eq!(storage.permissible_heuristic_hash(6), 2);
+        assert_eq!(storage.admissible_heuristic_hash(6), 2);
     }
 
     #[test_log::test]
@@ -1060,9 +1060,9 @@ mod tests {
             max_size_bytes: 0,
         };
         let (zero_orbit_table, _) = ZeroOrbitTable::try_generate(generate_meta).unwrap();
-        assert_eq!(zero_orbit_table.permissible_heuristic(&solved), 0);
+        assert_eq!(zero_orbit_table.admissible_heuristic(&solved), 0);
         assert_eq!(
-            zero_orbit_table.permissible_heuristic(u_move.puzzle_state()),
+            zero_orbit_table.admissible_heuristic(u_move.puzzle_state()),
             0
         );
 
@@ -1076,8 +1076,8 @@ mod tests {
         let orbit_tables =
             OrbitPruningTables::try_generate_all(identity_cycle_type, generate_metas).unwrap();
 
-        assert_eq!(orbit_tables.permissible_heuristic(&solved), 0);
-        assert_eq!(orbit_tables.permissible_heuristic(u_move.puzzle_state()), 0);
+        assert_eq!(orbit_tables.admissible_heuristic(&solved), 0);
+        assert_eq!(orbit_tables.admissible_heuristic(u_move.puzzle_state()), 0);
     }
 
     #[test_log::test]
@@ -1090,7 +1090,7 @@ mod tests {
         let zero_table = ZeroTable::try_generate_all(identity_cycle_type, ()).unwrap();
 
         let random_state = apply_random_moves(&cube3_def, &cube3_def.new_solved_state(), 20);
-        assert_eq!(zero_table.permissible_heuristic(&random_state), 0);
+        assert_eq!(zero_table.admissible_heuristic(&random_state), 0);
     }
 
     #[test]
@@ -1217,7 +1217,7 @@ mod tests {
         assert_eq!(orbit_tables.orbit_pruning_tables.len(), 2);
         assert_eq!(
             orbit_tables.orbit_pruning_tables[0]
-                .permissible_heuristic(&cube3_def.new_solved_state()),
+                .admissible_heuristic(&cube3_def.new_solved_state()),
             0
         );
         panic!();

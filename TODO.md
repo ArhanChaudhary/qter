@@ -9,7 +9,9 @@
 ## SCC
 
 - Phase 2
+  - make sure sequence symmetry is good
   - replace pub(crate) with getters
+  - try out a different exact hasher
   - spam debug_assert!()
   - ⭐branding for OrbitPuzzleStates should be unique and happen at a very small level
   - dont pack bit vector for AuxMem
@@ -27,7 +29,7 @@
     - ⭐exact: dfs at low levels instead of scanning
     - dynamic simd detection rather than -Ctarget-cpu=native
   - ⭐stabilizer
-  - ⭐avoid symmetric moves from the start
+  - ⭐avoid symmetric moves from the start by doing A\* then IDA\* in parallel (youtube video)
   - you NEED to account for parity constraints when calculating orbit size; address this in schreier sims
   - fix corner in stabilizer for 4x4
   - ⭐solved state for 4x4

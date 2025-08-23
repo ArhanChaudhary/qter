@@ -15,6 +15,17 @@ pub struct CycleTypeSolver<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> {
     search_strategy: SearchStrategy,
 }
 
+/// The return type of the IDA* recursion function. It maintains the
+/// soft-invariant that zero means a solution has been found, hence
+/// `AdmissibleGoalHeuristic::SOLVED`.
+#[derive(PartialEq, Copy, Clone)]
+struct AdmissibleGoalHeuristic(u8);
+
+impl AdmissibleGoalHeuristic {
+    const SOLVED: Self = Self(0);
+}
+
+// TODO: is this worth making a const generic?
 #[derive(PartialEq)]
 pub enum SearchStrategy {
     FirstSolution,
@@ -27,6 +38,12 @@ struct CycleTypeSolverMutable<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'i
     solutions: Vec<Vec<usize>>,
     first_move_class_index: usize,
     nodes_visited: u64,
+}
+
+impl<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'id, P>> CycleTypeSolverMutable<'id, P, H> {
+    fn found_solution(&self) -> bool {
+        !self.solutions.is_empty()
+    }
 }
 
 pub struct SolutionsIntoIter<'id, 'a, P: PuzzleState<'id>> {
@@ -53,14 +70,33 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
         (self.puzzle_def, self.pruning_tables)
     }
 
+    /// A highly optimized [iterative deepening A*][IDA] search algorithm. We
+    /// employ a number of techniques, some specific to a cycle type solver
+    /// only:
+    ///
+    /// - We reduce the branching factor by using a finite state machine of
+    ///   non-commutative moves.
+    /// - We embed a "sequence symmetry" optimization into search, which takes
+    ///   advantage of the properties of conjugacy classes.
+    /// - We disallow the same move class at the beginning and end to optimize
+    ///   the last depth in the search.
+    /// - We promote the heuristic to one if the pruning value is zero.
+    /// - We use pathmax to prune nodes with large child pruning values.
+    ///
+    /// The return value is an admissible goal heuristic. That is, it is a
+    /// lower bound on the number of moves required to find the solution state
+    /// at the exact node. When this lower bound is equal to zero, that means
+    /// the node is a solution.
+    ///
+    /// [IDA]: https://en.wikipedia.org/wiki/Iterative_deepening_A*
     fn search_for_solution<H: PuzzleStateHistory<'id, P>>(
         &self,
         mutable: &mut CycleTypeSolverMutable<'id, P, H>,
         current_fsm_state: CanonicalFSMState,
         entry_index: usize,
-        root: bool,
-        mut togo: u8,
-    ) {
+        is_root: bool,
+        mut permitted_cost: u8,
+    ) -> AdmissibleGoalHeuristic {
         if log_enabled!(Level::Debug) {
             mutable.nodes_visited += 1;
         }
@@ -68,16 +104,18 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
         // Therefore, the `pop_stack` cannot be called more than `push_stack`.
         let last_puzzle_state = unsafe { mutable.puzzle_state_history.last_state_unchecked() };
 
-        let est_remaining_cost = self.pruning_tables.permissible_heuristic(last_puzzle_state);
-        if est_remaining_cost > togo {
-            // TODO: what the heck does this do
-            // https://github.com/cubing/twsearch/commit/a86177ac2bd462bb9d7d91af743e883449fbfb6b
-            return;
+        let admissible_prune_cost = self.pruning_tables.admissible_heuristic(last_puzzle_state);
+        if admissible_prune_cost > permitted_cost {
+            // Note that `admissible_prune_heuristic` is impossible to be zero
+            // here, so the enum instantiation is valid
+            return AdmissibleGoalHeuristic(admissible_prune_cost);
         }
 
         let mut next_entry_index = entry_index + 1;
         // Tomas Rokicki's "sequence symmetry" optimization:
         // <https://github.com/cubing/twsearch/commit/7b1d62bd9d9d232fb4729c7227d5255deed9673c>
+        // TODO: rederive the logic for this and explain it and show it cannot
+        // be improved
         //
         // SAFETY: `entry_index` starts at zero in the initial call, and
         // `B::initialize` guarantees that the first entry is bound. For every
@@ -90,7 +128,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                 .puzzle_state_history
                 .move_index_unchecked(entry_index)
         };
-        togo -= 1;
+        permitted_cost -= 1;
         for (move_index, move_) in self
             .puzzle_def
             .moves
@@ -98,19 +136,27 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             .enumerate()
             .skip(move_index_prune_lt)
         {
-            // if self.search_strategy == SearchStrategy::FirstSolution && move_index == 2 && root {
+            // if self.search_strategy == SearchStrategy::FirstSolution && move_index == 2 && is_root {
             //     return false;
             // }
             let move_class_index = move_.move_class_index();
-            // branches should have high predictability
-            if root {
+            // This branch should have high predictability
+            if is_root {
                 mutable.first_move_class_index = move_class_index;
-            } else if togo == 0 && move_class_index == mutable.first_move_class_index {
-                // we don't have to set `next_entry_index = 0` here because
-                // `togo` is already zero
+            // We take advantage of the fact that the shortest sequence can
+            // never start and end with the moves in the same move class.
+            // Otherwise the end could be rotated to the start and combined
+            // together, thus contradicting that assumption
+            } else if permitted_cost == 0 && move_class_index == mutable.first_move_class_index {
+                // We don't have to set `next_entry_index = 0` here because
+                // this function is never recursed when `permitted_cost` is
+                // zero
                 continue;
             }
 
+            // We use a canonical FSM to enforce a total ordering of commutating
+            // moves. For example, U D and D U produce equivalent states, and
+            // there is no point in searching both
             let next_fsm_state = self
                 .canonical_fsm
                 .next_state(current_fsm_state, move_class_index);
@@ -131,8 +177,9 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                     .push_stack_unchecked(move_index, &self.puzzle_def);
             }
 
-            // We handle togo==0 inline to save the function call overhead
-            if togo == 0 {
+            // We handle when `permitted_cost == 0` (leaf node) inline to save
+            // the recursive function call overhead otherwise incurred
+            let child_admissible_goal_heuristic = if permitted_cost == 0 {
                 // SAFETY: we just pushed something onto the stack
                 let last_puzzle_state =
                     unsafe { mutable.puzzle_state_history.last_state_unchecked() };
@@ -144,31 +191,90 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                     mutable
                         .solutions
                         .push(mutable.puzzle_state_history.create_move_history());
+                    AdmissibleGoalHeuristic::SOLVED
+                } else {
+                    // If this node resulted in no solution, then we are at
+                    // least one step away from a solution
+                    AdmissibleGoalHeuristic(1)
                 }
             } else {
-                // TODO: Actual IDA* takes the min of this bound and uses it; look into?
-                self.search_for_solution(mutable, next_fsm_state, next_entry_index, false, togo);
-            }
+                self.search_for_solution(
+                    mutable,
+                    next_fsm_state,
+                    next_entry_index,
+                    false,
+                    permitted_cost,
+                )
+            };
 
-            if !mutable.solutions.is_empty()
-                && self.search_strategy == SearchStrategy::FirstSolution
+            // If we've found a solution, and our search strategy is to
+            // find the first solution, we instantly terminate. No more
+            // processing will occur once this returns
+            if self.search_strategy == SearchStrategy::FirstSolution
+                // We cannot use `child_admissible_goal_heuristic == 0` because
+                // the following assert fails when placed:
+                // TODO: formalize why
+                // assert_eq!(mutable.found_solution(), child_admissible_goal_heuristic == 0);
+                && mutable.found_solution()
             {
-                return;
+                // We don't care about preserving `mutable.puzzle_state_history`
+                // anymore because there is no further processing
+                return AdmissibleGoalHeuristic::SOLVED;
             }
 
             mutable.puzzle_state_history.pop_stack();
+
+            // Pathmax optimization. If the child node has a large pruning,
+            // then we can set the current node cost to that value minus one
+            // (it's still admissible) and re-prune.
+            //
+            // Note that this is only effective when the heuristics are
+            // **inconsistent**, or when the pruning table entry is the minimum
+            // of two or more other values.
+            if (
+                // We do an important check. If we are searching for the first
+                // solution only, then there are no caveats. But when we are
+                // searching for all solutions, if child node is zero (it's
+                // a solution), then propagating the value minus one would
+                // integer overflow. When this is the case I have deemed it
+                // unnecessary to do any further optimization because the search
+                // must be at the last depth and close to terminating
+                self.search_strategy == SearchStrategy::FirstSolution
+                || child_admissible_goal_heuristic != AdmissibleGoalHeuristic::SOLVED)
+                // Re-prune with the same inequality at the beginning of this
+                // function. Assume the current node to be the child node
+                // heuristic minus one, and the permitted cost plus one because
+                // we subtracted one from it before entering this loop
+                && child_admissible_goal_heuristic.0 - 1 > permitted_cost + 1
+            {
+                // The child node heuristic minus one cannot be one and break
+                // the zero invariant because 1 - 1 cannot be greater than any
+                // u8. Overflow is impossible following the logic of this `if`
+                // statement
+                return AdmissibleGoalHeuristic(child_admissible_goal_heuristic.0 - 1);
+            }
             next_entry_index = 0;
 
-            // TODO: BPMX optimization
-            // if next_est_goal_cost.saturating_sub(1) > est_goal_cost {
-            //     est_goal_cost = next_est_goal_cost.saturating_sub(1);
-            //     if est_goal_cost > cost_bound {
-            //         return est_goal_cost;
-            //     }
-            // }
+            // TODO: look into taking the min of all the child nodes
         }
+        AdmissibleGoalHeuristic(
+            // This optimizes to branchless code
+            if admissible_prune_cost == 0 {
+                // If this node resulted in no solution, then we are at least
+                // one step away from a solution.
+                1
+            } else {
+                admissible_prune_cost
+            },
+        )
     }
 
+    /// Run qter's cycle combination solver.
+    ///
+    /// # Panics
+    ///
+    /// The solver will panic if the search depth becomes too deep (a solution
+    /// is extremely unlikely to even exist).
     pub fn solve<H: PuzzleStateHistory<'id, P>>(&self) -> SolutionsIntoIter<'id, '_, P> {
         info!(start!("Searching for phase2 solutions"));
         let start = Instant::now();
@@ -183,10 +289,12 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
         // SAFETY: `H::initialize` when puzzle_state_history is created
         // guarantees that the first entry is bound
         let last_puzzle_state = unsafe { mutable.puzzle_state_history.last_state_unchecked() };
-        let mut depth = self.pruning_tables.permissible_heuristic(last_puzzle_state);
-        // Manually check depth 0 because the togo == 0 check was moved inside
-        // of the main loop in `search_for_solution`.
+        let mut depth = self.pruning_tables.admissible_heuristic(last_puzzle_state);
+        // Manually check depth 0 because the `permitted_cost == 0` check was
+        // moved inside of the main loop in `search_for_solution`.
         if depth == 0 {
+            debug!(working!("Searching depth {}..."), depth);
+            let depth_start = Instant::now();
             // The return values here don't matter since it's not used in the
             // below loop so we can get rid of `true` and `false`
             if last_puzzle_state.induces_sorted_cycle_type(
@@ -198,6 +306,12 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                     .solutions
                     .push(mutable.puzzle_state_history.create_move_history());
             }
+            debug!(
+                working!("Traversed {} nodes in {:.3}s"),
+                mutable.nodes_visited,
+                depth_start.elapsed().as_secs_f64()
+            );
+            mutable.nodes_visited = 0;
             // The loop ends up incrementing `depth` so we do this manually
             depth = 1;
         }
@@ -205,7 +319,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             .puzzle_state_history
             .resize_if_needed(depth as usize + 1);
 
-        while mutable.solutions.is_empty() {
+        while !mutable.found_solution() {
             debug!(working!("Searching depth {}..."), depth);
             let depth_start = Instant::now();
             self.search_for_solution(&mut mutable, CanonicalFSMState::default(), 0, true, depth);
@@ -218,7 +332,9 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             mutable
                 .puzzle_state_history
                 .resize_if_needed(depth as usize + 1);
-            depth += 1;
+            depth = depth
+                .checked_add(1)
+                .expect("Depth is too deep. Solution was not found.");
         }
 
         info!(

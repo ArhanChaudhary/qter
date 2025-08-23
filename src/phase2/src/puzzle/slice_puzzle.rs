@@ -326,18 +326,6 @@ impl<'id> SlicePuzzle<'id> for HeapPuzzle<'id> {
     }
 }
 
-impl<'id> From<BrandedOrbitDef<'id>> for AuxMem<'id> {
-    fn from(branded_orbit_def: BrandedOrbitDef<'id>) -> Self {
-        AuxMem {
-            inner: Some(
-                vec![0; branded_orbit_def.inner.piece_count.get().div_ceil(4) as usize]
-                    .into_boxed_slice(),
-            ),
-            id: branded_orbit_def.id(),
-        }
-    }
-}
-
 /// Populate `slice_orbit_states` with `transformation_metas`.
 fn transformation_meta_to_slice(
     slice_orbit_states: &mut [u8],
