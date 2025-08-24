@@ -433,20 +433,18 @@ impl PeepholeRewriter for RepeatUntil1 {
 /*
 Transforms
 ```
-    goto spot2
 spot1:
     <algorithm>
-spot2:
+<optional label>:
     solved-goto <positions> spot3
     goto spot1
 spot3:
 ```
 into
 ```
-    goto spot2
 spot1:
     <algorithm>
-spot2:
+<optional label>:
     repeat until <positions> solved <algorithm>
 spot3:
 ```
@@ -454,33 +452,28 @@ spot3:
 struct RepeatUntil2;
 
 impl PeepholeRewriter for RepeatUntil2 {
-    const MAX_WINDOW_SIZE: usize = 7;
+    const MAX_WINDOW_SIZE: usize = 6;
 
     fn try_match(
         window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
         global_regs: &GlobalRegs,
     ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
-        primitive_match!(OptimizingPrimitive::Goto { label: spot2 } = &**window.front()?);
-
-        let OptimizingCodeComponent::Label(spot1) = &**window.get(1)? else {
+        let OptimizingCodeComponent::Label(spot1) = &**window.front()? else {
             return None;
         };
 
-        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &**window.get(2)?);
+        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &**window.get(1)?);
 
-        let OptimizingCodeComponent::Label(real_spot2) = &**window.get(3)? else {
-            return None;
-        };
-
-        if spot2.name != real_spot2.name || spot2.block_id != real_spot2.maybe_block_id.unwrap() {
-            return None;
-        }
+        let optional_label = usize::from(matches!(
+            window.get(2).map(|v| &**v),
+            Some(OptimizingCodeComponent::Label(_))
+        ));
 
         primitive_match!(
             OptimizingPrimitive::SolvedGoto {
                 label: spot3,
                 register,
-            } = &**window.get(4)?
+            } = &**window.get(2 + optional_label)?
         );
 
         if match global_regs.get_reg(register) {
@@ -490,13 +483,15 @@ impl PeepholeRewriter for RepeatUntil2 {
             return None;
         }
 
-        primitive_match!(OptimizingPrimitive::Goto { label: maybe_spot1 } = &**window.get(5)?);
+        primitive_match!(
+            OptimizingPrimitive::Goto { label: maybe_spot1 } = &**window.get(3 + optional_label)?
+        );
 
         if spot1.name != maybe_spot1.name || spot1.maybe_block_id.unwrap() != maybe_spot1.block_id {
             return None;
         }
 
-        let OptimizingCodeComponent::Label(real_spot3) = &**window.get(6)? else {
+        let OptimizingCodeComponent::Label(real_spot3) = &**window.get(4 + optional_label)? else {
             return None;
         };
 
@@ -516,7 +511,7 @@ impl PeepholeRewriter for RepeatUntil2 {
 
         let mut out = Vec::new();
 
-        out.extend(window.drain(0..4));
+        out.extend(window.drain(0..2 + optional_label));
 
         let span = window
             .drain(0..2)
@@ -565,7 +560,10 @@ impl PeepholeRewriter for RepeatUntil3 {
 
         primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &**window.get(1)?);
 
-        let optional_label = usize::from(matches!(&*window[2], OptimizingCodeComponent::Label(_)));
+        let optional_label = usize::from(matches!(
+            window.get(2).map(|v| &**v),
+            Some(OptimizingCodeComponent::Label(_))
+        ));
 
         primitive_match!(
             OptimizingPrimitive::SolvedGoto {

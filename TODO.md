@@ -3,6 +3,7 @@
 # TODO
 
 ⭐means it's important to be done before the video series
+😎means it's optional
 
 - crashlog
 
@@ -51,7 +52,7 @@
 - ⭐Calculate orientations and parities of the puzzle
 - ⭐Calculate the symmetries of the puzzle
 - ⭐Parse our modified puzzlegeometry definition string
-- Reorganize parts of qter_core into here, rename `puzzle_theory` or something, and release as a crate on crates.io
+- ⭐Reorganize parts of qter_core into here, rename `puzzle_theory` or something, and release as a crate on crates.io
 
 ## QAT
 
@@ -66,30 +67,31 @@
 - Function macro
 - ⭐Directory of testing programs instead of hardcoding into Rust
   - ⭐Inline testing in the QAT format
-- `solve-puzzle` and instruction to copy solving moves to other puzzle
-- Architecture that avoids sharing a piece by always having two additions simultaneously which avoids parity
+- 😎Instruction to copy solving moves to other puzzle
+- 😎Architecture that avoids sharing a piece by always having two additions simultaneously which avoids parity
+- 😎Asher's repeated move post process optimization: R U R repeated = R then U R2 repeated then R'
+- 😎force conditional blocks that end with "halt" to codegen at the end of the instruction memory, optimizing a goto
 
 ## Interpreter/CLI
 
 - ⭐Implement tapes
 - Debugging tool
-- Implementing the fancy CRT/loop-repetition-calculating thingy
+- 😎Implementing the fancy CRT/loop-repetition-calculating thingy
 
 ## Q
 
 - ⭐Compile to Q
-- ⭐"[repeat|print|halt] until _ solved" syntax
+  - ⭐"[repeat|print|halt] until _ solved" syntax
 - Parse Q
 - Comments with parentheses
-- Asher's repeated move post process optimization: R U R repeated = R then U R2 repeated then R'
-- force conditional blocks that end with "halt" to codegen at the end of the instruction memory, optimizing a goto
 
 ## End user
 
 - Web app of qter with a visualization
 - ⭐Youtube videos
+- ⭐Animation of the robot doing a computation
 
 ## Robot
 
 - ⭐Add robot to the README
-- Build one
+- 😎Build one
