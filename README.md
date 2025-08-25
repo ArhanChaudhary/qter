@@ -1,6 +1,6 @@
 <!-- cspell:ignore nlogo promela scilab vcube benwh rokicki lgarron ditrus voltara infinidoge esqu1 trangium movecount Arhan Chaudhary Rovnyak korf twizzle metaprogramming cubies youtuber abelian nxopt sebastianotronto twsearch -->
 <p align="center">
-    <img src="media/Header.png" width="500" alt="The qter logo">
+    <img src="media/Header.png" width="500" alt="The Qter logo">
 </p>
 <hr>
 
@@ -86,13 +86,13 @@ loop {
 
 ### Table of Contents
 
-- [How does qter work?](#how-does-qter-work)
+- [How does Qter work?](#how-does-qter-work)
   - [Introduction](#introduction)
   - [Addition](#addition)
   - [Bigger numbers](#bigger-numbers)
   - [Branching](#branching)
   - [Multiple numbers](#multiple-numbers)
-- [Physically running qter](#physically-running-qter)
+- [Physically running Qter](#physically-running-qter)
   - [The Q file format](#the-q-file-format)
   - [Logical instructions](#logical-instructions)
   - [Other twisty puzzles](#other-twisty-puzzles)
@@ -101,6 +101,10 @@ loop {
   - [Global variables](#global-variables)
   - [Basic instructions](#basic-instructions)
   - [Metaprogramming](#metaprogramming)
+    - [Defines](#defines)
+    - [Macros](#macros)
+  - [Lua Macros](#lua-macros)
+    - [Importing](#importing)
   - [Prelude](#prelude)
 - [Memory tapes](#memory-tapes)
 - [Technical details](#technical-details)
@@ -112,7 +116,7 @@ loop {
 - [References](#references)
 - [Acknowledgements](#acknowledgements)
 
-# How does qter work?
+# How does Qter work?
 
 ## Introduction
 
@@ -122,7 +126,7 @@ The most important thing for a computer to be able to do is represent numbers. L
 
 <img src="media/State Zero.png" width="275" alt="A solved Rubik's cube"/>
 
-The fundamental unit of computation in qter is an _algorithm_, or a sequence of moves to apply to the cube. Let's see what happens if we apply the simplest algorithm, just turning the top face, and see what this buys us:
+The fundamental unit of computation in Qter is an _algorithm_, or a sequence of moves to apply to the cube. Let's see what happens if we apply the simplest algorithm, just turning the top face, and see what this buys us:
 
 <img src="media/State One.png" width="275" alt="A Rubik's cube after performing U"/>
 
@@ -152,15 +156,15 @@ You may notice that subtracting one is equivalent to adding three, because `U'` 
 
 ## Bigger numbers
 
-If the biggest number qter could represent was three, it would not be an effective tool for computation. Thankfully, the Rubik's cube has 43 quintillion states, leaving us lots of room to do better than just four. Consider the algorithm `R U`. We can play the same game using this algorithm. The solved cube represents zero, `R U` represents one, `R U R U` represents two, etc. This algorithm performs a much more complicated action on the cube, so we should be able to represent more numbers. In fact, the maximum number we can represent this way is 104, wrapping around after 105 iterations. We would say that the algorithm has "order 105".
+If the biggest number Qter could represent was three, it would not be an effective tool for computation. Thankfully, the Rubik's cube has 43 quintillion states, leaving us lots of room to do better than just four. Consider the algorithm `R U`. We can play the same game using this algorithm. The solved cube represents zero, `R U` represents one, `R U R U` represents two, etc. This algorithm performs a much more complicated action on the cube, so we should be able to represent more numbers. In fact, the maximum number we can represent this way is 104, wrapping around after 105 iterations. We would say that the algorithm has "order 105".
 
 There are still lots of cube states left; can we do better? Unfortunately, it's only possible to get to 1259, wrapping around on the 1260th iteration. You can try this using the algorithm `R U2 D' B D'`. This has been proven to be the maximum order [[1](#ref-1)].
 
 ## Branching
 
-The next thing that a computer must be able to do is _branch_, without it we can only do addition and subtraction and nothing else. If we want to perform loops or only execute code conditionally, qter must be able to change what it does based on the state of the cube. For this, we introduce a "solved-goto" instruction.
+The next thing that a computer must be able to do is _branch_, without it we can only do addition and subtraction and nothing else. If we want to perform loops or only execute code conditionally, Qter must be able to change what it does based on the state of the cube. For this, we introduce a "solved-goto" instruction.
 
-If you perform `R U` on a cube a bunch of times without counting, it's essentially impossible for you to tell how many times you did the algorithm by _just looking_ at the cube. With one exception: If you did it _zero_ times, then the cube is solved and it's completely obvious that you did it zero times. Since we want qter code to be executable by humans, the "solved-goto" instruction asks you to go to a different location of the program _only_ if the cube is solved.
+If you perform `R U` on a cube a bunch of times without counting, it's essentially impossible for you to tell how many times you did the algorithm by _just looking_ at the cube. With one exception: If you did it _zero_ times, then the cube is solved and it's completely obvious that you did it zero times. Since we want Qter code to be executable by humans, the "solved-goto" instruction asks you to go to a different location of the program _only_ if the cube is solved.
 
 ## Multiple numbers
 
@@ -172,7 +176,7 @@ The simplest example of this concept are the algorithms `U` and `D`. You can see
 
 As described, "solved-goto" would only branch if the entire cube is solved, however since each algorithm affects a distinct area of the cube, it's possible for a human to determine whether a _single_ register is zero, by inspecting whether a particular section of the cube is solved. In the Q format, we support this by each "solved-goto" instruction giving a list of positions, all of which must have their solved piece for the branch to be taken, but not necessarily any more.
 
-Can we do better than two registers with four states? In fact we can! If you try out the algorithms `R' F' L U' L U L F U' R` and `U F R' D' R2 F R' U' D`, you can see that they affect different pieces and both have order ninety. You may notice that they both rotate the same corner; this is not a problem because they are independently decodable even ignoring that corner. One of the biggest challenges in the development of qter has been finding sets of algorithms with high orders that are all independently decodable.
+Can we do better than two registers with four states? In fact we can! If you try out the algorithms `R' F' L U' L U L F U' R` and `U F R' D' R2 F R' U' D`, you can see that they affect different pieces and both have order ninety. You may notice that they both rotate the same corner; this is not a problem because they are independently decodable even ignoring that corner. One of the biggest challenges in the development of Qter has been finding sets of algorithms with high orders that are all independently decodable.
 
 If you're curious, the Fibonacci program uses these four registers:
 
@@ -183,13 +187,13 @@ If you're curious, the Fibonacci program uses these four registers:
 | 10 | `R' U' L' F2 L F U F R L U'` |
 | 9 | `B2 U2 L F' R B L2 D2 B R' F L` |
 
-# Physically running qter
+# Physically running Qter
 
 ## The Q file format
 
-The Q file format is qter's representation of a computer program in an executable Rubik's cube language. The file format was designed in such a way that, with only basic Rubik's cube knowledge, a human can physically manipulate a twisty puzzle to execute a program and perform a meaningful computation.
+The Q file format is Qter's representation of a computer program in an executable Rubik's cube language. The file format was designed in such a way that, with only basic Rubik's cube knowledge, a human can physically manipulate a twisty puzzle to execute a program and perform a meaningful computation.
 
-Qter doesn't just support 3x3x3 cubes, but it works with any twisty puzzle in the shape of a platonic solid. Since most people are most familiar with the 3x3x3 cube, we will introduce qter with the aforementioned from now on.
+Qter doesn't just support 3x3x3 cubes, but it works with any twisty puzzle in the shape of a platonic solid. Since most people are most familiar with the 3x3x3 cube, we will introduce Qter with the aforementioned from now on.
 
 Q files are expected to be read from top to bottom. Each line indicates an instruction, the simplest of which is just an algorithm to perform on the cube. For example:
 
@@ -404,17 +408,17 @@ Talking points:
 
 # The QAT programming language
 
-This section assumes moderate familiarity with an existing programming language, such as Python, JavaScript, or C. Once again, qter supports all types of twisty puzzles in the shape of a platonic solid. Since most people are most familiar with the 3x3x3 cube, we will introduce qter with the aforementioned from now on.
+This section assumes moderate familiarity with an existing programming language, such as Python, JavaScript, or C. Once again, Qter supports all types of twisty puzzles in the shape of a platonic solid. Since most people are most familiar with the 3x3x3 cube, we will introduce Qter with the aforementioned from now on.
 
 ## Your first QAT program
 
-Q would be very difficult to create programs with by hand, similarly to how it is difficult to write programs in machine code directly. Therefore, we created a high-level programming language called _QAT_ (Qter Assembly Text) that is designed to make it easy to write meaningful Qter programs. To run a program in a traditional programming language, you compile your source code into machine code that the computer processor then interprets and executes. The qter compilation pipeline works similarly.
+Q would be very difficult to create programs with by hand, similarly to how it is difficult to write programs in machine code directly. Therefore, we created a high-level programming language called _QAT_ (Qter Assembly Text) that is designed to make it easy to write meaningful Qter programs. To run a program in a traditional programming language, you compile your source code into machine code that the computer processor then interprets and executes. The Qter compilation pipeline works similarly.
 
 <p align="center">
-  <img src="media/CompilationPipelineVert.svg" width="360" alt="A diagram of the qter compilation pipeline">
+  <img src="media/CompilationPipelineVert.svg" width="360" alt="A diagram of the Qter compilation pipeline">
 </p>
 
-To run your first QAT program, you will first need to install Cargo (talk about installing Cargo) and then the qter compiler executable through the command line: `cargo install qter`. Once set up, create a file named `average.qat` with the following program code.
+To run your first QAT program, you will first need to install Cargo (talk about installing Cargo) and then the Qter compiler executable through the command line: `cargo install qter`. Once set up, create a file named `average.qat` with the following program code.
 
 ```janet
 .registers {
@@ -449,7 +453,7 @@ To compile this program, run `qter compile average.qat` to generate `average.q`.
 
 Every QAT program begins with a `.registers` statement, used to declare global variables named registers. The statement in the above average program declares two global registers of size 90 to be stored on a Rubik's cube. That is, additions operate modulo 90: incrementing a register of value 89 resets it back to 0, and decrementing a register of value 0 sets it to 89.
 
-The `builtin` keyword refers to the fact that valid register sizes are specified in a puzzle-specific preset. For the Rubik's cube, all builtin register sizes are in [src/qter_core/puzzles/3x3.txt](src/qter_core/puzzles/3x3.txt). Unlike traditional computers, qter is only able to operate with small and irregular register sizes.
+The `builtin` keyword refers to the fact that valid register sizes are specified in a puzzle-specific preset. For the Rubik's cube, all builtin register sizes are in [src/qter_core/puzzles/3x3.txt](src/qter_core/puzzles/3x3.txt). Unlike traditional computers, Qter is only able to operate with small and irregular register sizes.
 
 You can choose to use larger register sizes at the cost of requiring more puzzles. For example, 1260 is a valid builtin register size that needs an entire Rubik's cube to declare. If your program wants access to more than one register, it would have to use multiple Rubik's cubes for more memory.
 
@@ -944,7 +948,7 @@ Now we're getting to the more theoretical side, as well as into a design space t
 
 There are plenty of cool programs one can write using the system described above, but it's certainly not turing complete. The fundamental reason is that we only have finite memory... For example it would be impossible to write a QAT compile in QAT because there's simply not enough memory to even store a whole program on a Rubik's cube. In principle, anything would be possible with infinite Rubik's cubes, but it wouldn't be practical to give all of them names since you can't put infinite names in a program. How can we organize them instead?
 
-The traditional solution to this problem that is used by classical computers is _pointers_. You assign every piece of memory a number and allow that number to be stored in memory itself. Each piece of memory essentially has a unique name — its number — and you can calculate which pieces of memory needed at runtime as necessary. However, this system won't work for qter because we would like to avoid requiring the user to manually decode registers outside of halting. We allow the `print` instruction to exist because it doesn't affect what the program does and can simply be ignored at the user's discretion.
+The traditional solution to this problem that is used by classical computers is _pointers_. You assign every piece of memory a number and allow that number to be stored in memory itself. Each piece of memory essentially has a unique name — its number — and you can calculate which pieces of memory needed at runtime as necessary. However, this system won't work for Qter because we would like to avoid requiring the user to manually decode registers outside of halting. We allow the `print` instruction to exist because it doesn't affect what the program does and can simply be ignored at the user's discretion.
 
 Even if we did allow pointers, it wouldn't be a foundation for the usage of infinite memory. The maximum number that a single Rubik's cube could represent if you use the whole cube for one register is 1259. Therefore, we could only possibly assign numbers to 1260 Rubik's cubes, which would still not be nearly enough memory to compile a QAT program.
 
@@ -959,7 +963,7 @@ Since our language is so minimal, we can take inspiration from perhaps the most 
 - `[` Jump past the matching `]` if the number at the pointer is zero
 - `]` Jump to the matching `[` if the number at the pointer is non-zero
 
-The similarity to Qter is immediately striking and it provides a blueprint for how we can support infinite cubes. We can give Qter and infinite list of cubes called a _memory tape_ and instructions to move left and right, and that would make Qter turing-complete. Now Brainfuck is intentionally designed to be a "turing tarpit" and to make writing programs as annoying as possible, but we don't want that. For the sake of our sanity, we support having multiple memory tapes and naming them, so you don't have to think about potentially messing up other pieces of data while traversing for something else. To model a tape in a hand-computation of a qter program, one could have a bunch of Rubik's cubes on a table laid out in a row and a physical pointer like an arrow cut out of paper to model the pointer. One could also set the currently pointed-to Rubik's cube aside. 
+The similarity to Qter is immediately striking and it provides a blueprint for how we can support infinite cubes. We can give Qter and infinite list of cubes called a _memory tape_ and instructions to move left and right, and that would make Qter turing-complete. Now Brainfuck is intentionally designed to be a "turing tarpit" and to make writing programs as annoying as possible, but we don't want that. For the sake of our sanity, we support having multiple memory tapes and naming them, so you don't have to think about potentially messing up other pieces of data while traversing for something else. To model a tape in a hand-computation of a Qter program, one could have a bunch of Rubik's cubes on a table laid out in a row and a physical pointer like an arrow cut out of paper to model the pointer. One could also set the currently pointed-to Rubik's cube aside.
 
 Lets see how we can tweak Q and QAT to interact with memory tapes. First, we need a way to declare them in both languages. In Q, you can write
 
@@ -1043,7 +1047,7 @@ The proof for this introduces an important concept that will later be brought up
 
 At its most basic level, _registers_ are units of storage that can be modified at will, and an essential building block to how computers work. Computer CPUs use registers to store small amounts of data during program execution.
 
-Armed with puzzle theory background knowledge, you can understand the main idea of how qter works in three words: cycles are registers. In essence, the value of a register is the Nth step of the cycle's corresponding algorithm.
+Armed with puzzle theory background knowledge, you can understand the main idea of how Qter works in three words: cycles are registers. In essence, the value of a register is the Nth step of the cycle's corresponding algorithm.
 
 Let's explain what that means through an example. Here are all the states visited by the `U` cycle:
 
@@ -1071,32 +1075,12 @@ Talking points
 
 ### Phase 2
 
-WIP
-
-Using Korf's algorithm
-
-Talking points
-
-- Korf's algorithm
-- Symmetry and inverse reduction [[3](#ref-3)]
-- Trangium's algorithm evaluator
-
-Using GAP
-
-WIP
-
-Talking points
-
-- Stabilizers
-- Conjugacy classes
-- Fork of optimal solver
-
 ## Puzzle geometry
 
 # About the authors
 
-- Arhan Chaudhary: Hi! I am a sophomore at Purdue University, and I have always been fascinated by Rubik's cubes since I learned how to solve them in middle school. I was greatly inspired by the [Purdue Hackers](https://www.purduehackers.com/) community to begin this project, and have spent the better part of the entire school year working on it. I'm looking for Summer 2026 internships - and I'm particularly excited about working with startups. Read more about my work at my [website](https://arhan.sh/).
-- Henry Rovnyak: (_lands behind you_) Hello there! Like Arhan, I too am a sophomore at Purdue University. I'm interested in math and programming, and I met Arhan through this project and the Purdue Hackers community. I enjoy systems and scientific programming, but I also have a soft spot for theoretical work and frontend design. Arhan may or may not have gotten me addicted to cubes... I'm also interested in Summer 2026 internships, and you should consider checking out [my website](https://hrovnyak.gitlab.io/) to see some of the other stuff I've been working on.
+- Arhan Chaudhary: Hi! I am a junior at Purdue University, and I have always been fascinated by Rubik's cubes since I learned how to solve them in middle school. I was greatly inspired by the [Purdue Hackers](https://www.purduehackers.com/) community to begin this project, and have spent the better part of the entire school year working on it. I'm looking for Summer 2026 internships - and I'm particularly excited about working with startups. Read more about my work at my [website](https://arhan.sh/).
+- Henry Rovnyak: (_lands behind you_) Hello there! Like Arhan, I too am a junior at Purdue University. I'm interested in math and programming, and I met Arhan through this project and the Purdue Hackers community. I enjoy systems and scientific programming, but I also have a soft spot for theoretical work and frontend design. Arhan may or may not have gotten me addicted to cubes... I'm also interested in Summer 2026 internships, and you should consider checking out [my website](https://hrovnyak.gitlab.io/) to see some of the other stuff I've been working on.
 - Asher Gray: Hello! I'm a data analyst and youtuber from the PNW. I started off making videos about solving Rubik's cubes blindfolded, and now focus on math and fun ways to visualize it. Lately I've been studying the theory of abelian groups, including the abelian subgroups of the Rubik's cube. I'm excited to have joined this project, such an interesting application of these ideas! You can find me on [YouTube](https://m.youtube.com/channel/UCJZt93WO-evfsfi7YlVmrQA) or enjoy some interactive math visualizations on my [website](https://thegraycuber.github.io/).
 
 # References
@@ -1121,5 +1105,5 @@ Additionally,
 - Thanks to [@rokicki](https://github.com/rokicki) for personally advising most of phase 2's design.
 - Thanks to [@benwh1](https://github.com/benwh1) for miscellaneous puzzle theory insights.
 - Thanks to [@Infinidoge](https://github.com/Infinidoge) for providing access to powerful hardware.
-- Thanks to [@DitrusNight](https://github.com/DitrusNight) for advising qter's programming language design.
+- Thanks to [@DitrusNight](https://github.com/DitrusNight) for advising Qter's programming language design.
 - Thanks to [@Phineas1500](https://github.com/Phineas1500) for encouragement and outreach.

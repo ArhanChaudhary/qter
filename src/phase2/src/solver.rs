@@ -224,33 +224,28 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
 
             mutable.puzzle_state_history.pop_stack();
 
-            // Pathmax optimization. If the child node has a large pruning,
-            // then we can set the current node cost to that value minus one
-            // (it's still admissible) and re-prune.
+            // Pathmax optimization. If the child node has a large pruning
+            // value, then we can set the current node cost to that value minus
+            // one and re-prune. This larger value is still admissible because
+            // it is one less then a known lower bound.
             //
             // Note that this is only effective when the heuristics are
             // **inconsistent**, or when the pruning table entry is the minimum
-            // of two or more other values.
-            if (
-                // We do an important check. If we are searching for the first
-                // solution only, then there are no caveats. But when we are
-                // searching for all solutions, if child node is zero (it's
-                // a solution), then propagating the value minus one would
-                // integer overflow. When this is the case I have deemed it
-                // unnecessary to do any further optimization because the search
-                // must be at the last depth and close to terminating
-                self.search_strategy == SearchStrategy::FirstSolution
-                || child_admissible_goal_heuristic != AdmissibleGoalHeuristic::SOLVED)
-                // Re-prune with the same inequality at the beginning of this
-                // function. Assume the current node to be the child node
-                // heuristic minus one, and the permitted cost plus one because
-                // we subtracted one from it before entering this loop
-                && child_admissible_goal_heuristic.0 - 1 > permitted_cost + 1
-            {
-                // The child node heuristic minus one cannot be one and break
-                // the zero invariant because 1 - 1 cannot be greater than any
-                // u8. Overflow is impossible following the logic of this `if`
-                // statement
+            // of two or more other values. With exact tables, this if statement
+            // will never run, which should be good for the branch predictor.
+            if
+            // Assume the current node to be the child node heuristic minus one,
+            // and the permitted cost plus one because we subtracted one from it
+            // before entering this loop.
+            //
+            // IMPORTANT: We carry over the minus one to the left side, to
+            // create plus two. It must be written with a plus two to prevent
+            // overflow.
+            child_admissible_goal_heuristic.0 > permitted_cost + 2 {
+                // The child node heuristic minus one cannot be zero and break
+                // the zero invariant because 1 > X + 2 cannot be true for any
+                // u8. It cannot be zero either and overflow for the same
+                // reason.
                 return AdmissibleGoalHeuristic(child_admissible_goal_heuristic.0 - 1);
             }
             next_entry_index = 0;
