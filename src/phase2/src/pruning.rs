@@ -54,7 +54,7 @@ pub trait PruningTables<'id, P: PuzzleState<'id>> {
 
     /// The pruning table is expected to hold the sorted cycle type so the
     /// instance can be tied to it and not some other foreign cycle type.
-    fn sorted_cycle_type_slice_view(&self) -> SortedCycleTypeRef<'id, '_>;
+    fn sorted_cycle_type_ref(&self) -> SortedCycleTypeRef<'id, '_>;
 }
 
 /// A trait for a pruning table storage backend
@@ -333,7 +333,7 @@ impl<'id, P: PuzzleState<'id>> PruningTables<'id, P> for OrbitPruningTables<'id,
         let mut maybe_orbit_identifier: Option<P::OrbitIdentifier> = None;
         for (orbit_index, branded_orbit_def) in generate_metas
             .puzzle_def
-            .sorted_orbit_defs_slice_view()
+            .sorted_orbit_defs_ref()
             .branded_copied_iter()
             .enumerate()
         {
@@ -416,7 +416,7 @@ impl<'id, P: PuzzleState<'id>> PruningTables<'id, P> for OrbitPruningTables<'id,
             })
     }
 
-    fn sorted_cycle_type_slice_view(&self) -> SortedCycleTypeRef<'id, '_> {
+    fn sorted_cycle_type_ref(&self) -> SortedCycleTypeRef<'id, '_> {
         self.sorted_cycle_type.slice_view()
     }
 }
@@ -816,7 +816,7 @@ impl<'id, P: PuzzleState<'id>, S: StorageBackend<true>> OrbitPruningTable<'id, P
 
         let mut orbit_result = orbit_puzzle_solved.clone();
 
-        let mut aux_mem = P::new_aux_mem(puzzle_def.sorted_orbit_defs_slice_view());
+        let mut aux_mem = P::new_aux_mem(puzzle_def.sorted_orbit_defs_ref());
         let mut depth = 0;
         let mut vacant_entry_count = entry_count;
 
@@ -985,7 +985,7 @@ impl<'id, P: PuzzleState<'id>> PruningTables<'id, P> for ZeroTable<'id, P> {
         0
     }
 
-    fn sorted_cycle_type_slice_view(&self) -> SortedCycleTypeRef<'id, '_> {
+    fn sorted_cycle_type_ref(&self) -> SortedCycleTypeRef<'id, '_> {
         self.sorted_cycle_type.slice_view()
     }
 }
@@ -1044,15 +1044,14 @@ mod tests {
         let solved = cube3_def.new_solved_state();
         let u_move = cube3_def.find_move("U").unwrap();
         let identity_cycle_type =
-            SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_slice_view())
-                .unwrap();
+            SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_ref()).unwrap();
 
         let generate_meta = OrbitPruningTableGenerationMeta {
             puzzle_def: &cube3_def,
             sorted_cycle_type_orbit: &[],
             orbit_identifier: <Cube3 as PuzzleState>::OrbitIdentifier::first_orbit_identifier(
                 cube3_def
-                    .sorted_orbit_defs_slice_view()
+                    .sorted_orbit_defs_ref()
                     .branded_copied_iter()
                     .next()
                     .unwrap(),
@@ -1085,8 +1084,7 @@ mod tests {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let identity_cycle_type =
-            SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_slice_view())
-                .unwrap();
+            SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_ref()).unwrap();
         let zero_table = ZeroTable::try_generate_all(identity_cycle_type, ()).unwrap();
 
         let random_state = apply_random_moves(&cube3_def, &cube3_def.new_solved_state(), 20);
@@ -1133,8 +1131,7 @@ mod tests {
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let id = cube3_def.id();
         let identity_cycle_type =
-            SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_slice_view())
-                .unwrap();
+            SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_ref()).unwrap();
         let generate_metas = OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
             vec![
@@ -1195,13 +1192,12 @@ mod tests {
     }
 
     #[test_log::test]
-    fn test_wip() {
+    fn test_2x2_solver_pruning_table() {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let id = cube3_def.id();
         let identity_cycle_type =
-            SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_slice_view())
-                .unwrap();
+            SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_ref()).unwrap();
         let generate_metas = OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
             vec![

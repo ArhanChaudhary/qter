@@ -402,11 +402,10 @@ impl Cube3State for Cube3 {
         edge_cycle_type_pointer = edge_cycle_type_pointer.wrapping_sub(1);
 
         if edge_cycle_type_pointer == usize::MAX {
-            if let Some(&first_cycle) = sorted_edges_cycle_type.first() {
-                if first_cycle == (1.try_into().unwrap(), true) {
+            if let Some(&first_cycle) = sorted_edges_cycle_type.first()
+                && first_cycle == (1.try_into().unwrap(), true) {
                     return false;
                 }
-            }
         } else if edge_cycle_type_pointer >= sorted_edges_cycle_type.len()
             || sorted_edges_cycle_type[edge_cycle_type_pointer] != (1.try_into().unwrap(), true)
         {
@@ -691,7 +690,7 @@ mod tests {
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
     #[test]
-    #[cfg_attr(not(avx2), ignore)]
+    #[cfg_attr(not(avx2), ignore = "AVX2 not enabled")]
     fn test_brute_force_inversion() {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
@@ -733,7 +732,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(not(avx2), ignore)]
+    #[cfg_attr(not(avx2), ignore = "AVX2 not enabled")]
     fn test_raw_inversion() {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
@@ -775,7 +774,7 @@ mod tests {
     }
 
     #[bench]
-    #[cfg_attr(not(avx2), ignore)]
+    #[cfg_attr(not(avx2), ignore = "AVX2 not enabled")]
     fn bench_brute_force_inversion(b: &mut test::Bencher) {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
@@ -788,7 +787,7 @@ mod tests {
     }
 
     #[bench]
-    #[cfg_attr(not(avx2), ignore)]
+    #[cfg_attr(not(avx2), ignore = "AVX2 not enabled")]
     fn bench_raw_inversion(b: &mut test::Bencher) {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();

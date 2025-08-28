@@ -16,7 +16,7 @@ fn test_identity_cycle_type() {
     make_guard!(guard);
     let mut cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
     let identity_cycle_type =
-        SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_slice_view()).unwrap();
+        SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_ref()).unwrap();
 
     let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
         cube3_def,
@@ -53,7 +53,7 @@ fn test_single_quarter_turn() {
     let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
     let sorted_cycle_type = SortedCycleType::new(
         &[vec![(4, false)], vec![(4, false)]],
-        cube3_def.sorted_orbit_defs_slice_view(),
+        cube3_def.sorted_orbit_defs_ref(),
     )
     .unwrap();
     let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
@@ -72,7 +72,7 @@ fn test_single_half_turn() {
     let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
     let sorted_cycle_type = SortedCycleType::new(
         &[vec![(2, false), (2, false)], vec![(2, false), (2, false)]],
-        cube3_def.sorted_orbit_defs_slice_view(),
+        cube3_def.sorted_orbit_defs_ref(),
     )
     .unwrap();
     let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
@@ -92,7 +92,7 @@ fn test_optimal_subgroup_cycle() {
         PuzzleDef::<Cube3>::new(&KPUZZLE_3X3.clone().with_moves(&["F", "R", "U"]), guard).unwrap();
     let sorted_cycle_type = SortedCycleType::new(
         &[vec![(3, false), (4, false)], vec![(1, true), (8, true)]],
-        cube3_def.sorted_orbit_defs_slice_view(),
+        cube3_def.sorted_orbit_defs_ref(),
     )
     .unwrap();
     let solver: CycleTypeSolver<Cube3, _> = CycleTypeSolver::new(
@@ -117,7 +117,7 @@ fn test_control_optimal_cycle() {
     let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
     let sorted_cycle_type = SortedCycleType::new(
         &[vec![(1, true), (5, true)], vec![(1, true), (7, true)]],
-        cube3_def.sorted_orbit_defs_slice_view(),
+        cube3_def.sorted_orbit_defs_ref(),
     )
     .unwrap();
     let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
@@ -405,7 +405,7 @@ fn test_many_optimal_cycles() {
     ];
 
     let solved = cube3_def.new_solved_state();
-    let mut aux_mem = HeapPuzzle::new_aux_mem(cube3_def.sorted_orbit_defs_slice_view());
+    let mut aux_mem = HeapPuzzle::new_aux_mem(cube3_def.sorted_orbit_defs_ref());
 
     for optimal_cycle_test in optimal_cycle_type_tests {
         let mut result_1 = solved.clone();
@@ -416,14 +416,14 @@ fn test_many_optimal_cycles() {
             result_2.replace_compose(
                 &result_1,
                 move_.puzzle_state(),
-                cube3_def.sorted_orbit_defs_slice_view(),
+                cube3_def.sorted_orbit_defs_ref(),
             );
             std::mem::swap(&mut result_1, &mut result_2);
             move_count += 1;
         }
 
         let sorted_cycle_type =
-            result_1.sorted_cycle_type(cube3_def.sorted_orbit_defs_slice_view(), &mut aux_mem);
+            result_1.sorted_cycle_type(cube3_def.sorted_orbit_defs_ref(), &mut aux_mem);
 
         let zero_table = ZeroTable::try_generate_all(sorted_cycle_type, ()).unwrap();
 
@@ -772,7 +772,7 @@ fn test_big_cube_optimal_cycle() {
     let optimal_cycle_type_tests = &optimal_cycle_type_tests[0..5];
 
     let solved = cube4_def.new_solved_state();
-    let mut aux_mem = HeapPuzzle::new_aux_mem(cube4_def.sorted_orbit_defs_slice_view());
+    let mut aux_mem = HeapPuzzle::new_aux_mem(cube4_def.sorted_orbit_defs_ref());
 
     for optimal_cycle_test in optimal_cycle_type_tests {
         let mut result_1 = solved.clone();
@@ -783,14 +783,14 @@ fn test_big_cube_optimal_cycle() {
             result_2.replace_compose(
                 &result_1,
                 move_.puzzle_state(),
-                cube4_def.sorted_orbit_defs_slice_view(),
+                cube4_def.sorted_orbit_defs_ref(),
             );
             std::mem::swap(&mut result_1, &mut result_2);
             move_count += 1;
         }
 
         let sorted_cycle_type =
-            result_1.sorted_cycle_type(cube4_def.sorted_orbit_defs_slice_view(), &mut aux_mem);
+            result_1.sorted_cycle_type(cube4_def.sorted_orbit_defs_ref(), &mut aux_mem);
 
         let zero_table = ZeroTable::try_generate_all(sorted_cycle_type, ()).unwrap();
 

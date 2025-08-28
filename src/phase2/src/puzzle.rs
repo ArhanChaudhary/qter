@@ -464,7 +464,7 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
     }
 
     #[must_use]
-    pub fn sorted_orbit_defs_slice_view(&self) -> SortedOrbitDefsRef<'id, '_> {
+    pub fn sorted_orbit_defs_ref(&self) -> SortedOrbitDefsRef<'id, '_> {
         SortedOrbitDefsRef {
             inner: &self.sorted_orbit_defs,
             id: self.id,
@@ -679,7 +679,7 @@ pub fn apply_moves<'id, P: PuzzleState<'id>>(
             result_2.replace_compose(
                 &result_1,
                 &move_.puzzle_state,
-                puzzle_def.sorted_orbit_defs_slice_view(),
+                puzzle_def.sorted_orbit_defs_ref(),
             );
             std::mem::swap(&mut result_1, &mut result_2);
         }
@@ -701,7 +701,7 @@ pub fn apply_random_moves<'id, P: PuzzleState<'id>>(
         result_1.replace_compose(
             &result_2,
             &move_.puzzle_state,
-            puzzle_def.sorted_orbit_defs_slice_view(),
+            puzzle_def.sorted_orbit_defs_ref(),
         );
         std::mem::swap(&mut result_2, &mut result_1);
     }
@@ -735,43 +735,43 @@ mod tests {
             u_move,
             &mut result_1,
             &mut result_2,
-            cube3_def.sorted_orbit_defs_slice_view()
+            cube3_def.sorted_orbit_defs_ref()
         ));
         assert!(d2_move.commutes_with(
             d2_move,
             &mut result_1,
             &mut result_2,
-            cube3_def.sorted_orbit_defs_slice_view()
+            cube3_def.sorted_orbit_defs_ref()
         ));
         assert!(u_move.commutes_with(
             d2_move,
             &mut result_1,
             &mut result_2,
-            cube3_def.sorted_orbit_defs_slice_view()
+            cube3_def.sorted_orbit_defs_ref()
         ));
         assert!(!u_move.commutes_with(
             r_move,
             &mut result_1,
             &mut result_2,
-            cube3_def.sorted_orbit_defs_slice_view()
+            cube3_def.sorted_orbit_defs_ref()
         ));
         assert!(!d2_move.commutes_with(
             r_move,
             &mut result_1,
             &mut result_2,
-            cube3_def.sorted_orbit_defs_slice_view()
+            cube3_def.sorted_orbit_defs_ref()
         ));
         assert!(!r_move.commutes_with(
             u_move,
             &mut result_1,
             &mut result_2,
-            cube3_def.sorted_orbit_defs_slice_view()
+            cube3_def.sorted_orbit_defs_ref()
         ));
         assert!(!r_move.commutes_with(
             d2_move,
             &mut result_1,
             &mut result_2,
-            cube3_def.sorted_orbit_defs_slice_view()
+            cube3_def.sorted_orbit_defs_ref()
         ));
     }
 
@@ -845,7 +845,7 @@ mod tests {
             result_2.replace_compose(
                 &result_1,
                 &s_u4_symmetry.puzzle_state,
-                cube3_def.sorted_orbit_defs_slice_view(),
+                cube3_def.sorted_orbit_defs_ref(),
             );
             std::mem::swap(&mut result_1, &mut result_2);
         }
@@ -911,20 +911,20 @@ mod tests {
         let mut result = solved.clone();
 
         let state_r2_b_prime = apply_moves(&cube3_def, &solved, "R2 B'", 1);
-        result.replace_inverse(&state_r2_b_prime, cube3_def.sorted_orbit_defs_slice_view());
+        result.replace_inverse(&state_r2_b_prime, cube3_def.sorted_orbit_defs_ref());
 
         let state_b_r2 = apply_moves(&cube3_def, &solved, "B R2", 1);
         assert_eq!(result, state_b_r2);
 
         let in_r_f_cycle = apply_moves(&cube3_def, &solved, "R F", 40);
-        result.replace_inverse(&in_r_f_cycle, cube3_def.sorted_orbit_defs_slice_view());
+        result.replace_inverse(&in_r_f_cycle, cube3_def.sorted_orbit_defs_ref());
 
         let remaining_r_f_cycle = apply_moves(&cube3_def, &solved, "R F", 65);
         assert_eq!(result, remaining_r_f_cycle);
 
         for i in 1..=5 {
             let state = apply_moves(&cube3_def, &solved, "L F L' F'", i);
-            result.replace_inverse(&state, cube3_def.sorted_orbit_defs_slice_view());
+            result.replace_inverse(&state, cube3_def.sorted_orbit_defs_ref());
             let remaining_state = apply_moves(&cube3_def, &solved, "L F L' F'", 6 - i);
             assert_eq!(result, remaining_state);
         }
@@ -958,12 +958,8 @@ mod tests {
             let random_state = apply_random_moves(&cube3_def, &solved, 20);
             let mut result_1 = solved.clone();
             let mut result_2 = solved.clone();
-            result_1.replace_inverse(&random_state, cube3_def.sorted_orbit_defs_slice_view());
-            result_2.replace_compose(
-                &result_1,
-                &random_state,
-                cube3_def.sorted_orbit_defs_slice_view(),
-            );
+            result_1.replace_inverse(&random_state, cube3_def.sorted_orbit_defs_ref());
+            result_2.replace_compose(&result_1, &random_state, cube3_def.sorted_orbit_defs_ref());
 
             assert_eq!(result_2, solved);
         }
@@ -992,7 +988,7 @@ mod tests {
     pub fn induces_sorted_cycle_type_within_cycle<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
         let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
-        let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_slice_view());
+        let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_ref());
 
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 1);
         let sorted_cycle_type = SortedCycleType::new(
@@ -1000,19 +996,19 @@ mod tests {
                 vec![(3, true), (5, true)],
                 vec![(2, false), (2, true), (7, true)],
             ],
-            cube3_def.sorted_orbit_defs_slice_view(),
+            cube3_def.sorted_orbit_defs_ref(),
         )
         .unwrap();
         assert!(order_1260.induces_sorted_cycle_type(
             sorted_cycle_type.slice_view(),
-            cube3_def.sorted_orbit_defs_slice_view(),
+            cube3_def.sorted_orbit_defs_ref(),
             aux_mem.slice_view_mut(),
         ));
 
         let order_1260_in_cycle = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 209);
         assert!(order_1260_in_cycle.induces_sorted_cycle_type(
             sorted_cycle_type.slice_view(),
-            cube3_def.sorted_orbit_defs_slice_view(),
+            cube3_def.sorted_orbit_defs_ref(),
             aux_mem.slice_view_mut(),
         ));
     }
@@ -1040,14 +1036,13 @@ mod tests {
     pub fn induces_sorted_cycle_type_many<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
         let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
-        let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_slice_view());
+        let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_ref());
 
         let sorted_cycle_type =
-            SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_slice_view())
-                .unwrap();
+            SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_ref()).unwrap();
         assert!(solved.induces_sorted_cycle_type(
             sorted_cycle_type.slice_view(),
-            cube3_def.sorted_orbit_defs_slice_view(),
+            cube3_def.sorted_orbit_defs_ref(),
             aux_mem.slice_view_mut(),
         ));
 
@@ -1056,7 +1051,7 @@ mod tests {
                 "F2 L' U2 F U F U L' B U' F' U D2 L F2 B'",
                 SortedCycleType::new(
                     &[vec![(1, true), (3, true)], vec![(1, true), (5, true)]],
-                    cube3_def.sorted_orbit_defs_slice_view(),
+                    cube3_def.sorted_orbit_defs_ref(),
                 )
                 .unwrap(),
             ),
@@ -1064,7 +1059,7 @@ mod tests {
                 "U2 L B L2 F U2 B' U2 R U' F R' F' R F' L' U2",
                 SortedCycleType::new(
                     &[vec![(1, true), (5, true)], vec![(1, true), (7, true)]],
-                    cube3_def.sorted_orbit_defs_slice_view(),
+                    cube3_def.sorted_orbit_defs_ref(),
                 )
                 .unwrap(),
             ),
@@ -1072,7 +1067,7 @@ mod tests {
                 "R' U2 R' U2 F' D' L F L2 F U2 F2 D' L' D2 F R2",
                 SortedCycleType::new(
                     &[vec![(1, true), (3, true)], vec![(1, true), (7, true)]],
-                    cube3_def.sorted_orbit_defs_slice_view(),
+                    cube3_def.sorted_orbit_defs_ref(),
                 )
                 .unwrap(),
             ),
@@ -1083,7 +1078,7 @@ mod tests {
                         vec![(1, true), (1, true), (3, true)],
                         vec![(1, true), (7, true)],
                     ],
-                    cube3_def.sorted_orbit_defs_slice_view(),
+                    cube3_def.sorted_orbit_defs_ref(),
                 )
                 .unwrap(),
             ),
@@ -1091,7 +1086,7 @@ mod tests {
                 "R2 L2 D' B L2 D' B L' B D2 R2 B2 R' D' B2 L2 U'",
                 SortedCycleType::new(
                     &[vec![(2, true), (3, true)], vec![(4, true), (5, true)]],
-                    cube3_def.sorted_orbit_defs_slice_view(),
+                    cube3_def.sorted_orbit_defs_ref(),
                 )
                 .unwrap(),
             ),
@@ -1102,7 +1097,7 @@ mod tests {
                         vec![(1, true), (2, true), (3, true)],
                         vec![(4, true), (5, true)],
                     ],
-                    cube3_def.sorted_orbit_defs_slice_view(),
+                    cube3_def.sorted_orbit_defs_ref(),
                 )
                 .unwrap(),
             ),
@@ -1113,7 +1108,7 @@ mod tests {
                         vec![(2, true), (3, true)],
                         vec![(1, true), (4, true), (5, false)],
                     ],
-                    cube3_def.sorted_orbit_defs_slice_view(),
+                    cube3_def.sorted_orbit_defs_ref(),
                 )
                 .unwrap(),
             ),
@@ -1124,7 +1119,7 @@ mod tests {
                         vec![(1, true), (2, true), (3, true)],
                         vec![(1, true), (4, true), (5, false)],
                     ],
-                    cube3_def.sorted_orbit_defs_slice_view(),
+                    cube3_def.sorted_orbit_defs_ref(),
                 )
                 .unwrap(),
             ),
@@ -1135,7 +1130,7 @@ mod tests {
                         vec![(1, true), (2, false), (3, true)],
                         vec![(4, true), (5, true)],
                     ],
-                    cube3_def.sorted_orbit_defs_slice_view(),
+                    cube3_def.sorted_orbit_defs_ref(),
                 )
                 .unwrap(),
             ),
@@ -1146,7 +1141,7 @@ mod tests {
                         vec![(1, true), (2, false), (3, true)],
                         vec![(1, true), (4, true), (5, false)],
                     ],
-                    cube3_def.sorted_orbit_defs_slice_view(),
+                    cube3_def.sorted_orbit_defs_ref(),
                 )
                 .unwrap(),
             ),
@@ -1157,7 +1152,7 @@ mod tests {
                         vec![(1, true), (2, false), (3, true)],
                         vec![(2, false), (3, false), (3, false)],
                     ],
-                    cube3_def.sorted_orbit_defs_slice_view(),
+                    cube3_def.sorted_orbit_defs_ref(),
                 )
                 .unwrap(),
             ),
@@ -1165,7 +1160,7 @@ mod tests {
                 "U",
                 SortedCycleType::new(
                     &[vec![(4, false)], vec![(4, false)]],
-                    cube3_def.sorted_orbit_defs_slice_view(),
+                    cube3_def.sorted_orbit_defs_ref(),
                 )
                 .unwrap(),
             ),
@@ -1176,13 +1171,13 @@ mod tests {
 
             assert!(random_state.induces_sorted_cycle_type(
                 expected_cts.slice_view(),
-                cube3_def.sorted_orbit_defs_slice_view(),
+                cube3_def.sorted_orbit_defs_ref(),
                 aux_mem.slice_view_mut(),
             ));
 
             assert!(!solved.induces_sorted_cycle_type(
                 expected_cts.slice_view(),
-                cube3_def.sorted_orbit_defs_slice_view(),
+                cube3_def.sorted_orbit_defs_ref(),
                 aux_mem.slice_view_mut(),
             ));
 
@@ -1193,7 +1188,7 @@ mod tests {
                 let other_state = apply_moves(&cube3_def, &solved, other_moves, 1);
                 assert!(!other_state.induces_sorted_cycle_type(
                     expected_cts.slice_view(),
-                    cube3_def.sorted_orbit_defs_slice_view(),
+                    cube3_def.sorted_orbit_defs_ref(),
                     aux_mem.slice_view_mut()
                 ));
             }
@@ -1263,7 +1258,7 @@ mod tests {
         ] {
             let mut maybe_orbit_identifier: Option<P::OrbitIdentifier> = None;
             for (i, branded_orbit_def) in cube3_def
-                .sorted_orbit_defs_slice_view()
+                .sorted_orbit_defs_ref()
                 .branded_copied_iter()
                 .enumerate()
             {
@@ -1310,7 +1305,7 @@ mod tests {
             test::black_box(&mut solved).replace_compose(
                 test::black_box(&r_move.puzzle_state),
                 test::black_box(&f_move.puzzle_state),
-                cube3_def.sorted_orbit_defs_slice_view(),
+                cube3_def.sorted_orbit_defs_ref(),
             );
         });
     }
@@ -1323,7 +1318,7 @@ mod tests {
         b.iter(|| {
             test::black_box(&mut result).replace_inverse(
                 test::black_box(&order_1260),
-                cube3_def.sorted_orbit_defs_slice_view(),
+                cube3_def.sorted_orbit_defs_ref(),
             );
         });
     }
@@ -1338,15 +1333,15 @@ mod tests {
                 vec![(3, true), (5, true)],
                 vec![(2, false), (2, true), (7, true)],
             ],
-            cube3_def.sorted_orbit_defs_slice_view(),
+            cube3_def.sorted_orbit_defs_ref(),
         )
         .unwrap();
         let order_1260 = apply_moves(&cube3_def, &cube3_def.new_solved_state(), "R U2 D' B D'", 1);
-        let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_slice_view());
+        let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_ref());
         b.iter(|| {
             test::black_box(&order_1260).induces_sorted_cycle_type(
                 test::black_box(sorted_cycle_type.slice_view()),
-                cube3_def.sorted_orbit_defs_slice_view(),
+                cube3_def.sorted_orbit_defs_ref(),
                 aux_mem.slice_view_mut(),
             );
         });
@@ -1382,17 +1377,17 @@ mod tests {
                     vec![(3, true), (5, true)],
                     vec![(2, false), (2, true), (7, true)],
                 ],
-                cube3_def.sorted_orbit_defs_slice_view(),
+                cube3_def.sorted_orbit_defs_ref(),
             )
             .unwrap(),
             SortedCycleType::new(
                 &[vec![(1, true), (3, true)], vec![(1, true), (5, true)]],
-                cube3_def.sorted_orbit_defs_slice_view(),
+                cube3_def.sorted_orbit_defs_ref(),
             )
             .unwrap(),
             SortedCycleType::new(
                 &[vec![(2, true), (3, true)], vec![(4, true), (5, true)]],
-                cube3_def.sorted_orbit_defs_slice_view(),
+                cube3_def.sorted_orbit_defs_ref(),
             )
             .unwrap(),
             SortedCycleType::new(
@@ -1400,7 +1395,7 @@ mod tests {
                     vec![(1, true), (2, true), (3, true)],
                     vec![(4, true), (5, true)],
                 ],
-                cube3_def.sorted_orbit_defs_slice_view(),
+                cube3_def.sorted_orbit_defs_ref(),
             )
             .unwrap(),
             SortedCycleType::new(
@@ -1408,12 +1403,12 @@ mod tests {
                     vec![(2, true), (3, true)],
                     vec![(1, true), (4, true), (5, false)],
                 ],
-                cube3_def.sorted_orbit_defs_slice_view(),
+                cube3_def.sorted_orbit_defs_ref(),
             )
             .unwrap(),
             SortedCycleType::new(
                 &[vec![(4, false)], vec![(4, false)]],
-                cube3_def.sorted_orbit_defs_slice_view(),
+                cube3_def.sorted_orbit_defs_ref(),
             )
             .unwrap(),
         ];
@@ -1426,7 +1421,7 @@ mod tests {
             .collect();
         let mut random_iter = random_1000.iter().cycle();
 
-        let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_slice_view());
+        let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_ref());
         b.iter(|| {
             test::black_box(unsafe { random_iter.next().unwrap_unchecked() })
                 .induces_sorted_cycle_type(
@@ -1436,7 +1431,7 @@ mod tests {
                             .unwrap_unchecked()
                             .slice_view()
                     }),
-                    cube3_def.sorted_orbit_defs_slice_view(),
+                    cube3_def.sorted_orbit_defs_ref(),
                     aux_mem.slice_view_mut(),
                 );
         });
