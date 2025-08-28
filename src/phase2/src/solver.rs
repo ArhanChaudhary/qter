@@ -94,7 +94,6 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
         mutable: &mut CycleTypeSolverMutable<'id, P, H>,
         current_fsm_state: CanonicalFSMState,
         entry_index: usize,
-        is_root: bool,
         mut permitted_cost: u8,
     ) -> AdmissibleGoalHeuristic {
         if log_enabled!(Level::Debug) {
@@ -111,7 +110,6 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             return AdmissibleGoalHeuristic(admissible_prune_cost);
         }
 
-        let mut next_entry_index = entry_index + 1;
         // Tomas Rokicki's "sequence symmetry" optimization:
         // <https://github.com/cubing/twsearch/commit/7b1d62bd9d9d232fb4729c7227d5255deed9673c>
         // TODO: rederive the logic for this and explain it and show it cannot
@@ -140,6 +138,9 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             //     return false;
             // }
             let move_class_index = move_.move_class_index();
+            // TODO: optimize this more
+            // This is only ever true at the root node
+            let is_root = entry_index == 0;
             // This branch should have high predictability
             if is_root {
                 mutable.first_move_class_index = move_class_index;
@@ -161,7 +162,6 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                 .canonical_fsm
                 .next_state(current_fsm_state, move_class_index);
             if next_fsm_state.is_none() {
-                next_entry_index = 0;
                 continue;
             }
 
@@ -184,8 +184,8 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                 let last_puzzle_state =
                     unsafe { mutable.puzzle_state_history.last_state_unchecked() };
                 if last_puzzle_state.induces_sorted_cycle_type(
-                    self.pruning_tables.sorted_cycle_type_slice_view(),
-                    self.puzzle_def.sorted_orbit_defs_slice_view(),
+                    self.pruning_tables.sorted_cycle_type_ref(),
+                    self.puzzle_def.sorted_orbit_defs_ref(),
                     mutable.aux_mem.slice_view_mut(),
                 ) {
                     mutable
@@ -198,13 +198,13 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                     AdmissibleGoalHeuristic(1)
                 }
             } else {
-                self.search_for_solution(
-                    mutable,
-                    next_fsm_state,
-                    next_entry_index,
-                    false,
-                    permitted_cost,
-                )
+                // This optimizes to branchless code
+                let next_entry_index = if move_index == move_index_prune_lt {
+                    entry_index + 1
+                } else {
+                    1
+                };
+                self.search_for_solution(mutable, next_fsm_state, next_entry_index, permitted_cost)
             };
 
             // If we've found a solution, and our search strategy is to
@@ -238,17 +238,16 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             // and the permitted cost plus one because we subtracted one from it
             // before entering this loop.
             //
-            // IMPORTANT: We carry over the minus one to the left side, to
+            // IMPORTANT: We carry over the minus one to the right side to
             // create plus two. It must be written with a plus two to prevent
             // overflow.
             child_admissible_goal_heuristic.0 > permitted_cost + 2 {
                 // The child node heuristic minus one cannot be zero and break
                 // the zero invariant because 1 > X + 2 cannot be true for any
-                // u8. It cannot be zero either and overflow for the same
-                // reason.
+                // u8 (we don't care about 254). It cannot be zero either and
+                // overflow for the same reason.
                 return AdmissibleGoalHeuristic(child_admissible_goal_heuristic.0 - 1);
             }
-            next_entry_index = 0;
 
             // TODO: look into taking the min of all the child nodes
         }
@@ -276,7 +275,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
 
         let mut mutable: CycleTypeSolverMutable<P, H> = CycleTypeSolverMutable {
             puzzle_state_history: (&self.puzzle_def).into(),
-            aux_mem: P::new_aux_mem(self.puzzle_def.sorted_orbit_defs_slice_view()),
+            aux_mem: P::new_aux_mem(self.puzzle_def.sorted_orbit_defs_ref()),
             solutions: vec![],
             first_move_class_index: usize::default(),
             nodes_visited: 0,
@@ -293,8 +292,8 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             // The return values here don't matter since it's not used in the
             // below loop so we can get rid of `true` and `false`
             if last_puzzle_state.induces_sorted_cycle_type(
-                self.pruning_tables.sorted_cycle_type_slice_view(),
-                self.puzzle_def.sorted_orbit_defs_slice_view(),
+                self.pruning_tables.sorted_cycle_type_ref(),
+                self.puzzle_def.sorted_orbit_defs_ref(),
                 mutable.aux_mem.slice_view_mut(),
             ) {
                 mutable
@@ -317,7 +316,9 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
         while !mutable.found_solution() {
             debug!(working!("Searching depth {}..."), depth);
             let depth_start = Instant::now();
-            self.search_for_solution(&mut mutable, CanonicalFSMState::default(), 0, true, depth);
+            // `entry_index` must be zero here so the root level so sequence
+            // symmetry doesn't access OOB move history entries.
+            self.search_for_solution(&mut mutable, CanonicalFSMState::default(), 0, depth);
             debug!(
                 working!("Traversed {} nodes in {:.3}s"),
                 mutable.nodes_visited,
