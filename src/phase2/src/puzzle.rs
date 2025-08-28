@@ -123,7 +123,7 @@ pub struct OrbitDef {
 #[derive(Copy, Clone, Debug)]
 pub struct BrandedOrbitDef<'id> {
     pub inner: OrbitDef,
-    id: Id<'id>,
+    _id: Id<'id>,
 }
 
 #[derive(Clone, Copy)]
@@ -362,17 +362,11 @@ impl<'id> SortedCycleType<'id> {
     }
 }
 
-impl<'id> BrandedOrbitDef<'id> {
-    fn id(self) -> Id<'id> {
-        self.id
-    }
-}
-
 impl<'id> SortedOrbitDefsRef<'id, '_> {
     pub fn branded_copied_iter(&self) -> impl Iterator<Item = BrandedOrbitDef<'id>> {
         self.inner.iter().copied().map(|orbit_def| BrandedOrbitDef {
             inner: orbit_def,
-            id: self.id,
+            _id: self.id,
         })
     }
 
@@ -1530,28 +1524,28 @@ mod tests {
     // --- avx2::Cube3 benchmarks ---
 
     #[bench]
-    #[cfg_attr(not(avx2), ignore)]
+    #[cfg_attr(not(avx2), ignore = "AVX2 not enabled")]
     fn bench_compose_cube3_avx2(b: &mut Bencher) {
         make_guard!(guard);
         bench_compose_helper::<cube3::avx2::Cube3>(guard, b);
     }
 
     #[bench]
-    #[cfg_attr(not(avx2), ignore)]
+    #[cfg_attr(not(avx2), ignore = "AVX2 not enabled")]
     fn bench_inverse_cube3_avx2(b: &mut Bencher) {
         make_guard!(guard);
         bench_inverse_helper::<cube3::avx2::Cube3>(guard, b);
     }
 
     #[bench]
-    #[cfg_attr(not(avx2), ignore)]
+    #[cfg_attr(not(avx2), ignore = "AVX2 not enabled")]
     fn bench_induces_sorted_cycle_type_cube3_avx2_worst(b: &mut Bencher) {
         make_guard!(guard);
         bench_induces_sorted_cycle_type_worst_helper::<cube3::avx2::Cube3>(guard, b);
     }
 
     #[bench]
-    #[cfg_attr(not(avx2), ignore)]
+    #[cfg_attr(not(avx2), ignore = "AVX2 not enabled")]
     fn bench_induces_sorted_cycle_type_cube3_avx2_average(b: &mut Bencher) {
         make_guard!(guard);
         bench_induces_sorted_cycle_type_average_helper::<cube3::avx2::Cube3>(guard, b);

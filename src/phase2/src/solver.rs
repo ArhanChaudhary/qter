@@ -110,17 +110,46 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             return AdmissibleGoalHeuristic(admissible_prune_cost);
         }
 
-        // Tomas Rokicki's "sequence symmetry" optimization:
-        // <https://github.com/cubing/twsearch/commit/7b1d62bd9d9d232fb4729c7227d5255deed9673c>
-        // TODO: rederive the logic for this and explain it and show it cannot
-        // be improved
+        // Sequence symmetry optimization, first observed by [Tomas Rokicki][ss],
+        // and slightly improved by this implementation. Some solution to Phase2
+        // A B C D conjugated by A^-1 yields A^-1 (A B C D) A = B C D A, which
+        // we observe to be a rotation of the original sequence. One of the
+        // properties of conjugate elements is that they cannot be distinguished
+        // by using only the group structure, and this includes the cycle
+        // structure we are solving for. Recursively applying this conjugation
+        // forms an equivalence class based on the rotations of sequences, so we
+        // search only a single representative sequence to avoid duplicate work.
+        // We choose the representative as the lexicographically minimal
+        // sequence because this restriction is easy to embed in IDA* search.
+        //
+        // [ss]: https://github.com/cubing/twsearch/commit/7b1d62bd9d9d232fb4729c7227d5255deed9673c
+        //
+        // Let us define:
+        //
+        // - `X` as the node about to be explored in the recursive step of IDA*
+        // - The inequality symbols lexicographically
+        // - `HISTORY(i)` as a function that returns the one-indexed move in the
+        //   current move history.
+        // - The integer `i`, initialized to zero
+        //
+        // The sequence symmetry optimization recursively goes through the
+        // following decision tree to ensure it only ever searches the
+        // lexicographically minimal sequence by their rotation:
+        //
+        // - If i == 0 or X > HISTORY(i), then append X to the move history and
+        //   set `i` to one in the next recursion.
+        // - If X == HISTORY(i), then append X to the move history and increment
+        //   `i` in the next recursion.
+        // - If X < HISTORY(i), then prune X and set `i` to one in the next
+        //   recursion. X can be rotated to the front of the sequence to produce
+        //   something lexicographically lesser.
         //
         // SAFETY: `entry_index` starts at zero in the initial call, and
         // `B::initialize` guarantees that the first entry is bound. For every
         // recursive call, the puzzle history stack is pushed and `entry_index`
-        // can only be incremented by 1. Therefore, `entry_index` is always
-        // less than the number of entries in the puzzle state history and
-        // always bound
+        // can only be incremented by 1 at most. Therefore, `entry_index` is
+        // always less than the number of entries in the puzzle state history
+        // and always bound
         let move_index_prune_lt = unsafe {
             mutable
                 .puzzle_state_history
@@ -132,6 +161,9 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             .moves
             .iter()
             .enumerate()
+            // We are at the "X < HISTORY(i)" case described earlier. Pruning
+            // all of the child nodes is as simple as skipping a "HISTORY(i)"
+            // number of children from the beginning.
             .skip(move_index_prune_lt)
         {
             // if self.search_strategy == SearchStrategy::FirstSolution && move_index == 2 && is_root {
@@ -156,7 +188,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             }
 
             // We use a canonical FSM to enforce a total ordering of commutating
-            // moves. For example, U D and D U produce equivalent states, and
+            // moves. For example, U D and D U produce equivalent states, so
             // there is no point in searching both
             let next_fsm_state = self
                 .canonical_fsm
@@ -200,8 +232,14 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             } else {
                 // This optimizes to branchless code
                 let next_entry_index = if move_index == move_index_prune_lt {
+                    // We are at the "X == HISTORY(i)" case described earlier.
+                    // We increment the move history index in the next
+                    // recursion.
                     entry_index + 1
                 } else {
+                    // We are at the "X > HISTORY(i)" case described earlier.
+                    // We set the move history index to one in the next
+                    // recursion.
                     1
                 };
                 self.search_for_solution(mutable, next_fsm_state, next_entry_index, permitted_cost)
@@ -318,7 +356,14 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             let depth_start = Instant::now();
             // `entry_index` must be zero here so the root level so sequence
             // symmetry doesn't access OOB move history entries.
-            self.search_for_solution(&mut mutable, CanonicalFSMState::default(), 0, depth);
+            self.search_for_solution(
+                &mut mutable,
+                CanonicalFSMState::default(),
+                // Remember that `i` must be initialized to zero for the
+                // sequence symmetry optimization to work.
+                0,
+                depth,
+            );
             debug!(
                 working!("Traversed {} nodes in {:.3}s"),
                 mutable.nodes_visited,
