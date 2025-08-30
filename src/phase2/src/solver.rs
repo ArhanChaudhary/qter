@@ -7,12 +7,32 @@ use super::{
 use crate::{SliceViewMut, puzzle::AuxMem, start, success, working};
 use log::{Level, debug, info, log_enabled};
 use std::{time::Instant, vec::IntoIter};
+use thiserror::Error;
 
 pub struct CycleTypeSolver<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> {
     puzzle_def: PuzzleDef<'id, P>,
     pruning_tables: T,
     canonical_fsm: PuzzleCanonicalFSM<'id, P>,
+    max_solution_length: Option<usize>,
     search_strategy: SearchStrategy,
+}
+
+struct CycleTypeSolverMutable<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'id, P>> {
+    puzzle_state_history: StackedPuzzleStateHistory<'id, P, H>,
+    aux_mem: AuxMem<'id>,
+    solutions: Vec<Vec<usize>>,
+    first_move_class_index: usize,
+    nodes_visited: u64,
+}
+
+#[derive(Error, Debug)]
+pub enum CycleTypeSolverError {
+    #[error("A deep search still did not find a solution. It is unlikely that one exists")]
+    SolutionDoesNotExist,
+    #[error("Max solution length exceeded")]
+    MaxSolutionLengthExceeded,
+    #[error("Time limit exceeded")]
+    TimeLimitExceeded,
 }
 
 /// The return type of the IDA* recursion function. It maintains the
@@ -32,20 +52,13 @@ pub enum SearchStrategy {
     AllSolutions,
 }
 
-struct CycleTypeSolverMutable<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'id, P>> {
-    puzzle_state_history: StackedPuzzleStateHistory<'id, P, H>,
-    aux_mem: AuxMem<'id>,
-    solutions: Vec<Vec<usize>>,
-    first_move_class_index: usize,
-    nodes_visited: u64,
-}
-
 impl<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'id, P>> CycleTypeSolverMutable<'id, P, H> {
     fn found_solution(&self) -> bool {
         !self.solutions.is_empty()
     }
 }
 
+#[derive(Debug)]
 pub struct SolutionsIntoIter<'id, 'a, P: PuzzleState<'id>> {
     puzzle_def: &'a PuzzleDef<'id, P>,
     solutions: IntoIter<Vec<usize>>,
@@ -62,8 +75,15 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             puzzle_def,
             pruning_tables,
             canonical_fsm,
+            max_solution_length: None,
             search_strategy,
         }
+    }
+
+    #[must_use]
+    pub fn with_max_solution_length(mut self, max_solution_length: usize) -> Self {
+        self.max_solution_length = Some(max_solution_length);
+        self
     }
 
     pub fn into_puzzle_def_and_pruning_tables(self) -> (PuzzleDef<'id, P>, T) {
@@ -140,9 +160,8 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
         //   set `i` to one in the next recursion.
         // - If X == HISTORY(i), then append X to the move history and increment
         //   `i` in the next recursion.
-        // - If X < HISTORY(i), then prune X and set `i` to one in the next
-        //   recursion. X can be rotated to the front of the sequence to produce
-        //   something lexicographically lesser.
+        // - If X < HISTORY(i), then prune X. X can be rotated to the front of
+        //   the sequence to produce something lexicographically lesser.
         //
         // SAFETY: `entry_index` starts at zero in the initial call, and
         // `B::initialize` guarantees that the first entry is bound. For every
@@ -167,7 +186,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             .skip(move_index_prune_lt)
         {
             // if self.search_strategy == SearchStrategy::FirstSolution && move_index == 2 && is_root {
-            //     return false;
+            //     return AdmissibleGoalHeuristic::SOLVED;
             // }
 
             let move_class_index = move_.move_class_index();
@@ -308,11 +327,13 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
 
     /// Run qter's cycle combination solver.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// The solver will panic if the search depth becomes too deep (a solution
-    /// is extremely unlikely to even exist).
-    pub fn solve<H: PuzzleStateHistory<'id, P>>(&self) -> SolutionsIntoIter<'id, '_, P> {
+    /// The solver will fail if it cannot find a solution. See
+    /// `CycleTypeSolverError`.
+    pub fn solve<H: PuzzleStateHistory<'id, P>>(
+        &self,
+    ) -> Result<SolutionsIntoIter<'id, '_, P>, CycleTypeSolverError> {
         info!(start!("Searching for phase2 solutions"));
         let start = Instant::now();
 
@@ -348,50 +369,72 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                 mutable.nodes_visited,
                 depth_start.elapsed().as_secs_f64()
             );
-            mutable.nodes_visited = 0;
-            // The loop ends up incrementing `depth` so we do this manually
+            // The loop increments `depth` so we do this manually
             depth = 1;
         }
-        mutable
-            .puzzle_state_history
-            .resize_if_needed(depth as usize + 1);
 
-        while !mutable.found_solution() {
-            debug!(working!("Searching depth {}..."), depth);
-            let depth_start = Instant::now();
-            // `entry_index` must be zero here so the root level so sequence
-            // symmetry doesn't access OOB move history entries.
-            self.search_for_solution(
-                &mut mutable,
-                CanonicalFSMState::default(),
-                // Remember that `i` must be initialized to zero for the
-                // sequence symmetry optimization to work.
-                0,
-                depth,
-            );
-            debug!(
-                working!("Traversed {} nodes in {:.3}s"),
-                mutable.nodes_visited,
-                depth_start.elapsed().as_secs_f64()
-            );
+        if !mutable.found_solution() {
+            if depth == u8::MAX {
+                return Err(CycleTypeSolverError::SolutionDoesNotExist);
+            }
+            if let Some(max_solution_length) = self.max_solution_length
+                && depth as usize > max_solution_length
+            {
+                return Err(CycleTypeSolverError::MaxSolutionLengthExceeded);
+            }
             mutable.nodes_visited = 0;
             mutable
                 .puzzle_state_history
-                .resize_if_needed(depth as usize + 1);
-            depth = depth
-                .checked_add(1)
-                .expect("Depth is too deep. Solution was not found.");
+                .resize_if_needed(depth as usize);
+            loop {
+                debug!(working!("Searching depth {}..."), depth);
+                let depth_start = Instant::now();
+                // `entry_index` must be zero here so the root level so sequence
+                // symmetry doesn't access OOB move history entries.
+                self.search_for_solution(
+                    &mut mutable,
+                    CanonicalFSMState::default(),
+                    // Remember that `i` must be initialized to zero for the
+                    // sequence symmetry optimization to work.
+                    0,
+                    depth,
+                );
+                debug!(
+                    working!("Traversed {} nodes in {:.3}s"),
+                    mutable.nodes_visited,
+                    depth_start.elapsed().as_secs_f64()
+                );
+                if mutable.found_solution() {
+                    break;
+                }
+                depth += 1;
+                // During pathmax we increment the depth by one, so we ensure it
+                // cannot overflow
+                if depth == u8::MAX {
+                    return Err(CycleTypeSolverError::SolutionDoesNotExist);
+                }
+                if let Some(max_solution_length) = self.max_solution_length
+                    && depth as usize > max_solution_length
+                {
+                    return Err(CycleTypeSolverError::MaxSolutionLengthExceeded);
+                }
+                mutable.nodes_visited = 0;
+                mutable
+                    .puzzle_state_history
+                    .resize_if_needed(depth as usize);
+            }
         }
 
         info!(
-            success!("phase2 solutions found in {:.3}s"),
-            start.elapsed().as_secs_f64()
+            success!("phase2 solutions found in {:.3}s at depth {}"),
+            start.elapsed().as_secs_f64(),
+            depth
         );
         debug!("");
-        SolutionsIntoIter {
+        Ok(SolutionsIntoIter {
             puzzle_def: &self.puzzle_def,
             solutions: mutable.solutions.into_iter(),
-        }
+        })
     }
 }
 

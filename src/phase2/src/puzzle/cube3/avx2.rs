@@ -8,7 +8,7 @@ use crate::{
     puzzle::{SortedCycleTypeRef, cube3::common::CUBE_3_SORTED_ORBIT_DEFS},
 };
 use std::{
-    fmt,
+    fmt::{self, Formatter},
     hash::Hash,
     num::NonZeroU8,
     simd::{
@@ -154,7 +154,7 @@ impl PartialEq for Cube3 {
 }
 
 impl fmt::Debug for Cube3 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut ep = [0; 16];
         let mut eo = [0; 16];
         let mut cp = [0; 16];
@@ -374,14 +374,14 @@ impl Cube3State for Cube3 {
         if corner_cycle_type_pointer == usize::MAX {
             // If the state has no (1, true) cycle types, then get the first
             // cycle of the specified sorted cycle type
-            if let Some(&first_cycle) = sorted_corners_cycle_type.first() {
+            if let Some(&first_cycle) = sorted_corners_cycle_type.first()
                 // If sorted cycle type has a first cycle, it must not be
-                // (1, true) because this branch only runs when the state has
-                // no (1, true) cycle types
-                if first_cycle == (1.try_into().unwrap(), true) {
-                    // So we short circuit
-                    return false;
-                }
+                // (1, true) because this branch only runs when the state has no
+                // (1, true) cycle types
+                && first_cycle == (1.try_into().unwrap(), true)
+            {
+                // So we short circuit
+                return false;
             }
         } else if
         // If the corner cycle type pointer is out of range then something
@@ -403,9 +403,10 @@ impl Cube3State for Cube3 {
 
         if edge_cycle_type_pointer == usize::MAX {
             if let Some(&first_cycle) = sorted_edges_cycle_type.first()
-                && first_cycle == (1.try_into().unwrap(), true) {
-                    return false;
-                }
+                && first_cycle == (1.try_into().unwrap(), true)
+            {
+                return false;
+            }
         } else if edge_cycle_type_pointer >= sorted_edges_cycle_type.len()
             || sorted_edges_cycle_type[edge_cycle_type_pointer] != (1.try_into().unwrap(), true)
         {
@@ -502,8 +503,8 @@ impl Cube3State for Cube3 {
                 let iter_eo_mod = iter
                     & u8x32::splat(
                         1
-                        // we avoid shifting the edge orientation bits by shifting
-                        // the mask instead
+                        // we avoid shifting the edge orientation bits by
+                        // shifting the mask instead
                         << 4,
                     );
                 let oriented_edge_mask = new_pieces & iter_eo_mod.simd_ne(u8x32::splat(0));
