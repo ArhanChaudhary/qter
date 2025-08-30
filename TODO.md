@@ -17,6 +17,8 @@
   - ⭐branding for OrbitPuzzleStates should be unique and happen at a very small level
   - dont pack bit vector for AuxMem
   - ⭐pruning table
+    - generate table during the solve
+      - if the number of probes exceeds the number of set values in the table by a certain factor (3x?) it considers generating another level of the table, if there is enough memory to do so
     - cartesian product tables
       - seed only one value
       - <https://discord.com/channels/772576325897945119/1326029986578038784/1347580846647017482>

@@ -116,7 +116,7 @@ fn test_control_optimal_cycle() {
     make_guard!(guard);
     let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
     let sorted_cycle_type = SortedCycleType::new(
-        &[vec![(1, true), (5, true)], vec![(1, true), (7, true)]],
+        &[vec![(1, true), (5, true)], vec![(1, true), (1, true)]],
         cube3_def.sorted_orbit_defs_ref(),
     )
     .unwrap();

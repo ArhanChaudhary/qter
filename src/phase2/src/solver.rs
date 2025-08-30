@@ -169,8 +169,8 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             // if self.search_strategy == SearchStrategy::FirstSolution && move_index == 2 && is_root {
             //     return false;
             // }
+
             let move_class_index = move_.move_class_index();
-            // TODO: optimize this more
             // This is only ever true at the root node
             let is_root = entry_index == 0;
             // This branch should have high predictability
@@ -180,10 +180,10 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             // never start and end with the moves in the same move class.
             // Otherwise the end could be rotated to the start and combined
             // together, thus contradicting that assumption
+            //
+            // TODO: investigate optimizing this once phase2 becomes more mature
+            // see: https://discord.com/channels/772576325897945119/1326029986578038784/1411433393387999345
             } else if permitted_cost == 0 && move_class_index == mutable.first_move_class_index {
-                // We don't have to set `next_entry_index = 0` here because
-                // this function is never recursed when `permitted_cost` is
-                // zero
                 continue;
             }
 
@@ -212,6 +212,11 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             // We handle when `permitted_cost == 0` (leaf node) inline to save
             // the recursive function call overhead otherwise incurred
             let child_admissible_goal_heuristic = if permitted_cost == 0 {
+                // [Chen Shuang][cs] doesn't count the maxdepth nodes as
+                // visited, so we won't either
+                //
+                // [cs]: https://github.com/cs0x7f/cube_solver_test/blob/bd78072c49f8a01aee16d592400cbd6e2bacca93/vcube.patch#L22
+
                 // SAFETY: we just pushed something onto the stack
                 let last_puzzle_state =
                     unsafe { mutable.puzzle_state_history.last_state_unchecked() };
@@ -315,7 +320,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             puzzle_state_history: (&self.puzzle_def).into(),
             aux_mem: P::new_aux_mem(self.puzzle_def.sorted_orbit_defs_ref()),
             solutions: vec![],
-            first_move_class_index: usize::default(),
+            first_move_class_index: 0,
             nodes_visited: 0,
         };
         // SAFETY: `H::initialize` when puzzle_state_history is created

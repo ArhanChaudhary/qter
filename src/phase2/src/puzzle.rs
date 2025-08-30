@@ -475,10 +475,6 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
         self.id
     }
 
-    // pub fn brand_orbit_def(&self, orbit_def: OrbitDef) -> BrandedOrbitDef<'id> {
-    //     BrandedOrbitDef::new(orbit_def, self.id)
-    // }
-
     /// Create a new `PuzzleDef` from a `KSolve` definition and a generativity
     /// `Guard`.
     ///
@@ -605,8 +601,6 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
                 move_powers.push(result_1.clone());
                 std::mem::swap(&mut result_1, &mut result_2);
             }
-            moves.push(base_move);
-
             if move_powers.len() == MAX_MOVE_POWER {
                 return Err(KSolveConversionError::MoveOrderTooHigh);
             }
@@ -614,6 +608,7 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
             // MAX_MOVE_POWER is way less than isize::MAX
             #[allow(clippy::cast_possible_wrap)]
             let order = move_powers.len() as isize + 2;
+            moves.push(base_move);
             for (j, expanded_puzzle_state) in move_powers.into_iter().enumerate() {
                 // see above
                 #[allow(clippy::cast_possible_wrap)]
@@ -651,7 +646,7 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
 impl SliceViewMut for () {
     type SliceMut<'a> = ();
 
-    fn slice_view_mut(&mut self) -> Self::SliceMut<'_> {}
+    fn slice_view_mut(&mut self) {}
 }
 
 /// A utility function for testing. Not optimized.
