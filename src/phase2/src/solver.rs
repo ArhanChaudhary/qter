@@ -62,6 +62,24 @@ impl<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'id, P>> CycleTypeSolverMut
 pub struct SolutionsIntoIter<'id, 'a, P: PuzzleState<'id>> {
     puzzle_def: &'a PuzzleDef<'id, P>,
     solutions: IntoIter<Vec<usize>>,
+    solution_length: usize,
+    expanded_solution: Option<Box<[&'a Move<'id, P>]>>,
+    currently_expanding_solution: Option<Vec<usize>>,
+    reversion_state: SymmetryReversionState,
+    sequence_symmetry_reversion_context: Option<SequenceSymmetryReversionContext>,
+}
+
+#[derive(Default, Debug)]
+struct SequenceSymmetryReversionContext {
+    reversion_index: usize,
+    reversion_index_end: usize,
+}
+
+#[derive(Debug, Default)]
+enum SymmetryReversionState {
+    #[default]
+    CanonicalSequence,
+    SequenceSymmetry,
 }
 
 impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P, T> {
@@ -363,6 +381,8 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                 mutable
                     .solutions
                     .push(mutable.puzzle_state_history.create_move_history());
+            } else {
+                depth = 1;
             }
             debug!(
                 working!("Traversed {} nodes in {:.3}s"),
@@ -370,7 +390,6 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                 depth_start.elapsed().as_secs_f64()
             );
             // The loop increments `depth` so we do this manually
-            depth = 1;
         }
 
         if !mutable.found_solution() {
@@ -434,19 +453,71 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
         Ok(SolutionsIntoIter {
             puzzle_def: &self.puzzle_def,
             solutions: mutable.solutions.into_iter(),
+            solution_length: depth.into(),
+            expanded_solution: None,
+            reversion_state: SymmetryReversionState::default(),
+            currently_expanding_solution: None,
+            sequence_symmetry_reversion_context: None,
         })
     }
 }
 
-impl<'id, 'a, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, 'a, P> {
-    type Item = Vec<&'a Move<'id, P>>;
+impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
+    type Item = ();
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.solutions.next().map(|solution| {
-            solution
-                .into_iter()
-                .map(|move_index| &self.puzzle_def.moves[move_index])
-                .collect()
-        })
+    fn next(&mut self) -> Option<()> {
+        // The current reverse symmetry application order:
+        //
+        // - Canonical sequences
+        // - Sequence symmetry
+
+        if self.currently_expanding_solution.is_none() {
+            self.currently_expanding_solution = self.solutions.next();
+        }
+        let currently_expanding_solution = self.currently_expanding_solution.as_deref()?;
+
+        let sequence_symmetry_reversion_context = self
+            .sequence_symmetry_reversion_context
+            .get_or_insert(SequenceSymmetryReversionContext {
+                reversion_index: 0,
+                reversion_index_end: currently_expanding_solution.len(),
+            });
+
+        let expanded_solution = self.expanded_solution.get_or_insert_with(|| {
+            // Something random that we will override
+            // TODO: [0] can panic!
+            vec![&self.puzzle_def.moves[0]; self.solution_length].into_boxed_slice()
+        });
+        for (i, move_index) in currently_expanding_solution
+            .iter()
+            .copied()
+            .skip(sequence_symmetry_reversion_context.reversion_index)
+            .chain(
+                currently_expanding_solution
+                    .iter()
+                    .copied()
+                    .take(sequence_symmetry_reversion_context.reversion_index),
+            )
+            .enumerate()
+        {
+            expanded_solution[i] = &self.puzzle_def.moves[move_index];
+        }
+
+        sequence_symmetry_reversion_context.reversion_index += 1;
+        if sequence_symmetry_reversion_context.reversion_index
+            >= sequence_symmetry_reversion_context.reversion_index_end
+        {
+            self.currently_expanding_solution = None;
+            self.sequence_symmetry_reversion_context = None;
+        }
+
+        Some(())
+    }
+}
+
+impl<'id, 'a, P: PuzzleState<'id>> SolutionsIntoIter<'id, 'a, P> {
+    #[must_use]
+    pub fn current_solution(&self) -> Option<&[&'a Move<'id, P>]> {
+        self.expanded_solution.as_deref()
     }
 }

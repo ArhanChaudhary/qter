@@ -677,7 +677,6 @@ pub fn apply_moves<'id, P: PuzzleState<'id>>(
 }
 
 /// Return a random 3x3 puzzle state
-#[allow(clippy::missing_panics_doc)]
 pub fn apply_random_moves<'id, P: PuzzleState<'id>>(
     puzzle_def: &PuzzleDef<'id, P>,
     solved: &P,
@@ -686,6 +685,7 @@ pub fn apply_random_moves<'id, P: PuzzleState<'id>>(
     let mut result_1 = solved.clone();
     let mut result_2 = solved.clone();
     for _ in 0..random_move_count {
+        #[allow(clippy::missing_panics_doc)]
         let move_ = fastrand::choice(puzzle_def.moves.iter()).unwrap();
         result_1.replace_compose(
             &result_2,

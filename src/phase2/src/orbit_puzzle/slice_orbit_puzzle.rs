@@ -88,7 +88,6 @@ impl SliceOrbitPuzzle {
 ///
 /// 1) `slice_orbit_states_mut`, `a`, and `b` must all correspond to `orbit_def`
 /// 2) `base` must be a valid index to the start of an orbit
-#[allow(clippy::missing_panics_doc)]
 #[inline]
 pub unsafe fn replace_compose_slice_orbit(
     slice_orbit_states_mut: &mut [u8],

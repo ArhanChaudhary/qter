@@ -10,11 +10,12 @@
 ## SCC
 
 - Phase 2
+  - max sol length flag
+  - check for logs in test cases
   - make sure sequence symmetry is good
   - replace pub(crate) with getters
   - try out a different exact hasher
   - spam debug_assert!()
-  - ⭐branding for OrbitPuzzleStates should be unique and happen at a very small level
   - dont pack bit vector for AuxMem
   - ⭐pruning table
     - generate table during the solve
