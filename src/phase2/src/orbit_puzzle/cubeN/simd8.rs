@@ -140,7 +140,8 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
     }
 
     fn exact_hasher(&self) -> u64 {
-        // Use the exact same constants as 3x3 cube corners since all cubes have 8 corners
+        // Use the exact same constants as 3x3 cube corners since all cubes have
+        // 8 corners
         const PIECE_COUNT: u16 = 8;
         const ORI_COUNT: u16 = 3;
 

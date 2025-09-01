@@ -429,7 +429,9 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                 depth += 1;
                 // During pathmax we increment the depth by one, so we ensure it
                 // cannot overflow
-                if depth == u8::MAX {
+                if depth == u8::MAX
+                    || H::GODS_NUMBER.is_some_and(|gods_number| depth as usize > gods_number)
+                {
                     return Err(CycleTypeSolverError::SolutionDoesNotExist);
                 }
                 if let Some(max_solution_length) = self.max_solution_length
