@@ -158,7 +158,7 @@ fn test_210_optimal_cycle() {
     let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
         &cube3_def,
         vec![
-            TableTy::Exact(StorageBackendTy::Uncompressed),
+            TableTy::Zero,
             TableTy::Zero,
         ],
         88_179_840,
@@ -186,8 +186,6 @@ fn test_210_optimal_cycle() {
         assert_eq!(solutions.current_solution().unwrap().len(), 5);
     }
     assert_eq!(count, 300);
-
-    panic!();
 }
 
 #[test_log::test]
@@ -224,6 +222,39 @@ fn test_hard_30x30x30_optimal_cycle() {
     panic!();
 }
 
+#[test_log::test]
+fn test_3cp_optimal_cycle() {
+    make_guard!(guard);
+    let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+    let sorted_cycle_type = SortedCycleType::new(
+        &[vec![(3, false)], vec![]],
+        cube3_def.sorted_orbit_defs_ref(),
+    )
+    .unwrap();
+    let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
+        &cube3_def,
+        vec![
+            TableTy::Zero,
+            TableTy::Zero,
+        ],
+        88_179_840,
+        cube3_def.id(),
+    )
+    .unwrap();
+    let pruning_tables =
+        OrbitPruningTables::try_generate_all(sorted_cycle_type, generate_meta).unwrap();
+    let solver: CycleTypeSolver<Cube3, _> =
+        CycleTypeSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
+
+    let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
+    let mut count = 0;
+    while solutions.next().is_some() {
+        count += 1;
+        assert_eq!(solutions.current_solution().unwrap().len(), 8);
+    }
+    assert_eq!(count, 864);
+}
+
 #[allow(dead_code)]
 struct OptimalCycleTypeTest {
     moves_str: &'static str,
@@ -241,7 +272,7 @@ fn test_many_optimal_cycles() {
     let optimal_cycle_type_tests = [
         OptimalCycleTypeTest {
             moves_str: "U2 R2 U2 R2",
-            expected_partial_count: 48,
+            expected_partial_count: 24,
             expected_count: 24,
         },
         OptimalCycleTypeTest {

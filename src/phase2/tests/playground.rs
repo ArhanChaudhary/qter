@@ -16,15 +16,14 @@ fn playground() {
     make_guard!(guard);
     let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
     let sorted_cycle_type = SortedCycleType::new(
-        &[vec![(3, false)], vec![]],
+        &[vec![(2, false), (2, false)], vec![]],
         cube3_def.sorted_orbit_defs_ref(),
     )
     .unwrap();
     let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
         &cube3_def,
         vec![
-            // TableTy::Exact(StorageBackendTy::Uncompressed),
-            TableTy::Zero,
+            TableTy::Exact(StorageBackendTy::Uncompressed),
             TableTy::Zero,
         ],
         88_179_840,
@@ -37,7 +36,9 @@ fn playground() {
         CycleTypeSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
 
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
+    let mut count = 0;
     while solutions.next().is_some() {
+        count += 1;
         info!(
             "{:<2}",
             solutions
@@ -48,6 +49,8 @@ fn playground() {
                 .format(" ")
         );
     }
+
+    info!("Total: {count}");
 
     panic!();
 }

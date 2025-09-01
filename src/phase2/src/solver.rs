@@ -71,8 +71,8 @@ pub struct SolutionsIntoIter<'id, 'a, P: PuzzleState<'id>> {
 
 #[derive(Default, Debug)]
 struct SequenceSymmetryReversionContext {
-    reversion_index: usize,
-    reversion_index_end: usize,
+    rotation_index: usize,
+    rotation_class_size: usize,
 }
 
 #[derive(Debug, Default)]
@@ -478,34 +478,51 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
 
         let sequence_symmetry_reversion_context = self
             .sequence_symmetry_reversion_context
-            .get_or_insert(SequenceSymmetryReversionContext {
-                reversion_index: 0,
-                reversion_index_end: currently_expanding_solution.len(),
+            .get_or_insert_with(|| {
+                let mut rotation_class_size = 1;
+                // https://leetcode.com/problems/rotate-string/description/
+                while rotation_class_size < currently_expanding_solution.len()
+                    && (0..currently_expanding_solution.len()).any(|i| {
+                        let rotated_index =
+                            (rotation_class_size + i) % currently_expanding_solution.len();
+                        currently_expanding_solution[i]
+                            != currently_expanding_solution[rotated_index]
+                    })
+                {
+                    rotation_class_size += 1;
+                }
+                SequenceSymmetryReversionContext {
+                    rotation_index: 0,
+                    rotation_class_size,
+                }
             });
 
-        let expanded_solution = self.expanded_solution.get_or_insert_with(|| {
-            // Something random that we will override
-            // TODO: [0] can panic!
-            vec![&self.puzzle_def.moves[0]; self.solution_length].into_boxed_slice()
-        });
-        for (i, move_index) in currently_expanding_solution
-            .iter()
-            .copied()
-            .skip(sequence_symmetry_reversion_context.reversion_index)
-            .chain(
-                currently_expanding_solution
-                    .iter()
-                    .copied()
-                    .take(sequence_symmetry_reversion_context.reversion_index),
-            )
-            .enumerate()
-        {
-            expanded_solution[i] = &self.puzzle_def.moves[move_index];
+        match self.expanded_solution.as_mut() {
+            Some(expanded_solution) => {
+                for i in 0..currently_expanding_solution.len() {
+                    let rotated_index = (i + sequence_symmetry_reversion_context.rotation_index)
+                        % currently_expanding_solution.len();
+                    expanded_solution[i] =
+                        &self.puzzle_def.moves[currently_expanding_solution[rotated_index]];
+                }
+            }
+            None => {
+                self.expanded_solution = Some(
+                    (0..currently_expanding_solution.len())
+                        .map(|i| {
+                            let rotated_index = (i + sequence_symmetry_reversion_context
+                                .rotation_index)
+                                % currently_expanding_solution.len();
+                            &self.puzzle_def.moves[currently_expanding_solution[rotated_index]]
+                        })
+                        .collect(),
+                );
+            }
         }
 
-        sequence_symmetry_reversion_context.reversion_index += 1;
-        if sequence_symmetry_reversion_context.reversion_index
-            >= sequence_symmetry_reversion_context.reversion_index_end
+        sequence_symmetry_reversion_context.rotation_index += 1;
+        if sequence_symmetry_reversion_context.rotation_index
+            >= sequence_symmetry_reversion_context.rotation_class_size
         {
             self.currently_expanding_solution = None;
             self.sequence_symmetry_reversion_context = None;
