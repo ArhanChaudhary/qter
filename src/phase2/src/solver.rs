@@ -383,6 +383,9 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                     .push(mutable.puzzle_state_history.create_move_history());
             } else {
                 depth = 1;
+                if H::GODS_NUMBER.is_some_and(|gods_number| gods_number == 0) {
+                    return Err(CycleTypeSolverError::SolutionDoesNotExist);
+                }
             }
             debug!(
                 working!("Traversed {} nodes in {:.3}s"),
@@ -397,14 +400,14 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                 return Err(CycleTypeSolverError::SolutionDoesNotExist);
             }
             if let Some(max_solution_length) = self.max_solution_length
-                && depth as usize > max_solution_length
+                && usize::from(depth) > max_solution_length
             {
                 return Err(CycleTypeSolverError::MaxSolutionLengthExceeded);
             }
             mutable.nodes_visited = 0;
             mutable
                 .puzzle_state_history
-                .resize_if_needed(depth as usize);
+                .resize_if_needed(usize::from(depth));
             loop {
                 debug!(working!("Searching depth {}..."), depth);
                 let depth_start = Instant::now();
@@ -430,19 +433,19 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                 // During pathmax we increment the depth by one, so we ensure it
                 // cannot overflow
                 if depth == u8::MAX
-                    || H::GODS_NUMBER.is_some_and(|gods_number| depth as usize > gods_number)
+                    || H::GODS_NUMBER.is_some_and(|gods_number| usize::from(depth) > gods_number)
                 {
                     return Err(CycleTypeSolverError::SolutionDoesNotExist);
                 }
                 if let Some(max_solution_length) = self.max_solution_length
-                    && depth as usize > max_solution_length
+                    && usize::from(depth) > max_solution_length
                 {
                     return Err(CycleTypeSolverError::MaxSolutionLengthExceeded);
                 }
                 mutable.nodes_visited = 0;
                 mutable
                     .puzzle_state_history
-                    .resize_if_needed(depth as usize);
+                    .resize_if_needed(usize::from(depth));
             }
         }
 
