@@ -63,23 +63,26 @@ pub struct SolutionsIntoIter<'id, 'a, P: PuzzleState<'id>> {
     puzzle_def: &'a PuzzleDef<'id, P>,
     solutions: IntoIter<Vec<usize>>,
     solution_length: usize,
+    /// The buffer reused
     expanded_solution: Option<Box<[&'a Move<'id, P>]>>,
+    /// The current solution from `solutions` being expanded upon
     currently_expanding_solution: Option<Vec<usize>>,
-    reversion_state: SymmetryReversionState,
-    sequence_symmetry_reversion_context: Option<SequenceSymmetryReversionContext>,
+    /// The state of the canonical sequence expansion
+    canonical_sequence_expansion: Option<CanonicalSequenceExpansion>,
+    /// The state of the sequence symmetry expansion
+    sequence_symmetry_expansion: Option<SequenceSymmetryExpansion>,
 }
 
-#[derive(Default, Debug)]
-struct SequenceSymmetryReversionContext {
+#[derive(Debug)]
+struct SequenceSymmetryExpansion {
     rotation_index: usize,
     rotation_class_size: usize,
 }
 
-#[derive(Debug, Default)]
-enum SymmetryReversionState {
-    #[default]
-    CanonicalSequence,
-    SequenceSymmetry,
+#[derive(Debug)]
+struct CanonicalSequenceExpansion {
+    expansion_start_index: usize,
+    length: usize,
 }
 
 impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P, T> {
@@ -450,9 +453,10 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
         }
 
         info!(
-            success!("phase2 solutions found in {:.3}s at depth {}"),
-            start.elapsed().as_secs_f64(),
-            depth
+            success!("{} raw solutions at depth {} found in {:.3}s"),
+            mutable.solutions.len(),
+            depth,
+            start.elapsed().as_secs_f64()
         );
         debug!("");
         Ok(SolutionsIntoIter {
@@ -460,9 +464,9 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             solutions: mutable.solutions.into_iter(),
             solution_length: depth.into(),
             expanded_solution: None,
-            reversion_state: SymmetryReversionState::default(),
             currently_expanding_solution: None,
-            sequence_symmetry_reversion_context: None,
+            canonical_sequence_expansion: None,
+            sequence_symmetry_expansion: None,
         })
     }
 }
@@ -471,7 +475,7 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
     type Item = ();
 
     fn next(&mut self) -> Option<()> {
-        // The current reverse symmetry application order:
+        // The current expansion order:
         //
         // - Canonical sequences
         // - Sequence symmetry
@@ -481,22 +485,22 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
         }
         let currently_expanding_solution = self.currently_expanding_solution.as_deref()?;
 
-        let sequence_symmetry_reversion_context = self
-            .sequence_symmetry_reversion_context
-            .get_or_insert_with(|| {
+        // if self.sequence_symmetry_expansion.is_none() {}
+
+        let sequence_symmetry_expansion =
+            self.sequence_symmetry_expansion.get_or_insert_with(|| {
                 let mut rotation_class_size = 1;
                 // https://leetcode.com/problems/rotate-string/description/
-                while rotation_class_size < currently_expanding_solution.len()
-                    && (0..currently_expanding_solution.len()).any(|i| {
-                        let rotated_index =
-                            (rotation_class_size + i) % currently_expanding_solution.len();
+                while rotation_class_size < self.solution_length
+                    && (0..self.solution_length).any(|i| {
+                        let rotated_index = (rotation_class_size + i) % self.solution_length;
                         currently_expanding_solution[i]
                             != currently_expanding_solution[rotated_index]
                     })
                 {
                     rotation_class_size += 1;
                 }
-                SequenceSymmetryReversionContext {
+                SequenceSymmetryExpansion {
                     rotation_index: 0,
                     rotation_class_size,
                 }
@@ -504,20 +508,19 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
 
         match self.expanded_solution.as_mut() {
             Some(expanded_solution) => {
-                for i in 0..currently_expanding_solution.len() {
-                    let rotated_index = (i + sequence_symmetry_reversion_context.rotation_index)
-                        % currently_expanding_solution.len();
+                for i in 0..self.solution_length {
+                    let rotated_index =
+                        (i + sequence_symmetry_expansion.rotation_index) % self.solution_length;
                     expanded_solution[i] =
                         &self.puzzle_def.moves[currently_expanding_solution[rotated_index]];
                 }
             }
             None => {
                 self.expanded_solution = Some(
-                    (0..currently_expanding_solution.len())
+                    (0..self.solution_length)
                         .map(|i| {
-                            let rotated_index = (i + sequence_symmetry_reversion_context
-                                .rotation_index)
-                                % currently_expanding_solution.len();
+                            let rotated_index = (i + sequence_symmetry_expansion.rotation_index)
+                                % self.solution_length;
                             &self.puzzle_def.moves[currently_expanding_solution[rotated_index]]
                         })
                         .collect(),
@@ -525,12 +528,13 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
             }
         }
 
-        sequence_symmetry_reversion_context.rotation_index += 1;
-        if sequence_symmetry_reversion_context.rotation_index
-            >= sequence_symmetry_reversion_context.rotation_class_size
+        sequence_symmetry_expansion.rotation_index += 1;
+        if sequence_symmetry_expansion.rotation_index
+            // GE because rotation_class_size could be 0
+            >= sequence_symmetry_expansion.rotation_class_size
         {
             self.currently_expanding_solution = None;
-            self.sequence_symmetry_reversion_context = None;
+            self.sequence_symmetry_expansion = None;
         }
 
         Some(())
@@ -538,8 +542,18 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
 }
 
 impl<'id, 'a, P: PuzzleState<'id>> SolutionsIntoIter<'id, 'a, P> {
+    /// Returns the expanded solution.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this is called before `.next()`
     #[must_use]
-    pub fn current_solution(&self) -> Option<&[&'a Move<'id, P>]> {
-        self.expanded_solution.as_deref()
+    pub fn expanded_solution(&self) -> &[&'a Move<'id, P>] {
+        self.expanded_solution.as_ref().unwrap()
+    }
+
+    #[must_use]
+    pub fn puzzle_def(&self) -> &PuzzleDef<'id, P> {
+        self.puzzle_def
     }
 }

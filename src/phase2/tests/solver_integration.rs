@@ -25,7 +25,7 @@ fn test_identity_cycle_type() {
     );
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
     solutions.next().unwrap();
-    assert_eq!(solutions.current_solution().unwrap().len(), 0);
+    assert_eq!(solutions.expanded_solution().len(), 0);
     assert!(solutions.next().is_none());
 
     cube3_def = solver.into_puzzle_def_and_pruning_tables().0;
@@ -45,7 +45,7 @@ fn test_identity_cycle_type() {
         CycleTypeSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
     solutions.next().unwrap();
-    assert_eq!(solutions.current_solution().unwrap().len(), 0);
+    assert_eq!(solutions.expanded_solution().len(), 0);
     assert!(solutions.next().is_none());
 }
 
@@ -70,13 +70,25 @@ fn test_single_quarter_turn() {
         info!(
             "{:<2}",
             solutions
-                .current_solution()
-                .unwrap()
+                .expanded_solution()
                 .iter()
                 .map(|move_| move_.name())
                 .format(" ")
         );
-        assert_eq!(solutions.current_solution().unwrap().len(), 1);
+        assert_eq!(solutions.expanded_solution().len(), 1);
+        if count == 1 {
+            assert_eq!(
+                format!(
+                    "{}",
+                    solutions
+                        .expanded_solution()
+                        .iter()
+                        .map(|move_| move_.name())
+                        .format(" ")
+                ),
+                "F"
+            );
+        }
     }
     assert_eq!(count, 12);
 }
@@ -102,13 +114,26 @@ fn test_single_half_turn() {
         info!(
             "{:<2}",
             solutions
-                .current_solution()
-                .unwrap()
+                .expanded_solution()
                 .iter()
                 .map(|move_| move_.name())
                 .format(" ")
         );
-        assert_eq!(solutions.current_solution().unwrap().len(), 1);
+        assert_eq!(solutions.expanded_solution().len(), 1);
+
+        if count == 1 {
+            assert_eq!(
+                format!(
+                    "{}",
+                    solutions
+                        .expanded_solution()
+                        .iter()
+                        .map(|move_| move_.name())
+                        .format(" ")
+                ),
+                "F2"
+            );
+        }
     }
     assert_eq!(count, 6);
 }
@@ -135,13 +160,25 @@ fn test_optimal_subgroup_cycle() {
         info!(
             "{:<2}",
             solutions
-                .current_solution()
-                .unwrap()
+                .expanded_solution()
                 .iter()
                 .map(|move_| move_.name())
                 .format(" ")
         );
-        assert_eq!(solutions.current_solution().unwrap().len(), 4);
+        assert_eq!(solutions.expanded_solution().len(), 4);
+        if count == 1 {
+            // assert_eq!(
+            //     format!(
+            //         "{}",
+            //         solutions
+            //             .expanded_solution()
+            //             .iter()
+            //             .map(|move_| move_.name())
+            //             .format(" ")
+            //     ),
+            //     "F2"
+            // );
+        }
     }
     assert_eq!(count, 24);
 }
@@ -157,10 +194,7 @@ fn test_210_optimal_cycle() {
     .unwrap();
     let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
         &cube3_def,
-        vec![
-            TableTy::Zero,
-            TableTy::Zero,
-        ],
+        vec![TableTy::Zero, TableTy::Zero],
         88_179_840,
         cube3_def.id(),
     )
@@ -177,13 +211,12 @@ fn test_210_optimal_cycle() {
         info!(
             "{:<2}",
             solutions
-                .current_solution()
-                .unwrap()
+                .expanded_solution()
                 .iter()
                 .map(|move_| move_.name())
                 .format(" ")
         );
-        assert_eq!(solutions.current_solution().unwrap().len(), 5);
+        assert_eq!(solutions.expanded_solution().len(), 5);
     }
     assert_eq!(count, 300);
 }
@@ -233,10 +266,7 @@ fn test_3cp_optimal_cycle() {
     .unwrap();
     let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
         &cube3_def,
-        vec![
-            TableTy::Zero,
-            TableTy::Zero,
-        ],
+        vec![TableTy::Zero, TableTy::Zero],
         88_179_840,
         cube3_def.id(),
     )
@@ -250,7 +280,7 @@ fn test_3cp_optimal_cycle() {
     let mut count = 0;
     while solutions.next().is_some() {
         count += 1;
-        assert_eq!(solutions.current_solution().unwrap().len(), 8);
+        assert_eq!(solutions.expanded_solution().len(), 8);
     }
     assert_eq!(count, 864);
 }
@@ -544,13 +574,12 @@ fn test_many_optimal_cycles() {
             info!(
                 "{:<2}",
                 solutions
-                    .current_solution()
-                    .unwrap()
+                    .expanded_solution()
                     .iter()
                     .map(|move_| move_.name())
                     .format(" ")
             );
-            assert_eq!(solutions.current_solution().unwrap().len(), move_count);
+            assert_eq!(solutions.expanded_solution().len(), move_count);
             count += 1;
         }
         assert_eq!(count, optimal_cycle_test.expected_partial_count);
@@ -921,13 +950,12 @@ fn test_big_cube_optimal_cycle() {
             info!(
                 "{:<2}",
                 solutions
-                    .current_solution()
-                    .unwrap()
+                    .expanded_solution()
                     .iter()
                     .map(|move_| move_.name())
                     .format(" ")
             );
-            assert_eq!(solutions.current_solution().unwrap().len(), move_count);
+            assert_eq!(solutions.expanded_solution().len(), move_count);
         }
         assert_eq!(count, optimal_cycle_test.expected_partial_count);
 

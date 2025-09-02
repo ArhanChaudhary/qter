@@ -10,8 +10,8 @@
 ## SCC
 
 - Phase 2
-  - max sol length flag
-  - check for logs in test cases
+  - check for logs in test cases; tracing
+    - hardcode the first solution moves in the test cases to be sure
   - make sure sequence symmetry is good
   - replace pub(crate) with getters
   - try out a different exact hasher

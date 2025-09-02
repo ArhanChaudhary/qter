@@ -16,14 +16,20 @@ fn playground() {
     make_guard!(guard);
     let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
     let sorted_cycle_type = SortedCycleType::new(
-        &[vec![(2, false), (2, false)], vec![]],
+        &[
+            // vec![(1, true), (1, true), (3, true)],
+            // vec![(1, true), (5, true)],
+            vec![(8, false)],
+            vec![(8, false)],
+        ],
         cube3_def.sorted_orbit_defs_ref(),
     )
     .unwrap();
     let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
         &cube3_def,
         vec![
-            TableTy::Exact(StorageBackendTy::Uncompressed),
+            // TableTy::Exact(StorageBackendTy::Uncompressed),
+            TableTy::Zero,
             TableTy::Zero,
         ],
         88_179_840,
@@ -42,8 +48,7 @@ fn playground() {
         info!(
             "{:<2}",
             solutions
-                .current_solution()
-                .unwrap()
+                .expanded_solution()
                 .iter()
                 .map(|move_| move_.name())
                 .format(" ")
