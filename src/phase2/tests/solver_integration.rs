@@ -24,8 +24,8 @@ fn test_identity_cycle_type() {
         SearchStrategy::AllSolutions,
     );
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
+    assert_eq!(solutions.solution_length(), 0);
     solutions.next().unwrap();
-    assert_eq!(solutions.expanded_solution().len(), 0);
     assert!(solutions.next().is_none());
 
     cube3_def = solver.into_puzzle_def_and_pruning_tables().0;
@@ -44,8 +44,8 @@ fn test_identity_cycle_type() {
     let solver: CycleTypeSolver<Cube3, _> =
         CycleTypeSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
+    assert_eq!(solutions.solution_length(), 0);
     solutions.next().unwrap();
-    assert_eq!(solutions.expanded_solution().len(), 0);
     assert!(solutions.next().is_none());
 }
 
@@ -64,6 +64,7 @@ fn test_single_quarter_turn() {
         SearchStrategy::AllSolutions,
     );
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
+    assert_eq!(solutions.solution_length(), 1);
     while solutions.next().is_some() {
         info!(
             "{:<2}",
@@ -73,8 +74,7 @@ fn test_single_quarter_turn() {
                 .map(|move_| move_.name())
                 .format(" ")
         );
-        assert_eq!(solutions.expanded_solution().len(), 1);
-        if solutions.solution_count() == 1 {
+        if solutions.expanded_count() == 1 {
             assert_eq!(
                 format!(
                     "{}",
@@ -88,7 +88,7 @@ fn test_single_quarter_turn() {
             );
         }
     }
-    assert_eq!(solutions.solution_count(), 12);
+    assert_eq!(solutions.expanded_count(), 12);
 }
 
 #[test_log::test]
@@ -106,6 +106,7 @@ fn test_single_half_turn() {
         SearchStrategy::AllSolutions,
     );
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
+    assert_eq!(solutions.solution_length(), 1);
     while solutions.next().is_some() {
         info!(
             "{:<2}",
@@ -115,9 +116,8 @@ fn test_single_half_turn() {
                 .map(|move_| move_.name())
                 .format(" ")
         );
-        assert_eq!(solutions.expanded_solution().len(), 1);
 
-        if solutions.solution_count() == 1 {
+        if solutions.expanded_count() == 1 {
             assert_eq!(
                 format!(
                     "{}",
@@ -131,7 +131,7 @@ fn test_single_half_turn() {
             );
         }
     }
-    assert_eq!(solutions.solution_count(), 6);
+    assert_eq!(solutions.expanded_count(), 6);
 }
 
 #[test_log::test]
@@ -150,6 +150,7 @@ fn test_optimal_subgroup_cycle() {
         SearchStrategy::AllSolutions,
     );
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
+    assert_eq!(solutions.solution_length(), 4);
     while solutions.next().is_some() {
         info!(
             "{:<2}",
@@ -159,8 +160,7 @@ fn test_optimal_subgroup_cycle() {
                 .map(|move_| move_.name())
                 .format(" ")
         );
-        assert_eq!(solutions.expanded_solution().len(), 4);
-        if solutions.solution_count() == 1 {
+        if solutions.expanded_count() == 1 {
             // assert_eq!(
             //     format!(
             //         "{}",
@@ -174,7 +174,7 @@ fn test_optimal_subgroup_cycle() {
             // );
         }
     }
-    assert_eq!(solutions.solution_count(), 24);
+    assert_eq!(solutions.expanded_count(), 24);
 }
 
 #[test_log::test]
@@ -199,6 +199,7 @@ fn test_210_optimal_cycle() {
         CycleTypeSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
 
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
+    assert_eq!(solutions.solution_length(), 5);
     while solutions.next().is_some() {
         info!(
             "{:<2}",
@@ -208,9 +209,8 @@ fn test_210_optimal_cycle() {
                 .map(|move_| move_.name())
                 .format(" ")
         );
-        assert_eq!(solutions.expanded_solution().len(), 5);
     }
-    assert_eq!(solutions.solution_count(), 300);
+    assert_eq!(solutions.expanded_count(), 300);
 }
 
 #[test_log::test]
@@ -248,7 +248,7 @@ fn test_hard_30x30x30_optimal_cycle() {
 }
 
 #[test_log::test]
-fn test_3cp_optimal_cycle() {
+fn test_3c_optimal_cycle() {
     make_guard!(guard);
     let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
     let sorted_cycle_type = SortedCycleType::new(
@@ -269,10 +269,37 @@ fn test_3cp_optimal_cycle() {
         CycleTypeSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
 
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
-    while solutions.next().is_some() {
-        assert_eq!(solutions.expanded_solution().len(), 8);
-    }
-    assert_eq!(solutions.solution_count(), 864);
+    assert_eq!(solutions.solution_length(), 8);
+    while solutions.next().is_some() {}
+    assert_eq!(solutions.expanded_count(), 864);
+}
+
+#[test_log::test]
+fn test_8c8e_optimal_cycle() {
+    make_guard!(guard);
+    let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+    let sorted_cycle_type = SortedCycleType::new(
+        &[vec![(8, false)], vec![(8, false)]],
+        cube3_def.sorted_orbit_defs_ref(),
+    )
+    .unwrap();
+    let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
+        &cube3_def,
+        vec![TableTy::Zero, TableTy::Zero],
+        88_179_840,
+        cube3_def.id(),
+    )
+    .unwrap();
+    let pruning_tables =
+        OrbitPruningTables::try_generate_all(sorted_cycle_type, generate_meta).unwrap();
+    let solver: CycleTypeSolver<Cube3, _> =
+        CycleTypeSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
+
+    let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
+
+    assert_eq!(solutions.solution_length(), 5);
+    while solutions.next().is_some() {}
+    assert_eq!(solutions.expanded_count(), 720);
 }
 
 #[allow(dead_code)]
@@ -559,19 +586,10 @@ fn test_many_optimal_cycles() {
             CycleTypeSolver::new(cube3_def, zero_table, SearchStrategy::AllSolutions);
 
         let mut solutions = solver.solve::<Vec<_>>().unwrap();
-        while solutions.next().is_some() {
-            info!(
-                "{:<2}",
-                solutions
-                    .expanded_solution()
-                    .iter()
-                    .map(|move_| move_.name())
-                    .format(" ")
-            );
-            assert_eq!(solutions.expanded_solution().len(), move_count);
-        }
+        assert_eq!(solutions.solution_length(), move_count);
+        while solutions.next().is_some() {}
         assert_eq!(
-            solutions.solution_count(),
+            solutions.expanded_count(),
             optimal_cycle_test.expected_partial_count
         );
 
@@ -935,19 +953,10 @@ fn test_big_cube_optimal_cycle() {
             CycleTypeSolver::new(cube4_def, zero_table, SearchStrategy::AllSolutions);
 
         let mut solutions = solver.solve::<Vec<_>>().unwrap();
-        while solutions.next().is_some() {
-            info!(
-                "{:<2}",
-                solutions
-                    .expanded_solution()
-                    .iter()
-                    .map(|move_| move_.name())
-                    .format(" ")
-            );
-            assert_eq!(solutions.expanded_solution().len(), move_count);
-        }
+        assert_eq!(solutions.solution_length(), move_count);
+        while solutions.next().is_some() {}
         assert_eq!(
-            solutions.solution_count(),
+            solutions.expanded_count(),
             optimal_cycle_test.expected_partial_count
         );
 

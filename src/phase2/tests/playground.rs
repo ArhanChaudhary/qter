@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 use itertools::Itertools;
 use log::info;
 use phase2::{
@@ -12,48 +14,4 @@ use phase2::{
 use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
 #[test_log::test]
-fn playground() {
-    make_guard!(guard);
-    let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
-    let sorted_cycle_type = SortedCycleType::new(
-        &[
-            // vec![(1, true), (1, true), (3, true)],
-            // vec![(1, true), (5, true)],
-            vec![(8, false)],
-            vec![(8, false)],
-        ],
-        cube3_def.sorted_orbit_defs_ref(),
-    )
-    .unwrap();
-    let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
-        &cube3_def,
-        vec![
-            // TableTy::Exact(StorageBackendTy::Uncompressed),
-            TableTy::Zero,
-            TableTy::Zero,
-        ],
-        88_179_840,
-        cube3_def.id(),
-    )
-    .unwrap();
-    let pruning_tables =
-        OrbitPruningTables::try_generate_all(sorted_cycle_type, generate_meta).unwrap();
-    let solver: CycleTypeSolver<Cube3, _> =
-        CycleTypeSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
-
-    let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
-    while solutions.next().is_some() {
-        info!(
-            "{:<2}",
-            solutions
-                .expanded_solution()
-                .iter()
-                .map(|move_| move_.name())
-                .format(" ")
-        );
-    }
-
-    info!("Total: {}", solutions.solution_count());
-
-    panic!();
-}
+fn playground() {}

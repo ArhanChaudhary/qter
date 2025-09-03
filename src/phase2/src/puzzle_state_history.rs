@@ -126,6 +126,7 @@ impl<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'id, P>> StackedPuzzleState
     ///
     /// The caller must guarantee that `entry_index` is in bounds of the stack.
     pub unsafe fn move_index_unchecked(&self, entry_index: usize) -> usize {
+        debug_assert!(entry_index <= self.stack_pointer);
         // SAFETY: entry_index is guaranteed to be in bounds by the caller
         unsafe { (*entry_index.get_unchecked(self.stack.as_ref())).1 }
     }
@@ -133,6 +134,10 @@ impl<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'id, P>> StackedPuzzleState
     /// Create a new move history from the current state of the stack.
     pub fn create_move_history(&self) -> Vec<usize> {
         (1..=self.stack_pointer).map(|i| self.stack[i].1).collect()
+    }
+
+    pub fn stack_pointer(&self) -> usize {
+        self.stack_pointer
     }
 }
 

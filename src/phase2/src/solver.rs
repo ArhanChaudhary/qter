@@ -62,7 +62,7 @@ impl<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'id, P>> CycleTypeSolverMut
 pub struct SolutionsIntoIter<'id, 'a, P: PuzzleState<'id>> {
     puzzle_def: &'a PuzzleDef<'id, P>,
     solutions: IntoIter<Vec<usize>>,
-    solution_count: usize,
+    expanded_count: usize,
     solution_length: usize,
     /// The buffer reused
     expanded_solution: Option<Box<[&'a Move<'id, P>]>>,
@@ -191,12 +191,32 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
         // can only be incremented by 1 at most. Therefore, `entry_index` is
         // always less than the number of entries in the puzzle state history
         // and always bound
-        let move_index_prune_lt = unsafe {
+        let mut move_index_prune_lt = unsafe {
             mutable
                 .puzzle_state_history
                 .move_index_unchecked(entry_index)
         };
         permitted_cost -= 1;
+        // TODO: document this when I am less sleepy
+        // skip the "move_index == move_index_prune_pt" case
+        // after rotating the end to the front, the move right after (currently
+        // the first move) might be lex less than entry_index + 1 (the current
+        // move right after)
+        // only works on leaf nodes
+        if permitted_cost == 0
+            // check in bounds
+            && entry_index < mutable.puzzle_state_history.stack_pointer()
+            // SAFETY: we checked in bounds
+            && unsafe { mutable.puzzle_state_history.move_index_unchecked(1) }
+                // SAFETY: we checked in bounds
+                < unsafe {
+                    mutable
+                        .puzzle_state_history
+                        .move_index_unchecked(entry_index + 1)
+                }
+        {
+            move_index_prune_lt += 1;
+        }
         for (move_index, move_) in self
             .puzzle_def
             .moves
@@ -463,7 +483,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
         Ok(SolutionsIntoIter {
             puzzle_def: &self.puzzle_def,
             solutions: mutable.solutions.into_iter(),
-            solution_count: 0,
+            expanded_count: 0,
             solution_length: depth.into(),
             expanded_solution: None,
             currently_expanding_solution: None,
@@ -539,7 +559,7 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
             self.sequence_symmetry_expansion = None;
         }
 
-        self.solution_count += 1;
+        self.expanded_count += 1;
         Some(())
     }
 }
@@ -561,7 +581,12 @@ impl<'id, 'a, P: PuzzleState<'id>> SolutionsIntoIter<'id, 'a, P> {
     }
 
     #[must_use]
-    pub fn solution_count(&self) -> usize {
-        self.solution_count
+    pub fn solution_length(&self) -> usize {
+        self.solution_length
+    }
+
+    #[must_use]
+    pub fn expanded_count(&self) -> usize {
+        self.expanded_count
     }
 }

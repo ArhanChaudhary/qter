@@ -1192,7 +1192,7 @@ mod tests {
     }
 
     #[test_log::test]
-    fn test_2x2_solver_pruning_table() {
+    fn test_3x3_corners_pruning_table() {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let id = cube3_def.id();
