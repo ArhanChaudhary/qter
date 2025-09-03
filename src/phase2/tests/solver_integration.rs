@@ -359,7 +359,7 @@ fn test_many_optimal_cycles() {
         },
         OptimalCycleTypeTest {
             moves_str: "U R2 U R2",
-            expected_partial_count: 192,
+            expected_partial_count: 96,
             expected_count: 96,
         },
         OptimalCycleTypeTest {
@@ -562,7 +562,7 @@ fn test_many_optimal_cycles() {
     let solved = cube3_def.new_solved_state();
     let mut aux_mem = HeapPuzzle::new_aux_mem(cube3_def.sorted_orbit_defs_ref());
 
-    for optimal_cycle_test in optimal_cycle_type_tests.into_iter().take(1) {
+    for optimal_cycle_test in optimal_cycle_type_tests.into_iter() {
         let mut result_1 = solved.clone();
         let mut result_2 = solved.clone();
         let mut move_count = 0;

@@ -496,6 +496,11 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
 impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
     type Item = ();
 
+    // Note that we cannot use a method that mutates self and also returns
+    // an Option<&[&Move<'id, P>]>. This would create a mutable borrow that
+    // would last while this slice is in use (which is likely in the entire)
+    // scope) preventing immutable methods from being called on self.
+    // See: https://doc.rust-lang.org/nomicon/lifetime-mismatch.html
     fn next(&mut self) -> Option<()> {
         // The current expansion order:
         //
