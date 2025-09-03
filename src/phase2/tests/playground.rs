@@ -42,9 +42,7 @@ fn playground() {
         CycleTypeSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
 
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
-    let mut count = 0;
     while solutions.next().is_some() {
-        count += 1;
         info!(
             "{:<2}",
             solutions
@@ -55,7 +53,7 @@ fn playground() {
         );
     }
 
-    info!("Total: {count}");
+    info!("Total: {}", solutions.solution_count());
 
     panic!();
 }

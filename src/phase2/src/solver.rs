@@ -62,6 +62,7 @@ impl<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'id, P>> CycleTypeSolverMut
 pub struct SolutionsIntoIter<'id, 'a, P: PuzzleState<'id>> {
     puzzle_def: &'a PuzzleDef<'id, P>,
     solutions: IntoIter<Vec<usize>>,
+    solution_count: usize,
     solution_length: usize,
     /// The buffer reused
     expanded_solution: Option<Box<[&'a Move<'id, P>]>>,
@@ -462,6 +463,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
         Ok(SolutionsIntoIter {
             puzzle_def: &self.puzzle_def,
             solutions: mutable.solutions.into_iter(),
+            solution_count: 0,
             solution_length: depth.into(),
             expanded_solution: None,
             currently_expanding_solution: None,
@@ -537,6 +539,7 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
             self.sequence_symmetry_expansion = None;
         }
 
+        self.solution_count += 1;
         Some(())
     }
 }
@@ -555,5 +558,10 @@ impl<'id, 'a, P: PuzzleState<'id>> SolutionsIntoIter<'id, 'a, P> {
     #[must_use]
     pub fn puzzle_def(&self) -> &PuzzleDef<'id, P> {
         self.puzzle_def
+    }
+
+    #[must_use]
+    pub fn solution_count(&self) -> usize {
+        self.solution_count
     }
 }

@@ -64,9 +64,7 @@ fn test_single_quarter_turn() {
         SearchStrategy::AllSolutions,
     );
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
-    let mut count = 0;
     while solutions.next().is_some() {
-        count += 1;
         info!(
             "{:<2}",
             solutions
@@ -76,7 +74,7 @@ fn test_single_quarter_turn() {
                 .format(" ")
         );
         assert_eq!(solutions.expanded_solution().len(), 1);
-        if count == 1 {
+        if solutions.solution_count() == 1 {
             assert_eq!(
                 format!(
                     "{}",
@@ -90,7 +88,7 @@ fn test_single_quarter_turn() {
             );
         }
     }
-    assert_eq!(count, 12);
+    assert_eq!(solutions.solution_count(), 12);
 }
 
 #[test_log::test]
@@ -108,9 +106,7 @@ fn test_single_half_turn() {
         SearchStrategy::AllSolutions,
     );
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
-    let mut count = 0;
     while solutions.next().is_some() {
-        count += 1;
         info!(
             "{:<2}",
             solutions
@@ -121,7 +117,7 @@ fn test_single_half_turn() {
         );
         assert_eq!(solutions.expanded_solution().len(), 1);
 
-        if count == 1 {
+        if solutions.solution_count() == 1 {
             assert_eq!(
                 format!(
                     "{}",
@@ -135,7 +131,7 @@ fn test_single_half_turn() {
             );
         }
     }
-    assert_eq!(count, 6);
+    assert_eq!(solutions.solution_count(), 6);
 }
 
 #[test_log::test]
@@ -154,9 +150,7 @@ fn test_optimal_subgroup_cycle() {
         SearchStrategy::AllSolutions,
     );
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
-    let mut count = 0;
     while solutions.next().is_some() {
-        count += 1;
         info!(
             "{:<2}",
             solutions
@@ -166,7 +160,7 @@ fn test_optimal_subgroup_cycle() {
                 .format(" ")
         );
         assert_eq!(solutions.expanded_solution().len(), 4);
-        if count == 1 {
+        if solutions.solution_count() == 1 {
             // assert_eq!(
             //     format!(
             //         "{}",
@@ -180,7 +174,7 @@ fn test_optimal_subgroup_cycle() {
             // );
         }
     }
-    assert_eq!(count, 24);
+    assert_eq!(solutions.solution_count(), 24);
 }
 
 #[test_log::test]
@@ -205,9 +199,7 @@ fn test_210_optimal_cycle() {
         CycleTypeSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
 
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
-    let mut count = 0;
     while solutions.next().is_some() {
-        count += 1;
         info!(
             "{:<2}",
             solutions
@@ -218,7 +210,7 @@ fn test_210_optimal_cycle() {
         );
         assert_eq!(solutions.expanded_solution().len(), 5);
     }
-    assert_eq!(count, 300);
+    assert_eq!(solutions.solution_count(), 300);
 }
 
 #[test_log::test]
@@ -277,12 +269,10 @@ fn test_3cp_optimal_cycle() {
         CycleTypeSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
 
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
-    let mut count = 0;
     while solutions.next().is_some() {
-        count += 1;
         assert_eq!(solutions.expanded_solution().len(), 8);
     }
-    assert_eq!(count, 864);
+    assert_eq!(solutions.solution_count(), 864);
 }
 
 #[allow(dead_code)]
@@ -569,7 +559,6 @@ fn test_many_optimal_cycles() {
             CycleTypeSolver::new(cube3_def, zero_table, SearchStrategy::AllSolutions);
 
         let mut solutions = solver.solve::<Vec<_>>().unwrap();
-        let mut count = 0;
         while solutions.next().is_some() {
             info!(
                 "{:<2}",
@@ -580,9 +569,11 @@ fn test_many_optimal_cycles() {
                     .format(" ")
             );
             assert_eq!(solutions.expanded_solution().len(), move_count);
-            count += 1;
         }
-        assert_eq!(count, optimal_cycle_test.expected_partial_count);
+        assert_eq!(
+            solutions.solution_count(),
+            optimal_cycle_test.expected_partial_count
+        );
 
         cube3_def = solver.into_puzzle_def_and_pruning_tables().0;
     }
@@ -944,9 +935,7 @@ fn test_big_cube_optimal_cycle() {
             CycleTypeSolver::new(cube4_def, zero_table, SearchStrategy::AllSolutions);
 
         let mut solutions = solver.solve::<Vec<_>>().unwrap();
-        let mut count = 0;
         while solutions.next().is_some() {
-            count += 1;
             info!(
                 "{:<2}",
                 solutions
@@ -957,7 +946,10 @@ fn test_big_cube_optimal_cycle() {
             );
             assert_eq!(solutions.expanded_solution().len(), move_count);
         }
-        assert_eq!(count, optimal_cycle_test.expected_partial_count);
+        assert_eq!(
+            solutions.solution_count(),
+            optimal_cycle_test.expected_partial_count
+        );
 
         cube4_def = solver.into_puzzle_def_and_pruning_tables().0;
     }
