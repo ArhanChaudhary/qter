@@ -95,7 +95,7 @@ pub struct PuzzleDef<'id, P: PuzzleState<'id>> {
 #[derive(Error, Debug)]
 pub enum KSolveConversionError {
     #[error(
-        "Phase 2 does not currently support puzzles with set sizes larger than 255, but it will in the future"
+        "Puzzles with set sizes larger than 255 are not yet supported, but it will be in the future"
     )]
     SetSizeTooBig,
     #[error("Could not expand move set, order of a move too high")]

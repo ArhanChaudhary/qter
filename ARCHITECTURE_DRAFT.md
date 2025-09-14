@@ -11,7 +11,7 @@ The other packages are more math heavy and you won't have to worry about them un
 
 `puzzle_geometry` allows a twisty puzzle to be defined as a polyhedron with cut planes. It's mostly computational geometry, and converts a geometrical representation of a puzzle into a permutation group representation of the puzzle
 `cycle_combination_solver` implements the search process for algs to encode registers
-`movecount_coefficient` implements a metric for how "easy" it is for a human to perform an algorithm (sequence of moves) on a rubik's cube. For example, turns on the back face are harder to do than turns on the top face, though it gets more complicated than that.
+`movecount_coefficient_calculator` implements a metric for how "easy" it is for a human to perform an algorithm (sequence of moves) on a rubik's cube. For example, turns on the back face are harder to do than turns on the top face, though it gets more complicated than that.
 
 # Second, some important technical details not mentioned in the readme:
 

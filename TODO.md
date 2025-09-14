@@ -9,14 +9,14 @@
 
 ## SCC
 
-- Phase 2
+- CCS
   - check for logs in test cases; tracing
     - hardcode the first solution moves in the test cases to be sure
-  - make sure sequence symmetry is good
   - replace pub(crate) with getters
   - try out a different exact hasher
   - spam debug_assert!()
   - dont pack bit vector for AuxMem
+  - solve for all cycle structures from CCF at once vs many runs of single cycle structure at a time
   - ⭐pruning table
     - generate table during the solve
       - if the number of probes exceeds the number of set values in the table by a certain factor (3x?) it considers generating another level of the table, if there is enough memory to do so
@@ -31,22 +31,23 @@
       - <https://discord.com/channels/772576325897945119/1326029986578038784/1374906236956573806>
     - ⭐each thread fills in 1024 entires at a time
     - ⭐exact: dfs at low levels instead of scanning
-    - dynamic simd detection rather than -Ctarget-cpu=native
-  - ⭐stabilizer
-  - ⭐avoid symmetric moves from the start by doing A\* then IDA\* in parallel (youtube video)
+  - search
+    - ⭐stabilizer
+      - Look into fixing a corner for even cubes/other puzzles
+    - ⭐standard symmetry
+      - ⭐Doug's canon_into function simplified and explained in #programming
+      - ⭐reread kociemba's website and h48.md
+    - ⭐multithreading
+      - heuristically sort based on sqrt(3)/sqrt(2) and canonical seq (h48.md)
+      - microthreading
   - you NEED to account for parity constraints when calculating orbit size; address this in schreier sims
-  - fix corner in stabilizer for 4x4
   - ⭐solved state for 4x4
-  - ⭐standard symmetry
-    - ⭐reread kociemba's website and h48.md
   - ⭐antisymmetry
-  - ⭐multithreading
-    - microthreading
   - ⭐make fsm lookup unsafe when pg is done
   - can we use move tables? look into at the end
+  - Schreier Sims & generating algs using it
+  - Generate a pruning table starting from the scramble instead of the solved state and then began the search from the solved state
 - ⭐Phase 1
-- Look into fixing a corner for even cubes/other puzzles
-- Schreier Sims & generating algs using it
 
 ## PuzzleGeometry
 

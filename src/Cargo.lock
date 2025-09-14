@@ -2157,6 +2157,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
+name = "cycle_combination_finder"
+version = "0.1.0"
+dependencies = [
+ "puzzle_geometry",
+ "qter_core",
+]
+
+[[package]]
+name = "cycle_combination_solver"
+version = "0.1.0"
+dependencies = [
+ "cfg_aliases",
+ "enum_dispatch",
+ "fastrand",
+ "fxhash",
+ "generativity",
+ "integer-partitions",
+ "itertools 0.14.0",
+ "log",
+ "memoize",
+ "num-traits",
+ "pareto_front",
+ "pretty_env_logger",
+ "puzzle_geometry",
+ "qter_core",
+ "test-log",
+ "thiserror 2.0.15",
+]
+
+[[package]]
 name = "dashmap"
 version = "5.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3335,7 +3365,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "movecount_coefficient"
+name = "movecount_coefficient_calculator"
 version = "0.1.0"
 
 [[package]]
@@ -3940,36 +3970,6 @@ dependencies = [
  "indexmap",
  "serde",
  "serde_derive",
-]
-
-[[package]]
-name = "phase1"
-version = "0.1.0"
-dependencies = [
- "puzzle_geometry",
- "qter_core",
-]
-
-[[package]]
-name = "phase2"
-version = "0.1.0"
-dependencies = [
- "cfg_aliases",
- "enum_dispatch",
- "fastrand",
- "fxhash",
- "generativity",
- "integer-partitions",
- "itertools 0.14.0",
- "log",
- "memoize",
- "num-traits",
- "pareto_front",
- "pretty_env_logger",
- "puzzle_geometry",
- "qter_core",
- "test-log",
- "thiserror 2.0.15",
 ]
 
 [[package]]

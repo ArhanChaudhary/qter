@@ -5,11 +5,11 @@ members = [
   "interpreter",
   "compiler",
   "cli",
-  "phase2",
+  "cycle_combination_solver",
   "puzzle_geometry",
-  "movecount_coefficient",
+  "movecount_coefficient_calculator",
   "pog_ans",
-  "phase1",
+  "cycle_combination_finder",
 ]
 
 [workspace.lints.clippy]

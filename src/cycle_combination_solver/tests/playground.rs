@@ -1,8 +1,6 @@
 #![allow(unused_imports)]
 
-use itertools::Itertools;
-use log::info;
-use phase2::{
+use cycle_combination_solver::{
     make_guard,
     pruning::{
         OrbitPruningTables, OrbitPruningTablesGenerateMeta, PruningTables, StorageBackendTy,
@@ -11,6 +9,8 @@ use phase2::{
     puzzle::{PuzzleDef, SortedCycleType, cube3::Cube3},
     solver::{CycleTypeSolver, SearchStrategy},
 };
+use itertools::Itertools;
+use log::info;
 use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
 #[test_log::test]

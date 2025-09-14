@@ -153,7 +153,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
         }
 
         // Sequence symmetry optimization, first observed by [Tomas Rokicki][ss],
-        // and slightly improved by this implementation. Some solution to Phase2
+        // and slightly improved by this implementation. Some solution to CCS
         // A B C D conjugated by A^-1 yields A^-1 (A B C D) A = B C D A, which
         // we observe to be a rotation of the original sequence. One of the
         // properties of conjugate elements is that they cannot be distinguished
@@ -224,7 +224,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             .enumerate()
             // We are at the "X < HISTORY(i)" case described earlier. Pruning
             // all of the child nodes is as simple as skipping a "HISTORY(i)"
-            // number of children from the beginning.
+            // number of children from the beginning
             .skip(move_index_prune_lt)
         {
             // if self.search_strategy == SearchStrategy::FirstSolution && move_index == 2 && is_root {
@@ -242,7 +242,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             // Otherwise the end could be rotated to the start and combined
             // together, thus contradicting that assumption
             //
-            // TODO: investigate optimizing this once phase2 becomes more mature
+            // TODO: investigate optimizing this once CCS becomes more mature
             // see: https://discord.com/channels/772576325897945119/1326029986578038784/1411433393387999345
             } else if permitted_cost == 0 && move_class_index == mutable.first_move_class_index {
                 continue;
@@ -376,7 +376,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
     pub fn solve<H: PuzzleStateHistory<'id, P>>(
         &self,
     ) -> Result<SolutionsIntoIter<'id, '_, P>, CycleTypeSolverError> {
-        info!(start!("Searching for phase2 solutions"));
+        info!(start!("Beginning Cycle Combination Solver solution search..."));
         let start = Instant::now();
 
         let mut mutable: CycleTypeSolverMutable<P, H> = CycleTypeSolverMutable {
@@ -406,6 +406,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                     .solutions
                     .push(mutable.puzzle_state_history.create_move_history());
             } else {
+                // The loop increments `depth` so we do this manually
                 depth = 1;
                 if H::GODS_NUMBER.is_some_and(|gods_number| gods_number == 0) {
                     return Err(CycleTypeSolverError::SolutionDoesNotExist);
@@ -416,7 +417,6 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                 mutable.nodes_visited,
                 depth_start.elapsed().as_secs_f64()
             );
-            // The loop increments `depth` so we do this manually
         }
 
         if !mutable.found_solution() {

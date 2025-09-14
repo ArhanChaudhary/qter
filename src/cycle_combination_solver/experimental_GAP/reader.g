@@ -13,7 +13,7 @@ edge_facelet_buf := 42;
 corner_facelet_buf := 1;
 edge_cubies := Blocks(cube, Orbit(cube, edge_facelet_buf));
 corner_cubies := Blocks(cube, Orbit(cube, corner_facelet_buf));
-edge_facelets := Immutable(Flat(edge_cubies));g
+edge_facelets := Immutable(Flat(edge_cubies));
 corner_facelets := Immutable(Flat(corner_cubies));
 
 Read("phase3/util.g");
@@ -28,6 +28,11 @@ for i in ConjugacyClass(cube, (1,3,6,9,33,17,35,27,11)(2,13,44,4,45,34,20,15,10,
         WriteAll(outFile, line);
     fi;
 od;
+
+# for i in c do
+#     j := PermutationSpeffz(i);
+#     AppendTo(outFile, '\n');
+# od;
 
 CloseStream(stream);
 CloseStream(outFile);

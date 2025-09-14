@@ -1,5 +1,5 @@
 [package]
-name = "phase1"
+name = "cycle_combination_finder"
 version = "0.1.0"
 edition = "2024"
 

@@ -1,5 +1,3 @@
-//! Phase 2 of the cycle combination solver.
-
 #![feature(test, slice_index_methods, portable_simd, abi_vectorcall)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::similar_names, clippy::too_many_lines, refining_impl_trait)]

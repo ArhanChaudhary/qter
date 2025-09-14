@@ -1,10 +1,8 @@
 """
-Phase 1 of the three-phase solver.
+Finds pairs of commutative cycles on a Rubik's cube that have high products of
+orders.
 
-This phase is responsible for finding pairs of commutative cycles on a Rubik's cube
-that have high products of orders.
-
-This is more efficient version of the optimal Phase 1. The goal is to return
+This is more efficient version of the optimal CCF. The goal is to return
 one structure for each combination, rather than every structure.
 There are also a few more assumptions, and as such there may be some missed combinations.
 """
@@ -127,6 +125,7 @@ def possible_order_list(total_pieces, partition_max, max_orient):
                     )
 
     paths = sorted(paths, key=lambda x: x[0], reverse=True)
+
     return paths
 
 
@@ -140,8 +139,14 @@ def cycle_combo_test(registers, cycle_cubie_counts, puzzle_orbit_definition):
             sum(cycle_cubie_counts) - sum([sum(x.piece_counts) for x in registers]),
         ]
     ]
+    loops = 0
     while stack:
+        loops += 1
+        if loops == 10000:
+            return None
         r, p, orbit_sums, assignments, available_pieces = stack.pop()
+        # print(len(stack), r)
+        seen = []
 
         while p == len(registers[r].values):
             p = 0
@@ -151,8 +156,15 @@ def cycle_combo_test(registers, cycle_cubie_counts, puzzle_orbit_definition):
 
         if r == len(registers):
             return assignments
+        # TODO no duplicates
 
         for i, orbit in enumerate(puzzle_orbit_definition.orbits):
+            if orbit.orientation_status == OrientationStatus.CannotOrient:
+                if cycle_cubie_counts[i] in seen:
+                    continue
+                else:
+                    seen.append(cycle_cubie_counts[i])
+
             if (
                 isinstance(
                     orbit.orientation_status,
@@ -175,7 +187,9 @@ def cycle_combo_test(registers, cycle_cubie_counts, puzzle_orbit_definition):
             else:
                 continue
             if new_cycle == 0 and len(assignments[r][i]) == 0:
-                continue
+                if available_pieces == 0:
+                    continue
+                new_cycle = 1
 
             parity = 0
             if new_cycle % 2 == 0 and new_cycle > 0:
@@ -194,110 +208,40 @@ def cycle_combo_test(registers, cycle_cubie_counts, puzzle_orbit_definition):
                 stack[-1][2][i] += new_cycle
                 if new_cycle > 0:
                     stack[-1][3][r][i].append(new_cycle)
-                if parity > 0:
-                    stack[-1][2][i] += 2
-                    stack[-1][3][r][i].append(2)
+                    if parity > 0:
+                        stack[-1][2][i] += 2
+                        stack[-1][3][r][i].append(2)
 
 
-def recursive_cycle_combinations(
-    remaining_pieces,
-    remaining_registers,
-    possible_orders,
-    min_indices,
-    registers,
-    cycle_cubie_counts,
-    puzzle_orbit_definition,
-    cycle_combinations,
-    prior_index,
+def assignments_to_combo(
+    assignments, registers, cycle_cubie_counts, puzzle_orbit_definition
 ):
-    if remaining_registers == 1:
-        max_used = True
-        for order in possible_orders[max(prior_index, min_indices[remaining_pieces]) :]:
-            if len(registers) > 0 and order.order > registers[-1].order:
-                continue
+    cycle_combination = []
+    for r, reg in enumerate(registers):
+        partitions = []
+        for o, orbit in enumerate(puzzle_orbit_definition.orbits):
+            lcm = 1
+            for a in assignments[r][o]:
+                lcm = math.lcm(lcm, a)
+            if isinstance(orbit.orientation_status, OrientationStatus.CanOrient):
+                lcm *= (
+                    orbit.orientation_status.count
+                )  # TODO fix this, it's not always accurate
+                assignments[r][o] = [1] + assignments[r][o]
 
-            assignments = cycle_combo_test(
-                registers + [order], cycle_cubie_counts, puzzle_orbit_definition
-            )
-            if assignments is not None:
-                registers = registers + [order]
-                cycle_combination = []
-                for r, reg in enumerate(registers):
-                    partitions = []
-                    for o, orbit in enumerate(puzzle_orbit_definition.orbits):
-                        lcm = 1
-                        for a in assignments[r][o]:
-                            lcm = math.lcm(lcm, a)
-                        if isinstance(
-                            orbit.orientation_status, OrientationStatus.CanOrient
-                        ):
-                            lcm *= (
-                                orbit.orientation_status.count
-                            )  # TODO fix this, it's not always accurate
-                            assignments[r][o] = [1] + assignments[r][o]
-
-                        partitions.append(
-                            CubiePartition(
-                                orbit.name,
-                                assignments[r][o],
-                                lcm,
-                            )
-                        )
-                    cycle_combination.append(Cycle(reg.order, partitions))
-                new_combo = CycleCombination(
-                    used_cubie_counts=cycle_cubie_counts,
-                    order_product=math.prod(x.order for x in registers),
-                    cycle_combination=cycle_combination,  # shouldn't need to sort with new version
-                    # sorted(
-                    # cycle_combination, key=lambda x: x.order, reverse=True
-                    # ),
+            partitions.append(
+                CubiePartition(
+                    orbit.name,
+                    assignments[r][o],
+                    lcm,
                 )
-
-                for c in range(len(cycle_combinations) - 1, -1, -1):
-                    if cycle_combination_dominates(cycle_combinations[c], new_combo):
-                        return cycle_combinations, max_used
-                    elif cycle_combination_dominates(new_combo, cycle_combinations[c]):
-                        cycle_combinations.pop(c)
-                cycle_combinations.append(new_combo)
-                return cycle_combinations, max_used
-            max_used = False
-
-        return cycle_combinations, False
-
-    max_tracker = True
-    minimum_checked = remaining_pieces
-    minimum_maxxed = remaining_pieces + 1
-
-    for o in range(
-        max(min_indices[remaining_pieces], prior_index), len(possible_orders)
-    ):
-        minimum_checked = min(minimum_checked, possible_orders[o].piece_total)
-        if possible_orders[o].piece_total >= minimum_maxxed:
-            continue
-        if len(registers) == 0:
-            print("Checking first register", possible_orders[o].order)
-        # if len(registers) > 0 and possible_orders[o].order > registers[-1].order:
-        # continue
-        cycle_combination, max_used = recursive_cycle_combinations(
-            remaining_pieces - possible_orders[o].piece_total,
-            remaining_registers - 1,
-            possible_orders,
-            min_indices,
-            registers + [possible_orders[o]],
-            cycle_cubie_counts,
-            puzzle_orbit_definition,
-            cycle_combinations,
-            o,
-        )
-        if max_used and minimum_checked == 0:
-            return cycle_combinations, max_tracker
-        elif max_used:
-            minimum_maxxed = possible_orders[o].piece_total
-            o = min(min_indices[minimum_maxxed - 1] - 1, o)
-        else:
-            max_tracker = False
-
-    return cycle_combinations, max_tracker
+            )
+        cycle_combination.append(Cycle(reg.order, partitions))
+    return CycleCombination(
+        used_cubie_counts=cycle_cubie_counts,
+        order_product=math.prod(x.order for x in registers),
+        cycle_combination=cycle_combination,
+    )
 
 
 def efficient_cycle_combinations(puzzle_orbit_definition, num_registers):
@@ -305,34 +249,56 @@ def efficient_cycle_combinations(puzzle_orbit_definition, num_registers):
     max_orient = [0] * 4
     for orbit in puzzle_orbit_definition.orbits:
         if isinstance(orbit.orientation_status, OrientationStatus.CanOrient):
-            max_orient[orbit.orientation_status.count] = orbit.cubie_count
+            max_orient[orbit.orientation_status.count] = orbit.cubie_count - 1
             cycle_cubie_counts = cycle_cubie_counts + (orbit.cubie_count - 1,)
         else:
             cycle_cubie_counts = cycle_cubie_counts + (orbit.cubie_count,)
 
     total_cubies = sum(cycle_cubie_counts)
+    cubies_per_register = total_cubies // num_registers
     possible_orders = possible_order_list(
-        total_cubies, max(cycle_cubie_counts), max_orient
+        cubies_per_register,
+        min(max(cycle_cubie_counts), cubies_per_register),
+        max_orient,
     )
 
-    min_indices = [len(possible_orders)] * (total_cubies + 1)
-    for i, order in enumerate(possible_orders):
-        for pieces in range(order.piece_total, total_cubies + 1):
-            if i > min_indices[pieces]:
+    for order in possible_orders:
+        print("testing order", order.order)
+
+        unorientable_excess = 0
+        for o in range(len(order.values) - 1, -1, -1):
+            if order.values[o] % 2 == 0:
+                orientable = min(
+                    max_orient[2] // max(1, order.piece_counts[o]), num_registers
+                )
+                unorientable_excess += (num_registers - orientable) * (
+                    order.values[o] - order.piece_counts[o]
+                )
+            elif order.values[o] % 3 == 0:
+                orientable = min(
+                    max_orient[3] // max(1, order.piece_counts[o]), num_registers
+                )
+                unorientable_excess += (num_registers - orientable) * (
+                    order.values[o] - order.piece_counts[o]
+                )
+            else:
                 break
-            min_indices[pieces] = i
 
-    return recursive_cycle_combinations(
-        total_cubies,
-        num_registers,
-        possible_orders,
-        min_indices,
-        [],
-        cycle_cubie_counts,
-        puzzle_orbit_definition,
-        [],
-        0,
-    )
+        if unorientable_excess + num_registers * sum(order.piece_counts) > total_cubies:
+            continue
+
+        assignments = cycle_combo_test(
+            [order] * num_registers, cycle_cubie_counts, puzzle_orbit_definition
+        )
+        if assignments is not None:
+            return [
+                assignments_to_combo(
+                    assignments,
+                    [order] * num_registers,
+                    cycle_cubie_counts,
+                    puzzle_orbit_definition,
+                )
+            ]
 
 
 def cycle_combination_objs_stats(cycle_combination_objs):
@@ -361,9 +327,9 @@ def cycle_combination_dominates(this, other):
 
 def main():
     start = timeit.default_timer()
-    cycle_combinations, dummy = efficient_cycle_combinations(
-        puzzle_orbit_definition=puzzle_orbit_definitions.PUZZLE_4x4,
-        num_registers=2,
+    cycle_combinations = efficient_cycle_combinations(
+        puzzle_orbit_definition=puzzle_orbit_definitions.PUZZLE_6x6,
+        num_registers=3,
     )
     cycle_combinations = sorted(
         cycle_combinations, key=lambda x: x.order_product, reverse=True
@@ -378,7 +344,7 @@ if __name__ == "__main__":
         stats = cycle_combination_objs_stats(cycle_combination_objs)
     except Exception:
         stats = None
-    with open("./output_efficient.py", "w") as f:
+    with open("./output_equivalent.py", "w") as f:
         f.write(
             f"Cycle = 1\nCycleCombination = 1\nCubiePartition = 1\n{stats}\n{cycle_combination_objs}"
         )

@@ -1,6 +1,4 @@
-use itertools::Itertools;
-use log::info;
-use phase2::{
+use cycle_combination_solver::{
     make_guard,
     pruning::{
         OrbitPruningTables, OrbitPruningTablesGenerateMeta, PruningTables, StorageBackendTy,
@@ -9,6 +7,8 @@ use phase2::{
     puzzle::{PuzzleDef, PuzzleState, SortedCycleType, cube3::Cube3, slice_puzzle::HeapPuzzle},
     solver::{CycleTypeSolver, CycleTypeSolverError, SearchStrategy},
 };
+use itertools::Itertools;
+use log::info;
 use puzzle_geometry::ksolve::{KPUZZLE_3X3, KPUZZLE_4X4};
 
 #[test_log::test]

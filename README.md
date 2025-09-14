@@ -1105,5 +1105,3 @@ Additionally,
 - Thanks to [@rokicki](https://github.com/rokicki) for personally advising most of phase 2's design.
 - Thanks to [@benwh1](https://github.com/benwh1) for miscellaneous puzzle theory insights.
 - Thanks to [@Infinidoge](https://github.com/Infinidoge) for providing access to powerful hardware.
-- Thanks to [@DitrusNight](https://github.com/DitrusNight) for advising Qter's programming language design.
-- Thanks to [@Phineas1500](https://github.com/Phineas1500) for encouragement and outreach.

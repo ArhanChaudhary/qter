@@ -1,12 +1,6 @@
 """
-Phase 1 of the three-phase solver.
-
-This phase is responsible for finding pairs of commutative cycles on a Rubik's cube
-that have high products of orders. The output of this phase is directly
-used in phase 2.
-
-Adapted with permission from ScriptRaccon's
-<https://gist.github.com/ScriptRaccoon/c12c4884c116dead62a15a3d09732d5d>
+Finds pairs of commutative cycles on a Rubik's cube that have high products of
+orders. The output of this phase is directly used in the CCS.
 """
 
 import collections
@@ -335,7 +329,7 @@ def optimal_cycle_combinations(puzzle_orbit_definition, num_cycles, cache_clear=
                         else:
                             # We only permute the cycles that have the same maximum
                             # order because the partition permutation for same order
-                            # cycles matters for phase 2. Don't permute the rest
+                            # cycles matters for the CCS. Don't permute the rest
                             # because that logic is implemented in phase 3 (more
                             # efficient to do this in phase 3 vs here).
                             if (
@@ -537,7 +531,7 @@ def possible_order_list(total_pieces, partition_max, max_orient):
     return paths
 
 
-# TODO(pri 3/5): on bigger cubes where phase 2 is not applicable, do special
+# TODO(pri 3/5): on bigger cubes where the CCS is not applicable, do special
 # optimizations that make this faster. only find the highest order
 # product cycle dont care abt duplicates
 @functools.cache

@@ -52,9 +52,11 @@ impl<'id, P: PuzzleState<'id>> From<&PuzzleDef<'id, P>> for PuzzleCanonicalFSM<'
         let mut commutes: Vec<MoveClassMask> = vec![vec![true; num_move_classes]; num_move_classes];
 
         // Written this way so if we later iterate over all moves instead of
-        // all move classes. This is because multiples can commute differently than their quantum values.
-        // For example:
-        // - The standard T-Perm (`R U R' U' R' F R2 U' R' U' R U R' F'`) has order 2.
+        // all move classes. This is because multiples can commute differently
+        // than their quantum values. For example:
+        //
+        // - The standard T-Perm (`R U R' U' R' F R2 U' R' U' R U R' F'`) has
+        //   order 2.
         // - `R2 U2` has order 6.
         // - T-perm and `(R2 U2)3` commute.
         let mut result_1 = puzzle_def.new_solved_state();
@@ -77,9 +79,9 @@ impl<'id, P: PuzzleState<'id>> From<&PuzzleDef<'id, P>> for PuzzleCanonicalFSM<'
 
         let mut mask_to_state = MaskToState(HashMap::new());
         mask_to_state.0.insert(vec![false; num_move_classes], 0);
-        // state_to_mask, indexed by state ordinal, holds the set of move classes in the
-        // move sequence so far for which there has not been a subsequent move that does not
-        // commute with that move
+        // state_to_mask, indexed by state ordinal, holds the set of move
+        // classes in the move sequence so far for which there has not been a
+        // subsequent move that does not commute with that move
         let mut state_to_mask = StateToMask(vec![vec![false; num_move_classes]]);
 
         // start state
@@ -98,9 +100,10 @@ impl<'id, P: PuzzleState<'id>> From<&PuzzleDef<'id, P>> for PuzzleCanonicalFSM<'
                 // `move_class`.
                 skip |= dequeue_move_class_mask
                     .iter()
-                    .zip(commutes[move_class_index].iter())
+                    .copied()
+                    .zip(commutes[move_class_index].iter().copied())
                     .skip(move_class_index + 1)
-                    .any(|(&dequeue_move_class, &commute)| dequeue_move_class && commute);
+                    .any(|(dequeue_move_class, commute)| dequeue_move_class && commute);
                 skip |= dequeue_move_class_mask[move_class_index];
                 if skip {
                     continue;
@@ -117,6 +120,8 @@ impl<'id, P: PuzzleState<'id>> From<&PuzzleDef<'id, P>> for PuzzleCanonicalFSM<'
                 // If a pair of bits are set with the same commutating moves, we
                 // can clear out the higher ones. This optimization keeps the
                 // state count from going exponential for very big cubes.
+                //
+                // Originally implemented by Tomas Rokicki: https://github.com/cubing/twsearch/blob/0dced6e55f5612609a54c75056d00535fadee0c8/src/cpp/canon.cpp#L106
                 for i in 0..num_move_classes {
                     if next_state_mask[i] {
                         for j in (i + 1)..num_move_classes {
