@@ -1,3 +1,3 @@
-[submodule "vcube"]
+[submodule "src/cycle_combination_solver/experimental_GAP/vcube"]
 	path = src/cycle_combination_solver/experimental_GAP/vcube
-	url = https://github.com/ArhanChaudhary/vcube
+	url = https://github.com/ArhanChaudhary-forks/vcube
