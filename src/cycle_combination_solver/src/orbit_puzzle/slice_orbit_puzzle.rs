@@ -35,17 +35,17 @@ impl OrbitPuzzleState for SliceOrbitPuzzle {
         unsafe { replace_compose_slice_orbit(&mut self.0, 0, &a.0, &b.0, orbit_def) };
     }
 
-    unsafe fn induces_sorted_cycle_type(
+    unsafe fn induces_sorted_cycle_structure(
         &self,
-        sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
+        sorted_cycle_structure_orbit: &[(NonZeroU8, bool)],
         orbit_def: OrbitDef,
         mut aux_mem: AuxMemRefMut,
     ) -> bool {
         unsafe {
-            induces_sorted_cycle_type_slice_orbit(
+            induces_sorted_cycle_structure_slice_orbit(
                 &self.0,
                 0,
-                sorted_cycle_type_orbit,
+                sorted_cycle_structure_orbit,
                 orbit_def,
                 aux_mem.aux_mem_unchecked(),
             )
@@ -131,20 +131,20 @@ pub unsafe fn replace_compose_slice_orbit(
     }
 }
 
-/// Check if a slice puzzle state induces a sorted cycle type.
+/// Check if a slice puzzle state induces a sorted cycle structure.
 ///
 /// # Safety
 ///
 /// 1) `slice_orbit_states` must correspond to `orbit_def`
 /// 2) `base` must be a valid index to the start of an orbit
-/// 3) `sorted_cycle_type_orbit` must be sorted by cycle length and then by
+/// 3) `sorted_cycle_structure_orbit` must be sorted by cycle length and then by
 ///    `is_oriented`
 /// 4) `multi_bv` must be the result of `new_multi_bv` on the same `orbit_def`
 #[inline]
-pub unsafe fn induces_sorted_cycle_type_slice_orbit(
+pub unsafe fn induces_sorted_cycle_structure_slice_orbit(
     slice_orbit_state: &[u8],
     base: usize,
-    sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
+    sorted_cycle_structure_orbit: &[(NonZeroU8, bool)],
     orbit_def: OrbitDef,
     // We cannot brand this field because a newtype holding a mutable reference
     // cannot be moved in a loop
@@ -201,7 +201,7 @@ pub unsafe fn induces_sorted_cycle_type_slice_orbit(
         }
         let mut valid_cycle_index = None;
         for (j, &(expected_cycle_length, expected_orients)) in
-            sorted_cycle_type_orbit.iter().enumerate()
+            sorted_cycle_structure_orbit.iter().enumerate()
         {
             match expected_cycle_length.get().cmp(&actual_cycle_length) {
                 Ordering::Less => (),
@@ -230,9 +230,9 @@ pub unsafe fn induces_sorted_cycle_type_slice_orbit(
         }
         covered_cycles_count += 1;
         // cannot possibly return true if this runs
-        if covered_cycles_count > sorted_cycle_type_orbit.len() {
+        if covered_cycles_count > sorted_cycle_structure_orbit.len() {
             return false;
         }
     }
-    covered_cycles_count == sorted_cycle_type_orbit.len()
+    covered_cycles_count == sorted_cycle_structure_orbit.len()
 }

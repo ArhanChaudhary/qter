@@ -26,7 +26,7 @@ moves := [U, L, F, R, B, D, U^-1, L^-1, F^-1, R^-1, B^-1, D^-1, U^2, L^2, F^2, R
 len_moves := Length(moves);
 target_cycle_structure_corners := [ ,2 ];
 target_cycle_structure := [ 1,2,,,,,,,1 ];
-# phase 2 currently has a logic error, it finds the first cycle with the cycle type but not every cycle same htm/qtm which are all candidates for phase 3
+# phase 2 currently has a logic error, it finds the first cycle with the cycle structure but not every cycle same htm/qtm which are all candidates for phase 3
 HashPerm := function(perm)
     # TODO: use lehmer code + ternary instead
     return Position(cornercube_enumerator, perm);

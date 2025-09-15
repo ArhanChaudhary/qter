@@ -5,7 +5,7 @@
 use super::common::{CornersTransformation, Cube3OrbitType, Cube3State, EdgesTransformation};
 use crate::{
     orbit_puzzle::exact_hasher_orbit,
-    puzzle::{SortedCycleTypeRef, cube3::common::CUBE_3_SORTED_ORBIT_DEFS},
+    puzzle::{SortedCycleStructureRef, cube3::common::CUBE_3_SORTED_ORBIT_DEFS},
 };
 use std::{
     fmt::{self, Formatter},
@@ -301,11 +301,15 @@ impl Cube3State for Cube3 {
         replace_inverse_vectorcall(self, a);
     }
 
-    fn induces_sorted_cycle_type(&self, sorted_cycle_type: SortedCycleTypeRef) -> bool {
+    fn induces_sorted_cycle_structure(
+        &self,
+        sorted_cycle_structure: SortedCycleStructureRef,
+    ) -> bool {
         // Benchmarked on a 2x Intel Xeon E5-2667 v3: 36.47ns (worst) 7.33ns (average)
         //
-        // The cycle type of a state is a sorted list of (int: cycle_length,
-        // bool: is_oriented). For example, the corner permutation:
+        // The cycle structure of a state is a sorted list of
+        // (int: cycle_length, bool: is_oriented). For example, the corner
+        // permutation:
         //
         // index 0 1 2 3 4 5 6 7
         // perm  0 2 3 5 4 1 7 6
@@ -314,32 +318,33 @@ impl Cube3State for Cube3 {
         // when the sum of orientation values of each piece in the cycle is
         // nonzero modulo the orbit's orientation count.
         //
-        // To calculate if a state induces a sorted cycle type we use a SIMD
-        // shuffling and counting approach. We perform the following for the
-        // corners and edges orbit. We first focus on finding the cycle lengths.
-        // To do so, repeatedly compose the permutation with its original value
-        // and equality mask it with the identity permutation. If any element is
-        // set, then there are X / Y cycles of length Y, where X is the number
-        // of set elements and Y is the number of repititions. This should make
-        // sense; after two repetitions, if there are six set elements, there
-        // must be three cycles of length two. Each of the two pieces of the
-        // three cycles are returning to their original position. To account
-        // for orientation, we first make note of the nonobvious fact that every
-        // piece's orientation is the same when cycled back to their original
-        // positions. In a cycle, think of each piece position as an addition to
-        // the visitor's orientation count. Each piece cycles through each
-        // position exactly once, so each piece will be added to by the same
-        // value (the sum of each piece's orientation value). Since the identity
-        // state has every orientation value the same (zero), each piece
-        // must therefore have the same orientation value after a full cycle.
-        // Thus, we can find how many of those cycles of the same length are
-        // oriented cycles by using same technique.
+        // To structure if a state induces a sorted cycle structure we use a
+        // SIMD shuffling and counting approach. We perform the following for
+        // the corners and edges orbit. We first focus on finding the cycle
+        // lengths. To do so, repeatedly compose the permutation with its
+        // original value and equality mask it with the identity permutation. If
+        // any element is set, then there are X / Y cycles of length Y, where X
+        // is the number of set elements and Y is the number of repititions.
+        // This should make sense; after two repetitions, if there are six set
+        // elements, there must be three cycles of length two. Each of the two
+        // pieces of the three cycles are returning to their original position.
+        // To account for orientation, we first make note of the nonobvious fact
+        // that every piece's orientation is the same when cycled back to their
+        // original positions. In a cycle, think of each piece position as an
+        // addition to the visitor's orientation count. Each piece cycles
+        // through each position exactly once, so each piece will be added to by
+        // the same value (the sum of each piece's orientation value). Since the
+        // identity state has every orientation value the same (zero), each
+        // piece must therefore have the same orientation value after a full
+        // cycle. Thus, we can find how many of those cycles of the same length
+        // are oriented cycles by using same technique.
 
         // Helps avoid bound checks in codegen
         #![allow(clippy::int_plus_one)]
 
-        let sorted_corners_cycle_type = unsafe { sorted_cycle_type.inner.get_unchecked(0) };
-        let sorted_edges_cycle_type = unsafe { sorted_cycle_type.inner.get_unchecked(1) };
+        let sorted_corners_cycle_structure =
+            unsafe { sorted_cycle_structure.inner.get_unchecked(0) };
+        let sorted_edges_cycle_structure = unsafe { sorted_cycle_structure.inner.get_unchecked(1) };
 
         // The orientation to add every composition repetition
         let compose_ori = self.0 & ORI_MASK;
@@ -352,11 +357,11 @@ impl Cube3State for Cube3 {
         let oriented_one_cycle_corner_mask = seen_perm & compose_ori.simd_ne(u8x32::splat(0));
 
         // We need a way to cross-reference the computed cycles with the given
-        // cycle type to test if the current state induces it. I settled on
-        // using an index pointer to the given cycle type list, taking advantage
-        // of the fact that the list is sorted.
+        // cycle structure to test if the current state induces it. I settled on
+        // using an index pointer to the given cycle structure list, taking
+        // advantage of the fact that the list is sorted.
         //
-        // Let's say we test against the cycle type [(1, true), (1, true),
+        // Let's say we test against the cycle structure [(1, true), (1, true),
         // (2, false), (4, true)]. We have already presented an algorithm to
         // compute the number of cycles of each length. For every cycle length,
         // we can add that number to the index pointer starting at -1 and check
@@ -364,32 +369,32 @@ impl Cube3State for Cube3 {
         // this approach to account for orientations.
         //
         // We initialize the index pointer to the number of oriented one cycles
-        let mut corner_cycle_type_pointer =
+        let mut corner_cycle_structure_pointer =
             corner_bits(oriented_one_cycle_corner_mask.to_bitmask()).count_ones() as usize;
         // Subtract one to make it zero indexed
-        corner_cycle_type_pointer = corner_cycle_type_pointer.wrapping_sub(1);
+        corner_cycle_structure_pointer = corner_cycle_structure_pointer.wrapping_sub(1);
 
-        // Error checking for the (1, true) cycle type. This isn't actually
+        // Error checking for the (1, true) cycle structure. This isn't actually
         // necessary. It's just a hot path for failing early
-        if corner_cycle_type_pointer == usize::MAX {
-            // If the state has no (1, true) cycle types, then get the first
-            // cycle of the specified sorted cycle type
-            if let Some(&first_cycle) = sorted_corners_cycle_type.first()
-                // If sorted cycle type has a first cycle, it must not be
+        if corner_cycle_structure_pointer == usize::MAX {
+            // If the state has no (1, true) cycle structures, then get the
+            // first cycle of the specified sorted cycle structure
+            if let Some(&first_cycle) = sorted_corners_cycle_structure.first()
+                // If sorted cycle structure has a first cycle, it must not be
                 // (1, true) because this branch only runs when the state has no
-                // (1, true) cycle types
+                // (1, true) cycle structures
                 && first_cycle == (1.try_into().unwrap(), true)
             {
                 // So we short circuit
                 return false;
             }
         } else if
-        // If the corner cycle type pointer is out of range then something
+        // If the corner cycle structure pointer is out of range then something
         // is wrong
-        corner_cycle_type_pointer >= sorted_corners_cycle_type.len()
-            // If the corner cycle type is in range, but it doesn't point to
-            // (1, true) then the cycle type is mismatched
-            || sorted_corners_cycle_type[corner_cycle_type_pointer] != (1.try_into().unwrap(), true)
+        corner_cycle_structure_pointer >= sorted_corners_cycle_structure.len()
+            // If the corner cycle structure is in range, but it doesn't point
+            // to (1, true) then the cycle structure is mismatched
+            || sorted_corners_cycle_structure[corner_cycle_structure_pointer] != (1.try_into().unwrap(), true)
         {
             // In both cases short circuit
             return false;
@@ -397,18 +402,19 @@ impl Cube3State for Cube3 {
 
         // We use the same techniques as above but for edges
         let oriented_one_cycle_edge_mask = seen_perm & compose_ori.simd_ne(u8x32::splat(0));
-        let mut edge_cycle_type_pointer =
+        let mut edge_cycle_structure_pointer =
             edge_bits(oriented_one_cycle_edge_mask.to_bitmask()).count_ones() as usize;
-        edge_cycle_type_pointer = edge_cycle_type_pointer.wrapping_sub(1);
+        edge_cycle_structure_pointer = edge_cycle_structure_pointer.wrapping_sub(1);
 
-        if edge_cycle_type_pointer == usize::MAX {
-            if let Some(&first_cycle) = sorted_edges_cycle_type.first()
+        if edge_cycle_structure_pointer == usize::MAX {
+            if let Some(&first_cycle) = sorted_edges_cycle_structure.first()
                 && first_cycle == (1.try_into().unwrap(), true)
             {
                 return false;
             }
-        } else if edge_cycle_type_pointer >= sorted_edges_cycle_type.len()
-            || sorted_edges_cycle_type[edge_cycle_type_pointer] != (1.try_into().unwrap(), true)
+        } else if edge_cycle_structure_pointer >= sorted_edges_cycle_structure.len()
+            || sorted_edges_cycle_structure[edge_cycle_structure_pointer]
+                != (1.try_into().unwrap(), true)
         {
             return false;
         }
@@ -441,8 +447,8 @@ impl Cube3State for Cube3 {
             // iteration divided by the number of repetitions
             let reps_corner_cycle_count = corner_bits(new_pieces_bitmask).count_ones();
             // If there are any corner cycles, we need to check if they match
-            // the specified sorted cycle type. Note that this if statement is
-            // compiled to more optimized assembly during codegen
+            // the specified sorted cycle structure. Note that this if statement
+            // is compiled to more optimized assembly during codegen
             if reps_corner_cycle_count > 0 {
                 // We now calculate how many of those corner cycles are
                 // oriented. Recall a corner is oriented if O % 3 != 0, where O
@@ -470,13 +476,14 @@ impl Cube3State for Cube3 {
                 if reps_oriented_corner_cycle_count != reps_corner_cycle_count {
                     // and then divide it by the number of repetitions to get
                     // the number of unoriented cycles
-                    corner_cycle_type_pointer = corner_cycle_type_pointer.wrapping_add(
+                    corner_cycle_structure_pointer = corner_cycle_structure_pointer.wrapping_add(
                         ((reps_corner_cycle_count - reps_oriented_corner_cycle_count)
                             / u32::from(reps.get())) as usize,
                     );
                     // Same error checking as before
-                    if corner_cycle_type_pointer >= sorted_corners_cycle_type.len()
-                        || sorted_corners_cycle_type[corner_cycle_type_pointer] != (reps, false)
+                    if corner_cycle_structure_pointer >= sorted_corners_cycle_structure.len()
+                        || sorted_corners_cycle_structure[corner_cycle_structure_pointer]
+                            != (reps, false)
                     {
                         return false;
                     }
@@ -484,11 +491,12 @@ impl Cube3State for Cube3 {
 
                 // Perform the same logic for oriented corner cycles
                 if reps_oriented_corner_cycle_count != 0 {
-                    corner_cycle_type_pointer = corner_cycle_type_pointer.wrapping_add(
+                    corner_cycle_structure_pointer = corner_cycle_structure_pointer.wrapping_add(
                         (reps_oriented_corner_cycle_count / u32::from(reps.get())) as usize,
                     );
-                    if corner_cycle_type_pointer >= sorted_corners_cycle_type.len()
-                        || sorted_corners_cycle_type[corner_cycle_type_pointer] != (reps, true)
+                    if corner_cycle_structure_pointer >= sorted_corners_cycle_structure.len()
+                        || sorted_corners_cycle_structure[corner_cycle_structure_pointer]
+                            != (reps, true)
                     {
                         return false;
                     }
@@ -512,23 +520,25 @@ impl Cube3State for Cube3 {
                     edge_bits(oriented_edge_mask.to_bitmask()).count_ones();
 
                 if reps_oriented_edge_cycle_count != reps_edge_cycle_count {
-                    edge_cycle_type_pointer = edge_cycle_type_pointer.wrapping_add(
+                    edge_cycle_structure_pointer = edge_cycle_structure_pointer.wrapping_add(
                         ((reps_edge_cycle_count - reps_oriented_edge_cycle_count)
                             / u32::from(reps.get())) as usize,
                     );
-                    if edge_cycle_type_pointer >= sorted_edges_cycle_type.len()
-                        || sorted_edges_cycle_type[edge_cycle_type_pointer] != (reps, false)
+                    if edge_cycle_structure_pointer >= sorted_edges_cycle_structure.len()
+                        || sorted_edges_cycle_structure[edge_cycle_structure_pointer]
+                            != (reps, false)
                     {
                         return false;
                     }
                 }
 
                 if reps_oriented_edge_cycle_count != 0 {
-                    edge_cycle_type_pointer = edge_cycle_type_pointer.wrapping_add(
+                    edge_cycle_structure_pointer = edge_cycle_structure_pointer.wrapping_add(
                         (reps_oriented_edge_cycle_count / u32::from(reps.get())) as usize,
                     );
-                    if edge_cycle_type_pointer >= sorted_edges_cycle_type.len()
-                        || sorted_edges_cycle_type[edge_cycle_type_pointer] != (reps, true)
+                    if edge_cycle_structure_pointer >= sorted_edges_cycle_structure.len()
+                        || sorted_edges_cycle_structure[edge_cycle_structure_pointer]
+                            != (reps, true)
                     {
                         return false;
                     }
@@ -539,10 +549,11 @@ impl Cube3State for Cube3 {
             reps = unsafe { NonZeroU8::new_unchecked(reps.get() + 1) };
         }
 
-        // Finally, confirm that the cycle type pointers have visited every
-        // cycle type in the sorted cycle type list. If so, then return true
-        corner_cycle_type_pointer == sorted_corners_cycle_type.len().wrapping_sub(1)
-            && edge_cycle_type_pointer == sorted_edges_cycle_type.len().wrapping_sub(1)
+        // Finally, confirm that the cycle structure pointers have visited every
+        // cycle structure in the sorted cycle structure list. If so, then
+        // return true
+        corner_cycle_structure_pointer == sorted_corners_cycle_structure.len().wrapping_sub(1)
+            && edge_cycle_structure_pointer == sorted_edges_cycle_structure.len().wrapping_sub(1)
     }
 
     fn orbit_bytes(&self, orbit_type: Cube3OrbitType) -> (u8x16, u8x16) {

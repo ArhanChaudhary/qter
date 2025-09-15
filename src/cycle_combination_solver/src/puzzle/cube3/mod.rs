@@ -11,7 +11,7 @@ mod common {
     use crate::orbit_puzzle::{OrbitPuzzleStateImplementor, SpecializedOrbitPuzzleState};
     use crate::puzzle::{
         AuxMem, AuxMemRefMut, BrandedOrbitDef, OrbitDef, OrbitIdentifier, PuzzleState,
-        SortedCycleTypeRef, SortedOrbitDefsRef, TransformationsMeta, TransformationsMetaError,
+        SortedCycleStructureRef, SortedOrbitDefsRef, TransformationsMeta, TransformationsMetaError,
         cube3,
     };
     use generativity::Id;
@@ -67,8 +67,11 @@ mod common {
         /// Inverse `a` into self.
         fn replace_inverse(&mut self, a: &Self);
 
-        /// Check if the cube induces a sorted cycle type.
-        fn induces_sorted_cycle_type(&self, sorted_cycle_type: SortedCycleTypeRef) -> bool;
+        /// Check if the cube induces a sorted cycle structure.
+        fn induces_sorted_cycle_structure(
+            &self,
+            sorted_cycle_structure: SortedCycleStructureRef,
+        ) -> bool;
 
         /// Convert an orbit of the cube state into a pair of (perm, ori) bytes.
         /// For implementation reasons that should ideally be abstracted away,
@@ -178,13 +181,13 @@ mod common {
                     Cube3State::replace_inverse(self, a);
                 }
 
-                fn induces_sorted_cycle_type(
+                fn induces_sorted_cycle_structure(
                     &self,
-                    sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
+                    sorted_cycle_structure: SortedCycleStructureRef<'id, '_>,
                     _sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
                     _aux_mem: AuxMemRefMut<'id, '_>,
                 ) -> bool {
-                    Cube3State::induces_sorted_cycle_type(self, sorted_cycle_type)
+                    Cube3State::induces_sorted_cycle_structure(self, sorted_cycle_structure)
                 }
 
                 fn orbit_bytes(&self, orbit_identifier: Cube3OrbitType) -> (Self::OrbitBytesBuf<'_>, Self::OrbitBytesBuf<'_>) {

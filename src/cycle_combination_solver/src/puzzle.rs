@@ -17,7 +17,7 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug + 'id {
         Self: 'a;
     type OrbitIdentifier: OrbitIdentifier<'id> + Copy + Debug;
 
-    /// Get a default multi bit vector for use in `induces_sorted_cycle_type`
+    /// Get a default multi bit vector for use in `induces_sorted_cycle_structure`
     fn new_aux_mem(sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) -> AuxMem<'id>;
 
     /// Create a puzzle state from a sorted transformation and sorted
@@ -44,9 +44,9 @@ pub trait PuzzleState<'id>: Clone + PartialEq + Debug + 'id {
     fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>);
 
     /// The goal state for IDA* search.
-    fn induces_sorted_cycle_type(
+    fn induces_sorted_cycle_structure(
         &self,
-        sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
+        sorted_cycle_structure: SortedCycleStructureRef<'id, '_>,
         sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
         aux_mem: AuxMemRefMut<'id, '_>,
     ) -> bool;
@@ -133,13 +133,13 @@ pub struct SortedOrbitDefsRef<'id, 'a> {
 }
 
 #[derive(Clone)]
-pub struct SortedCycleType<'id> {
+pub struct SortedCycleStructure<'id> {
     pub inner: Vec<Vec<(NonZeroU8, bool)>>,
     id: Id<'id>,
 }
 
 #[derive(Copy, Clone)]
-pub struct SortedCycleTypeRef<'id, 'a> {
+pub struct SortedCycleStructureRef<'id, 'a> {
     pub inner: &'a [Vec<(NonZeroU8, bool)>],
     _id: Id<'id>,
 }
@@ -151,13 +151,15 @@ pub struct TransformationsMeta<'id, 'a> {
 }
 
 #[derive(Error, Debug)]
-pub enum SortedCycleTypeCreationError {
-    #[error("Cycle type uses too many pieces, expected at most {expected} pieces but got {actual}")]
+pub enum SortedCycleStructureCreationError {
+    #[error(
+        "Cycle structure uses too many pieces, expected at most {expected} pieces but got {actual}"
+    )]
     TooManyPieces { expected: usize, actual: usize },
-    #[error("Cycle type uses zero-length cycles, which is not allowed")]
+    #[error("Cycle structure uses zero-length cycles, which is not allowed")]
     ZeroLengthCycle,
     #[error(
-        "There must be the same number of cycle types as orbit definitions, expected {expected}, got {actual}"
+        "There must be the same number of cycle structures as orbit definitions, expected {expected}, got {actual}"
     )]
     MismatchedLength { expected: usize, actual: usize },
 }
@@ -308,55 +310,55 @@ impl<'id, 'a> TransformationsMeta<'id, 'a> {
     }
 }
 
-impl<'id> SortedCycleType<'id> {
-    /// Create a new `SortedCycleType`.
+impl<'id> SortedCycleStructure<'id> {
+    /// Create a new `SortedCycleStructure`.
     ///
     /// # Errors
     ///
     /// Returns an error if the creation fails.
     pub fn new(
-        maybe_cycle_type: &[Vec<(u8, bool)>],
+        maybe_cycle_structure: &[Vec<(u8, bool)>],
         sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
-    ) -> Result<Self, SortedCycleTypeCreationError> {
-        if maybe_cycle_type.len() != sorted_orbit_defs.inner.len() {
-            return Err(SortedCycleTypeCreationError::MismatchedLength {
+    ) -> Result<Self, SortedCycleStructureCreationError> {
+        if maybe_cycle_structure.len() != sorted_orbit_defs.inner.len() {
+            return Err(SortedCycleStructureCreationError::MismatchedLength {
                 expected: sorted_orbit_defs.inner.len(),
-                actual: maybe_cycle_type.len(),
+                actual: maybe_cycle_structure.len(),
             });
         }
 
-        let sorted_cycle_type = maybe_cycle_type
+        let sorted_cycle_structure = maybe_cycle_structure
             .iter()
             .zip(sorted_orbit_defs.inner)
-            .map(|(cycle_type, &orbit_def)| {
+            .map(|(cycle_structure, &orbit_def)| {
                 let max_piece_count_sum = orbit_def.piece_count.get() as usize;
-                let mut cycle_type_checked = Vec::with_capacity(cycle_type.len());
+                let mut cycle_structure_checked = Vec::with_capacity(cycle_structure.len());
                 let mut piece_count_sum = 0;
-                for &(length, oriented) in cycle_type {
+                for &(length, oriented) in cycle_structure {
                     if length == 1 && !oriented {
                         continue;
                     }
                     match NonZeroU8::new(length) {
                         Some(length) => {
                             piece_count_sum += length.get() as usize;
-                            cycle_type_checked.push((length, oriented));
+                            cycle_structure_checked.push((length, oriented));
                         }
-                        None => return Err(SortedCycleTypeCreationError::ZeroLengthCycle),
+                        None => return Err(SortedCycleStructureCreationError::ZeroLengthCycle),
                     }
                 }
                 if piece_count_sum > max_piece_count_sum {
-                    return Err(SortedCycleTypeCreationError::TooManyPieces {
+                    return Err(SortedCycleStructureCreationError::TooManyPieces {
                         expected: max_piece_count_sum,
                         actual: piece_count_sum,
                     });
                 }
-                cycle_type_checked.sort_unstable();
-                Ok(cycle_type_checked)
+                cycle_structure_checked.sort_unstable();
+                Ok(cycle_structure_checked)
             })
-            .collect::<Result<Vec<_>, SortedCycleTypeCreationError>>()?;
+            .collect::<Result<Vec<_>, SortedCycleStructureCreationError>>()?;
 
         Ok(Self {
-            inner: sorted_cycle_type,
+            inner: sorted_cycle_structure,
             id: sorted_orbit_defs.id,
         })
     }
@@ -375,14 +377,14 @@ impl<'id> SortedOrbitDefsRef<'id, '_> {
     }
 }
 
-impl<'id> SliceView for SortedCycleType<'id> {
+impl<'id> SliceView for SortedCycleStructure<'id> {
     type Slice<'a>
-        = SortedCycleTypeRef<'id, 'a>
+        = SortedCycleStructureRef<'id, 'a>
     where
         Self: 'a;
 
     fn slice_view(&self) -> Self::Slice<'_> {
-        SortedCycleTypeRef {
+        SortedCycleStructureRef {
             inner: &self.inner,
             _id: self.id,
         }
@@ -974,13 +976,15 @@ mod tests {
         }
     }
 
-    pub fn induces_sorted_cycle_type_within_cycle<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
+    pub fn induces_sorted_cycle_structure_within_cycle<'id, P: PuzzleState<'id>>(
+        guard: Guard<'id>,
+    ) {
         let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_ref());
 
         let order_1260 = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 1);
-        let sorted_cycle_type = SortedCycleType::new(
+        let sorted_cycle_structure = SortedCycleStructure::new(
             &[
                 vec![(3, true), (5, true)],
                 vec![(2, false), (2, true), (7, true)],
@@ -988,49 +992,52 @@ mod tests {
             cube3_def.sorted_orbit_defs_ref(),
         )
         .unwrap();
-        assert!(order_1260.induces_sorted_cycle_type(
-            sorted_cycle_type.slice_view(),
+        assert!(order_1260.induces_sorted_cycle_structure(
+            sorted_cycle_structure.slice_view(),
             cube3_def.sorted_orbit_defs_ref(),
             aux_mem.slice_view_mut(),
         ));
 
         let order_1260_in_cycle = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 209);
-        assert!(order_1260_in_cycle.induces_sorted_cycle_type(
-            sorted_cycle_type.slice_view(),
+        assert!(order_1260_in_cycle.induces_sorted_cycle_structure(
+            sorted_cycle_structure.slice_view(),
             cube3_def.sorted_orbit_defs_ref(),
             aux_mem.slice_view_mut(),
         ));
     }
 
     #[test]
-    fn test_induces_sorted_cycle_type_within_cycle() {
+    fn test_induces_sorted_cycle_structure_within_cycle() {
         make_guard!(guard);
-        induces_sorted_cycle_type_within_cycle::<StackCube3>(guard);
+        induces_sorted_cycle_structure_within_cycle::<StackCube3>(guard);
         make_guard!(guard);
-        induces_sorted_cycle_type_within_cycle::<HeapPuzzle>(guard);
+        induces_sorted_cycle_structure_within_cycle::<HeapPuzzle>(guard);
         #[cfg(simd8and16)]
         {
             make_guard!(guard);
-            induces_sorted_cycle_type_within_cycle::<cube3::simd8and16::Cube3>(guard);
+            induces_sorted_cycle_structure_within_cycle::<cube3::simd8and16::Cube3>(guard);
             make_guard!(guard);
-            induces_sorted_cycle_type_within_cycle::<cube3::simd8and16::UncompressedCube3>(guard);
+            induces_sorted_cycle_structure_within_cycle::<cube3::simd8and16::UncompressedCube3>(
+                guard,
+            );
         }
         #[cfg(avx2)]
         {
             make_guard!(guard);
-            induces_sorted_cycle_type_within_cycle::<cube3::avx2::Cube3>(guard);
+            induces_sorted_cycle_structure_within_cycle::<cube3::avx2::Cube3>(guard);
         }
     }
 
-    pub fn induces_sorted_cycle_type_many<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
+    pub fn induces_sorted_cycle_structure_many<'id, P: PuzzleState<'id>>(guard: Guard<'id>) {
         let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
         let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_ref());
 
-        let sorted_cycle_type =
-            SortedCycleType::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_ref()).unwrap();
-        assert!(solved.induces_sorted_cycle_type(
-            sorted_cycle_type.slice_view(),
+        let sorted_cycle_structure =
+            SortedCycleStructure::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_ref())
+                .unwrap();
+        assert!(solved.induces_sorted_cycle_structure(
+            sorted_cycle_structure.slice_view(),
             cube3_def.sorted_orbit_defs_ref(),
             aux_mem.slice_view_mut(),
         ));
@@ -1038,7 +1045,7 @@ mod tests {
         let tests = [
             (
                 "F2 L' U2 F U F U L' B U' F' U D2 L F2 B'",
-                SortedCycleType::new(
+                SortedCycleStructure::new(
                     &[vec![(1, true), (3, true)], vec![(1, true), (5, true)]],
                     cube3_def.sorted_orbit_defs_ref(),
                 )
@@ -1046,7 +1053,7 @@ mod tests {
             ),
             (
                 "U2 L B L2 F U2 B' U2 R U' F R' F' R F' L' U2",
-                SortedCycleType::new(
+                SortedCycleStructure::new(
                     &[vec![(1, true), (5, true)], vec![(1, true), (7, true)]],
                     cube3_def.sorted_orbit_defs_ref(),
                 )
@@ -1054,7 +1061,7 @@ mod tests {
             ),
             (
                 "R' U2 R' U2 F' D' L F L2 F U2 F2 D' L' D2 F R2",
-                SortedCycleType::new(
+                SortedCycleStructure::new(
                     &[vec![(1, true), (3, true)], vec![(1, true), (7, true)]],
                     cube3_def.sorted_orbit_defs_ref(),
                 )
@@ -1062,7 +1069,7 @@ mod tests {
             ),
             (
                 "B2 U' B' D B' L' D' B U' R2 B2 R U B2 R B' R U",
-                SortedCycleType::new(
+                SortedCycleStructure::new(
                     &[
                         vec![(1, true), (1, true), (3, true)],
                         vec![(1, true), (7, true)],
@@ -1073,7 +1080,7 @@ mod tests {
             ),
             (
                 "R2 L2 D' B L2 D' B L' B D2 R2 B2 R' D' B2 L2 U'",
-                SortedCycleType::new(
+                SortedCycleStructure::new(
                     &[vec![(2, true), (3, true)], vec![(4, true), (5, true)]],
                     cube3_def.sorted_orbit_defs_ref(),
                 )
@@ -1081,7 +1088,7 @@ mod tests {
             ),
             (
                 "F' B2 R L U2 B U2 L2 F2 U R L B' L' D' R' D' B'",
-                SortedCycleType::new(
+                SortedCycleStructure::new(
                     &[
                         vec![(1, true), (2, true), (3, true)],
                         vec![(4, true), (5, true)],
@@ -1092,7 +1099,7 @@ mod tests {
             ),
             (
                 "L' D2 F B2 U F' L2 B R F2 D R' L F R' F' D",
-                SortedCycleType::new(
+                SortedCycleStructure::new(
                     &[
                         vec![(2, true), (3, true)],
                         vec![(1, true), (4, true), (5, false)],
@@ -1103,7 +1110,7 @@ mod tests {
             ),
             (
                 "B' L' F2 R U' R2 F' L2 F R' L B L' U' F2 U' D2 L",
-                SortedCycleType::new(
+                SortedCycleStructure::new(
                     &[
                         vec![(1, true), (2, true), (3, true)],
                         vec![(1, true), (4, true), (5, false)],
@@ -1114,7 +1121,7 @@ mod tests {
             ),
             (
                 "F2 D2 L' F D R2 F2 U2 L2 F R' B2 D2 R2 U R2 U",
-                SortedCycleType::new(
+                SortedCycleStructure::new(
                     &[
                         vec![(1, true), (2, false), (3, true)],
                         vec![(4, true), (5, true)],
@@ -1125,7 +1132,7 @@ mod tests {
             ),
             (
                 "F2 B' R' F' L' D B' U' F U B' U2 D L' F' L' B R2",
-                SortedCycleType::new(
+                SortedCycleStructure::new(
                     &[
                         vec![(1, true), (2, false), (3, true)],
                         vec![(1, true), (4, true), (5, false)],
@@ -1136,7 +1143,7 @@ mod tests {
             ),
             (
                 "U L U L2 U2 B2",
-                SortedCycleType::new(
+                SortedCycleStructure::new(
                     &[
                         vec![(1, true), (2, false), (3, true)],
                         vec![(2, false), (3, false), (3, false)],
@@ -1147,7 +1154,7 @@ mod tests {
             ),
             (
                 "U",
-                SortedCycleType::new(
+                SortedCycleStructure::new(
                     &[vec![(4, false)], vec![(4, false)]],
                     cube3_def.sorted_orbit_defs_ref(),
                 )
@@ -1158,13 +1165,13 @@ mod tests {
         for (i, (moves_str, expected_cts)) in tests.iter().enumerate() {
             let random_state = apply_moves(&cube3_def, &solved, moves_str, 1);
 
-            assert!(random_state.induces_sorted_cycle_type(
+            assert!(random_state.induces_sorted_cycle_structure(
                 expected_cts.slice_view(),
                 cube3_def.sorted_orbit_defs_ref(),
                 aux_mem.slice_view_mut(),
             ));
 
-            assert!(!solved.induces_sorted_cycle_type(
+            assert!(!solved.induces_sorted_cycle_structure(
                 expected_cts.slice_view(),
                 cube3_def.sorted_orbit_defs_ref(),
                 aux_mem.slice_view_mut(),
@@ -1175,7 +1182,7 @@ mod tests {
                     continue;
                 }
                 let other_state = apply_moves(&cube3_def, &solved, other_moves, 1);
-                assert!(!other_state.induces_sorted_cycle_type(
+                assert!(!other_state.induces_sorted_cycle_structure(
                     expected_cts.slice_view(),
                     cube3_def.sorted_orbit_defs_ref(),
                     aux_mem.slice_view_mut()
@@ -1185,22 +1192,22 @@ mod tests {
     }
 
     #[test]
-    fn test_induces_sorted_cycle_type_many() {
+    fn test_induces_sorted_cycle_structure_many() {
         make_guard!(guard);
-        induces_sorted_cycle_type_many::<StackCube3>(guard);
+        induces_sorted_cycle_structure_many::<StackCube3>(guard);
         make_guard!(guard);
-        induces_sorted_cycle_type_many::<HeapPuzzle>(guard);
+        induces_sorted_cycle_structure_many::<HeapPuzzle>(guard);
         #[cfg(simd8and16)]
         {
             make_guard!(guard);
-            induces_sorted_cycle_type_many::<cube3::simd8and16::Cube3>(guard);
+            induces_sorted_cycle_structure_many::<cube3::simd8and16::Cube3>(guard);
             make_guard!(guard);
-            induces_sorted_cycle_type_many::<cube3::simd8and16::UncompressedCube3>(guard);
+            induces_sorted_cycle_structure_many::<cube3::simd8and16::UncompressedCube3>(guard);
         }
         #[cfg(avx2)]
         {
             make_guard!(guard);
-            induces_sorted_cycle_type_many::<cube3::avx2::Cube3>(guard);
+            induces_sorted_cycle_structure_many::<cube3::avx2::Cube3>(guard);
         }
     }
 
@@ -1312,12 +1319,12 @@ mod tests {
         });
     }
 
-    pub fn bench_induces_sorted_cycle_type_worst_helper<'id, P: PuzzleState<'id>>(
+    pub fn bench_induces_sorted_cycle_structure_worst_helper<'id, P: PuzzleState<'id>>(
         guard: Guard<'id>,
         b: &mut Bencher,
     ) {
         let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
-        let sorted_cycle_type = SortedCycleType::new(
+        let sorted_cycle_structure = SortedCycleStructure::new(
             &[
                 vec![(3, true), (5, true)],
                 vec![(2, false), (2, true), (7, true)],
@@ -1328,22 +1335,22 @@ mod tests {
         let order_1260 = apply_moves(&cube3_def, &cube3_def.new_solved_state(), "R U2 D' B D'", 1);
         let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_ref());
         b.iter(|| {
-            test::black_box(&order_1260).induces_sorted_cycle_type(
-                test::black_box(sorted_cycle_type.slice_view()),
+            test::black_box(&order_1260).induces_sorted_cycle_structure(
+                test::black_box(sorted_cycle_structure.slice_view()),
                 cube3_def.sorted_orbit_defs_ref(),
                 aux_mem.slice_view_mut(),
             );
         });
     }
 
-    pub fn bench_induces_sorted_cycle_type_average_helper<'id, P: PuzzleState<'id>>(
+    pub fn bench_induces_sorted_cycle_structure_average_helper<'id, P: PuzzleState<'id>>(
         guard: Guard<'id>,
         b: &mut Bencher,
     ) {
         let cube3_def = PuzzleDef::<P>::new(&KPUZZLE_3X3, guard).unwrap();
         let solved = cube3_def.new_solved_state();
 
-        // let sorted_cycle_types = [
+        // let sorted_cycle_structures = [
         //     [
         //         ct(&[(3, true), (5, true)]),
         //         ct(&[(2, false), (2, true), (7, true)]),
@@ -1360,8 +1367,8 @@ mod tests {
         //     ],
         //     [ct(&[(4, false)]), ct(&[(4, false)])],
         // ];
-        let sorted_cycle_types = [
-            SortedCycleType::new(
+        let sorted_cycle_structures = [
+            SortedCycleStructure::new(
                 &[
                     vec![(3, true), (5, true)],
                     vec![(2, false), (2, true), (7, true)],
@@ -1369,17 +1376,17 @@ mod tests {
                 cube3_def.sorted_orbit_defs_ref(),
             )
             .unwrap(),
-            SortedCycleType::new(
+            SortedCycleStructure::new(
                 &[vec![(1, true), (3, true)], vec![(1, true), (5, true)]],
                 cube3_def.sorted_orbit_defs_ref(),
             )
             .unwrap(),
-            SortedCycleType::new(
+            SortedCycleStructure::new(
                 &[vec![(2, true), (3, true)], vec![(4, true), (5, true)]],
                 cube3_def.sorted_orbit_defs_ref(),
             )
             .unwrap(),
-            SortedCycleType::new(
+            SortedCycleStructure::new(
                 &[
                     vec![(1, true), (2, true), (3, true)],
                     vec![(4, true), (5, true)],
@@ -1387,7 +1394,7 @@ mod tests {
                 cube3_def.sorted_orbit_defs_ref(),
             )
             .unwrap(),
-            SortedCycleType::new(
+            SortedCycleStructure::new(
                 &[
                     vec![(2, true), (3, true)],
                     vec![(1, true), (4, true), (5, false)],
@@ -1395,15 +1402,18 @@ mod tests {
                 cube3_def.sorted_orbit_defs_ref(),
             )
             .unwrap(),
-            SortedCycleType::new(
+            SortedCycleStructure::new(
                 &[vec![(4, false)], vec![(4, false)]],
                 cube3_def.sorted_orbit_defs_ref(),
             )
             .unwrap(),
         ];
-        let sorted_cycle_types: Vec<_> =
-            sorted_cycle_types.into_iter().cycle().take(1000).collect();
-        let mut sorted_cycle_type_iter = sorted_cycle_types.iter().cycle();
+        let sorted_cycle_structures: Vec<_> = sorted_cycle_structures
+            .into_iter()
+            .cycle()
+            .take(1000)
+            .collect();
+        let mut sorted_cycle_structure_iter = sorted_cycle_structures.iter().cycle();
 
         let random_1000: Vec<P> = (0..1000)
             .map(|_| apply_random_moves(&cube3_def, &solved, 20))
@@ -1413,9 +1423,9 @@ mod tests {
         let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_ref());
         b.iter(|| {
             test::black_box(unsafe { random_iter.next().unwrap_unchecked() })
-                .induces_sorted_cycle_type(
+                .induces_sorted_cycle_structure(
                     test::black_box(unsafe {
-                        sorted_cycle_type_iter
+                        sorted_cycle_structure_iter
                             .next()
                             .unwrap_unchecked()
                             .slice_view()
@@ -1441,15 +1451,15 @@ mod tests {
     }
 
     #[bench]
-    fn bench_induces_sorted_cycle_type_cube3_heap_worst(b: &mut Bencher) {
+    fn bench_induces_sorted_cycle_structure_cube3_heap_worst(b: &mut Bencher) {
         make_guard!(guard);
-        bench_induces_sorted_cycle_type_worst_helper::<HeapPuzzle>(guard, b);
+        bench_induces_sorted_cycle_structure_worst_helper::<HeapPuzzle>(guard, b);
     }
 
     #[bench]
-    fn bench_induces_sorted_cycle_type_cube3_heap_average(b: &mut Bencher) {
+    fn bench_induces_sorted_cycle_structure_cube3_heap_average(b: &mut Bencher) {
         make_guard!(guard);
-        bench_induces_sorted_cycle_type_average_helper::<HeapPuzzle>(guard, b);
+        bench_induces_sorted_cycle_structure_average_helper::<HeapPuzzle>(guard, b);
     }
 
     // --- simd8and16::UncompressedCube3 benchmarks ---
@@ -1470,18 +1480,18 @@ mod tests {
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
-    fn bench_induces_sorted_cycle_type_uncompressed_cube3_simd8and16_worst(b: &mut Bencher) {
+    fn bench_induces_sorted_cycle_structure_uncompressed_cube3_simd8and16_worst(b: &mut Bencher) {
         make_guard!(guard);
-        bench_induces_sorted_cycle_type_worst_helper::<cube3::simd8and16::UncompressedCube3>(
+        bench_induces_sorted_cycle_structure_worst_helper::<cube3::simd8and16::UncompressedCube3>(
             guard, b,
         );
     }
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
-    fn bench_induces_sorted_cycle_type_uncompressed_cube3_simd8and16_average(b: &mut Bencher) {
+    fn bench_induces_sorted_cycle_structure_uncompressed_cube3_simd8and16_average(b: &mut Bencher) {
         make_guard!(guard);
-        bench_induces_sorted_cycle_type_average_helper::<cube3::simd8and16::UncompressedCube3>(
+        bench_induces_sorted_cycle_structure_average_helper::<cube3::simd8and16::UncompressedCube3>(
             guard, b,
         );
     }
@@ -1504,16 +1514,16 @@ mod tests {
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
-    fn bench_induces_sorted_cycle_type_cube3_simd8and16_worst(b: &mut Bencher) {
+    fn bench_induces_sorted_cycle_structure_cube3_simd8and16_worst(b: &mut Bencher) {
         make_guard!(guard);
-        bench_induces_sorted_cycle_type_worst_helper::<cube3::simd8and16::Cube3>(guard, b);
+        bench_induces_sorted_cycle_structure_worst_helper::<cube3::simd8and16::Cube3>(guard, b);
     }
 
     #[bench]
     #[cfg_attr(not(simd8and16), ignore)]
-    fn bench_induces_sorted_cycle_type_cube3_simd8and16_average(b: &mut Bencher) {
+    fn bench_induces_sorted_cycle_structure_cube3_simd8and16_average(b: &mut Bencher) {
         make_guard!(guard);
-        bench_induces_sorted_cycle_type_average_helper::<cube3::simd8and16::Cube3>(guard, b);
+        bench_induces_sorted_cycle_structure_average_helper::<cube3::simd8and16::Cube3>(guard, b);
     }
 
     // --- avx2::Cube3 benchmarks ---
@@ -1534,15 +1544,15 @@ mod tests {
 
     #[bench]
     #[cfg_attr(not(avx2), ignore = "AVX2 not enabled")]
-    fn bench_induces_sorted_cycle_type_cube3_avx2_worst(b: &mut Bencher) {
+    fn bench_induces_sorted_cycle_structure_cube3_avx2_worst(b: &mut Bencher) {
         make_guard!(guard);
-        bench_induces_sorted_cycle_type_worst_helper::<cube3::avx2::Cube3>(guard, b);
+        bench_induces_sorted_cycle_structure_worst_helper::<cube3::avx2::Cube3>(guard, b);
     }
 
     #[bench]
     #[cfg_attr(not(avx2), ignore = "AVX2 not enabled")]
-    fn bench_induces_sorted_cycle_type_cube3_avx2_average(b: &mut Bencher) {
+    fn bench_induces_sorted_cycle_structure_cube3_avx2_average(b: &mut Bencher) {
         make_guard!(guard);
-        bench_induces_sorted_cycle_type_average_helper::<cube3::avx2::Cube3>(guard, b);
+        bench_induces_sorted_cycle_structure_average_helper::<cube3::avx2::Cube3>(guard, b);
     }
 }

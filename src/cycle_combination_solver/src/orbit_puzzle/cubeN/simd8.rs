@@ -67,21 +67,25 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
         self.co = CO_MOD_SWIZZLE.swizzle_dyn(a.co.swizzle_dyn(b.cp) + b.co);
     }
 
-    fn induces_sorted_cycle_type(&self, sorted_cycle_type_orbit: &[(NonZeroU8, bool)]) -> bool {
+    fn induces_sorted_cycle_structure(
+        &self,
+        sorted_cycle_structure_orbit: &[(NonZeroU8, bool)],
+    ) -> bool {
         let mut seen_cp = self.cp.simd_eq(CP_IDENTITY);
         let oriented_one_cycle_corner_mask = seen_cp & self.co.simd_ne(u8x8::splat(0));
-        let mut cycle_type_pointer =
+        let mut cycle_structure_pointer =
             (oriented_one_cycle_corner_mask.to_bitmask().count_ones() as usize).wrapping_sub(1);
 
         // Check oriented one cycles
-        if cycle_type_pointer == usize::MAX {
-            if let Some(&first_cycle) = sorted_cycle_type_orbit.first()
+        if cycle_structure_pointer == usize::MAX {
+            if let Some(&first_cycle) = sorted_cycle_structure_orbit.first()
                 && first_cycle == (1.try_into().unwrap(), true)
             {
                 return false;
             }
-        } else if cycle_type_pointer >= sorted_cycle_type_orbit.len()
-            || sorted_cycle_type_orbit[cycle_type_pointer] != (1.try_into().unwrap(), true)
+        } else if cycle_structure_pointer >= sorted_cycle_structure_orbit.len()
+            || sorted_cycle_structure_orbit[cycle_structure_pointer]
+                != (1.try_into().unwrap(), true)
         {
             return false;
         }
@@ -108,12 +112,12 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
 
                 // Unoriented cycles
                 if reps_oriented_corner_cycle_count != reps_corner_cycle_count {
-                    cycle_type_pointer = cycle_type_pointer.wrapping_add(
+                    cycle_structure_pointer = cycle_structure_pointer.wrapping_add(
                         ((reps_corner_cycle_count - reps_oriented_corner_cycle_count)
                             / u32::from(reps.get())) as usize,
                     );
-                    if cycle_type_pointer >= sorted_cycle_type_orbit.len()
-                        || sorted_cycle_type_orbit[cycle_type_pointer] != (reps, false)
+                    if cycle_structure_pointer >= sorted_cycle_structure_orbit.len()
+                        || sorted_cycle_structure_orbit[cycle_structure_pointer] != (reps, false)
                     {
                         return false;
                     }
@@ -121,11 +125,11 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
 
                 // Oriented cycles
                 if reps_oriented_corner_cycle_count != 0 {
-                    cycle_type_pointer = cycle_type_pointer.wrapping_add(
+                    cycle_structure_pointer = cycle_structure_pointer.wrapping_add(
                         (reps_oriented_corner_cycle_count / u32::from(reps.get())) as usize,
                     );
-                    if cycle_type_pointer >= sorted_cycle_type_orbit.len()
-                        || sorted_cycle_type_orbit[cycle_type_pointer] != (reps, true)
+                    if cycle_structure_pointer >= sorted_cycle_structure_orbit.len()
+                        || sorted_cycle_structure_orbit[cycle_structure_pointer] != (reps, true)
                     {
                         return false;
                     }
@@ -136,7 +140,7 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
             reps = unsafe { NonZeroU8::new_unchecked(reps.get() + 1) };
         }
 
-        cycle_type_pointer == sorted_cycle_type_orbit.len().wrapping_sub(1)
+        cycle_structure_pointer == sorted_cycle_structure_orbit.len().wrapping_sub(1)
     }
 
     fn exact_hasher(&self) -> u64 {

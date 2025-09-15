@@ -29,10 +29,10 @@ pub trait OrbitPuzzleState: Clone {
         orbit_def: OrbitDef,
     );
 
-    /// Check if the orbit puzzle state induces a sorted cycle type.
-    unsafe fn induces_sorted_cycle_type(
+    /// Check if the orbit puzzle state induces a sorted cycle structure.
+    unsafe fn induces_sorted_cycle_structure(
         &self,
-        sorted_cycle_type_orbit: &[(NonZeroU8, bool)],
+        sorted_cycle_structure_orbit: &[(NonZeroU8, bool)],
         orbit_def: OrbitDef,
         aux_mem: AuxMemRefMut,
     ) -> bool;
@@ -48,7 +48,10 @@ pub trait SpecializedOrbitPuzzleState {
     ) -> &Self;
     unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(perm: B, ori: B) -> Self;
     fn replace_compose(&mut self, a: &Self, b: &Self);
-    fn induces_sorted_cycle_type(&self, sorted_cycle_type_orbit: &[(NonZeroU8, bool)]) -> bool;
+    fn induces_sorted_cycle_structure(
+        &self,
+        sorted_cycle_structure_orbit: &[(NonZeroU8, bool)],
+    ) -> bool;
     fn exact_hasher(&self) -> u64;
     /// An approximate hash of the orbit puzzle state used for approximate
     /// pruning tables.
@@ -128,13 +131,13 @@ impl<C: SpecializedOrbitPuzzleState + Clone> OrbitPuzzleState for C {
         self.replace_compose(a, b);
     }
 
-    unsafe fn induces_sorted_cycle_type(
+    unsafe fn induces_sorted_cycle_structure(
         &self,
-        sorted_cycle_type: &[(NonZeroU8, bool)],
+        sorted_cycle_structure: &[(NonZeroU8, bool)],
         _orbit_def: OrbitDef,
         _aux_mem: AuxMemRefMut<'_, '_>,
     ) -> bool {
-        self.induces_sorted_cycle_type(sorted_cycle_type)
+        self.induces_sorted_cycle_structure(sorted_cycle_structure)
     }
 
     unsafe fn exact_hasher(&self, _orbit_def: OrbitDef) -> u64 {

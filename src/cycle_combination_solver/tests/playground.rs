@@ -6,8 +6,8 @@ use cycle_combination_solver::{
         OrbitPruningTables, OrbitPruningTablesGenerateMeta, PruningTables, StorageBackendTy,
         TableTy,
     },
-    puzzle::{PuzzleDef, SortedCycleType, cube3::Cube3},
-    solver::{CycleTypeSolver, SearchStrategy},
+    puzzle::{PuzzleDef, SortedCycleStructure, cube3::Cube3},
+    solver::{CycleStructureSolver, SearchStrategy},
 };
 use itertools::Itertools;
 use log::info;

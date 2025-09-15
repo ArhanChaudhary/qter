@@ -9,10 +9,13 @@ use crate::{
     orbit_puzzle::{
         OrbitPuzzleStateImplementor,
         slice_orbit_puzzle::{
-            SliceOrbitPuzzle, induces_sorted_cycle_type_slice_orbit, replace_compose_slice_orbit,
+            SliceOrbitPuzzle, induces_sorted_cycle_structure_slice_orbit,
+            replace_compose_slice_orbit,
         },
     },
-    puzzle::{AuxMem, AuxMemRefMut, OrbitDef, PuzzleState, SortedCycleType, SortedCycleTypeRef},
+    puzzle::{
+        AuxMem, AuxMemRefMut, OrbitDef, PuzzleState, SortedCycleStructure, SortedCycleStructureRef,
+    },
 };
 use generativity::Id;
 use itertools::Itertools;
@@ -187,27 +190,29 @@ impl<'id, S: SlicePuzzle<'id>> PuzzleState<'id> for S {
         }
     }
 
-    fn induces_sorted_cycle_type(
+    fn induces_sorted_cycle_structure(
         &self,
-        sorted_cycle_type: SortedCycleTypeRef<'id, '_>,
+        sorted_cycle_structure: SortedCycleStructureRef<'id, '_>,
         sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
         aux_mem: AuxMemRefMut<'id, '_>,
     ) -> bool {
         let slice_orbit_states = self.as_slice();
         let aux_mem = unsafe { aux_mem.inner.unwrap_unchecked() };
         unsafe {
-            assert_unchecked(sorted_cycle_type.inner.len() == sorted_cycle_type.inner.len());
+            assert_unchecked(
+                sorted_cycle_structure.inner.len() == sorted_cycle_structure.inner.len(),
+            );
         }
         let mut base = 0;
-        for (branded_orbit_def, sorted_cycle_type_orbit) in sorted_orbit_defs
+        for (branded_orbit_def, sorted_cycle_structure_orbit) in sorted_orbit_defs
             .branded_copied_iter()
-            .zip(sorted_cycle_type.inner.iter())
+            .zip(sorted_cycle_structure.inner.iter())
         {
             unsafe {
-                if !induces_sorted_cycle_type_slice_orbit(
+                if !induces_sorted_cycle_structure_slice_orbit(
                     slice_orbit_states,
                     base,
-                    sorted_cycle_type_orbit,
+                    sorted_cycle_structure_orbit,
                     branded_orbit_def.inner,
                     aux_mem,
                 ) {
@@ -408,19 +413,19 @@ impl<'id> HeapPuzzle<'id> {
     ///
     /// # Panics
     ///
-    /// Panics if the generated cycle type is deemed to be invalid because of
-    /// bad implementation of the function.
+    /// Panics if the generated cycle structure is deemed to be invalid because
+    /// of bad implementation of the function.
     #[must_use]
-    pub fn sorted_cycle_type(
+    pub fn sorted_cycle_structure(
         &self,
         sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
         aux_mem: &mut AuxMem<'id>,
-    ) -> SortedCycleType<'id> {
+    ) -> SortedCycleStructure<'id> {
         let aux_mem_inner = aux_mem.inner.as_mut().unwrap().as_mut();
-        let mut cycle_type = vec![];
+        let mut cycle_structure = vec![];
         let mut base = 0;
         for branded_orbit_def in sorted_orbit_defs.branded_copied_iter() {
-            let mut cycle_type_piece = vec![];
+            let mut cycle_structure_piece = vec![];
             aux_mem_inner.fill(0);
             let piece_count = branded_orbit_def.inner.piece_count.get() as usize;
             for i in 0..piece_count {
@@ -445,22 +450,23 @@ impl<'id> HeapPuzzle<'id> {
                 let actual_orients =
                     orientation_sum % branded_orbit_def.inner.orientation_count != 0;
                 if actual_cycle_length != 1 || actual_orients {
-                    cycle_type_piece.push((actual_cycle_length, actual_orients));
+                    cycle_structure_piece.push((actual_cycle_length, actual_orients));
                 }
             }
             base += slice_orbit_size(branded_orbit_def.inner);
-            cycle_type_piece.sort_unstable();
-            cycle_type.push(cycle_type_piece);
+            cycle_structure_piece.sort_unstable();
+            cycle_structure.push(cycle_structure_piece);
         }
-        let sorted_cycle_type = SortedCycleType::new(&cycle_type, sorted_orbit_defs).unwrap();
+        let sorted_cycle_structure =
+            SortedCycleStructure::new(&cycle_structure, sorted_orbit_defs).unwrap();
         // We don't actually need to test this function because we have this
         // assert!(self.indu
-        assert!(PuzzleState::induces_sorted_cycle_type(
+        assert!(PuzzleState::induces_sorted_cycle_structure(
             self,
-            sorted_cycle_type.slice_view(),
+            sorted_cycle_structure.slice_view(),
             sorted_orbit_defs,
             aux_mem.slice_view_mut()
         ));
-        sorted_cycle_type
+        sorted_cycle_structure
     }
 }

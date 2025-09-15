@@ -28,7 +28,10 @@ impl SpecializedOrbitPuzzleState for Cube3Edges {
         todo!()
     }
 
-    fn induces_sorted_cycle_type(&self, sorted_cycle_type_orbit: &[(NonZeroU8, bool)]) -> bool {
+    fn induces_sorted_cycle_structure(
+        &self,
+        sorted_cycle_structure_orbit: &[(NonZeroU8, bool)],
+    ) -> bool {
         todo!()
     }
 

@@ -9,7 +9,7 @@ use log::{Level, debug, info, log_enabled};
 use std::{time::Instant, vec::IntoIter};
 use thiserror::Error;
 
-pub struct CycleTypeSolver<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> {
+pub struct CycleStructureSolver<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> {
     puzzle_def: PuzzleDef<'id, P>,
     pruning_tables: T,
     canonical_fsm: PuzzleCanonicalFSM<'id, P>,
@@ -17,7 +17,7 @@ pub struct CycleTypeSolver<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> {
     search_strategy: SearchStrategy,
 }
 
-struct CycleTypeSolverMutable<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'id, P>> {
+struct CycleStructureSolverMutable<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'id, P>> {
     puzzle_state_history: StackedPuzzleStateHistory<'id, P, H>,
     aux_mem: AuxMem<'id>,
     solutions: Vec<Vec<usize>>,
@@ -26,7 +26,7 @@ struct CycleTypeSolverMutable<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'i
 }
 
 #[derive(Error, Debug)]
-pub enum CycleTypeSolverError {
+pub enum CycleStructureSolverError {
     #[error("A deep search still did not find a solution. It is unlikely that one exists")]
     SolutionDoesNotExist,
     #[error("Max solution length exceeded")]
@@ -52,7 +52,9 @@ pub enum SearchStrategy {
     AllSolutions,
 }
 
-impl<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'id, P>> CycleTypeSolverMutable<'id, P, H> {
+impl<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'id, P>>
+    CycleStructureSolverMutable<'id, P, H>
+{
     fn found_solution(&self) -> bool {
         !self.solutions.is_empty()
     }
@@ -86,7 +88,7 @@ struct CanonicalSequenceExpansion {
     length: usize,
 }
 
-impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P, T> {
+impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'id, P, T> {
     pub fn new(
         puzzle_def: PuzzleDef<'id, P>,
         pruning_tables: T,
@@ -113,7 +115,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
     }
 
     /// A highly optimized [iterative deepening A*][IDA] search algorithm. We
-    /// employ a number of techniques, some specific to a cycle type solver
+    /// employ a number of techniques, some specific to a cycle structure solver
     /// only:
     ///
     /// - We reduce the branching factor by using a finite state machine of
@@ -133,7 +135,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
     /// [IDA]: https://en.wikipedia.org/wiki/Iterative_deepening_A*
     fn search_for_solution<H: PuzzleStateHistory<'id, P>>(
         &self,
-        mutable: &mut CycleTypeSolverMutable<'id, P, H>,
+        mutable: &mut CycleStructureSolverMutable<'id, P, H>,
         current_fsm_state: CanonicalFSMState,
         entry_index: usize,
         mut permitted_cost: u8,
@@ -281,8 +283,8 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                 // SAFETY: we just pushed something onto the stack
                 let last_puzzle_state =
                     unsafe { mutable.puzzle_state_history.last_state_unchecked() };
-                if last_puzzle_state.induces_sorted_cycle_type(
-                    self.pruning_tables.sorted_cycle_type_ref(),
+                if last_puzzle_state.induces_sorted_cycle_structure(
+                    self.pruning_tables.sorted_cycle_structure_ref(),
                     self.puzzle_def.sorted_orbit_defs_ref(),
                     mutable.aux_mem.slice_view_mut(),
                 ) {
@@ -372,14 +374,16 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
     /// # Errors
     ///
     /// The solver will fail if it cannot find a solution. See
-    /// `CycleTypeSolverError`.
+    /// `CycleStructureSolverError`.
     pub fn solve<H: PuzzleStateHistory<'id, P>>(
         &self,
-    ) -> Result<SolutionsIntoIter<'id, '_, P>, CycleTypeSolverError> {
-        info!(start!("Beginning Cycle Combination Solver solution search..."));
+    ) -> Result<SolutionsIntoIter<'id, '_, P>, CycleStructureSolverError> {
+        info!(start!(
+            "Beginning Cycle Combination Solver solution search..."
+        ));
         let start = Instant::now();
 
-        let mut mutable: CycleTypeSolverMutable<P, H> = CycleTypeSolverMutable {
+        let mut mutable: CycleStructureSolverMutable<P, H> = CycleStructureSolverMutable {
             puzzle_state_history: (&self.puzzle_def).into(),
             aux_mem: P::new_aux_mem(self.puzzle_def.sorted_orbit_defs_ref()),
             solutions: vec![],
@@ -397,8 +401,8 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
             let depth_start = Instant::now();
             // The return values here don't matter since it's not used in the
             // below loop so we can get rid of `true` and `false`
-            if last_puzzle_state.induces_sorted_cycle_type(
-                self.pruning_tables.sorted_cycle_type_ref(),
+            if last_puzzle_state.induces_sorted_cycle_structure(
+                self.pruning_tables.sorted_cycle_structure_ref(),
                 self.puzzle_def.sorted_orbit_defs_ref(),
                 mutable.aux_mem.slice_view_mut(),
             ) {
@@ -409,7 +413,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                 // The loop increments `depth` so we do this manually
                 depth = 1;
                 if H::GODS_NUMBER.is_some_and(|gods_number| gods_number == 0) {
-                    return Err(CycleTypeSolverError::SolutionDoesNotExist);
+                    return Err(CycleStructureSolverError::SolutionDoesNotExist);
                 }
             }
             debug!(
@@ -421,12 +425,12 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
 
         if !mutable.found_solution() {
             if depth == u8::MAX {
-                return Err(CycleTypeSolverError::SolutionDoesNotExist);
+                return Err(CycleStructureSolverError::SolutionDoesNotExist);
             }
             if let Some(max_solution_length) = self.max_solution_length
                 && usize::from(depth) > max_solution_length
             {
-                return Err(CycleTypeSolverError::MaxSolutionLengthExceeded);
+                return Err(CycleStructureSolverError::MaxSolutionLengthExceeded);
             }
             mutable.nodes_visited = 0;
             mutable
@@ -459,12 +463,12 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleTypeSolver<'id, P,
                 if depth == u8::MAX
                     || H::GODS_NUMBER.is_some_and(|gods_number| usize::from(depth) > gods_number)
                 {
-                    return Err(CycleTypeSolverError::SolutionDoesNotExist);
+                    return Err(CycleStructureSolverError::SolutionDoesNotExist);
                 }
                 if let Some(max_solution_length) = self.max_solution_length
                     && usize::from(depth) > max_solution_length
                 {
-                    return Err(CycleTypeSolverError::MaxSolutionLengthExceeded);
+                    return Err(CycleStructureSolverError::MaxSolutionLengthExceeded);
                 }
                 mutable.nodes_visited = 0;
                 mutable
