@@ -1,7 +1,7 @@
 //! SIMD optimized implementations for 3x3 cubes
 
 #[cfg(not(any(avx2, simd8and16)))]
-pub type Cube3 = super::slice_puzzle::StackPuzzle<40>;
+pub type Cube3<'id> = super::slice_puzzle::StackPuzzle<'id, 40>;
 
 mod common {
     //! Common traits and types for the parent module.
