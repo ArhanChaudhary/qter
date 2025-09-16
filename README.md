@@ -94,13 +94,13 @@ WIP
 
 This repository hosts a suite of various twisty puzzle utilities to compile *QAT* programs to *Q*:
 
-- `puzzle_geometry`: Converts an arbitrary polyhedra with cutting planes into a twisty puzzle
-- `cycle_combination_finder`: Discovers Qter architectures on a twisty puzzle
-- `cycle_combination_solver`: Solves for a Qter architecture on a twisty puzzle
-- `pog_ans`: Implements [tabled asymmetric numerical system](https://en.wikipedia.org/wiki/Asymmetric_numeral_systems#Tabled_variant_(tANS)) compression to speed up the `cycle_combination_solver`
-- `movecount_coefficient_calculator`: Scores twisty puzzle algorithms by how easy they are to physically perform. A [rewrite](https://www.speedsolving.com/threads/movecount-coefficient-calculator-online-tool-to-evaluate-the-speed-of-3x3-algorithms.79025/) of Vincent Trang's online tool
-- `compiler`: Compiles *QAT* code to the *Q* file format
-- `interpreter`: Simulates a twisty puzzle and executes *QAT* or *Q*
+- `puzzle_geometry`: Convert an arbitrary polyhedra with cutting planes into a twisty puzzle
+- `cycle_combination_finder`: Discover Qter architectures on a twisty puzzle
+- `cycle_combination_solver`: Solve for a Qter architecture on a twisty puzzle
+- `pog_ans`: Implementation of [tabled asymmetric numerical system](https://en.wikipedia.org/wiki/Asymmetric_numeral_systems#Tabled_variant_(tANS)) compression for use in pruning tables
+- `movecount_coefficient_calculator`: [Rewrite](https://www.speedsolving.com/threads/movecount-coefficient-calculator-online-tool-to-evaluate-the-speed-of-3x3-algorithms.79025/) of Vincent Trang's algorithm to score twisty puzzle move sequences by how easy they are to physically perform
+- `compiler`: Compile *QAT* code to the *Q* file format
+- `interpreter`: Simulate a twisty puzzle to execute *QAT* or *Q*
 
 Refer to [our paper](media/paper/paper.pdf) for a comprehensive technical breakdown of the mathematics and programming behind Qter.
 
