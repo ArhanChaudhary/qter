@@ -1,0 +1,221 @@
+on-rubiks-cube:
+  title: "On Rubik's Cube"
+  type: book
+  date: 2010
+  publisher: KTH Royal Institute of Technology
+  page-range: 65-79
+  author:
+    - Hedberg, Mikael
+
+move-notation:
+  type: Web
+  title: "Rubik's Cube Move Notation"
+  author: Wang, Dylan
+  url: https://jperm.net/3x3/moves
+
+elementary-proofs:
+  type: Web
+  title: Elementary consequences of the group axioms
+  url: https://en.wikipedia.org/wiki/Group_(mathematics)#Elementary_consequences_of_the_group_axioms
+
+gap:
+  type: Web
+  title: "Analyzing Rubik's Cube with GAP"
+  url: https://www.math.rwth-aachen.de/homes/GAP/WWW2/Doc/Examples/rubik.html
+  publisher: RWTH Aachen University
+
+kociembas-algorithm:
+  type: Web
+  title: Two-Phase Algorithm Details
+  url: https://kociemba.org/math/imptwophase.htm
+  author: Kociemba, Herbert
+
+cube20:
+  type: article
+  title: "The diameter of the rubik's cube group is twenty"
+  author:
+    - Rokicki, Tomas
+    - Kociemba, Herbert
+    - Davidson, Morley
+    - Dethridge, John
+  date: 2014
+  publisher: siam REVIEW
+  volume: 56
+  issue: 4
+  page-range: 645-670
+
+np-complete:
+  type: article
+  serial-number:
+    doi: 10.4230/LIPICS.STACS.2018.24
+  url: https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.STACS.2018.24
+  author:
+    - Demaine, Erik
+    - Eisenstat, Sarah
+    - Rudoy, Mikhail
+  title: "Solving the Rubik's Cube Optimally is NP-complete"
+  publisher: Schloss Dagstuhl – Leibniz-Zentrum für Informatik
+  date: 2018
+
+korf:
+  type: article
+  author: Korf, Richard
+  title: "Finding optimal solutions to Rubik's cube using pattern databases"
+  date: 1997
+  isbn: 0262510952
+  publisher: AAAI Press
+  page-range: 700-705
+  series: "AAAI'97/IAAI'97"
+
+computer-puzzling:
+  type: Web
+  author: Scherphuis, Jaap
+  title: Computer Puzzling
+  url: https://www.jaapsch.net/puzzles/compcube.htm
+
+pigeons-in-holes:
+  type: Web
+  url: https://commons.wikimedia.org/wiki/File:TooManyPigeons.jpg
+  date: 2008
+  title: TooManyPigeons.jpg
+  author:
+    - en:User:BenFrantzDale
+    - en:User:McKay
+
+iddfs-time-complexity:
+  type: Web
+  url: https://en.wikipedia.org/wiki/Iterative_deepening_depth-first_search#Time_complexity
+  title: Iterative deepening depth-first search
+
+spacetime:
+  type: Web
+  url: https://en.wikipedia.org/wiki/Space%E2%80%93time_tradeoff
+  title: Space–time tradeoff
+
+sequence-symmetry:
+  type: repository
+  url: https://github.com/cubing/twsearch/commit/7b1d62bd9d9d232fb4729c7227d5255deed9673c
+  title: Support reduction by rotation of sequences in ordertree.
+  author: Rokicki, Tomas
+
+mcc:
+  type: Web
+  url: https://www.speedsolving.com/threads/movecount-coefficient-calculator-online-tool-to-evaluate-the-speed-of-3x3-algorithms.79025/
+  title: "Movecount Coefficient Calculator: Online Tool To Evaluate The Speed Of 3x3 Algorithms"
+  author: Trang, Vincent
+
+qter-simd1:
+  type: repository
+  url: https://github.com/ArhanChaudhary/qter/blob/8d2cbcb5338250cd25c132678b838d0316f502f9/src/phase2/src/puzzle/cube3/avx2.rs#L304
+  author: Chaudhary, Arhan
+
+qter-simd2:
+  type: repository
+  url: https://github.com/ArhanChaudhary/qter/blob/8d2cbcb5338250cd25c132678b838d0316f502f9/src/phase2/src/puzzle/cube3/avx2.rs#L207
+  author: Chaudhary, Arhan
+
+sym-counts:
+  type: Web
+  url: http://forum.cubeman.org/?q=node/view/201
+  title: "God's Algorithm out to 15f*"
+  author: Scheunemann, T
+
+optimal-4x4:
+  type: Web
+  url: https://www.speedsolving.com/threads/gods-number-is.30231/post-997686
+  title: "God's number is..."
+  author: Rokicki, Tomas
+
+sgs:
+  type: Web
+  url: https://en.wikipedia.org/wiki/Strong_generating_set
+  title: Strong generating set
+
+solving-permgroup:
+  type: article
+  author:
+    - Egner, Sebastian
+    - Püschel, Markus
+  title: Solving puzzles related to permutation groups
+  year: 1998,
+  isbn: 1581130023,
+  publisher: Association for Computing Machinery
+  url: https://doi.org/10.1145/281508.281611
+  page-range: 186–193
+  series: "ISSAC '98"
+
+canonical-sequence:
+  type: book
+  author: Singmaster, David
+  title: Notes on Rubik’s Magic Cube
+  edition: 5
+  page-range: 34
+  publisher: Enslow Publishers
+  date: 1981
+
+pathmax:
+  type: article
+  author: Mérõ, László
+  title: A Heuristic Search Algorithm with Modifiable Estimate
+  volume: 23
+  issue: 1
+  date: 1984
+  page-range: 13-27
+  doi: 10.1016/0004-3702(84)90003-1
+
+sequence-symmetry-impl:
+  type: Web
+  author: Chaudhary, Arhan
+  url: https://github.com/ArhanChaudhary/qter/blob/8f620ca1afc00c746f1fc42fb2df4f35525e2db3/src/phase2/src/solver.rs#L169
+
+pmida-star:
+  type: article
+  author: Mahafzah, Basel
+  title: "Parallel multithreaded IDA* heuristic search: algorithm design and performance evaluation"
+  journal: International Journal of Parallel, Emergent and Distributed Systems
+  volume: 26
+  issue: 1
+  page-range: 61-82
+  date: 2011
+  publisher: Taylor & Francis
+  doi: 10.1080/17445761003604521
+
+microthreading:
+  type: Web
+  author: Rokicki, Tomas
+  url: https://github.com/cubing/twsearch/blob/0dced6e55f5612609a54c75056d00535fadee0c8/src/cpp/solve.cpp#L111
+
+random-graph:
+  type: article
+  author:
+    - Qu, Yanlin
+    - Rokicki, Tomas
+    - Yang, Hillary
+  title: "Rubik's Cube Scrambling Requires at Least 26 Random Moves"
+  date: 2024
+  url: https://arxiv.org/abs/2410.20630
+
+rayon:
+  type: repository
+  url: https://github.com/rayon-rs/rayon
+  title: Rayon
+  date: 2019
+
+twsearch:
+  type: repository
+  url: https://github.com/cubing/twsearch
+  author:
+    - Rokicki, Tomas
+    - Garron, Lucas
+
+kociemba-symmetry:
+  type: Web
+  url: https://kociemba.org/cube.htm
+  author: Kociemba, Herbert
+  title: Equivalent Cubes and Symmetry
+
+identical-pieces:
+  type: Web
+  title: architecture.md
+  url: https://github.com/cubing/twsearch/blob/0dced6e55f5612609a54c75056d00535fadee0c8/docs/architecture.md?plain=1#L407
+  author: Rokicki, Tomas

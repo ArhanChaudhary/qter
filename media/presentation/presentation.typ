@@ -1,11 +1,11 @@
-#import "@preview/polylux:0.3.1": *
+#import "@preview/polylux:0.4.0": *
 #import "@preview/cetz:0.3.1"
 
 /// The color palette of the theme
 #let palette = (
   background: rgb("#2f3052"),///"#180b20"),
   text: rgb("#d8d9ff"),///white,
-  primary: rgb("#424374"),///rgb("#823372"),
+  primary: rgb("#424374"),///rgb("#40 choose 2823372"),
   accent: rgb("#8498f0"),///rgb("#df5671"),
 )
 
@@ -29,7 +29,7 @@
   )
   set text(fill: palette.text, size: 40pt, font: "Monaspace Neon Var")
 
-  set raw(theme: "Tomorrow-Night-Bright.tmTheme")
+  // set raw(theme: "Tomorrow-Night-Bright.tmTheme")
 
   show raw: it => block(
     // fill: rgb("#0f1419"),
@@ -43,6 +43,8 @@
 
   body
 }
+
+#let polylux-slide = slide
 
 /// A title slide
 ///
@@ -199,7 +201,7 @@
 #empty-slide(
   content: [
     #align(center, [
-      #text(size: 15pt)[```l
+      #text(size: 15pt)[```
       Puzzles
       A: 3x3
 
@@ -376,7 +378,7 @@
 ])
 
 #mono-slide(title: [How does this look in Q?], content: [
-  ```l
+  ```
   Puzzles
   A: 3x3
   B: 3x3
@@ -484,7 +486,7 @@
 #split-slide(
   title: [How can qter be turing complete?],
   content: [
-    ```l
+    ```
     Puzzles
     tape A: 3x3
 
@@ -531,8 +533,10 @@
 #mono-slide(
   title: [But wouldn't qter just be brainfuck?],
   content: [
-    - Multiple tapes are allowed #pause
-    - This makes call stacks easy #pause
+    - Multiple tapes are allowed
+    #show: later
+    - This makes call stacks easy
+    #show: later
     - We can use a global register to keep track of the head position
   ]
 )
@@ -565,43 +569,48 @@
 )
 
 #mono-slide(
-  title: [Cycle combination solver],
+  title: [Qter Architecture Solver],
   content: [
     - Computes optimal qter registers in two phases
-      - Phase 1: Find best cycles that provably exist
-      - Phase 2: Find shortest algorithms that produce the cycles
+      - Cycle Combination Prover: Find best cycles that provably exist
+      - Cycle Combination Solver: Find shortest algorithms that produce the cycles
 ])
 
 #mono-slide(
-  title: [Phase 1],
+  title: [Cycle Combination Prover],
   content: [
     The maximum number of repetitions for an algorithm on the Rubik's cube is 1260
-    #pause
+    #show: later
     #v(30pt)
     This is formed from:
-    - LCM 28 on edges: 4 cycle, another 4 cycle, and 7 cycle
+    - LCM 56 on edges: 4 cycle, another 4 cycle, and 7 cycle
     - LCM 45 on corners: 9 cycle and 15 cycle
-    - LCM(45, 28) = 1260
+    - LCM(45, 56) = 1260
 ])
 
 #mono-slide(
-  title: [Phase 1],
+  title: [Cycle Combination Prover],
   content: [
-    - We can generalize this idea! #pause
-      - N registers, not just one #pause
+    - We can generalize this idea!
+    #show: later
+      - N registers, not just one
+    #show: later
       - Any twisty puzzle, like the 4x4x4 or megaminx
 ])
 
 #mono-slide(
-  title: [Phase 2],
+  title: [Cycle Combination Solver],
   content: [
-    We have a structure of the cycles we want. Now, find an actual algorithm for the cycle. #pause
-    - IMPORTANT: The algorithm must be as short as possible
+    We have a structure of the cycles we want. Now, find an actual algorithm for the cycle.
+    #show: later
+    - The algorithm must be as short as possible
+    #show: later
+    - The only known optimal solving technique is brute force :-(
   ]
 )
 
 #mono-slide(
-  title: [Phase 2],
+  title: [Cycle Combination Solver],
   content: [
     #let node(faces) = {
        cetz.canvas({
@@ -657,13 +666,38 @@
 ])
 
 #mono-slide(
-  title: [Phase 2],
+  title: [Cycle Combination Solver],
   content: [
-    Modified Korf's algorithm #pause
-    - Iterative DFS + heuristic #pause
-    - Symmetries of the Rubik's cube #pause
-    - Movecount coefficient calculator #pause
-    - \... It gets complicated
+    Modified Korf's algorithm
+    #show: later
+    - Iterative DFS + heuristic
+    #show: later
+    - Movecount coefficient calculator
+    #show: later
+    - Fixed pieces
+    #show: later
+    - \... The optimizations gets complicated
+  ]
+)
+
+#mono-slide(
+  title: [We integrated Qter into a robot!],
+  content: [
+    Raw video: https://drive.google.com/file/d/121oxXZX2t8l1pAY0NNbxVoiUOWuV8dqR/view?usp=drive_link
+
+    Slo-mo video: https://drive.google.com/file/d/1dQrUkTKFgRiQjZEsESq42mu1uAC41Vrr/view?usp=drive_link
+
+  ]
+)
+
+#mono-slide(
+  title: [We demoed Qter at OpenSauce 2025!],
+  content: [
+    #grid(
+      columns: (1fr, 1fr),
+      image("robot.JPG", height: 84%),
+      image("us.jpg"),
+    )
   ]
 )
 
