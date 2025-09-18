@@ -40,8 +40,14 @@
         )
 
         let mat-mul(a, b) = (
-            ((a.at(0).at(0) * b.at(0).at(0) + a.at(1).at(0) * b.at(0).at(1)),(a.at(0).at(1) * b.at(0).at(0) + a.at(1).at(1) * b.at(0).at(1))),
-            ((a.at(0).at(0) * b.at(1).at(0) + a.at(1).at(0) * b.at(1).at(1)), (a.at(0).at(1) * b.at(1).at(0) + a.at(1).at(1) * b.at(1).at(1))),
+            (
+                (a.at(0).at(0) * b.at(0).at(0) + a.at(1).at(0) * b.at(0).at(1)),
+                (a.at(0).at(1) * b.at(0).at(0) + a.at(1).at(1) * b.at(0).at(1)),
+            ),
+            (
+                (a.at(0).at(0) * b.at(1).at(0) + a.at(1).at(0) * b.at(1).at(1)),
+                (a.at(0).at(1) * b.at(1).at(0) + a.at(1).at(1) * b.at(1).at(1)),
+            ),
         )
 
         let mul-coord(matrix, coord) = (
@@ -52,17 +58,28 @@
         let ortho-squish = 1 / (2 * calc.cos(30deg))
 
         let rot-scale-rot(b, a) = (
-                (-ortho-squish * calc.sin(a) * calc.sin(b) + calc.cos(a) * calc.cos(b), ortho-squish * calc.cos(a) * calc.sin(b) + calc.sin(a) * calc.cos(b)),
-                (-ortho-squish * calc.sin(a) * calc.cos(b) - calc.cos(a) * calc.sin(b), ortho-squish * calc.cos(a) * calc.cos(b) - calc.sin(a) * calc.sin(b))
-            )
+            (
+                -ortho-squish * calc.sin(a) * calc.sin(b) + calc.cos(a) * calc.cos(b),
+                ortho-squish * calc.cos(a) * calc.sin(b) + calc.sin(a) * calc.cos(b),
+            ),
+            (
+                -ortho-squish * calc.sin(a) * calc.cos(b) - calc.cos(a) * calc.sin(b),
+                ortho-squish * calc.cos(a) * calc.cos(b) - calc.sin(a) * calc.sin(b),
+            ),
+        )
 
         let maybe-back(matrix) = if back { mat-mul(back-matrix, matrix) } else { matrix }
 
         let transforms = (
-            (maybe-back((
-                (calc.cos(135deg), calc.sin(135deg) * ortho-squish),
-                (-calc.sin(135deg), calc.cos(135deg) * ortho-squish),
-            )), (0, by), "U", "B"),
+            (
+                maybe-back((
+                    (calc.cos(135deg), calc.sin(135deg) * ortho-squish),
+                    (-calc.sin(135deg), calc.cos(135deg) * ortho-squish),
+                )),
+                (0, by),
+                "U",
+                "B",
+            ),
             (maybe-back(rot-scale-rot(45deg, 120deg)), (0, 0), "F", "D"),
             (maybe-back(rot-scale-rot(135deg, 60deg)), (by, 0), "R", "L"),
         )
@@ -167,7 +184,7 @@
                 bezier(coords.c4b, coords.c4a, coords.c4)
                 line(coords.c4a, coords.c1b)
                 bezier(coords.c1b, coords.c1a, coords.c1)
-            }
+            },
         )
 
         if back {
@@ -188,7 +205,7 @@
                     line(coords.c3, coords.c4)
                     line(coords.c4, coords.c5)
                     line(coords.c5, coords.c1)
-                }
+                },
             )
         }
     })
