@@ -6,7 +6,7 @@
 > [!NOTE]
 > Qter is currently an incomplete work-in-progress
 
-Qter is a computer architecture that allows humans to perform computations by manipulating= Rubik's Cube (or any twisty puzzle) by hand. Following is an example executable program that accepts an index as user input and computes the corresponding Fibonacci number, written in our custom twisty puzzle file format named *Q*. It can be physically executed by a human without needing to know how computers work.
+Qter is a computer architecture that allows humans to perform computations by manipulating Rubik's Cube (or any twisty puzzle) by hand. Following is an example executable program that accepts an index as user input and computes the corresponding Fibonacci number, written in our custom twisty puzzle file format named *Q*. It can be physically executed by a human without needing to know how computers work.
 
 `fib.q`
 <!-- some alternatives: clarity cl el janet lfe lean nlogo opa pact promela scilab -->
@@ -94,10 +94,10 @@ WIP
 
 This repository hosts a suite of various twisty puzzle utilities to compile *QAT* programs to *Q*:
 
-- `puzzle_geometry`: Convert an arbitrary polyhedra with cutting planes into a twisty puzzle
+- `puzzle_geometry`: Convert an arbitrary polyhedra and cutting planes into a twisty puzzle
 - `cycle_combination_finder`: Discover Qter architectures on a twisty puzzle
 - `cycle_combination_solver`: Solve for a Qter architecture on a twisty puzzle
-- `pog_ans`: Implementation of [tabled asymmetric numerical system](https://en.wikipedia.org/wiki/Asymmetric_numeral_systems#Tabled_variant_(tANS)) compression for use in pruning tables
+- `pog_ans`: Implementation of [tabled asymmetric numerical systems](https://en.wikipedia.org/wiki/Asymmetric_numeral_systems#Tabled_variant_(tANS)) compression for use in pruning tables
 - `movecount_coefficient_calculator`: [Rewrite](https://www.speedsolving.com/threads/movecount-coefficient-calculator-online-tool-to-evaluate-the-speed-of-3x3-algorithms.79025/) of Vincent Trang's algorithm to score twisty puzzle move sequences by how easy they are to physically perform
 - `compiler`: Compile *QAT* code to the *Q* file format
 - `interpreter`: Simulate a twisty puzzle to execute *QAT* or *Q*
