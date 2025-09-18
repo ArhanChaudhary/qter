@@ -2,213 +2,266 @@
 #import "@preview/fletcher:0.5.8" as fletcher: diagram, edge, node, shapes
 
 #show heading: v => {
-  set text(tracking: -0.04em)
-  v
+    set text(tracking: -0.04em)
+    v
 }
 
 #let colors = (
-  "r": (rgb("#d86f9a"), none), ///red,
-  "o": (rgb("#e4b37f"), none), ///orange,
-  "w": (rgb("#ffffff"), (paint: gray, thickness: 1pt)), ///white,
-  "y": (rgb("#e1e485"), none), ///yellow,
-  "b": (rgb("#8498f0"), none), ///blue,
-  "g": (rgb("#2cda9d"), none), ///green,
-  "n": (rgb("#dddddd"), none), ///gray,
+    "r": (rgb("#d86f9a"), none), ///red,
+    "o": (rgb("#e4b37f"), none), ///orange,
+    "w": (rgb("#ffffff"), (paint: gray, thickness: 1pt)), ///white,
+    "y": (rgb("#e1e485"), none), ///yellow,
+    "b": (rgb("#8498f0"), none), ///blue,
+    "g": (rgb("#2cda9d"), none), ///green,
+    "n": (rgb("#dddddd"), none), ///gray,
 )
 
-#let cube(faces, offset: (0, 0), scale-amt: 1, back: false, name: "") = {
-  import cetz.draw: *
+#let cube(faces, offset: (0, 0), scale-amt: 1, distance: 5, back: false, name: "") = {
+    import cetz.draw: *
 
-  if faces == "" {
-    return
-  }
-
-  let faces = faces.split(" ").map(v => v.split("").filter(n => colors.keys().contains(n)).map(n => colors.at(n)))
-
-  let by = calc.floor(calc.sqrt(faces.at(0).len()))
-
-  group(name: name, {
-    translate(offset)
-    scale(scale-amt)
-
-    anchor("center", (0, 0))
-    anchor("ufr", (0, 0))
-
-    let back-matrix = (
-      (-calc.cos(60deg), calc.sin(60deg)),
-      (calc.sin(60deg), calc.cos(60deg)),
-    )
-
-    let mat-mul(a, b) = (
-      (
-        (a.at(0).at(0) * b.at(0).at(0) + a.at(1).at(0) * b.at(0).at(1)),
-        (a.at(0).at(1) * b.at(0).at(0) + a.at(1).at(1) * b.at(0).at(1)),
-      ),
-      (
-        (a.at(0).at(0) * b.at(1).at(0) + a.at(1).at(0) * b.at(1).at(1)),
-        (a.at(0).at(1) * b.at(1).at(0) + a.at(1).at(1) * b.at(1).at(1)),
-      ),
-    )
-
-    let mul-coord(matrix, coord) = (
-      matrix.at(0).at(0) * coord.at(0) + matrix.at(1).at(0) * coord.at(1),
-      matrix.at(0).at(1) * coord.at(0) + matrix.at(1).at(1) * coord.at(1),
-    )
+    if faces == "" {
+        return
+    }
 
     let ortho-squish = 1 / (2 * calc.cos(30deg))
 
-    let rot-scale-rot(b, a) = (
-      (
-        -ortho-squish * calc.sin(a) * calc.sin(b) + calc.cos(a) * calc.cos(b),
-        ortho-squish * calc.cos(a) * calc.sin(b) + calc.sin(a) * calc.cos(b),
-      ),
-      (
-        -ortho-squish * calc.sin(a) * calc.cos(b) - calc.cos(a) * calc.sin(b),
-        ortho-squish * calc.cos(a) * calc.cos(b) - calc.sin(a) * calc.sin(b),
-      ),
+    let faces = faces.split(" ").map(v => v.split("").filter(n => colors.keys().contains(n)).map(n => colors.at(n)))
+
+    let by = calc.floor(calc.sqrt(faces.at(0).len()))
+
+    let extra-angle = if back { 60deg } else { 0deg }
+
+    // These form the front three edges of the cube and have slope 1/sqrt(3) away from the viewer. By expressing a coordinate in terms of these vectors, we can calculate the Z depth.
+    let basis = (
+        (calc.cos(30deg + extra-angle), calc.sin(30deg + extra-angle)),
+        (calc.cos(30deg + 120deg + extra-angle), calc.sin(30deg + 120deg + extra-angle)),
+        (calc.cos(30deg + 240deg + extra-angle), calc.sin(30deg + 240deg + extra-angle)),
+    )
+    let slope = 1 / calc.sqrt(3)
+    // We would like the three corners on the edge of the outline that are nearest to the camera not to scale, so we calculate the neutral depth to make that happen
+    let neutral-depth = slope + distance
+
+    // To express the coordinates in terms of those vectors, we can construct inverse matrices to find out how much of each vector contributes to the final thingy
+
+    let mul-coord(matrix, coord) = (
+        matrix.at(0).at(0) * coord.at(0) + matrix.at(1).at(0) * coord.at(1),
+        matrix.at(0).at(1) * coord.at(0) + matrix.at(1).at(1) * coord.at(1),
     )
 
-    let maybe-back(matrix) = if back { mat-mul(back-matrix, matrix) } else { matrix }
+    let inv-matrices = (
+        (basis.at(0), basis.at(1)),
+        (basis.at(1), basis.at(2)),
+        (basis.at(2), basis.at(0)),
+    ).map(((col1, col2)) => {
+        let inv-det = 1 / (col1.at(0) * col2.at(1) - col1.at(1) * col2.at(0))
 
-    let transforms = (
-      (
-        maybe-back((
-          (calc.cos(135deg), calc.sin(135deg) * ortho-squish),
-          (-calc.sin(135deg), calc.cos(135deg) * ortho-squish),
-        )),
-        (0, by),
-        "U",
-        "B",
-      ),
-      (maybe-back(rot-scale-rot(45deg, 120deg)), (0, 0), "F", "D"),
-      (maybe-back(rot-scale-rot(135deg, 60deg)), (by, 0), "R", "L"),
-    )
+        ((col2.at(1) * inv-det, -col1.at(1) * inv-det), (-col2.at(0) * inv-det, col1.at(0) * inv-det))
+    })
 
-    let transform-coords(matrix, center, coords-before) = {
-      let coords = (:)
+    let perspective-adjust(coord) = {
+        let depth = distance + if back { slope * 3 } else { 0 }
 
-      for (name, coord) in coords-before {
-        let coord = (coord.at(0) - center.at(0), coord.at(1) - center.at(1))
-        let ret = (:)
-        coords.insert(name, mul-coord(matrix, coord))
-      }
+        // Express the coordinates in terms of two of the vectors
+        for matrix in inv-matrices {
+            let contributions = mul-coord(matrix, coord)
+            // We need both coordinates to be positive; otherwise we're in the wrong sector
+            if contributions.at(0) >= 0 and contributions.at(1) >= 0 {
+                let amt = (contributions.at(0) + contributions.at(1)) * slope / (by * calc.sqrt(2) * ortho-squish)
+                if back {
+                    depth -= amt
+                } else {
+                    depth += amt
+                }
 
-      coords
-    }
-
-    let radius = 0.2
-
-    for (x, (facelets, (matrix, center, front-name, back-name))) in faces.zip(transforms).enumerate() {
-      for i in range(0, by) {
-        for j in range(0, by) {
-          let idx = (by - 1) - i + j * by
-          let (fill, stroke) = facelets.at(idx)
-          let coords = transform-coords(matrix, center, (
-            c1: (i + 0.03, j + 0.03),
-            c1b: (i + 0.03 + radius, j + 0.03),
-            c1a: (i + 0.03, j + 0.03 + radius),
-            c2: (i + 0.03, j + 0.97),
-            c2b: (i + 0.03, j + 0.97 - radius),
-            c2a: (i + 0.03 + radius, j + 0.97),
-            c3: (i + 0.97, j + 0.97),
-            c3b: (i + 0.97 - radius, j + 0.97),
-            c3a: (i + 0.97, j + 0.97 - radius),
-            c4: (i + 0.97, j + 0.03),
-            c4b: (i + 0.97, j + 0.03 + radius),
-            c4a: (i + 0.97 - radius, j + 0.03),
-            center: (i + 0.5, j + 0.5),
-          ))
-
-          merge-path(fill: fill, stroke: stroke, {
-            line(coords.c1a, coords.c2b)
-            bezier(coords.c2b, coords.c2a, coords.c2)
-            line(coords.c2a, coords.c3b)
-            bezier(coords.c3b, coords.c3a, coords.c3)
-            line(coords.c3a, coords.c4b)
-            bezier(coords.c4b, coords.c4a, coords.c4)
-            line(coords.c4a, coords.c1b)
-            bezier(coords.c1b, coords.c1a, coords.c1)
-          })
-
-          anchor((if back { back-name } else { front-name }) + str(idx), coords.center)
+                break
+            }
         }
-      }
+
+        // Now we have the Z depth; lets calculate the perspective shrinkage...
+
+        let shrinkage = neutral-depth / depth
+
+        (coord.at(0) * shrinkage, coord.at(1) * shrinkage)
     }
 
-    for n in range(0, by - 1) {
-      let dist = 1.2 + n
-      let extra-angle = if back { 60deg } else { 0deg }
+    // let pt = perspective-adjust((0, -3 * calc.sqrt(2) * ortho-squish))
+    // circle(pt, radius: 0.1)
+    // content((rel: if back { (0, -1) } else { (0, 0) }, to: pt), [BRUH; #neutral-depth; #pt;])
 
-      for (angle, front-name, back-name, corner-name, back-corner-name) in (
-        (30deg, "ur", "bl", "ubr", "ubl"),
-        (30deg + 120deg, "uf", "dl", "ufl", "dfl"),
-        (30deg + 240deg, "fr", "db", "dfr", "dbr"),
-      ) {
-        let coords = (calc.cos(angle + extra-angle), calc.sin(angle + extra-angle))
-        let name = if n == by - 2 {
-          if back { back-corner-name } else { corner-name }
-        } else {
-          if back { back-name } else { front-name } + if by > 3 { str(n) } else { "" }
+    group(name: name, {
+        translate(offset)
+        scale(scale-amt)
+
+        anchor("center", (0, 0))
+        anchor("ufr", (0, 0))
+
+        let back-matrix = (
+            (-calc.cos(60deg), calc.sin(60deg)),
+            (calc.sin(60deg), calc.cos(60deg)),
+        )
+
+        let mat-mul(a, b) = (
+            (
+                (a.at(0).at(0) * b.at(0).at(0) + a.at(1).at(0) * b.at(0).at(1)),
+                (a.at(0).at(1) * b.at(0).at(0) + a.at(1).at(1) * b.at(0).at(1)),
+            ),
+            (
+                (a.at(0).at(0) * b.at(1).at(0) + a.at(1).at(0) * b.at(1).at(1)),
+                (a.at(0).at(1) * b.at(1).at(0) + a.at(1).at(1) * b.at(1).at(1)),
+            ),
+        )
+
+        let rot-scale-rot(b, a) = (
+            (
+                -ortho-squish * calc.sin(a) * calc.sin(b) + calc.cos(a) * calc.cos(b),
+                ortho-squish * calc.cos(a) * calc.sin(b) + calc.sin(a) * calc.cos(b),
+            ),
+            (
+                -ortho-squish * calc.sin(a) * calc.cos(b) - calc.cos(a) * calc.sin(b),
+                ortho-squish * calc.cos(a) * calc.cos(b) - calc.sin(a) * calc.sin(b),
+            ),
+        )
+
+        let maybe-back(matrix) = if back { mat-mul(back-matrix, matrix) } else { matrix }
+
+        let transforms = (
+            (
+                maybe-back((
+                    (calc.cos(135deg), calc.sin(135deg) * ortho-squish),
+                    (-calc.sin(135deg), calc.cos(135deg) * ortho-squish),
+                )),
+                (0, by),
+                "U",
+                "B",
+            ),
+            (maybe-back(rot-scale-rot(45deg, 120deg)), (0, 0), "F", "D"),
+            (maybe-back(rot-scale-rot(135deg, 60deg)), (by, 0), "R", "L"),
+        )
+
+        let transform-coords(matrix, center, coords-before) = {
+            let coords = (:)
+
+            for (name, coord) in coords-before {
+                let coord = (coord.at(0) - center.at(0), coord.at(1) - center.at(1))
+                let ret = (:)
+                coords.insert(name, perspective-adjust(mul-coord(matrix, coord)))
+            }
+
+            coords
         }
-        anchor(name, coords)
-      }
-    }
 
-    let which-face = if back { 0 } else { 1 }
+        let radius = 0.2
 
-    let coords = transform-coords(transforms.at(which-face).at(0), transforms.at(which-face).at(1), (
-      c1: (0.03, 0.03),
-      c1b: (0.03 + radius, 0.03),
-      c1a: (0.03, 0.03 + radius),
-      c2: (0.03, by - 0.03),
-      c2b: (0.03, by - 0.03 - radius),
-      c2a: (0.03 + radius, by - 0.03),
-      c3: (by - 0.03, by - 0.03),
-      c3b: (by - 0.03 - radius, by - 0.03),
-      c3a: (by - 0.03, by - 0.03 - radius),
-      c4: (by - 0.03, 0.03),
-      c4b: (by - 0.03, 0.03 + radius),
-      c4a: (by - 0.03 - radius, 0.03),
-      center: (0.5, 0.5),
-    ))
+        for (x, (facelets, (matrix, center, front-name, back-name))) in faces.zip(transforms).enumerate() {
+            for i in range(0, by) {
+                for j in range(0, by) {
+                    let idx = (by - 1) - i + j * by
+                    let (fill, stroke) = facelets.at(idx)
+                    let coords = transform-coords(matrix, center, (
+                        c1: (i + 0.03, j + 0.03),
+                        c1b: (i + 0.03 + radius, j + 0.03),
+                        c1a: (i + 0.03, j + 0.03 + radius),
+                        c2: (i + 0.03, j + 0.97),
+                        c2b: (i + 0.03, j + 0.97 - radius),
+                        c2a: (i + 0.03 + radius, j + 0.97),
+                        c3: (i + 0.97, j + 0.97),
+                        c3b: (i + 0.97 - radius, j + 0.97),
+                        c3a: (i + 0.97, j + 0.97 - radius),
+                        c4: (i + 0.97, j + 0.03),
+                        c4b: (i + 0.97, j + 0.03 + radius),
+                        c4a: (i + 0.97 - radius, j + 0.03),
+                        center: (i + 0.5, j + 0.5),
+                    ))
 
-    merge-path(
-      fill: black.transparentize(90%),
-      stroke: none,
-      {
-        line(coords.c1a, coords.c2b)
-        bezier(coords.c2b, coords.c2a, coords.c2)
-        line(coords.c2a, coords.c3b)
-        bezier(coords.c3b, coords.c3a, coords.c3)
-        line(coords.c3a, coords.c4b)
-        bezier(coords.c4b, coords.c4a, coords.c4)
-        line(coords.c4a, coords.c1b)
-        bezier(coords.c1b, coords.c1a, coords.c1)
-      },
-    )
+                    merge-path(fill: fill, stroke: stroke, {
+                        line(coords.c1a, coords.c2b)
+                        bezier(coords.c2b, coords.c2a, coords.c2)
+                        line(coords.c2a, coords.c3b)
+                        bezier(coords.c3b, coords.c3a, coords.c3)
+                        line(coords.c3a, coords.c4b)
+                        bezier(coords.c4b, coords.c4a, coords.c4)
+                        line(coords.c4a, coords.c1b)
+                        bezier(coords.c1b, coords.c1a, coords.c1)
+                    })
 
-    if back {
-      let coords = transform-coords(transforms.at(2).at(0), transforms.at(2).at(1), (
-        c1: (0.03, 0.03),
-        c2: (by - 0.03, -(by - 0.03)),
-        c3: ((by - 0.03) * 2, -(by - 0.03)),
-        c4: ((by - 0.03) * 2, 0.03),
-        c5: ((by - 0.03), (by - 0.03)),
-      ))
+                    anchor((if back { back-name } else { front-name }) + str(idx), coords.center)
+                }
+            }
+        }
 
-      merge-path(
-        fill: black.transparentize(95%),
-        stroke: none,
-        {
-          line(coords.c1, coords.c2)
-          line(coords.c2, coords.c3)
-          line(coords.c3, coords.c4)
-          line(coords.c4, coords.c5)
-          line(coords.c5, coords.c1)
-        },
-      )
-    }
-  })
+        for n in range(0, by - 1) {
+            let dist = 1.2 + n
+
+            for (angle, front-name, back-name, corner-name, back-corner-name) in (
+                (30deg, "ur", "bl", "ubr", "ubl"),
+                (30deg + 120deg, "uf", "dl", "ufl", "dfl"),
+                (30deg + 240deg, "fr", "db", "dfr", "dbr"),
+            ) {
+                let coords = perspective-adjust((calc.cos(angle + extra-angle), calc.sin(angle + extra-angle)))
+                let name = if n == by - 2 {
+                    if back { back-corner-name } else { corner-name }
+                } else {
+                    if back { back-name } else { front-name } + if by > 3 { str(n) } else { "" }
+                }
+                anchor(name, coords)
+            }
+        }
+
+        let which-face = if back { 0 } else { 1 }
+
+        let coords = transform-coords(transforms.at(which-face).at(0), transforms.at(which-face).at(1), (
+            c1: (0.03, 0.03),
+            c1b: (0.03 + radius, 0.03),
+            c1a: (0.03, 0.03 + radius),
+            c2: (0.03, by - 0.03),
+            c2b: (0.03, by - 0.03 - radius),
+            c2a: (0.03 + radius, by - 0.03),
+            c3: (by - 0.03, by - 0.03),
+            c3b: (by - 0.03 - radius, by - 0.03),
+            c3a: (by - 0.03, by - 0.03 - radius),
+            c4: (by - 0.03, 0.03),
+            c4b: (by - 0.03, 0.03 + radius),
+            c4a: (by - 0.03 - radius, 0.03),
+            center: (0.5, 0.5),
+        ))
+
+        merge-path(
+            fill: black.transparentize(90%),
+            stroke: none,
+            {
+                line(coords.c1a, coords.c2b)
+                bezier(coords.c2b, coords.c2a, coords.c2)
+                line(coords.c2a, coords.c3b)
+                bezier(coords.c3b, coords.c3a, coords.c3)
+                line(coords.c3a, coords.c4b)
+                bezier(coords.c4b, coords.c4a, coords.c4)
+                line(coords.c4a, coords.c1b)
+                bezier(coords.c1b, coords.c1a, coords.c1)
+            },
+        )
+
+        if back {
+            let coords = transform-coords(transforms.at(2).at(0), transforms.at(2).at(1), (
+                c1: (0.03, 0.03),
+                c2: (by - 0.03, -(by - 0.03)),
+                c3: ((by - 0.03) * 2, -(by - 0.03)),
+                c4: ((by - 0.03) * 2, 0.03),
+                c5: ((by - 0.03), (by - 0.03)),
+            ))
+
+            merge-path(
+                fill: black.transparentize(95%),
+                stroke: none,
+                {
+                    line(coords.c1, coords.c2)
+                    line(coords.c2, coords.c3)
+                    line(coords.c3, coords.c4)
+                    line(coords.c4, coords.c5)
+                    line(coords.c5, coords.c1)
+                },
+            )
+        }
+    })
 }
 
 #set par(justify: true)
@@ -216,31 +269,31 @@
 
 #align(center, [
 
-  #v(2em)
+    #v(2em)
 
-  #heading(outlined: false, numbering: none)[Qter: the Human Friendly Rubik's Cube Computer]
-  Arhan Chaudhary, Henry Rovnyak, Asher Gray
+    #heading(outlined: false, numbering: none)[Qter: the Human Friendly Rubik's Cube Computer]
+    Arhan Chaudhary, Henry Rovnyak, Asher Gray
 
-  #v(1em)
+    #v(1em)
 
-  #block(width: 40em, align(left)[
-    #smallcaps[Abstract.] #h(0.5em) In this paper/report/whatever, we propose a computer architecture called _Qter_ that allows humans to perform computations by manipulating Rubik's Cube by hand. It includes a "machine code" for humans called _Q_ and a high-level programming language called _QAT_ that compiles to _Q_. The system also applies to other permutation puzzles, such as the 4x4, Pyraminx, or Megaminx. We also present a program we call the _Qter Architecture Solver_ that executes on a classical computer to discover Qter architectures on arbitrary puzzles.
-  ])
+    #block(width: 40em, align(left)[
+        #smallcaps[Abstract.] #h(0.5em) In this paper/report/whatever, we propose a computer architecture called _Qter_ that allows humans to perform computations by manipulating Rubik's Cube by hand. It includes a "machine code" for humans called _Q_ and a high-level programming language called _QAT_ that compiles to _Q_. The system also applies to other permutation puzzles, such as the 4x4, Pyraminx, or Megaminx. We also present a program we call the _Qter Architecture Solver_ that executes on a classical computer to discover Qter architectures on arbitrary puzzles.
+    ])
 
-  #v(3em)
+    #v(3em)
 
-  #block(
-    clip: true,
-    radius: 30pt,
-    image("CPU Logo.png", width: 50%),
-  )
+    #block(
+        clip: true,
+        radius: 30pt,
+        image("CPU Logo.png", width: 50%),
+    )
 
-  #underline(text(fill: blue)[https://github.com/ArhanChaudhary/qter/])
+    #underline(text(fill: blue)[https://github.com/ArhanChaudhary/qter/])
 
-  #place(
-    bottom + center,
-    [Our submission to SIGHORSE 2025, the Purdue Hackers journal \ #underline(text(fill: blue)[https://sig.horse/])],
-  )
+    #place(
+        bottom + center,
+        [Our submission to SIGHORSE 2025, the Purdue Hackers journal \ #underline(text(fill: blue)[https://sig.horse/])],
+    )
 ])
 
 
@@ -261,129 +314,129 @@ _We also extend our gratitude to Ben Whitmore for helping us ideate the initial 
 Before we can explain how to turn a Rubik's Cube into a computer, we have to explain what a Rubik's Cube _is_ and the fundamental mathematics behind how it works. First, a Rubik's Cube is made out of three kinds of pieces: _Corners_, _Edges_, and _Centers_.
 
 #figure(
-  grid(
-    columns: 3,
-    column-gutter: 4em,
-    row-gutter: 1em,
-    align(center, [#set text(1.5em); Corners]),
-    align(center, [#set text(1.5em); Edges]),
-    align(center, [#set text(1.5em); Centers]),
+    grid(
+        columns: 3,
+        column-gutter: 4em,
+        row-gutter: 1em,
+        align(center, [#set text(1.5em); Corners]),
+        align(center, [#set text(1.5em); Edges]),
+        align(center, [#set text(1.5em); Centers]),
 
-    cetz.canvas(length: 25pt, {
-      cube("wnwnnnwnw gngnnngng rnrnnnrnr")
-    }),
-    cetz.canvas(length: 25pt, {
-      cube("nwnwnwnwn ngngngngn nrnrnrnrn")
-    }),
-    cetz.canvas(length: 25pt, {
-      cube("nnnnwnnnn nnnngnnnn nnnnrnnnn")
-    }),
+        cetz.canvas(length: 25pt, {
+            cube("wnwnnnwnw gngnnngng rnrnnnrnr")
+        }),
+        cetz.canvas(length: 25pt, {
+            cube("nwnwnwnwn ngngngngn nrnrnrnrn")
+        }),
+        cetz.canvas(length: 25pt, {
+            cube("nnnnwnnnn nnnngnnnn nnnnrnnnn")
+        }),
 
-    image("corner.jpg", height: 10em, width: 10em),
-    image("edge.jpg", height: 10em, width: 10em),
-    image("core.jpg", height: 10em, width: 10em),
-  ),
+        image("corner.jpg", height: 10em, width: 10em),
+        image("edge.jpg", height: 10em, width: 10em),
+        image("core.jpg", height: 10em, width: 10em),
+    ),
 )
 
 You can see that the centers are attached to each other by the _core_ and are only able to rotate in place. This allows us to treat the centers as a fixed reference point to tell whether or not a sticker is on the correct side. For example, if we have the following scramble,
 
 #align(center, cetz.canvas(length: 22pt, {
-  cube("bbbbwbbbb oooogooooo wwwwrwwwww")
+    cube("bbbbwbbbb oooogooooo wwwwrwwwww")
 }))
 
 it may look as if the centers are the only thing unsolved, but in fact we would actually consider _everything else_ to be unsolved. The reason is that all of the stickers are different from the center on the same side as it. People who are beginners at solving Rubik's Cubes often make the mistake of solving individual stickers instead of pieces.
 
 #align(center, cetz.canvas(length: 22pt, {
-  cube("wooywwoow ggggggggg rrbwrborw")
+    cube("wooywwoow ggggggggg rrbwrborw")
 }))
 
 If someone does this, then they haven't actually made progress towards a solution because the stickers on the pieces move together, which means that all of the pieces on the green face in the example given will have to be reshuffled to bring the rest of the stickers to their correct faces. Instead, it's better to solve a full "layer" (3x3x1 block), because all of the pieces are in their correct spots and won't need to be moved for the entire rest of the solve. The takeaway being that in general, _we need to think about the cube in terms of pieces rather than in terms of stickers_.
 
 #align(center, cetz.canvas(length: 22pt, {
-  cube("yyrbwowww ggggggggg rbbrrrrry")
+    cube("yyrbwowww ggggggggg rbbrrrrry")
 }))
 
 Now, we need some way to notate scrambles and solutions on a Rubik's Cube. We will use the conventional "Singmaster Notation" which is standard in the Rubik's Cube solving community @move-notation. First, we will name the six sides of a Rubik's Cube _Up_ (U), _Down_ (D), _Right_ (R), _Left_ (L), _Front_ (F), and _Back_ (B). Then, we will let the letter representing each face represent a clockwise turn about that face.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((-9.9, 3.1), [#set text(1.5em); U])
-  cube("wwwwwwwww rrrgggggg bbbrrrrrr", offset: (-9.9, 0))
-  content((-4.9, 3.1), [#set text(1.5em); D])
-  cube("wwwwwwwww ggggggooo rrrrrrggg", offset: (-4.9, 0))
-  content((0.1, 3.1), [#set text(1.5em); R])
-  cube("wwgwwgwwg ggyggyggy rrrrrrrrr", offset: (0.1, 0))
-  content((5.1, 3.1), [#set text(1.5em); L])
-  cube("bwwbwwbww wggwggwgg rrrrrrrrr", offset: (5.1, 0))
-  content((10.1, 3.1), [#set text(1.5em); F])
-  cube("wwwwwwooo ggggggggg wrrwrrwrr", offset: (10.1, 0))
-  content((15.1, 3.1), [#set text(1.5em); B])
-  cube("rrrwwwwww ggggggggg rryrryrry", offset: (15.1, 0))
+    content((-9.9, 3.1), [#set text(1.5em); U])
+    cube("wwwwwwwww rrrgggggg bbbrrrrrr", offset: (-9.9, 0))
+    content((-4.9, 3.1), [#set text(1.5em); D])
+    cube("wwwwwwwww ggggggooo rrrrrrggg", offset: (-4.9, 0))
+    content((0.1, 3.1), [#set text(1.5em); R])
+    cube("wwgwwgwwg ggyggyggy rrrrrrrrr", offset: (0.1, 0))
+    content((5.1, 3.1), [#set text(1.5em); L])
+    cube("bwwbwwbww wggwggwgg rrrrrrrrr", offset: (5.1, 0))
+    content((10.1, 3.1), [#set text(1.5em); F])
+    cube("wwwwwwooo ggggggggg wrrwrrwrr", offset: (10.1, 0))
+    content((15.1, 3.1), [#set text(1.5em); B])
+    cube("rrrwwwwww ggggggggg rryrryrry", offset: (15.1, 0))
 }))
 
 To represent double turns or counterclockwise turns, we append a `2` or a `'` respectively to the letter representing the face.
 
 #figure(cetz.canvas(length: 14pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((-9.9, 3.1), [#set text(1.5em); U])
-  cube("wwwwwwwww rrrgggggg bbbrrrrrr", offset: (-9.9, 0))
-  content((-4.9, 3.1), [#set text(1.5em); U2])
-  cube("wwwwwwwww bbbgggggg ooorrrrrr", offset: (-4.9, 0))
-  content((0, 3.1), [#set text(1.5em); U'])
-  cube("wwwwwwwww ooogggggg gggrrrrrr", offset: (0, 0))
+    content((-9.9, 3.1), [#set text(1.5em); U])
+    cube("wwwwwwwww rrrgggggg bbbrrrrrr", offset: (-9.9, 0))
+    content((-4.9, 3.1), [#set text(1.5em); U2])
+    cube("wwwwwwwww bbbgggggg ooorrrrrr", offset: (-4.9, 0))
+    content((0, 3.1), [#set text(1.5em); U'])
+    cube("wwwwwwwww ooogggggg gggrrrrrr", offset: (0, 0))
 }))
 
 In this paper, we will use what is known as the _half turn metric_, which means that we consider U2 to be a single move. An alternative choice would be the _quarter turn metric_ which would consider U2 to be two moves, however that is less common and we won't use it in this paper. Here is a full table of all 18 moves for reference:
 
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((-14, 0), [#set text(2em); #sym.circle.dotted], anchor: "west")
+    content((-14, 0), [#set text(2em); #sym.circle.dotted], anchor: "west")
 
-  content((-9.9, 3.1), [#set text(1.5em); U])
-  cube("wwwwwwwww rrrgggggg bbbrrrrrr", offset: (-9.9, 0))
-  content((-4.9, 3.1), [#set text(1.5em); D])
-  cube("wwwwwwwww ggggggooo rrrrrrggg", offset: (-4.9, 0))
-  content((0.1, 3.1), [#set text(1.5em); R])
-  cube("wwgwwgwwg ggyggyggy rrrrrrrrr", offset: (0.1, 0))
-  content((5.1, 3.1), [#set text(1.5em); L])
-  cube("bwwbwwbww wggwggwgg rrrrrrrrr", offset: (5.1, 0))
-  content((10.1, 3.1), [#set text(1.5em); F])
-  cube("wwwwwwooo ggggggggg wrrwrrwrr", offset: (10.1, 0))
-  content((15.1, 3.1), [#set text(1.5em); B])
-  cube("rrrwwwwww ggggggggg rryrryrry", offset: (15.1, 0))
+    content((-9.9, 3.1), [#set text(1.5em); U])
+    cube("wwwwwwwww rrrgggggg bbbrrrrrr", offset: (-9.9, 0))
+    content((-4.9, 3.1), [#set text(1.5em); D])
+    cube("wwwwwwwww ggggggooo rrrrrrggg", offset: (-4.9, 0))
+    content((0.1, 3.1), [#set text(1.5em); R])
+    cube("wwgwwgwwg ggyggyggy rrrrrrrrr", offset: (0.1, 0))
+    content((5.1, 3.1), [#set text(1.5em); L])
+    cube("bwwbwwbww wggwggwgg rrrrrrrrr", offset: (5.1, 0))
+    content((10.1, 3.1), [#set text(1.5em); F])
+    cube("wwwwwwooo ggggggggg wrrwrrwrr", offset: (10.1, 0))
+    content((15.1, 3.1), [#set text(1.5em); B])
+    cube("rrrwwwwww ggggggggg rryrryrry", offset: (15.1, 0))
 
-  content((-14, -5.5), [#set text(2em); #sym.circle.dotted;2], anchor: "west")
+    content((-14, -5.5), [#set text(2em); #sym.circle.dotted;2], anchor: "west")
 
-  cube("wwwwwwwww bbbgggggg ooorrrrrr", offset: (-9.9, -5.5))
-  cube("wwwwwwwww ggggggbbb rrrrrrooo", offset: (-4.9, -5.5))
-  cube("wwywwywwy ggbggbggb rrrrrrrrr", offset: (0.1, -5.5))
-  cube("ywwywwyww bggbggbgg rrrrrrrrr", offset: (5.1, -5.5))
-  cube("wwwwwwyyy ggggggggg orrorrorr", offset: (10.1, -5.5))
-  cube("yyywwwwww ggggggggg rrorrorro", offset: (15.1, -5.5))
+    cube("wwwwwwwww bbbgggggg ooorrrrrr", offset: (-9.9, -5.5))
+    cube("wwwwwwwww ggggggbbb rrrrrrooo", offset: (-4.9, -5.5))
+    cube("wwywwywwy ggbggbggb rrrrrrrrr", offset: (0.1, -5.5))
+    cube("ywwywwyww bggbggbgg rrrrrrrrr", offset: (5.1, -5.5))
+    cube("wwwwwwyyy ggggggggg orrorrorr", offset: (10.1, -5.5))
+    cube("yyywwwwww ggggggggg rrorrorro", offset: (15.1, -5.5))
 
-  content((-14, -11), [#set text(2em); #sym.circle.dotted;#sym.quote.single], anchor: "west")
+    content((-14, -11), [#set text(2em); #sym.circle.dotted;#sym.quote.single], anchor: "west")
 
-  cube("wwwwwwwww ooogggggg gggrrrrrr", offset: (-9.9, -11))
-  cube("wwwwwwwww ggggggrrr rrrrrrbbb", offset: (-4.9, -11))
-  cube("wwbwwbwwb ggwggwggw rrrrrrrrr", offset: (0.1, -11))
-  cube("gwwgwwgww yggyggygg rrrrrrrrr", offset: (5.1, -11))
-  cube("wwwwwwrrr ggggggggg yrryrryrr", offset: (10.1, -11))
-  cube("ooowwwwww ggggggggg rrwrrwrrw", offset: (15.1, -11))
+    cube("wwwwwwwww ooogggggg gggrrrrrr", offset: (-9.9, -11))
+    cube("wwwwwwwww ggggggrrr rrrrrrbbb", offset: (-4.9, -11))
+    cube("wwbwwbwwb ggwggwggw rrrrrrrrr", offset: (0.1, -11))
+    cube("gwwgwwgww yggyggygg rrrrrrrrr", offset: (5.1, -11))
+    cube("wwwwwwrrr ggggggggg yrryrryrr", offset: (10.1, -11))
+    cube("ooowwwwww ggggggggg rrwrrwrrw", offset: (15.1, -11))
 }))
 
 It may look like we're forgetting some moves. After all, there are _three_ layers that you can turn, not just two, and we haven't given names to turns of the three middle slices. However, we don't actually need to consider them because "slice" turns can be written in terms of the 18 "face" turns.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((-9.9, 3.1), [#set text(1.5em); ??])
-  cube("wgwwgwwgw gyggyggyg rrrrrrrrr", offset: (-9.9, 0))
-  content((-4.9, 3.1), [#set text(1.5em); R' L])
-  cube("bwbbwbbwb wgwwgwwgw rrrrrrrrr", offset: (-4.9, 0))
+    content((-9.9, 3.1), [#set text(1.5em); ??])
+    cube("wgwwgwwgw gyggyggyg rrrrrrrrr", offset: (-9.9, 0))
+    content((-4.9, 3.1), [#set text(1.5em); R' L])
+    cube("bwbbwbbwb wgwwgwwgw rrrrrrrrr", offset: (-4.9, 0))
 }))
 
 Those two cube states are actually the same because if you take the first cube and rotate it so that the green center is in front and the white center is on top again, we would see that it is exactly the same as the second cube. Since we're using the centers as a reference point, we can consider these two cube states to be exactly the same. Slice turns do have names, but we don't need to care about them for the purpose of this paper.
@@ -391,29 +444,29 @@ Those two cube states are actually the same because if you take the first cube a
 Another thing that we will need to name are the pieces of a Rubik's Cube. Do do this, we can simply list the sides that the piece has stickers on. For example, we can talk about the "Up, Front, Right" or _UFR_ corner, or the "Front, Left" — _FL_ — edge.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  cube("wwwwwwwww ggggggggg rrrrrrrrr", name: "cube")
+    cube("wwwwwwwww ggggggggg rrrrrrrrr", name: "cube")
 
-  line((rel: (2, 2), to: "cube.center"), "cube.center", mark: (end: "straight"), name: "ufr")
-  line((rel: (-2, 0), to: "cube.F3"), "cube.F3", mark: (end: "straight"), name: "fl")
+    line((rel: (2, 2), to: "cube.center"), "cube.center", mark: (end: "straight"), name: "ufr")
+    line((rel: (-2, 0), to: "cube.F3"), "cube.F3", mark: (end: "straight"), name: "fl")
 
-  content((rel: (0.8, 0.4), to: "ufr.start"), [#set text(1.5em); UFR])
-  content((rel: (-0.8, 0), to: "fl.start"), [#set text(1.5em); FL])
+    content((rel: (0.8, 0.4), to: "ufr.start"), [#set text(1.5em); UFR])
+    content((rel: (-0.8, 0), to: "fl.start"), [#set text(1.5em); FL])
 }))
 
 This system is able to uniquely identify all of the pieces. Finally, a sequence of moves to apply to a Rubik's Cube is called an _algorithm_. For example, (L2 D2 L' U' L D2 L' U L') is an algorithm that speed cubers memorize to help them at the very end of a solution when almost every piece is solved. It performs a three-cycle of the UBL, DBL, and DBR corners:
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((0, 3.1), [#set text(1.5em); L2 D2 L' U' L D2 L' U L'])
-  cube("ywwwwwwww ggggggggg rrrrrrrry", offset: (-2.5, 0))
-  cube("bbbbbbbbb oyoyyyyyy woroooooo", offset: (2.5, 0), back: true, name: "b")
+    content((0, 3.1), [#set text(1.5em); L2 D2 L' U' L D2 L' U L'])
+    cube("ywwwwwwww ggggggggg rrrrrrrry", offset: (-2.5, 0))
+    cube("bbbbbbbbb oyoyyyyyy woroooooo", offset: (2.5, 0), back: true, name: "b")
 
-  line("b.B2", "b.B8", mark: (end: "straight"))
-  line("b.B8", "b.B6", mark: (end: "straight"))
-  line("b.B6", "b.B2", mark: (end: "straight"))
+    line("b.B2", "b.B8", mark: (end: "straight"))
+    line("b.B8", "b.B6", mark: (end: "straight"))
+    line("b.B6", "b.B2", mark: (end: "straight"))
 }))
 
 = What is Qter?
@@ -441,19 +494,19 @@ You may notice that subtracting one is equivalent to adding three, because (U') 
 If the biggest number Qter could represent was three, it would not be an effective tool for computation. Thankfully, the Rubik's Cube has 43 quintillion states, leaving us lots of room to do better than just four. Consider the algorithm (R U). What if instead of saying that (U) adds one, we say that (R U) adds one? We can play the same game using this algorithm. The solved cube represents zero, (R U) represents one, (R U R U) represents two, etc. This algorithm performs a much more complicated action on the cube, so we should be able to represent more numbers. In fact, the maximum number we can represent this way is 104, and the cube re-solves itself after 105 iterations. We would say that the algorithm has "order 105".
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((-9.9, 3.1), [#set text(1.5em); "Zero"])
-  cube("wwwwwwwww ggggggggg rrrrrrrrr", offset: (-9.9, 0))
-  content((-4.9, 3.1), [#set text(1.5em); "One"])
-  cube("wwwwwwggg rrrggyggy wbbrrrrrr", offset: (-4.9, 0))
-  content((0.1, 3.1), [#set text(1.5em); "Two"])
-  cube("gwwgwwyyr rrwggbggb goorrbrrb", offset: (0.1, 0))
-  content((4.9, 3.1), [#set text(1.5em); ...])
-  content((10.1, 3.1), [#set text(1.5em); "104"])
-  cube("wwbwwbwwr oowggwggw grrgrrgrr", offset: (10.1, 0))
-  content((15.1, 3.1), [#set text(1.5em); "105"])
-  cube("wwwwwwwww ggggggggg rrrrrrrrr", offset: (15.1, 0))
+    content((-9.9, 3.1), [#set text(1.5em); "Zero"])
+    cube("wwwwwwwww ggggggggg rrrrrrrrr", offset: (-9.9, 0))
+    content((-4.9, 3.1), [#set text(1.5em); "One"])
+    cube("wwwwwwggg rrrggyggy wbbrrrrrr", offset: (-4.9, 0))
+    content((0.1, 3.1), [#set text(1.5em); "Two"])
+    cube("gwwgwwyyr rrwggbggb goorrbrrb", offset: (0.1, 0))
+    content((4.9, 3.1), [#set text(1.5em); ...])
+    content((10.1, 3.1), [#set text(1.5em); "104"])
+    cube("wwbwwbwwr oowggwggw grrgrrgrr", offset: (10.1, 0))
+    content((15.1, 3.1), [#set text(1.5em); "105"])
+    cube("wwwwwwwww ggggggggg rrrrrrrrr", offset: (15.1, 0))
 }))
 
 There are still lots of cube states left; can we do better? Unfortunately, it's only possible to get to 1259, wrapping around on the 1260th iteration. You can try this using the algorithm `R U2 D' B D'`. This has been proven to be the maximum order possible @on-rubiks-cube.
@@ -465,12 +518,12 @@ The next thing that a computer must be able to do is _branch_: without it we can
 If you perform `R U` on a cube a bunch of times without counting, it's essentially impossible for you to tell how many times you did the algorithm by _just looking_ at the cube. With one exception: If you did it _zero_ times, then the cube is solved and it's completely obvious that you did it zero times. Since we want qter code to be executable by humans, the `solved-goto` instruction asks you to jump to a different location of the program _only if_ the cube is solved. Otherwise, you simply go to the next instruction. This is functionally equivalent to a "jump-if-zero" instruction which exists in most computer architectures.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((-9.9, 3.1), [#set text(1.5em); (R U) × ???])
-  cube("oybbwgywr grwggwggb grobrgyob", offset: (-9.9, 0))
-  content((-2.9, 3.1), [#set text(1.5em); (R U) × #underline()[0]])
-  cube("wwwwwwwww ggggggggg rrrrrrrrr", offset: (-2.9, 0))
+    content((-9.9, 3.1), [#set text(1.5em); (R U) × ???])
+    cube("oybbwgywr grwggwggb grobrgyob", offset: (-9.9, 0))
+    content((-2.9, 3.1), [#set text(1.5em); (R U) × #underline()[0]])
+    cube("wwwwwwwww ggggggggg rrrrrrrrr", offset: (-2.9, 0))
 }))
 
 === Multiple numbers <multiple-numbers>
@@ -482,20 +535,20 @@ Something cool about Rubik's Cubes is that it's possible for a long sequence of 
 The simplest example of this are the algorithms (U) and (D'). You can see that (U) and (D') both allow representing numbers up to three, and since they affect different areas of the cube, we can represent _two different_ numbers on the cube at the _same time_. We call these "registers", as an analogy to the concept in classical computing.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((-9.9, 3.1), [#set text(1.5em); (0, 0)])
-  cube("wwwwwwwww ggggggggg rrrrrrrrr", offset: (-9.9, 0))
-  content((-4.9, 3.1), [#set text(1.5em); (1, 0)])
-  cube("wwwwwwwww rrrgggggg bbbrrrrrr", offset: (-4.9, 0))
-  content((0.1, 3.1), [#set text(1.5em); (0, 1)])
-  cube("wwwwwwwww ggggggrrr rrrrrrbbb", offset: (0.1, 0))
-  content((5.1, 3.1), [#set text(1.5em); (1, 1)])
-  cube("wwwwwwwww rrrgggrrr bbbrrrbbb", offset: (5.1, 0))
-  content((10.1, 3.1), [#set text(1.5em); (3, 2)])
-  cube("wwwwwwwww ooogggbbb gggrrrooo", offset: (10.1, 0))
-  content((15.1, 3.1), [#set text(1.5em); (1, 3)])
-  cube("wwwwwwwww rrrgggooo bbbrrrggg", offset: (15.1, 0))
+    content((-9.9, 3.1), [#set text(1.5em); (0, 0)])
+    cube("wwwwwwwww ggggggggg rrrrrrrrr", offset: (-9.9, 0))
+    content((-4.9, 3.1), [#set text(1.5em); (1, 0)])
+    cube("wwwwwwwww rrrgggggg bbbrrrrrr", offset: (-4.9, 0))
+    content((0.1, 3.1), [#set text(1.5em); (0, 1)])
+    cube("wwwwwwwww ggggggrrr rrrrrrbbb", offset: (0.1, 0))
+    content((5.1, 3.1), [#set text(1.5em); (1, 1)])
+    cube("wwwwwwwww rrrgggrrr bbbrrrbbb", offset: (5.1, 0))
+    content((10.1, 3.1), [#set text(1.5em); (3, 2)])
+    cube("wwwwwwwww ooogggbbb gggrrrooo", offset: (10.1, 0))
+    content((15.1, 3.1), [#set text(1.5em); (1, 3)])
+    cube("wwwwwwwww rrrgggooo bbbrrrggg", offset: (15.1, 0))
 }))
 
 As described, `solved-goto` would only branch if the entire cube is solved, however since each algorithm affects a distinct area of the cube, it's possible for a human to determine whether a _single_ register is zero, by inspecting whether a particular section of the cube is solved. In the example in the above figure representing (1, 0), it's easy to tell that the second register is zero because the entire bottom layer of the cube is solved. We can modify the "solved-goto" instruction to input a list of pieces, all of which must be solved for the branch to be taken, but not necessarily any more. The following illustrates a successful `solved-goto UF UFR` instruction that would require jumping to a different part of the program, as well as an unsuccessful one that would require going to the next instruction.
@@ -505,28 +558,28 @@ As described, `solved-goto` would only branch if the entire cube is solved, howe
 Can we do better than two registers with four states? In fact we can! If you try out the algorithms `R' F' L U' L U L F U' R` and `U F R' D' R2 F R' U' D`, you can see that they affect different pieces and both have order ninety. You may notice that they both twist the DBL corner; this is not a problem because they are independently decodable even ignoring that corner. One of the biggest challenges in the development of qter has been finding sets of algorithms with high orders that are all independently decodable. This is the fundamental problem that the Qter Architecture Solver attempts to solve, and will be discussed in later sections.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content(((-9.9 + -4.9) / 2, 3.1), [#set text(1.2em); R' F' L U' L U L F U' R #h(0.4em) (1, 0)])
-  cube("obwywwwgw bwggggggg rrbrrbrrr", offset: (-9.9, 0))
-  cube("orgobwbbo yybyywyyy yowboooor", offset: (-4.9, 0), back: true)
-  content(((2.1 + 7.1) / 2, 3.1), [#set text(1.2em); U F R' D' R2 F R' U' D #h(0.4em) (0, 1)])
-  cube("wwwwwywwg ggrwgyggb wgrbrryyy", offset: (2.1, 0))
-  cube("bbbbbbooy ggoryyrrr boooooyro", offset: (7.1, 0), back: true)
+    content(((-9.9 + -4.9) / 2, 3.1), [#set text(1.2em); R' F' L U' L U L F U' R #h(0.4em) (1, 0)])
+    cube("obwywwwgw bwggggggg rrbrrbrrr", offset: (-9.9, 0))
+    cube("orgobwbbo yybyywyyy yowboooor", offset: (-4.9, 0), back: true)
+    content(((2.1 + 7.1) / 2, 3.1), [#set text(1.2em); U F R' D' R2 F R' U' D #h(0.4em) (0, 1)])
+    cube("wwwwwywwg ggrwgyggb wgrbrryyy", offset: (2.1, 0))
+    cube("bbbbbbooy ggoryyrrr boooooyro", offset: (7.1, 0), back: true)
 }))
 
 Another fun thing that tweaking the "solved-goto" instruction in this way allows us to do is test whether the current value of a register is divisible by a particular set of numbers. For example, returning to the register defined by $R U$, we can test divisibility by three by looking at the the UFR corner.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((-2.5, 3.1), [#set text(1.5em); $R U$])
-  cube("wwwwwwggg rrrggyggy wbbrrrrrr", offset: (-2.5, 0), name: "1x")
-  content((2.5, 3.1), [#set text(1.5em); $(R U)^3$])
-  cube("yggywwbbw rrgggwggo rgyrrobbo", offset: (2.5, 0), name: "3x")
+    content((-2.5, 3.1), [#set text(1.5em); $R U$])
+    cube("wwwwwwggg rrrggyggy wbbrrrrrr", offset: (-2.5, 0), name: "1x")
+    content((2.5, 3.1), [#set text(1.5em); $(R U)^3$])
+    cube("yggywwbbw rrgggwggo rgyrrobbo", offset: (2.5, 0), name: "3x")
 
-  circle("1x.center", radius: 1)
-  circle("3x.center", radius: 1)
+    circle("1x.center", radius: 1)
+    circle("3x.center", radius: 1)
 }))
 
 You can see that that piece resolves itself _before_ the rest of the register does, allowing us to check divisibility by three. This will be further elaborated on in @CCS-intro.
@@ -1313,61 +1366,61 @@ Importantly, commutativity is _not_ required. So let's see how this definition a
 Next, we need an _operation_. For the Rubik's Cube, this will be jamming together the algorithms that reach the two cube states. We will call this operation _composition_ because it is very similar to function composition.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((-9.9, 3.2), [#set text(1.5em); R U R' U'])
-  cube("wwowwgwwg ggyggwggg rrwbrrwrr", offset: (-9.9, 0))
-  content((-3.9, 3.2), [#set text(1.5em); F L])
-  cube("bwwbwwboo wggwggogg wrrwrrwrr", offset: (-3.9, 0))
-  content((2.1, 3.2), [#set text(1.5em); (R U R' U') (F L)])
-  cube("bwobwgroo wggwggowy wrwwrrgrr", offset: (2.1, 0))
+    content((-9.9, 3.1), [#set text(1.5em); R U R' U'])
+    cube("wwowwgwwg ggyggwggg rrwbrrwrr", offset: (-9.9, 0))
+    content((-3.9, 3.1), [#set text(1.5em); F L])
+    cube("bwwbwwboo wggwggogg wrrwrrwrr", offset: (-3.9, 0))
+    content((2.1, 3.1), [#set text(1.5em); (R U R' U') (F L)])
+    cube("bwobwgroo wggwggowy wrwwrrgrr", offset: (2.1, 0))
 
-  circle((-7, 0), fill: black, radius: 0.15)
-  content((-0.9, 0), [#set text(2em); $=$])
+    circle((-7, 0), fill: black, radius: 0.15)
+    content((-0.9, 0), [#set text(2em); $=$])
 }))
 
 Now, let's verify that all of the group axioms hold. First, we need an identity element. This identity is simply the solved state! Lets verify this, and let $A$ be an arbitrary scramble:
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((-9.9, 3.1), [#set text(1.5em); A])
-  cube("wwowwgwwg ggyggwggg rrwbrrwrr", offset: (-9.9, 0))
-  content((-3.9, 3.1), [#set text(1.5em); ()])
-  cube("wwwwwwwww ggggggggg rrrrrrrrr", offset: (-3.9, 0))
-  content((2.1, 3.1), [#set text(1.5em); (A) () = A])
-  cube("wwowwgwwg ggyggwggg rrwbrrwrr", offset: (2.1, 0))
+    content((-9.9, 3.1), [#set text(1.5em); A])
+    cube("wwowwgwwg ggyggwggg rrwbrrwrr", offset: (-9.9, 0))
+    content((-3.9, 3.1), [#set text(1.5em); ()])
+    cube("wwwwwwwww ggggggggg rrrrrrrrr", offset: (-3.9, 0))
+    content((2.1, 3.1), [#set text(1.5em); (A) () = A])
+    cube("wwowwgwwg ggyggwggg rrwbrrwrr", offset: (2.1, 0))
 
-  circle((-7, 0), fill: black, radius: 0.15)
-  content((-0.9, 0), [#set text(2em); $=$])
+    circle((-7, 0), fill: black, radius: 0.15)
+    content((-0.9, 0), [#set text(2em); $=$])
 }))
 
 Regardless of what the first cube state is, appending the "do nothing" algorithm will lead to the same cube state. Next, lets verify associativity, letting $A$, $B$, and $C$ be arbitrary scrambles.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((-9.9, 3.1), [#set text(1.5em); A B])
-  cube("wwrwwgwwg rryggyggy rrbrrbrrb", offset: (-9.9, 0))
-  content((-3.9, 3.1), [#set text(1.5em); C])
-  cube("wwwwwwooo ggggggggg wrrwrrwrr", offset: (-3.9, 0))
-  content((2.1, 3.1), [#set text(1.5em); (A B) (C) = A B C])
-  cube("wwrwwgoog ggrggryyy wrbwrbgrb", offset: (2.1, 0))
+    content((-9.9, 3.1), [#set text(1.5em); A B])
+    cube("wwrwwgwwg rryggyggy rrbrrbrrb", offset: (-9.9, 0))
+    content((-3.9, 3.1), [#set text(1.5em); C])
+    cube("wwwwwwooo ggggggggg wrrwrrwrr", offset: (-3.9, 0))
+    content((2.1, 3.1), [#set text(1.5em); (A B) (C) = A B C])
+    cube("wwrwwgoog ggrggryyy wrbwrbgrb", offset: (2.1, 0))
 
-  circle((-7, 0), fill: black, radius: 0.15)
-  content((-0.9, 0), [#set text(2em); $=$])
+    circle((-7, 0), fill: black, radius: 0.15)
+    content((-0.9, 0), [#set text(2em); $=$])
 
-  translate((0, -8))
+    translate((0, -8))
 
-  content((-9.9, 3.1), [#set text(1.5em); A])
-  cube("wwwwwwwww rrrgggggg bbbrrrrrr", offset: (-9.9, 0))
-  content((-3.9, 3.1), [#set text(1.5em); B C])
-  cube("wwgwwgooo ggggggyyy wrrwrrgrr", offset: (-3.9, 0))
-  content((2.1, 3.1), [#set text(1.5em); (A) (B C) = A B C])
-  cube("wwrwwgoog ggrggryyy wrbwrbgrb", offset: (2.1, 0))
+    content((-9.9, 3.1), [#set text(1.5em); A])
+    cube("wwwwwwwww rrrgggggg bbbrrrrrr", offset: (-9.9, 0))
+    content((-3.9, 3.1), [#set text(1.5em); B C])
+    cube("wwgwwgooo ggggggyyy wrrwrrgrr", offset: (-3.9, 0))
+    content((2.1, 3.1), [#set text(1.5em); (A) (B C) = A B C])
+    cube("wwrwwgoog ggrggryyy wrbwrbgrb", offset: (2.1, 0))
 
-  circle((-7, 0), fill: black, radius: 0.15)
-  content((-0.9, 0), [#set text(2em); $=$])
+    circle((-7, 0), fill: black, radius: 0.15)
+    content((-0.9, 0), [#set text(2em); $=$])
 }))
 
 Because of the nature of how jamming together algorithms works, parentheses can essentially be ignored. Therefore, the composition operation is associative. Finally we must show that every cube position has an inverse. Intuitively, we should expect an inverse to exist simply because we can undo whatever algorithm created the scramble. Here is an algorithm to find the inverse of a scramble:
@@ -1393,42 +1446,42 @@ function inverse(moves: List<Move>): List<Move> {
 This works because any clockwise base move X cancels with it's counterclockwise pair X' and vice versa, and any double turn X2 cancels with itself.
 
 $
-  "R'" "U2" "F" " " "L" · "inverse"("R'" "U2" "F" " " "L") & = ("R'" "U2" "F" " " "L") ("L'" "F'" "U2" "R") \
-                                                           & = "R'" "U2" "F" "F'" "U2" "R" \
-                                                           & = "R'" "U2" "U2" "R" \
-                                                           & = "R'" "R" \
-                                                           & = () \
+    "R'" "U2" "F" " " "L" · "inverse"("R'" "U2" "F" " " "L") & = ("R'" "U2" "F" " " "L") ("L'" "F'" "U2" "R") \
+                                                             & = "R'" "U2" "F" "F'" "U2" "R" \
+                                                             & = "R'" "U2" "U2" "R" \
+                                                             & = "R'" "R" \
+                                                             & = () \
 $
 
 For the sake of example, let's do some proofs using the group axioms @elementary-proofs. These will apply to _all_ groups, not just the Rubik's Cube. First, lets show that $a^(-1) · a = e$. We already know that $a · a^(-1) = e$, but does that imply that $a$ and $a^(-1)$ commute with each other? We can simply begin with the same thing on both sides of an equality and do algebra to it:
 
 $
-  (a^(-1) · a) & = (a^(-1) · a)                                  && "Reflexivity" \
-  (a^(-1) · a) & = (a^(-1) · a) · e                              && "Identity axiom" \
-    a^(-1) · a & = a^(-1) · a · (a^(-1) · (a^(-1))^(-1)) #h(1em) && "Inverse axiom" \
-    a^(-1) · a & = a^(-1) · (a · a^(-1)) · (a^(-1))^(-1)         && "Associativity" \
-    a^(-1) · a & = a^(-1) · e · (a^(-1))^(-1)                    && "Inverse axiom" \
-    a^(-1) · a & = a^(-1) · (a^(-1))^(-1)                        && "Identity axiom" \
-    a^(-1) · a & = e                                             && "Inverse axiom" \
+    (a^(-1) · a) & = (a^(-1) · a)                                  && "Reflexivity" \
+    (a^(-1) · a) & = (a^(-1) · a) · e                              && "Identity axiom" \
+      a^(-1) · a & = a^(-1) · a · (a^(-1) · (a^(-1))^(-1)) #h(1em) && "Inverse axiom" \
+      a^(-1) · a & = a^(-1) · (a · a^(-1)) · (a^(-1))^(-1)         && "Associativity" \
+      a^(-1) · a & = a^(-1) · e · (a^(-1))^(-1)                    && "Inverse axiom" \
+      a^(-1) · a & = a^(-1) · (a^(-1))^(-1)                        && "Identity axiom" \
+      a^(-1) · a & = e                                             && "Inverse axiom" \
 $
 
 Second, let's show that $e · a = a$ for all $a$. We already know that $a · e = a$ from the axioms, but can we prove it the other way around? Lets begin with the following equation which is once again true by reflexivity and do algebra to it.
 
 $
-  e · a & = e · a                  && "Reflexivity" \
-  e · a & = a · a^(-1) · a #h(2em) && "Inverse axiom" \
-  e · a & = a · e                  && "Backwards-inverse theorem from above" \
-  e · a & = a                      && "Identity axiom" \
+    e · a & = e · a                  && "Reflexivity" \
+    e · a & = a · a^(-1) · a #h(2em) && "Inverse axiom" \
+    e · a & = a · e                  && "Backwards-inverse theorem from above" \
+    e · a & = a                      && "Identity axiom" \
 $
 
 Third, let's prove that inverses must be unique. For contradiction, lets assume that $b$ and $c$ are _different_ inverses of $a$, meaning $a · b = e$ and $a · c = e$.
 
 $
-      a · b & = e                 && "Assumption" \
-      a · b & = a · c             && "Assumption" \
-  b · a · b & = b · a · c #h(2em) && "Pre-apply" b "on both sides" \
-      e · b & = e · c             && "Backwards-inverse theorem" \
-          b & = c                 && "Backwards-identity theorem" \
+        a · b & = e                 && "Assumption" \
+        a · b & = a · c             && "Assumption" \
+    b · a · b & = b · a · c #h(2em) && "Pre-apply" b "on both sides" \
+        e · b & = e · c             && "Backwards-inverse theorem" \
+            b & = c                 && "Backwards-identity theorem" \
 $
 
 Since we were able to derive that $b = c$, this contradicts our assumption, proving that there only exists a unique inverse for each element. This also implies that $(a^(-1))^(-1) = a$ because we know that $a^(-1) · a = e$ and $a^(-1) · (a^(-1))^(-1) = e$ and since inverses are unique, those must be the same.
@@ -1440,9 +1493,9 @@ We also have to assume that the group is _finite_, because for infinite groups i
 Let $s$ be the number of elements in the group, its _order_, and consider the list of elements $[a^i "for" i "in" [0..s+1)]$. Note that the first element is the identity because we're taking $a$ to the zeroth power. The length of this list is one greater than the size of the group, therefore, by the pigeonhole principle, there must be at least one duplicate item in the list.
 
 #figure(
-  scale(20%, reflow: true, image("TooManyPigeons.jpg")),
-  caption: [10 pigeons in 9 holes. The top-left hole has two pigeons. Image source: @pigeons-in-holes],
-  numbering: none,
+    scale(20%, reflow: true, image("TooManyPigeons.jpg")),
+    caption: [10 pigeons in 9 holes. The top-left hole has two pigeons. Image source: @pigeons-in-holes],
+    numbering: none,
 )
 
 Let $x$ and $y$ be the indices of the first and second occurrences of the _first_ duplicate item in the list. There may be a many duplicated items, but we want the first one. From here, there are two possibilities. If $x$ is zero, then it looped around to the identity element in $y$ iterations and the theorem is true in this case.
@@ -1456,9 +1509,9 @@ Now that we understand the Rubik's Cube in the language of mathematics, we need 
 There are lots of other things that can form groups, but the things that we're interested in are _permutations_, which are re-arrangements of items in a set. For example, we could notate a permutation like
 
 $
-  & 0 #h(1em) && 1 #h(1em) && 2 #h(1em) && 3 #h(1em) && 4 \
-  & ↓         && ↓         && ↓         && ↓         && ↓ \
-  & 2         && 1         && 4         && 3         && 0 \
+    & 0 #h(1em) && 1 #h(1em) && 2 #h(1em) && 3 #h(1em) && 4 \
+    & ↓         && ↓         && ↓         && ↓         && ↓ \
+    & 2         && 1         && 4         && 3         && 0 \
 $
 
 where the arrows define the rearrangement. Note that we can have permutations of any number of items rather than just five. We can leave out the top row of the mapping because it will always be the numbers in order, so we could notate it $2, 1, 4, 3, 0$. We can see that this permutation can also be thought of as a bijective function between the numbers ${0, 1, 2, 3, 4}$ and themselves.
@@ -1470,19 +1523,19 @@ So now, lets construct a group. The set of all permutations of a particular size
 #align(center)[Permutation composition]
 
 $
-        a & =    && 2,         && 1,         && 4,         && 3,         && 0 \
-        b & =    && #y(4),     && #y(3),     && #y(0),     && #y(2),     && #y(1) \
-          &      && arrow.b    && arrow.b    && arrow.b    && arrow.b    && arrow.b \
-  a dot b & = a( && #y(4)), a( && #y(3)), a( && #y(0)), a( && #y(2)), a( && #y(1)) \
-          & =    && 0,         && 3,         && 2,         && 4,         && 1 \
+          a & =    && 2,         && 1,         && 4,         && 3,         && 0 \
+          b & =    && #y(4),     && #y(3),     && #y(0),     && #y(2),     && #y(1) \
+            &      && arrow.b    && arrow.b    && arrow.b    && arrow.b    && arrow.b \
+    a dot b & = a( && #y(4)), a( && #y(3)), a( && #y(0)), a( && #y(2)), a( && #y(1)) \
+            & =    && 0,         && 3,         && 2,         && 4,         && 1 \
 $
 
 From here, the group axioms are trivial. Our identity $e$ is the do-nothing permutation, $0, 1, 2, 3, 4$. We know that associativity holds because permutation composition is identical to function composition which is known to be associative. We know that there is always an inverse because permutations are _bijective_ mappings and you can simply reverse the arrows to form the inverse:
 
 $
-  &0 #h(1em) && 1 #h(1em) && 2 #h(1em) && 3 #h(1em) && 4 &&&&0 #h(1em) && 1 #h(1em) && 2 #h(1em) && 3 #h(1em) && 4 \
-  a^(-1) = #h(0.5em) &↑ && ↑ && ↑ && ↑ && ↑ #h(1em) && → #h(1em) && ↓ && ↓ && ↓ && ↓ && ↓ \
-  &2 && 1 && 4 && 3 && 0 &&&& 4 && 1 && 0 && 3 && 2 \
+    &0 #h(1em) && 1 #h(1em) && 2 #h(1em) && 3 #h(1em) && 4 &&&&0 #h(1em) && 1 #h(1em) && 2 #h(1em) && 3 #h(1em) && 4 \
+    a^(-1) = #h(0.5em) &↑ && ↑ && ↑ && ↑ && ↑ #h(1em) && → #h(1em) && ↓ && ↓ && ↓ && ↓ && ↓ \
+    &2 && 1 && 4 && 3 && 0 &&&& 4 && 1 && 0 && 3 && 2 \
 $
 
 Therefore, permutation composition satisfies all of the group axioms, so it is a group. Next, there also exists a much cleaner way to notate permutations, called _cycle notation_. The way you would write $a$ in cycle notation is as $(0, 2, 4)(1)(3)$. Each item maps to the next item in the list, wrapping around at a closing parenthesis. The notation is saying that $0$ maps to $2$, $2$ maps to $4$, $4$ maps to $0$ (because of the wraparound), $1$ maps to itself, and $3$ also maps to itself. This is called "cycle notation" because it shows clearly the underlying cycle structure of the permutation. $0$, $2$, and $4$ form a three-cycle and $1$ and $3$ both form one-cycles. It is also conventional to leave out the one-cycles and to just write down $(0, 2, 4)$.
@@ -1496,12 +1549,12 @@ A permutation is something that we can easily represent in a computer, but how c
 A Rubik's Cube forms a permutation of the stickers! We don't actually have to consider the centers because they don't move so we would have a permutation of $(9 - 1) · 6 = 48$ stickers. We can define the turns on a Rubik's Cube in terms of permutations like so @gap:
 
 $
-  U & = ( 1, 3, 8, 6)( 2, 5, 7, 4)( 9,33,25,17)(10,34,26,18)(11,35,27,19) \
-  D & = (41,43,48,46)(42,45,47,44)(14,22,30,38)(15,23,31,39)(16,24,32,40) \
-  R & = (25,27,32,30)(26,29,31,28)( 3,38,43,19)( 5,36,45,21)( 8,33,48,24) \
-  L & = ( 9,11,16,14)(10,13,15,12)( 1,17,41,40)( 4,20,44,37)( 6,22,46,35) \
-  F & = (17,19,24,22)(18,21,23,20)( 6,25,43,16)( 7,28,42,13)( 8,30,41,11) \
-  B & = (33,35,40,38)(34,37,39,36)( 3, 9,46,32)( 2,12,47,29)( 1,14,48,27) \
+    U & = ( 1, 3, 8, 6)( 2, 5, 7, 4)( 9,33,25,17)(10,34,26,18)(11,35,27,19) \
+    D & = (41,43,48,46)(42,45,47,44)(14,22,30,38)(15,23,31,39)(16,24,32,40) \
+    R & = (25,27,32,30)(26,29,31,28)( 3,38,43,19)( 5,36,45,21)( 8,33,48,24) \
+    L & = ( 9,11,16,14)(10,13,15,12)( 1,17,41,40)( 4,20,44,37)( 6,22,46,35) \
+    F & = (17,19,24,22)(18,21,23,20)( 6,25,43,16)( 7,28,42,13)( 8,30,41,11) \
+    B & = (33,35,40,38)(34,37,39,36)( 3, 9,46,32)( 2,12,47,29)( 1,14,48,27) \
 $
 
 The exact numbers aren't actually relevant for understanding, but you can sanity-check that exponentiating all of them to the fourth gives identity, due to all of the cycles having length four. This matches our expectation of how Rubik's Cube moves should work.
@@ -1511,13 +1564,13 @@ Now, if we restrict our set of permutations to only contain the permutations tha
 One final term to define is an _orbit_. An orbit is a collection of stickers (or whatever elements being permuted, in full generality) such that for each pair of stickers, there exists a sequence of moves that moves one sticker to another's place. On a Rubik's Cube, there are two orbits: the corners and the edges. There obviously doesn't exist an algorithm that can move a corner sticker to an edge sticker's place or vice versa, therefore the corners and edges form separate orbits. Intuitively, you can find orbits of any permutation subgroup by coloring the stickers using the most colors possible such that the colors don't change when applying moves.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((-9.9, 3.1), [#set text(1.5em); ()])
-  cube("roronoror roronoror roronoror", offset: (-9.9, 0))
-  line((-7.5, 0), (-5.3, 0), mark: (end: "straight"))
-  content((-2.9, 3.1), [#set text(1.5em); R])
-  cube("roronoror roronoror roronoror", offset: (-2.9, 0))
+    content((-9.9, 3.1), [#set text(1.5em); ()])
+    cube("roronoror roronoror roronoror", offset: (-9.9, 0))
+    line((-7.5, 0), (-5.3, 0), mark: (end: "straight"))
+    content((-2.9, 3.1), [#set text(1.5em); R])
+    cube("roronoror roronoror roronoror", offset: (-2.9, 0))
 }))
 
 Excluding centers, the best we can do is two colors, and those two colors highlight the corner and edge orbits.
@@ -1527,17 +1580,17 @@ Excluding centers, the best we can do is two colors, and those two colors highli
 Now, we need to show some properties of how the Rubik's Cube group works. First, we would ideally like a way to take pieces into account in our representation of the Rubik's Cube group. After all, we showed in the introduction how important they are to the mechanics of the cube. What we could do is instead of having a permutation group over all of the stickers, we could have a permutation group over all of the _pieces_. There are $12$ edges + $8$ corners = $20$ pieces on a Rubik's Cube, so we need a subgroup of the permutations on 20 elements. That's fine and dandy, but actually not sufficient to encode the full cube state. The reason is that pieces can rotate in place:
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((-9.9, 3.1), [#set text(1.5em); ()])
-  cube("wwwwwwwww ggggggggg rrrrrrrrr", offset: (-9.9, 0))
-  content((-3.9, 3.1), [#set text(1.5em); R U])
-  cube("wwwwwwggg rrrggyggy wbbrrrrrr", offset: (-3.9, 0), name: "ufr")
-  content((2.1, 3.1), [#set text(1.5em); R U F])
-  cube("wwwwwwooy ggrggryyr gbbgrrgrr", offset: (2.1, 0), name: "fr")
+    content((-9.9, 3.1), [#set text(1.5em); ()])
+    cube("wwwwwwwww ggggggggg rrrrrrrrr", offset: (-9.9, 0))
+    content((-3.9, 3.1), [#set text(1.5em); R U])
+    cube("wwwwwwggg rrrggyggy wbbrrrrrr", offset: (-3.9, 0), name: "ufr")
+    content((2.1, 3.1), [#set text(1.5em); R U F])
+    cube("wwwwwwooy ggrggryyr gbbgrrgrr", offset: (2.1, 0), name: "fr")
 
-  circle("ufr.center", radius: 1)
-  circle("fr.fr", radius: 1)
+    circle("ufr.center", radius: 1)
+    circle("fr.fr", radius: 1)
 }))
 
 You can see that happening here, where the UFR corner is twisted in place in the first example and the FR edge is flipped in place in the second example. This shows that _just_ encoding the positions of the pieces under-specifies the entire cube state, so we need to take orientation into account.
@@ -1547,26 +1600,26 @@ In general, any edge or corner can exist in any other edge or corner position in
 What we can do is imagine a special recoloring of the cube such that all pieces are indistinguishable but still show orientation. If the pieces aren't distinguishable, then they're _always_ in their solved positions since you can't tell them apart. Then it's easy to define orientation in full generality. Here is a recoloring that does that:
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  cube("bbbbbbbbb nnnbbbnnn nnnnnnnnn", offset: (-2.5, 0))
-  cube("nnnbbbnnn bbbbbbbbb nnnnnnnnn", offset: (2.5, 0), back: true)
+    cube("bbbbbbbbb nnnbbbnnn nnnnnnnnn", offset: (-2.5, 0))
+    cube("nnnbbbnnn bbbbbbbbb nnnnnnnnn", offset: (2.5, 0), back: true)
 }))
 
 To determine the orientation of a piece on a normally colored Rubik's Cube, you can pretend that the Rubik's Cube is actually following this coloring and imagine what the cube state would look like:
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  cube("owoywoowb bgybgwybg oggorgwrw", offset: (-2.3, 0))
-  cube("wbyrbybwr rryyyyrog bbgoogrrw", offset: (2.3, 0), back: true)
+    cube("owoywoowb bgybgwybg oggorgwrw", offset: (-2.3, 0))
+    cube("wbyrbybwr rryyyyrog bbgoogrrw", offset: (2.3, 0), back: true)
 
-  line((0, -2), (0, -4.2), mark: (end: "straight"))
+    line((0, -2), (0, -4.2), mark: (end: "straight"))
 
-  translate((0, -6))
+    translate((0, -6))
 
-  cube("nbnbbnnbn nnbbbbbbn nbnnnbbnb", offset: (-2.3, 0))
-  cube("bnbnbbnbn nnbbbbnnn nnnnnnnnb", offset: (2.3, 0), back: true)
+    cube("nbnbbnnbn nnbbbbbbn nbnnnbbnb", offset: (-2.3, 0))
+    cube("bnbnbbnbn nnbbbbnnn nnnnnnnnb", offset: (2.3, 0), back: true)
 }))
 
 Even though the UFR edge isn't solved, we can see that the piece in the UFR position is twisted, using this recoloring. The corner in the UFR position is the DBL corner, and according to our recoloring, the yellow sticker on it is the one that's recolored blue, and since the "blue" sticker isn't facing up, the corner is twisted. If you would like, you can verify this for all of the pieces.
@@ -1577,53 +1630,53 @@ Based on this recoloring, you can see that the move set $⟨U, D, R 2, F 2, L 2,
 
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((0, 3.1), [#set text(1.5em); R])
-  cube("bbnbbbbbn nnbbbbnnb nnnnnnnnn", offset: (-2.5, 0))
-  cube("bnnbbbbnn nbbbbbnbb nnnnnnnnn", offset: (2.5, 0), back: true)
+    content((0, 3.1), [#set text(1.5em); R])
+    cube("bbnbbbbbn nnbbbbnnb nnnnnnnnn", offset: (-2.5, 0))
+    cube("bnnbbbbnn nbbbbbnbb nnnnnnnnn", offset: (2.5, 0), back: true)
 
-  translate(x: 13, y: 0)
+    translate(x: 13, y: 0)
 
-  content((0, 3.1), [#set text(1.5em); F])
-  cube("bbbbbbnnn nbnnbnnbn bnnbnnbnn", offset: (-2.5, 0))
-  cube("nnnbbbnnn bbbbbbnnn nnnnnnbbb", offset: (2.5, 0), back: true)
+    content((0, 3.1), [#set text(1.5em); F])
+    cube("bbbbbbnnn nbnnbnnbn bnnbnnbnn", offset: (-2.5, 0))
+    cube("nnnbbbnnn bbbbbbnnn nnnnnnbbb", offset: (2.5, 0), back: true)
 }))
 
 Note that corners actually have _two_ ways of being misoriented. If the blue sticker on the corner is twisted clockwise with respect to the blue center on the top or bottom, we say that its orientation is one, and if it's counter-clockwise, we say that its orientation is two. Otherwise, it is zero.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  cube("bbbbbbbbn nnnbbbnnn bnnnnnnnn", offset: (-2.5, 0), name: "cl")
-  cube("bbbbbbbbn nnbbbbnnn nnnnnnnnn", offset: (2.5, 0), name: "ccl")
+    cube("bbbbbbbbn nnnbbbnnn bnnnnnnnn", offset: (-2.5, 0), name: "cl")
+    cube("bbbbbbbbn nnbbbbnnn nnnnnnnnn", offset: (2.5, 0), name: "ccl")
 
-  content((-2.5, 3.1), [#set text(2em); $1$])
-  content((2.5, 3.1), [#set text(2em); $2$])
-  circle("cl.center", radius: 1)
-  circle("ccl.center", radius: 1)
+    content((-2.5, 3.1), [#set text(2em); $1$])
+    content((2.5, 3.1), [#set text(2em); $2$])
+    circle("cl.center", radius: 1)
+    circle("ccl.center", radius: 1)
 }))
 
 We know that $F$ and $B$ flip four edges, but what do $R$, $F$, $L$, and $B$ do to corners? Well whatever it is, they all do the same thing because all four of those moves are symmetric to each other. Therefore, we can track what happens to the corners for just one of them.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((0, 3.1), [#set text(1.5em); R])
-  cube("bbnbbbbbn nnbbbbnnb nnnnnnnnn", offset: (-2.5, 0), name: "f")
-  cube("bnnbbbbnn nbbbbbnbb nnnnnnnnn", offset: (2.5, 0), back: true)
+    content((0, 3.1), [#set text(1.5em); R])
+    cube("bbnbbbbbn nnbbbbnnb nnnnnnnnn", offset: (-2.5, 0), name: "f")
+    cube("bnnbbbbnn nbbbbbnbb nnnnnnnnn", offset: (2.5, 0), back: true)
 
-  line("f.R0", "f.R2", mark: (end: "straight"), name: "A")
-  content((rel: "A.mid", to: (-0.1, 0.1)), anchor: "south-east", stroke: white, [#set text(1.5em); +1])
+    line("f.R0", "f.R2", mark: (end: "straight"), name: "A")
+    content((rel: "A.mid", to: (-0.1, 0.1)), anchor: "south-east", stroke: white, [#set text(1.5em); +1])
 
-  line("f.R8", "f.R6", mark: (end: "straight"), name: "A")
-  content((rel: "A.mid", to: (0.1, -0.1)), anchor: "north-west", stroke: white, [#set text(1.5em); +1])
+    line("f.R8", "f.R6", mark: (end: "straight"), name: "A")
+    content((rel: "A.mid", to: (0.1, -0.1)), anchor: "north-west", stroke: white, [#set text(1.5em); +1])
 
-  line("f.R2", "f.R8", mark: (end: "straight"), name: "A")
-  content((rel: "A.mid", to: (0.1, -0.1)), anchor: "south-west", stroke: white, [#set text(1.5em); +2])
+    line("f.R2", "f.R8", mark: (end: "straight"), name: "A")
+    content((rel: "A.mid", to: (0.1, -0.1)), anchor: "south-west", stroke: white, [#set text(1.5em); +2])
 
-  line("f.R6", "f.R0", mark: (end: "straight"), name: "A")
-  content((rel: "A.mid", to: (-0.3, -0.1)), anchor: "east", stroke: white, [#set text(1.5em); +2])
+    line("f.R6", "f.R0", mark: (end: "straight"), name: "A")
+    content((rel: "A.mid", to: (-0.3, -0.1)), anchor: "east", stroke: white, [#set text(1.5em); +2])
 }))
 
 This should make logical sense. If you apply $R$ twice, the corners don't get twisted, which you can see in the figure. If you perform $R$ twice, each corner will get a $+1$ twist and a $+2$ twist, which sums to three, except that three wraps around to zero.
@@ -1631,11 +1684,11 @@ This should make logical sense. If you apply $R$ twice, the corners don't get tw
 From here, we can prove that for _any_ cube position, if you sum the orientations of all of the corners, you get zero. Any quarter turn about $R$, $F$, $L$, and $B$ adds a total of $1 + 2 + 1 + 2 = 6$ twists to the corners, which wraps around to zero. Therefore, moves cannot change the total orientation sum so it always remains zero. This shows why a single corner twist is unsolvable on the Rubik's Cube:
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((-2, 2), [#set text(1.5em); $emptyset$])
-  cube("wwwwwwwwg ggrgggggg wrrrrrrrr", offset: (-2.5, 0))
-  cube("bbbbbbbbb yyyyyyyyy ooooooooo", offset: (2.5, 0), back: true)
+    content((0, 3.1), [#set text(1.5em); $emptyset$])
+    cube("wwwwwwwwg ggrgggggg wrrrrrrrr", offset: (-2.5, 0))
+    cube("bbbbbbbbb yyyyyyyyy ooooooooo", offset: (2.5, 0), back: true)
 }))
 
 The orientation sum for the corners in this position is one (one for the twisted corners plus zero for the rest), however it's impossible to apply just one twist using moves, and the corner orientation sum will always be one regardless of the moves that you do.
@@ -1643,17 +1696,17 @@ The orientation sum for the corners in this position is one (one for the twisted
 Similarly, we can show that the orientation sum of _edges_ is also always zero. If we call the non-flipped state "zero" and the flipped state "one", then $F$ and $B$ turns both flip four edges, adding $+4$ to the edge orientation sum of the cube, which wraps around to zero. Therefore, a single edge flip is unsolvable too:
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((-2, 2), [#set text(1.5em); $emptyset$])
-  cube("wwwwwwwgw gwggggggg rrrrrrrrr", offset: (-2.5, 0))
-  cube("bbbbbbbbb yyyyyyyyy ooooooooo", offset: (2.5, 0), back: true)
+    content((0, 3.1), [#set text(1.5em); $emptyset$])
+    cube("wwwwwwwgw gwggggggg rrrrrrrrr", offset: (-2.5, 0))
+    cube("bbbbbbbbb yyyyyyyyy ooooooooo", offset: (2.5, 0), back: true)
 }))
 
 Is there anything else that's unsolvable? Actually yes! For this to make sense, we have to think of permutations as a composition of various swaps. For example, a four-cycle can be composed out of three swaps:
 
 $
-  (1, 2) · (1, 3) · (1, 4) = (1, 2, 3) · (1, 4) = (1, 2, 3, 4)
+    (1, 2) · (1, 3) · (1, 4) = (1, 2, 3) · (1, 4) = (1, 2, 3, 4)
 $
 
 In general, any permutation can be expressed as a composition of swaps. So what does this have to do with Rubik's Cubes? Well a funny thing with swaps is that permutations can _only_ either be expressed as a combination of an even or an odd number of swaps. This is called the _parity_ of a permutation. You can see that a four-cycle has odd parity because creating it requires an odd number of swaps. Any quarter turn of a Rubik's Cube can be expressed as a four cycle of corners and a four cycle of edges, which is $3 + 3 = 6$ swaps. Overall, the permutation is even.
@@ -1662,11 +1715,11 @@ Therefore, a two-swap of Rubik's Cube pieces is unsolvable because creating it r
 
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((-2, 2), [#set text(1.5em); $emptyset$])
-  cube("wwwwwwwww grggggggg rgrrrrrrr", offset: (-2.5, 0))
-  cube("bbbbbbbbb yyyyyyyyy ooooooooo", offset: (2.5, 0), back: true)
+    content((0, 3.1), [#set text(1.5em); $emptyset$])
+    cube("wwwwwwwww grggggggg rgrrrrrrr", offset: (-2.5, 0))
+    cube("bbbbbbbbb yyyyyyyyy ooooooooo", offset: (2.5, 0), back: true)
 }))
 
 Is there any other arrangement of pieces that is unsolvable? Actually no! You can show this by counting the number of ways that you can take apart and randomly put together a Rubik's Cube, then dividing that by three because two thirds of those positions will be unsolvable due to the corner orientation sum being non-zero. Then divide by two for edge orientation sum, and then divide by two again for parity. You will see that the number you get is $4.3·10^19$ which is exactly the size of the Rubik's Cube group.
@@ -1676,34 +1729,34 @@ Is there any other arrangement of pieces that is unsolvable? Actually no! You ca
 Now that we understand orientation, we can notate cube states in terms of permutation and orientation of pieces rather than just permutation of stickers. This will make the way in which the Qter Architecture Solver works easier to think about. Lets see how we can represent the $R U$ algorithm.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((0, 3), [#set text(1.5em); $R U$])
-  cube("wwwwwwggg rrrggyggy wbbrrrrrr", offset: (-2.5, 0))
-  cube("ooowbbwbb byybyybyy oogoogooy", offset: (2.5, 0), back: true)
+    content((0, 3), [#set text(1.5em); $R U$])
+    cube("wwwwwwggg rrrggyggy wbbrrrrrr", offset: (-2.5, 0))
+    cube("ooowbbwbb byybyybyy oogoogooy", offset: (2.5, 0), back: true)
 }))
 
 Next, lets trace where the pieces go. Instead of using numbers to represent the pieces in the cycle notation, we can simply use their names.
 
 $
-  ("UFR") ("FDR", "UFL", "UBL", "UBR", "DBR") ("FR", "UF", "UL", "UB", "UR", "BR", "DR")
+    ("UFR") ("FDR", "UFL", "UBL", "UBR", "DBR") ("FR", "UF", "UL", "UB", "UR", "BR", "DR")
 $
 
 Note that I'm writing down the one-cycle of the UFR corner because we will see that it twists in place. If you would like, you can manually verify the tracing of the pieces. Next, we need to examine changes of orientation.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((0, 3), [#set text(1.5em); $R U$])
-  cube("bbbbbbnbn nnnbbbnnb bnnnnnnnn", offset: (-2.5, 0))
-  cube("nnnbbbbnn nbbbbbnbb nnnnnnnnb", offset: (2.5, 0), back: true)
+    content((0, 3), [#set text(1.5em); $R U$])
+    cube("bbbbbbnbn nnnbbbnnb bnnnnnnnn", offset: (-2.5, 0))
+    cube("nnnbbbbnn nbbbbbnbb nnnnnnnnb", offset: (2.5, 0), back: true)
 }))
 
 I'm going to notate orientation by writing the amount of orientation that a piece acquires above it.
 
 $
-  &"+1" &&"+2" &&"+0" &&"+0" &&"+2" &&"+1" &&"+0" &&"+0" &&"+0" &&"+0" &&"+0" &&"+0" &&"+0"\
-  (&"UFR") (&&"FDR", &&"UFL", &&"UBL", &&"UBR", &&"DBR") (&&"FR", &&"UF", &&"UL", &&"UB", &&"UR", &&"BR", &&"DR")
+    &"+1" &&"+2" &&"+0" &&"+0" &&"+2" &&"+1" &&"+0" &&"+0" &&"+0" &&"+0" &&"+0" &&"+0" &&"+0"\
+    (&"UFR") (&&"FDR", &&"UFL", &&"UBL", &&"UBR", &&"DBR") (&&"FR", &&"UF", &&"UL", &&"UB", &&"UR", &&"BR", &&"DR")
 $
 
 The process of translating a cube state into cycles of pieces including orientation is known as _blind tracing_ because when blind solvers memorize a puzzle, they memorize this representation. Using this representation, we can actually calculate the order of the algorithm. In the intro, we claimed that the $R U$ algorithm repeats after performing it $105$ times, but now we can prove it.
@@ -1711,33 +1764,33 @@ The process of translating a cube state into cycles of pieces including orientat
 First, we have to consider after how many iterations each cycle returns to solved. To find this, we have to consider both the length of the cycle and the overall orientation accrued by each piece over the length of the cycle. Lets consider the first cycle first. It has length one, meaning the piece stays in its solved location, however the piece returns with some orientation added, so it takes three iterations overall for that piece to return to solved.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((0, 3), [#set text(1.5em); $(R U)^3$])
-  cube("yggywwbbw rrgggwggo rgyrrobbo", offset: (-2.5, 0), name: "f")
-  cube("rrbwbbwbb gyywyywyy oorooroow", offset: (2.5, 0), back: true)
+    content((0, 3), [#set text(1.5em); $(R U)^3$])
+    cube("yggywwbbw rrgggwggo rgyrrobbo", offset: (-2.5, 0), name: "f")
+    cube("rrbwbbwbb gyywyywyy oorooroow", offset: (2.5, 0), back: true)
 
-  circle("f.center", radius: 1)
+    circle("f.center", radius: 1)
 }))
 
 Next, let's consider the cycle of edges. They have a cycle of seven and don't accrue orientation at all, so it simply takes 7 iterations for the edges to return to solved.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((0, 3), [#set text(1.5em); $(R U)^7$])
-  cube("rwgwwwrwg bgrgggggr wrwrrrwrw", offset: (-2.5, 0))
-  cube("obgbbbobb byyyyybyy ooyoooooy", offset: (2.5, 0), back: true)
+    content((0, 3), [#set text(1.5em); $(R U)^7$])
+    cube("rwgwwwrwg bgrgggggr wrwrrrwrw", offset: (-2.5, 0))
+    cube("obgbbbobb byyyyybyy ooyoooooy", offset: (2.5, 0), back: true)
 }))
 
 Finally, let's consider the cycle of corners. It has length 5, so all pieces return to their solved locations after 5 iterations, but you can see that they accrue some amount of orientation.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((0, 3), [#set text(1.5em); $(R U)^5$])
-  cube("obbwwygwr obwggwggr grworrygb", offset: (-2.5, 0))
-  cube("rrwgbbybb ryywyygyy oobooroow", offset: (2.5, 0), back: true)
+    content((0, 3), [#set text(1.5em); $(R U)^5$])
+    cube("obbwwygwr obwggwggr grworrygb", offset: (-2.5, 0))
+    cube("rrwgbbybb ryywyygyy oobooroow", offset: (2.5, 0), back: true)
 }))
 
 How can we calculate how much? Since each piece will move through each location in the cycle, it will move through each addition of orientation, meaning that all pieces will accrue the _same_ orientation, and that orientation will be the sum of all orientation changes, looping around after three. The cycle has three orientation changes, $+2$, $+2$, and $+1$, and summing them gives $+5$ which loops around to $+2$. You can see in the above example that all corners in the cycle have $+2$ orientation.
@@ -1745,17 +1798,17 @@ How can we calculate how much? Since each piece will move through each location 
 It will take three traversals through the cycle for the orientation of the pieces to return to zero, so the cycle resolves itself after 15 iterations.
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content((0, 3), [#set text(1.5em); $(R U)^15$])
-  cube("wwwwwwwgw grgggyggg rbrrrrrrr", offset: (-2.5, 0))
-  cube("bobwbbbbb yyybyyyyy ooooogooo", offset: (2.5, 0), back: true)
+    content((0, 3), [#set text(1.5em); $(R U)^15$])
+    cube("wwwwwwwgw grgggyggg rbrrrrrrr", offset: (-2.5, 0))
+    cube("bobwbbbbb yyybyyyyy ooooogooo", offset: (2.5, 0), back: true)
 }))
 
 Now, the _entire_ cycle resolves itself once all individual cycles resolve themselves. To calculate when, we can simply take the LCM:
 
 $
-  lcm(3, 7, 15) = 105
+    lcm(3, 7, 15) = 105
 $
 
 This also clarifies what pieces we have to select as parameters for "solved-goto". We need a representative piece from every cycle that isn't redundant. We don't need to care about the 3 cycle because it is always solved whenever the 15 cycle is. We can pick any representatives from the 7 and 15 cycles, for example FDR and FR. Using those, the QAT program
@@ -1783,26 +1836,26 @@ A: 3x3
 Lets examine a real Qter architecture, the 90/90 one:
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  content(((-9.9 - 4.9) / 2, 3.1), [#set text(1.2em); A = R' F' L U' L U L F U' R])
-  cube("obwywwwgw bwggggggg rrbrrbrrr", offset: (-9.9, 0))
-  cube("orgobwbbo yybyywyyy yowboooor", offset: (-4.9, 0), back: true)
-  content(((2.5 + 7.1) / 2, 3.1), [#set text(1.2em); B = U F R' D' R2 F R' U' D])
-  cube("wwwwwywwg ggrwgyggb wgrbrryyy", offset: (2.1, 0))
-  cube("bbbbbbooy ggoryyrrr boooooyro", offset: (7.1, 0), back: true)
+    content(((-9.9 - 4.9) / 2, 3.1), [#set text(1.2em); A = R' F' L U' L U L F U' R])
+    cube("obwywwwgw bwggggggg rrbrrbrrr", offset: (-9.9, 0))
+    cube("orgobwbbo yybyywyyy yowboooor", offset: (-4.9, 0), back: true)
+    content(((2.5 + 7.1) / 2, 3.1), [#set text(1.2em); B = U F R' D' R2 F R' U' D])
+    cube("wwwwwywwg ggrwgyggb wgrbrryyy", offset: (2.1, 0))
+    cube("bbbbbbooy ggoryyrrr boooooyro", offset: (7.1, 0), back: true)
 }))
 
 Now let's blind-trace the cube positions:
 
 $
-        & "+2"    && "+1"   && "+1"   && "+0"   && "+0"    && "+0"  && "+1"  && "+0"  && "+0"  && "+0" \
-  A = ( & "DBL")( && "UF")( && "UFL", && "UBL", && "UBR")( && "UL", && "LB", && "RB", && "UB", && "LD") \
+          & "+2"    && "+1"   && "+1"   && "+0"   && "+0"    && "+0"  && "+1"  && "+0"  && "+0"  && "+0" \
+    A = ( & "DBL")( && "UF")( && "UFL", && "UBL", && "UBR")( && "UL", && "LB", && "RB", && "UB", && "LD") \
 $
 
 $
-        & "+1"    && "+1"    && "+1"   && "+1"   && "+2"    && "+1"   && "+0"  && "+0"  && "+0"  && "+1"  && "+0" \
-  B = ( & "DBL")( && "UFR")( && "DFR", && "DFL", && "DBR")( && "RD")( && "UR", && "FL", && "DB", && "FR", && "FD")
+          & "+1"    && "+1"    && "+1"   && "+1"   && "+2"    && "+1"   && "+0"  && "+0"  && "+0"  && "+1"  && "+0" \
+    B = ( & "DBL")( && "UFR")( && "DFR", && "DFL", && "DBR")( && "RD")( && "UR", && "FL", && "DB", && "FR", && "FD")
 $
 
 From here, we can calculate the orders of each register. $A$ has cycles of length $3, 2, 9, 10$ with LCM $90$, and $B$ has cycles $3, 3, 9, 2, 10$ with LCM $90$. However, we can see that both cycles twist the DBL corner! This is not good for the cycles being independently decodable. However, what we can do is ignore that one piece when calculating cycle lengths and performing "solved-goto" instructions. Without that shared piece, we get that $A$ has cycles $2, 9, 10$ still with LCM $90$ and $B$ has cycles $3, 9, 2, 10$ still with LCM $90$.
@@ -1894,56 +1947,56 @@ Unfortunately, to find an _optimal_ solution, the only known approach is to brut
 A more formal way to think about the Cycle Combination Solver is to think of the state space as a tree of Rubik's Cube positions joined by the 18 moves. The number of moves that have been applied to any given position is simply that position's corresponding level in the tree. We will refer to these positions as _nodes_.
 
 #let cubenode(faces) = {
-  cetz.canvas({
-    cube(faces, scale-amt: 0.5)
-  })
+    cetz.canvas({
+        cube(faces, scale-amt: 0.5)
+    })
 }
 
 #align(center, cetz.canvas({
-  import cetz.draw: *
+    import cetz.draw: *
 
-  stroke(2pt + black)
-  let data = (
-    cubenode("rrrrrrrrr wwwwwwwww ggggggggg"),
-    ([#text(size: 33pt)[\...]],),
-    ([#cubenode("rrrrrrrrr gggwwwwww yyygggggg")],),
-    ([#cubenode("rrrrrrrrr yyywwwwww bbbgggggg")],),
-    (
-      cubenode("rrrrrrrrr bbbwwwwww wwwgggggg"),
-      [
-        #text(size: 33pt)[\...]
-        #h(10pt)
-        $cubenode("rrbrrwrrw bbowwowwo ggwggwggw")$
-        #h(10pt)
-        $cubenode("rrorrorro bbywwywwg ggggggwww")$
-        #h(10pt)
-        $cubenode("rrrrrrwgg bwwbwwbww owwoggogg")$
-        #h(10pt)
-        #text(size: 33pt)[\...]
-      ],
-    ),
-    ([#cubenode("rrwrrwrrw wwowwowwo ggggggggg")],),
-    ([#text(size: 33pt)[\...]],),
-  )
-  cetz.tree.tree(
-    data,
-    spread: 1.25,
-    grow: 1.5,
-    direction: "down",
-    draw-node: (node, ..) => {
-      content((), [#node.content])
-    },
-    draw-edge: (from, to, ..) => {
-      let (a, b) = (from + ".center", to + ".center")
-      line((a, 1.3, b), (b, 1.5, a))
-    },
-    name: "tree",
-  )
+    stroke(2pt + black)
+    let data = (
+        cubenode("rrrrrrrrr wwwwwwwww ggggggggg"),
+        ([#text(size: 33pt)[\...]],),
+        ([#cubenode("rrrrrrrrr gggwwwwww yyygggggg")],),
+        ([#cubenode("rrrrrrrrr yyywwwwww bbbgggggg")],),
+        (
+            cubenode("rrrrrrrrr bbbwwwwww wwwgggggg"),
+            [
+                #text(size: 33pt)[\...]
+                #h(10pt)
+                $cubenode("rrbrrwrrw bbowwowwo ggwggwggw")$
+                #h(10pt)
+                $cubenode("rrorrorro bbywwywwg ggggggwww")$
+                #h(10pt)
+                $cubenode("rrrrrrwgg bwwbwwbww owwoggogg")$
+                #h(10pt)
+                #text(size: 33pt)[\...]
+            ],
+        ),
+        ([#cubenode("rrwrrwrrw wwowwowwo ggggggggg")],),
+        ([#text(size: 33pt)[\...]],),
+    )
+    cetz.tree.tree(
+        data,
+        spread: 1.25,
+        grow: 1.5,
+        direction: "down",
+        draw-node: (node, ..) => {
+            content((), [#node.content])
+        },
+        draw-edge: (from, to, ..) => {
+            let (a, b) = (from + ".center", to + ".center")
+            line((a, 1.3, b), (b, 1.5, a))
+        },
+        name: "tree",
+    )
 
-  line((to: "tree.g0-3", rel: (-0.9, -1)), (to: "tree.0-3-0", rel: (-4.5, 1.2)))
-  line((to: "tree.g0-3", rel: (-0.6, -1.15)), (to: "tree.0-3-0", rel: (-2, 1.2)))
-  line((to: "tree.g0-3", rel: (0.6, -1.15)), (to: "tree.0-3-0", rel: (2, 1.2)))
-  line((to: "tree.g0-3", rel: (0.9, -1)), (to: "tree.0-3-0", rel: (4.5, 1.2)))
+    line((to: "tree.g0-3", rel: (-0.9, -1)), (to: "tree.0-3-0", rel: (-4.5, 1.2)))
+    line((to: "tree.g0-3", rel: (-0.6, -1.15)), (to: "tree.0-3-0", rel: (-2, 1.2)))
+    line((to: "tree.g0-3", rel: (0.6, -1.15)), (to: "tree.0-3-0", rel: (2, 1.2)))
+    line((to: "tree.g0-3", rel: (0.9, -1)), (to: "tree.0-3-0", rel: (4.5, 1.2)))
 }))
 
 Our goal is now to find a node with the specified cycle structure at the _topmost_ level of the tree, a solution of the optimal move length. Those familiar with data structures and algorithms will think of the most obvious approach to this form of tree searching: breadth-first search (BFS). BFS is an algorithm that explores all nodes in a level before moving on to the next one. Indeed, BFS guarantees optimality, and works in theory, but not in practice: extra memory is needed to keep track of child nodes that are yet to be explored. At every level, the number of nodes scales by a factor $18$, and so does the extra memory needed. At a depth level of just $8$, BFS would require storing $18^9$ or roughly 200 billion Rubik's Cube states in memory, which is not practical. We need to do better.
@@ -1959,14 +2012,14 @@ IDDFS solves the memory issue, but is lacking in speed because tree searching is
 For this, we introduce the idea of a _pruning table_. For any given Rubik's Cube state, a pruning table tells you a lower bound on the number of moves needed to reach a Cycle Combination Solver solution. Suppose we are running IDDFS until depth $12$, and we've done 5 moves so far. Say we are at this node.
 
 #figure(
-  cetz.canvas(length: 15pt, {
-    import cetz.draw: *
+    cetz.canvas(length: 15pt, {
+        import cetz.draw: *
 
-    cube("ywrgwygwg ybwygwrrw orborbory", offset: (-2.5, 0))
-    cube("wgbybbgoo rbbwyybgg yrrgoowoo", offset: (2.5, 0), back: true)
-  }),
-  caption: figure.caption(position: top, text(1.2em)[$R'$ $\U2$ $L'$ $D'$ $R'$]),
-  supplement: none,
+        cube("ywrgwygwg ybwygwrrw orborbory", offset: (-2.5, 0))
+        cube("wgbybbgoo rbbwyybgg yrrgoowoo", offset: (2.5, 0), back: true)
+    }),
+    caption: figure.caption(position: top, text(1.2em)[$R'$ $\U2$ $L'$ $D'$ $R'$]),
+    supplement: none,
 )
 
 If we _query_ the pruning table and it says that this position needs at least $8$ moves to reach a Cycle Combination Solver solution, we know that this branch is a dead end. $5$ moves done so far plus $8$ left is $13$, which is more than the $12$ at which we plan to terminate. Hence, we can avoid having to search this position any longer.
@@ -1988,27 +2041,27 @@ The larger the admissible heuristic, the better the pruning, and the lesser the 
 Symmetry reduction is the most famous way to compress pruning table entries. We thank Kociemba @kociemba-symmetry for his excellent explanations of symmetry reduction on his website. Take a good look at these two cube positions below:
 
 #grid(
-  columns: (1fr, 1fr),
-  figure(
-    cetz.canvas(length: 15pt, {
-      import cetz.draw: *
+    columns: (1fr, 1fr),
+    figure(
+        cetz.canvas(length: 15pt, {
+            import cetz.draw: *
 
-      cube("wwowwgwwg ggyggwggg rrwbrrwrr", offset: (-2.5, 8))
-      cube("brrbbbbbb yyyyyyryy ooboooooo", offset: (2.5, 8), back: true)
-    }),
-    caption: figure.caption(position: top, text(1.5em)[Cube $1$\ $R$ $U$ $R'$ $U'$]),
-    supplement: none,
-  ),
-  figure(
-    cetz.canvas(length: 15pt, {
-      import cetz.draw: *
+            cube("wwowwgwwg ggyggwggg rrwbrrwrr", offset: (-2.5, 8))
+            cube("brrbbbbbb yyyyyyryy ooboooooo", offset: (2.5, 8), back: true)
+        }),
+        caption: figure.caption(position: top, text(1.5em)[Cube $1$\ $R$ $U$ $R'$ $U'$]),
+        supplement: none,
+    ),
+    figure(
+        cetz.canvas(length: 15pt, {
+            import cetz.draw: *
 
-      cube("wwwwwwoob ggwrggwgg rggrrrrrr", offset: (-2.5, 8))
-      cube("rbbbbbbbb yyyyyyyyg ooooooowy", offset: (2.5, 8), back: true)
-    }),
-    caption: figure.caption(position: top, text(1.5em)[Cube $2$\ $F$ $U$ $F'$ $U'$]),
-    supplement: none,
-  ),
+            cube("wwwwwwoob ggwrggwgg rggrrrrrr", offset: (-2.5, 8))
+            cube("rbbbbbbbb yyyyyyyyg ooooooowy", offset: (2.5, 8), back: true)
+        }),
+        caption: figure.caption(position: top, text(1.5em)[Cube $2$\ $F$ $U$ $F'$ $U'$]),
+        supplement: none,
+    ),
 )
 
 They are different but they are _basically_ identical. If you replace red with green, green with orange, orange with blue, blue with red, and rotate the cube $90 degree$, you will have transformed Cube $1$ into Cube $2$. Because these two cube positions have the exact same structure of pieces, they need the same number of moves to reach a Cycle Combination Solver solution.
@@ -2018,24 +2071,24 @@ We call such positions _symmetrically equivalent_. If we really wanted to be ser
 Defining symmetrically equivalent cubes by figuring out an arbitrary way to recolor the cube isn't very efficient. The more mathematically natural way to define symmetrically equivalent cubes is with permutations. Two cube positions $A$ and $B$ are symmetrically equivalent if there exists a symmetry $S$ of the cube such that $S A S^(-1) = B$, where the $S$ operations are spatial manipulations the whole cube. We can prove that Cube 1 and Cube 2 are symmetrically equivalent using this model:
 
 #figure(cetz.canvas(length: 15pt, {
-  import cetz.draw: *
+    import cetz.draw: *
 
-  set-style(content: (
-    padding: (0, 0, 7pt, 0),
-  ))
+    set-style(content: (
+        padding: (0, 0, 7pt, 0),
+    ))
 
-  cube("wwwwwwwww ggggggggg rrrrrrrrr", offset: (0, 7.5), name: "one")
-  content("one.north", text(1.2em)[#align(center + bottom)[Solved\ (reference frame)]], anchor: "south")
+    cube("wwwwwwwww ggggggggg rrrrrrrrr", offset: (0, 7.5), name: "one")
+    content("one.north", text(1.2em)[#align(center + bottom)[Solved\ (reference frame)]], anchor: "south")
 
-  cube("wwwwwwwww ooooooooo ggggggggg", offset: (-9, 0), name: "two")
-  content("two.north", text(1.2em)[#align(center + bottom)[$S$\ Rotate $-90degree$]], anchor: "south")
-  cube("wwbwwowwo ooyoowooo ggwrggwgg", offset: (-3, 0), name: "three")
-  content("three.north", text(1.2em)[#align(center + bottom)[$A$\ Apply Cube 1]], anchor: "south")
-  cube("wwwwwwoob ggwrggwgg rggrrrrrr", offset: (3, 0), name: "four")
-  content("four.north", text(1.2em)[#align(center + bottom)[$S^(-1)$\ Rotate $90degree$]], anchor: "south")
-  content("four.east", text(2em)[$=$], anchor: "west", padding: (0, 0, 0, 5pt))
-  cube("wwwwwwoob ggwrggwgg rggrrrrrr", offset: (9, 0), name: "five")
-  content("five.north", text(1.2em)[#align(center + bottom)[$B$\ Cube 2]], anchor: "south")
+    cube("wwwwwwwww ooooooooo ggggggggg", offset: (-9, 0), name: "two")
+    content("two.north", text(1.2em)[#align(center + bottom)[$S$\ Rotate $-90degree$]], anchor: "south")
+    cube("wwbwwowwo ooyoowooo ggwrggwgg", offset: (-3, 0), name: "three")
+    content("three.north", text(1.2em)[#align(center + bottom)[$A$\ Apply Cube 1]], anchor: "south")
+    cube("wwwwwwoob ggwrggwgg rggrrrrrr", offset: (3, 0), name: "four")
+    content("four.north", text(1.2em)[#align(center + bottom)[$S^(-1)$\ Rotate $90degree$]], anchor: "south")
+    content("four.east", text(2em)[$=$], anchor: "west", padding: (0, 0, 0, 5pt))
+    cube("wwwwwwoob ggwrggwgg rggrrrrrr", offset: (9, 0), name: "five")
+    content("five.north", text(1.2em)[#align(center + bottom)[$B$\ Cube 2]], anchor: "south")
 }))
 
 In group theory, $S A S^(-1)$ is called a _conjugation_ of $A$ by $S$—we first perform the symmetry, apply our desired permutation, and then perform the inverse of the symmetry to restore the original reference frame. The symmetries of arbitrary polyhedra themselves form a group, called a _symmetry group_, so we can guarantee an $S^(-1)$ element exists.
@@ -2043,138 +2096,138 @@ In group theory, $S A S^(-1)$ is called a _conjugation_ of $A$ by $S$—we first
 How many distinct symmetries—all possible values of $S$—does the cube have? The symmetry group of the cube $M$ consists of 24 rotational symmetries and 24 _mirror_ reflectional symmetries, for a total of 48 distinct symmetries. We illustrate one (of very many) ways to uniquely construct all of these symmetries.
 
 #figure(
-  cetz.canvas(length: 130pt, {
-    import cetz.draw: *
+    cetz.canvas(length: 130pt, {
+        import cetz.draw: *
 
-    ortho(
-      x: 11deg,
-      y: 28deg,
-      {
-        let fillc(p) = gray.transparentize(p)
-        on-xy(z: 0, rect((0, 0), (1, 1), stroke: 1.25pt, fill: fillc(90%)))
-        on-xy(z: 1, rect((0, 0), (1, 1), stroke: 1.25pt, fill: fillc(90%)))
-        on-xz(y: 0, rect((0, 0), (1, 1), stroke: 1.25pt, fill: fillc(60%)))
-        on-xz(y: 1, rect((0, 0), (1, 1), stroke: 1.25pt, fill: fillc(60%)))
-        on-yz(x: 0, rect((0, 0), (1, 1), stroke: 1.25pt, fill: fillc(70%)))
-        on-yz(x: 1, rect((0, 0), (1, 1), stroke: 1.25pt, fill: fillc(80%)))
+        ortho(
+            x: 11deg,
+            y: 28deg,
+            {
+                let fillc(p) = gray.transparentize(p)
+                on-xy(z: 0, rect((0, 0), (1, 1), stroke: 1.25pt, fill: fillc(90%)))
+                on-xy(z: 1, rect((0, 0), (1, 1), stroke: 1.25pt, fill: fillc(90%)))
+                on-xz(y: 0, rect((0, 0), (1, 1), stroke: 1.25pt, fill: fillc(60%)))
+                on-xz(y: 1, rect((0, 0), (1, 1), stroke: 1.25pt, fill: fillc(60%)))
+                on-yz(x: 0, rect((0, 0), (1, 1), stroke: 1.25pt, fill: fillc(70%)))
+                on-yz(x: 1, rect((0, 0), (1, 1), stroke: 1.25pt, fill: fillc(80%)))
 
-        set-style(
-          mark: (
-            fill: black,
-            width: 0.1,
-            length: 0.1,
-          ),
-          paint: black,
+                set-style(
+                    mark: (
+                        fill: black,
+                        width: 0.1,
+                        length: 0.1,
+                    ),
+                    paint: black,
+                )
+
+                let x_len = 0.05
+                let x_thickness = 1.5pt
+
+                line(
+                    (-0.13, -0.13, 1.13),
+                    (1.3, 1.3, -0.3),
+                    stroke: (dash: "dashed"),
+                    mark: (end: ">"),
+                    name: "first-line",
+                )
+                let c = x_len * calc.sqrt(2.0) / 2
+                line((-c, c, 1 + c), (c, -c, 1 - c), stroke: x_thickness)
+                line((-c, c, 1 - c), (c, -c, 1 + c), stroke: x_thickness)
+                line((1 + c, 1 - c, c), (1 - c, 1 + c, -c), stroke: x_thickness)
+                line((1 + c, 1 - c, -c), (1 - c, 1 + c, c), stroke: x_thickness)
+                content((1.06, 1.31, -0.1), text(size: 13pt)[$3$x])
+                arc((1.28, 1.14, -0.1), start: 0deg, stop: 330deg, radius: (1.5 / 13, 1.2 / 13), mark: (
+                    end: ">",
+                    scale: 0.4,
+                ))
+                content("first-line.end", move(dx: 5pt, dy: -15pt)[#text(size: 13pt)[$S_(U\R\B3)$]])
+
+                line(
+                    (0.5, -0.3, 0.5),
+                    (0.5, 1.61, 0.5),
+                    stroke: (dash: "dashed"),
+                    mark: (end: ">"),
+                    name: "second-line",
+                )
+                let a = 0.5 + x_len
+                let b = 0.5 - x_len
+                line((a, 0, a), (b, 0, b), stroke: x_thickness)
+                line((a, 0, b), (b, 0, a), stroke: x_thickness)
+                line((a, 1, a), (b, 1, b), stroke: x_thickness)
+                line((a, 1, b), (b, 1, a), stroke: x_thickness)
+                content((0.74, 1.46, 0.55), text(size: 13pt)[$4$x])
+                arc((0.61, 1.35, 0.5), start: 37deg, stop: 364deg, radius: (1.7 / 13, 1 / 13), mark: (
+                    end: ">",
+                    scale: 0.4,
+                ))
+                content("second-line.end", text(size: 13pt)[$S_(\U4)$], padding: (0, 0, 25pt, 0))
+
+                set-style(stroke: (paint: red), mark: (fill: red))
+                line(
+                    (1.15, -0.15, 0.5),
+                    (-0.4, 1.4, 0.5),
+                    stroke: (dash: "dashed"),
+                    mark: (end: ">"),
+                    name: "third-line",
+                )
+                line((1 - c, -c, 0.5 + c), (1 + c, c, 0.5 - c), stroke: (thickness: x_thickness))
+                line((1 - c, -c, 0.5 - c), (1 + c, c, 0.5 + c), stroke: (thickness: x_thickness))
+                line((c, 1 + c, 0.5 + c), (-c, 1 - c, 0.5 - c), stroke: (thickness: x_thickness))
+                line((c, 1 + c, 0.5 - c), (-c, 1 - c, 0.5 + c), stroke: (thickness: x_thickness))
+                content((0, 1.38, 0.49), text(size: 13pt, fill: red)[$2$x])
+                line(
+                    (-0.2, 1.2, 0.2),
+                    (-0.2, 1.2, 0.8),
+                    stroke: (thickness: 1pt),
+                    mark: (start: ">", end: ">", scale: 0.5),
+                )
+                content("third-line.end", text(size: 13pt)[$S_(F\B2)$], padding: (0, 45pt, 12pt, 0))
+
+                set-style(stroke: (paint: black), mark: (fill: black))
+                line((-0.5, 0.5, 0.5), (1.8, 0.5, 0.5), stroke: (dash: "dashed"), mark: (end: ">"), name: "fourth-line")
+                line((0, a, a), (0, b, b), stroke: x_thickness)
+                line((0, b, a), (0, a, b), stroke: x_thickness)
+                line((1, a, a), (1, b, b), stroke: x_thickness)
+                line((1, a, b), (1, b, a), stroke: x_thickness)
+                arc((1.46, 0.61, 0.5), start: 100deg, stop: 430deg, radius: (1.2 / 13, 1.4 / 13), mark: (
+                    end: ">",
+                    scale: 0.4,
+                ))
+                content((1.52, 0.73, 0.5), text(size: 13pt)[$2$x])
+                content("fourth-line.end", text(size: 13pt)[#move(dx: 3pt, dy: -22pt)[$S_(\R2)$]])
+            },
         )
-
-        let x_len = 0.05
-        let x_thickness = 1.5pt
-
-        line(
-          (-0.13, -0.13, 1.13),
-          (1.3, 1.3, -0.3),
-          stroke: (dash: "dashed"),
-          mark: (end: ">"),
-          name: "first-line",
-        )
-        let c = x_len * calc.sqrt(2.0) / 2
-        line((-c, c, 1 + c), (c, -c, 1 - c), stroke: x_thickness)
-        line((-c, c, 1 - c), (c, -c, 1 + c), stroke: x_thickness)
-        line((1 + c, 1 - c, c), (1 - c, 1 + c, -c), stroke: x_thickness)
-        line((1 + c, 1 - c, -c), (1 - c, 1 + c, c), stroke: x_thickness)
-        content((1.06, 1.31, -0.1), text(size: 13pt)[$3$x])
-        arc((1.28, 1.14, -0.1), start: 0deg, stop: 330deg, radius: (1.5 / 13, 1.2 / 13), mark: (
-          end: ">",
-          scale: 0.4,
-        ))
-        content("first-line.end", move(dx: 5pt, dy: -15pt)[#text(size: 13pt)[$S_(U\R\B3)$]])
-
-        line(
-          (0.5, -0.3, 0.5),
-          (0.5, 1.61, 0.5),
-          stroke: (dash: "dashed"),
-          mark: (end: ">"),
-          name: "second-line",
-        )
-        let a = 0.5 + x_len
-        let b = 0.5 - x_len
-        line((a, 0, a), (b, 0, b), stroke: x_thickness)
-        line((a, 0, b), (b, 0, a), stroke: x_thickness)
-        line((a, 1, a), (b, 1, b), stroke: x_thickness)
-        line((a, 1, b), (b, 1, a), stroke: x_thickness)
-        content((0.74, 1.46, 0.55), text(size: 13pt)[$4$x])
-        arc((0.61, 1.35, 0.5), start: 37deg, stop: 364deg, radius: (1.7 / 13, 1 / 13), mark: (
-          end: ">",
-          scale: 0.4,
-        ))
-        content("second-line.end", text(size: 13pt)[$S_(\U4)$], padding: (0, 0, 25pt, 0))
-
-        set-style(stroke: (paint: red), mark: (fill: red))
-        line(
-          (1.15, -0.15, 0.5),
-          (-0.4, 1.4, 0.5),
-          stroke: (dash: "dashed"),
-          mark: (end: ">"),
-          name: "third-line",
-        )
-        line((1 - c, -c, 0.5 + c), (1 + c, c, 0.5 - c), stroke: (thickness: x_thickness))
-        line((1 - c, -c, 0.5 - c), (1 + c, c, 0.5 + c), stroke: (thickness: x_thickness))
-        line((c, 1 + c, 0.5 + c), (-c, 1 - c, 0.5 - c), stroke: (thickness: x_thickness))
-        line((c, 1 + c, 0.5 - c), (-c, 1 - c, 0.5 + c), stroke: (thickness: x_thickness))
-        content((0, 1.38, 0.49), text(size: 13pt, fill: red)[$2$x])
-        line(
-          (-0.2, 1.2, 0.2),
-          (-0.2, 1.2, 0.8),
-          stroke: (thickness: 1pt),
-          mark: (start: ">", end: ">", scale: 0.5),
-        )
-        content("third-line.end", text(size: 13pt)[$S_(F\B2)$], padding: (0, 45pt, 12pt, 0))
-
-        set-style(stroke: (paint: black), mark: (fill: black))
-        line((-0.5, 0.5, 0.5), (1.8, 0.5, 0.5), stroke: (dash: "dashed"), mark: (end: ">"), name: "fourth-line")
-        line((0, a, a), (0, b, b), stroke: x_thickness)
-        line((0, b, a), (0, a, b), stroke: x_thickness)
-        line((1, a, a), (1, b, b), stroke: x_thickness)
-        line((1, a, b), (1, b, a), stroke: x_thickness)
-        arc((1.46, 0.61, 0.5), start: 100deg, stop: 430deg, radius: (1.2 / 13, 1.4 / 13), mark: (
-          end: ">",
-          scale: 0.4,
-        ))
-        content((1.52, 0.73, 0.5), text(size: 13pt)[$2$x])
-        content("fourth-line.end", text(size: 13pt)[#move(dx: 3pt, dy: -22pt)[$S_(\R2)$]])
-      },
-    )
-  }),
-  caption: text(1.2em)[The 48 symmetries of the cube],
-  supplement: none,
+    }),
+    caption: text(1.2em)[The 48 symmetries of the cube],
+    supplement: none,
 )
 
 #v(0.5em)
 
 $
-  M = {(S_(U\R\B3))^a dot (S_(\R2))^b dot (S_(\U4))^c dot (S_(\F\B2))^d | a in {0,1,2}, b in {0, 1}, c in {0, 1, 2, 3}, d in {0, 1}}
+    M = {(S_(U\R\B3))^a dot (S_(\R2))^b dot (S_(\U4))^c dot (S_(\F\B2))^d | a in {0,1,2}, b in {0, 1}, c in {0, 1, 2, 3}, d in {0, 1}}
 $
 
 Because we expect $S A S^(-1)$ to be a Rubik's Cube position, one might expect all symmetries of $M$ to be valid transformations of the Rubik's Cube. But this is not the case with the mirror symmetry, which is the one illustrated above in red. Consider these two Rubik's Cube positions:
 
 #align(center)[#grid(
-  columns: 2,
-  column-gutter: 30pt,
-  figure(
-    cetz.canvas(length: 15pt, {
-      cube("wwwwwwggg rrrggyggy wbbrrrrrr", offset: (0, 7.5))
-    }),
-    caption: figure.caption(position: top, text(1.5em)[$R$ $U$]),
-    supplement: none,
-  ),
+    columns: 2,
+    column-gutter: 30pt,
+    figure(
+        cetz.canvas(length: 15pt, {
+            cube("wwwwwwggg rrrggyggy wbbrrrrrr", offset: (0, 7.5))
+        }),
+        caption: figure.caption(position: top, text(1.5em)[$R$ $U$]),
+        supplement: none,
+    ),
 
-  figure(
-    cetz.canvas(length: 15pt, {
-      cube("wwrwwrwwr oowgggggg gggyrryrr", offset: (0, 7.5))
-    }),
-    caption: figure.caption(position: top, text(1.5em)[$F'$ $U'$]),
-    supplement: none,
-  ),
+    figure(
+        cetz.canvas(length: 15pt, {
+            cube("wwrwwrwwr oowgggggg gggyrryrr", offset: (0, 7.5))
+        }),
+        caption: figure.caption(position: top, text(1.5em)[$F'$ $U'$]),
+        supplement: none,
+    ),
 )]
 
 They are apparently symmetrically equivalent, yet there is no way to rotate either position to transform one to the other. The solution is to think of holding either position in a mirror to get a mirror reflection of that position—a non-rotational symmetry of the cube. In this reflectional domain, we can again apply the $24$ rotational symmetries to our advantage. One would finally be able to see that these two positions are in fact symmetrically equivalent. It turns out that the mirror symmetry negates the corner orientations in a such way that makes this operation physically unrealizable on the Rubik's Cube. Fortunately this doesn't break our logic: applying the inverse symmetry at the last step of the conjugation brings the mirrored Rubik's Cube back to a valid position.
@@ -2229,11 +2282,8 @@ WIP (NOT DONE)
 
 It also supports no compression, "nxopt" compression, and tabled asymmetric numeral systems compression (tANS)
 
-- no compression
-  - Making the pruning table larger by increasing the size of each entry does not slow things down much, because a cache miss is a cache miss whether you access a bit of the cache line or all 32 bytes, and the performance of this pruning table is dominated by the cache (and TLB) misses it incurs.
-
 - tANS
-  - a potentially better pruning table implementation over the traditional 2-bit and "base" value approach.
+    - a potentially better pruning table implementation over the traditional 2-bit and "base" value approach.
 
 There's a relatively new entropy coding algorithm called "tabled asymmetric numeral systems" (tANS), where encoding and decoding a symbol consists only of a table lookup and some additions and bitwise operations, so it's very fast and close to the limit of the source coding theorem.
 
@@ -2252,38 +2302,38 @@ We observe that we never want to rotate the same face twice. For example, if we 
 We use a simple optimization described by Mérõ @pathmax called _pathmax_ to prune nodes with large child pruning values. When a child node has a large pruning value, we can set the current node cost to that value minus one and re-prune to avoid expanding the remaining child nodes. This larger value is still admissible because it is one less than a known lower bound, and the current node is one move away from all of its child nodes. This is only effective when the heuristics are _inconsistent_, or, in this case, when the pruning table entries are the minimum of two or more other values. With exact pruning tables only, this optimization will never run because the entries are exact heuristics.
 
 #figure(
-  diagram(
-    node((0, 0), [2], stroke: 0.5pt, name: <first>),
-    node((rel: (11.75mm, 0mm)), [$+$ #h(0.5mm) $5 gt.not 8$]),
-    node((0.75, 0.75), "5", stroke: 0.5pt, name: <second>),
-    node((-0.75, 0.75), "1", stroke: 0.5pt, name: <third>),
-    node(enclose: ((-0.75, 0), (0.75, 0.75)), name: <wrapper1>),
-    edge(<first>, <second>),
-    edge(<first>, <third>),
-    edge(<wrapper1>, <wrapper2>, align(bottom)[Pathmax], "-|>"),
+    diagram(
+        node((0, 0), [2], stroke: 0.5pt, name: <first>),
+        node((rel: (11.75mm, 0mm)), [$+$ #h(0.5mm) $5 gt.not 8$]),
+        node((0.75, 0.75), "5", stroke: 0.5pt, name: <second>),
+        node((-0.75, 0.75), "1", stroke: 0.5pt, name: <third>),
+        node(enclose: ((-0.75, 0), (0.75, 0.75)), name: <wrapper1>),
+        edge(<first>, <second>),
+        edge(<first>, <third>),
+        edge(<wrapper1>, <wrapper2>, align(bottom)[Pathmax], "-|>"),
 
-    node((4.5, 0), "4", stroke: 0.5pt, name: <fourth>),
-    node((rel: (0mm, 0mm)), move(dx: 51pt)[#box[$+$ #h(0.5mm) $5 gt 8$ (Prune)]]),
-    node((5.25, 0.75), "5", stroke: 0.5pt, name: <fifth>),
-    node((3.75, 0.75), "1", stroke: 0.5pt, name: <sixth>),
-    node(enclose: ((4.5, 0), (3.75, 0.75)), name: <wrapper2>),
-    edge(<fourth>, <fifth>),
-    edge(<fifth>, <fourth>, text(size: 10pt)[$-1$], "-|>", bend: 30deg),
-    edge(<fourth>, <sixth>),
-  ),
-  caption: text(size: 12pt)[IDA\* pathmax at $"depth"=5, "depth limit"=8$],
-  supplement: none,
+        node((4.5, 0), "4", stroke: 0.5pt, name: <fourth>),
+        node((rel: (0mm, 0mm)), move(dx: 51pt)[#box[$+$ #h(0.5mm) $5 gt 8$ (Prune)]]),
+        node((5.25, 0.75), "5", stroke: 0.5pt, name: <fifth>),
+        node((3.75, 0.75), "1", stroke: 0.5pt, name: <sixth>),
+        node(enclose: ((4.5, 0), (3.75, 0.75)), name: <wrapper2>),
+        edge(<fourth>, <fifth>),
+        edge(<fifth>, <fourth>, text(size: 10pt)[$-1$], "-|>", bend: 30deg),
+        edge(<fourth>, <sixth>),
+    ),
+    caption: text(size: 12pt)[IDA\* pathmax at $"depth"=5, "depth limit"=8$],
+    supplement: none,
 )
 
 We use a special form of symmetry reduction during the search we call _sequence symmetry_, first observed by Rokicki @sequence-symmetry and improved by our implementation. Some solution to the Cycle Combination Solver $A B C D$ conjugated by $A^(-1)$ yields $A^(-1) (A B C D) A = B C D A$, which we observe to also be a solution to the Cycle Combination Solver by the properties of conjugation as well as a rotation of the original sequence. Repeatedly applying this conjugation:
 
 #align(center)[#table(
-  columns: 2,
-  stroke: none,
-  [], [$A^(-1) (A B C D) A = B C D A$],
-  [$=>$], [$B^(-1) (B C D A) B = C D A B$],
-  [$=>$], [$C^(-1) (C D A B) C = D A B C$],
-  [$=>$], [$D^(-1) (D A B C) D = A B C D$],
+    columns: 2,
+    stroke: none,
+    [], [$A^(-1) (A B C D) A = B C D A$],
+    [$=>$], [$B^(-1) (B C D A) B = C D A B$],
+    [$=>$], [$C^(-1) (C D A B) C = D A B C$],
+    [$=>$], [$D^(-1) (D A B C) D = A B C D$],
 )]
 
 forms an equivalence class based on all the rotations of sequences that are all guaranteed to be solutions to the Cycle Combination Solver. The key is to search a single representative sequence in this equivalence class to avoid duplicate work. We choose the representative as the lexicographically minimal sequence because this restriction is easy to embed in IDA\* search through a simple modification to the recursive algorithm @sequence-symmetry-impl. Furthermore, we take advantage of the fact that the shortest sequence can never start and end with the moves in the same move class. Otherwise, the end could be rotated to the start and combined together, contradicting the shortest sequence assumption. Although this optimization only applies to the last depth in IDA\*, it turns out to be surprisingly effective because most of the time is spent there.
@@ -2297,42 +2347,42 @@ Our last trick is to enhance IDA\* through the use of parallel multithreaded IDA
 There have been many parallel IDA\* algorithms discussed in literature; how do we know PMIDA\* is the best one? We take advantage of the special fact that the Cycle Combination Solver starts searching from the solved state. In order to understand, we compare the total Rubik's Cube position counts with the Rubik's Cube position counts unique by symmetry.
 
 #grid(
-  columns: (1fr, 1fr),
-  align: center + bottom,
-  grid.cell(breakable: false)[
-    Rubik's Cube Position Counts @sym-counts
-    #table(
-      columns: (auto, auto, auto),
-      table.header([*Depth*], [*Count*], [*Branching\ factor*]),
-      [0], [1], [NA],
-      [1], [18], [18],
-      [2], [243], [13.5],
-      [3], [3240], [13.333],
-      [4], [43239], [13.345],
-      [5], [574908], [13.296],
-      [6], [7618438], [13.252],
-      [7], [100803036], [13.231],
-      [8], [1332343288], [13.217],
-      [9], [17596479795], [13.207],
-    )
-  ],
-  grid.cell(breakable: false)[
-    Rubik's Cube Position Counts Unique by \ Symmetry $+$ Antisymmetry @sym-counts
-    #table(
-      columns: (auto, auto, auto),
-      table.header([*Depth*], [*Count*], [*Branching\ factor*]),
-      [0], [1], [NA],
-      [1], [2], [2],
-      [2], [8], [4],
-      [3], [48], [6],
-      [4], [509], [10.604],
-      [5], [6198], [12.177],
-      [6], [80178], [12.936],
-      [7], [1053077], [13.134],
-      [8], [13890036], [13.190],
-      [9], [183339529], [13.199],
-    )
-  ],
+    columns: (1fr, 1fr),
+    align: center + bottom,
+    grid.cell(breakable: false)[
+        Rubik's Cube Position Counts @sym-counts
+        #table(
+            columns: (auto, auto, auto),
+            table.header([*Depth*], [*Count*], [*Branching\ factor*]),
+            [0], [1], [NA],
+            [1], [18], [18],
+            [2], [243], [13.5],
+            [3], [3240], [13.333],
+            [4], [43239], [13.345],
+            [5], [574908], [13.296],
+            [6], [7618438], [13.252],
+            [7], [100803036], [13.231],
+            [8], [1332343288], [13.217],
+            [9], [17596479795], [13.207],
+        )
+    ],
+    grid.cell(breakable: false)[
+        Rubik's Cube Position Counts Unique by \ Symmetry $+$ Antisymmetry @sym-counts
+        #table(
+            columns: (auto, auto, auto),
+            table.header([*Depth*], [*Count*], [*Branching\ factor*]),
+            [0], [1], [NA],
+            [1], [2], [2],
+            [2], [8], [4],
+            [3], [48], [6],
+            [4], [509], [10.604],
+            [5], [6198], [12.177],
+            [6], [80178], [12.936],
+            [7], [1053077], [13.134],
+            [8], [13890036], [13.190],
+            [9], [183339529], [13.199],
+        )
+    ],
 )
 
 Recall that our theoretical branching factor is $13.348$. In the table of Rubik's Cube position counts, the branching factor roughly matches this number. However, at the shallow depths of Rubik's Cube position counts unique by symmetry $+$ antisymmetry, our branching factor is much less because there are duplicate positions when performing moves from the solved state. Intuitively, this should make sense: the Rubik's Cube is not scrambled enough to start producing unique positions. It is easy to pick out two sequences of length two that are not unique by symmetry; for example $\R2$ $U$ and $\R2$ $F$. The branching factor converges to its theoretical value as the Rubik's Cube becomes more scrambled because symmetric positions become more rare. In fact, it was shown by Qu @random-graph that scrambling the Rubik's Cube can literally be modelled as a Markov chain (it's almost indistinguishable from a random walk of a graph). Hence, it is unlikely for two random move sequences of the same length to produce positions equivalent by symmetry. We know that such collisions _do_ happen because the branching factor doesn't actually reach the $13.348$ value, but we consider them negligible.
@@ -2351,35 +2401,35 @@ Optimally solving the 4x4x4 Rubik's Cube has been theorized to take "roughly as 
 
 - We can write _multiphase_ solvers for these larger puzzles. Multiphase solvers are specialized to the specific puzzle, and they work by incrementally bringing the twisty puzzle to a "closer to solved" state in a reasonable number of moves. However, designing a multiphase solver is profoundly more involved compared to designing an optimal solver. This approach is unsustainable because we cannot write a multiphase solver for every possible input twisty puzzle.
 - We can resort to methods to solve arbitrary permutation groups. The most promising method of which is to utilize something called a strong generating set @sgs in various ways we won't get into. The GAP computer algebra system implements this method in the `PreImagesRepresentative` function. Here is an example run of GAP solving the random scramble $F$ $L'$ $D'$ $\B2$ $U'$ $B'$ $U$ $\B2$ $\R2$ $F'$ $\R2$ $\U2$ $F'$ $\R2$ $F$ $\U2$ $B'$ $\R2$ $F'$ $R$ $\B2$ in just over two seconds using the strong generating set method.
-  ```gap
-  gap> U := ( 1, 3, 8, 6)( 2, 5, 7, 4)( 9,33,25,17)(10,34,26,18)(11,35,27,19);;
-  gap> L := ( 9,11,16,14)(10,13,15,12)( 1,17,41,40)( 4,20,44,37)( 6,22,46,35);;
-  gap> F := (17,19,24,22)(18,21,23,20)( 6,25,43,16)( 7,28,42,13)( 8,30,41,11);;
-  gap> R := (25,27,32,30)(26,29,31,28)( 3,38,43,19)( 5,36,45,21)( 8,33,48,24);;
-  gap> B := (33,35,40,38)(34,37,39,36)( 3, 9,46,32)( 2,12,47,29)( 1,14,48,27);;
-  gap> D := (41,43,48,46)(42,45,47,44)(14,22,30,38)(15,23,31,39)(16,24,32,40);;
-  gap> random_scramble := F*L^-1*D^-1*B^2*U^-1*B^-1*U*B^2*R^2*F^-1*R^2*U^2*F^-1*R^2*F *U^2*B^-1*R^2*F^-1*R*B^2;;
-  gap> cube := Group(U, L, F, R, B, D);;
-  gap> generator_names := ["U", "L", "F", "R", "B", "D"];;
-  gap> hom := EpimorphismFromFreeGroup(cube:names:=generator_names);;
-  gap> ext_rep := ExtRepOfObj(PreImagesRepresentative(hom, random_scramble));;
-  gap> time;
-  2180
-  gap> for i in Reversed([1..Length(ext_rep) / 2]) do
-  >     Print(generator_names[ext_rep[i * 2 - 1]]);
-  >     count := ext_rep[i * 2];
-  >     if count in [-2, 2] then
-  >         Print("2");
-  >     elif count in [-3, 1] then
-  >         Print("'");
-  >     else
-  >         Print(" ");
-  >     fi;
-  >     Print(" ");
-  > od;
-  U  B2 R2 F  B' R' B  R  F  R  F' R' U' D  R  D' F' U  L  F2 U  L' U2 F  D  F' D' L  U  L2 U' B  L  B' U' L' U' L' B' U' B  U' L  U  L' U  L  U  F  U' F' L  U  F  U' F' L' U  F' U' L' U  L  F  L  U2 L' U' L  U' L' U2 F  U  R  U' R' F' U' F  R  U  R' F' L' B' U2 B  U  L
-  ```
-  The algorithms produced by the strong generating sets can quickly become large. In the future, we plan to investigate the work of Egner @solving-permgroup and apply his techniques to keep the algorithm lengths in check.
+    ```gap
+    gap> U := ( 1, 3, 8, 6)( 2, 5, 7, 4)( 9,33,25,17)(10,34,26,18)(11,35,27,19);;
+    gap> L := ( 9,11,16,14)(10,13,15,12)( 1,17,41,40)( 4,20,44,37)( 6,22,46,35);;
+    gap> F := (17,19,24,22)(18,21,23,20)( 6,25,43,16)( 7,28,42,13)( 8,30,41,11);;
+    gap> R := (25,27,32,30)(26,29,31,28)( 3,38,43,19)( 5,36,45,21)( 8,33,48,24);;
+    gap> B := (33,35,40,38)(34,37,39,36)( 3, 9,46,32)( 2,12,47,29)( 1,14,48,27);;
+    gap> D := (41,43,48,46)(42,45,47,44)(14,22,30,38)(15,23,31,39)(16,24,32,40);;
+    gap> random_scramble := F*L^-1*D^-1*B^2*U^-1*B^-1*U*B^2*R^2*F^-1*R^2*U^2*F^-1*R^2*F *U^2*B^-1*R^2*F^-1*R*B^2;;
+    gap> cube := Group(U, L, F, R, B, D);;
+    gap> generator_names := ["U", "L", "F", "R", "B", "D"];;
+    gap> hom := EpimorphismFromFreeGroup(cube:names:=generator_names);;
+    gap> ext_rep := ExtRepOfObj(PreImagesRepresentative(hom, random_scramble));;
+    gap> time;
+    2180
+    gap> for i in Reversed([1..Length(ext_rep) / 2]) do
+    >     Print(generator_names[ext_rep[i * 2 - 1]]);
+    >     count := ext_rep[i * 2];
+    >     if count in [-2, 2] then
+    >         Print("2");
+    >     elif count in [-3, 1] then
+    >         Print("'");
+    >     else
+    >         Print(" ");
+    >     fi;
+    >     Print(" ");
+    > od;
+    U  B2 R2 F  B' R' B  R  F  R  F' R' U' D  R  D' F' U  L  F2 U  L' U2 F  D  F' D' L  U  L2 U' B  L  B' U' L' U' L' B' U' B  U' L  U  L' U  L  U  F  U' F' L  U  F  U' F' L' U  F' U' L' U  L  F  L  U2 L' U' L  U' L' U2 F  U  R  U' R' F' U' F  R  U  R' F' L' B' U2 B  U  L
+    ```
+    The algorithms produced by the strong generating sets can quickly become large. In the future, we plan to investigate the work of Egner @solving-permgroup and apply his techniques to keep the algorithm lengths in check.
 - When all other options have been exhausted, we must resort to designing our cycle structure algorithms by hand. This approach would likely follow the blindfolded twisty puzzle solving method of permuting a three or five pieces at a time. Contrary to popular belief, the blindfolded solving method is simple, and it is generalizable to arbitrary twisty puzzles.
 
 === Movecount Coefficient Calculator
