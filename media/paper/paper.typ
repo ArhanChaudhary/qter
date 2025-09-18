@@ -32,6 +32,7 @@
         scale(scale-amt)
 
         anchor("center", (0, 0))
+        anchor("ufr", (0, 0))
 
         let back-matrix = (
             (-calc.cos(60deg), calc.sin(60deg)),
@@ -114,6 +115,25 @@
 
                     anchor((if back { back-name } else { front-name }) + str(idx), coords.center)
                 }
+            }
+        }
+
+        for n in range(0, by - 1) {
+            let dist = 1.2 + n
+            let extra-angle = if back { 60deg } else { 0deg }
+
+            for (angle, front-name, back-name, corner-name, back-corner-name) in (
+                (30deg, "ur", "bl", "ubr", "ubl"),
+                (30deg + 120deg, "uf", "dl", "ufl", "dfl"),
+                (30deg + 240deg, "fr", "db", "dfr", "dbr"),
+            ) {
+                let coords = (calc.cos(angle + extra-angle), calc.sin(angle + extra-angle))
+                let name = if n == by - 2 {
+                    if back { back-corner-name } else { corner-name }
+                } else {
+                    if back { back-name } else { front-name } + if by > 3 { str(n) } else { "" }
+                }
+                anchor(name, coords)
             }
         }
 
@@ -1500,7 +1520,7 @@ Now, we need to show some properties of how the Rubik's Cube group works. First,
     cube("wwwwwwooy ggrggryyr gbbgrrgrr", offset: (2.1, 0), name: "fr")
 
     circle("ufr.center", radius: 1)
-    circle((rel: (0, -1), to: "fr.center"), radius: 1)
+    circle("fr.fr", radius: 1)
 }))
 
 You can see that happening here, where the UFR corner is twisted in place in the first example and the FR edge is flipped in place in the second example. This shows that _just_ encoding the positions of the pieces under-specifies the entire cube state, so we need to take orientation into account.
