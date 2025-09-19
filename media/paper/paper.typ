@@ -2018,7 +2018,7 @@ For this, we introduce the idea of a _pruning table_. For any given Rubik's Cube
         cube("ywrgwygwg ybwygwrrw orborbory", offset: (-2.5, 0))
         cube("wgbybbgoo rbbwyybgg yrrgoowoo", offset: (2.5, 0), back: true)
     }),
-    caption: figure.caption(position: top, text(1.2em)[$R'$ $\U2$ $L'$ $D'$ $R'$]),
+    caption: figure.caption(position: top, text(1.2em)[R' U2 L' D' R']),
     supplement: none,
 )
 
@@ -2049,7 +2049,7 @@ Symmetry reduction is the most famous way to compress pruning table entries. We 
             cube("wwowwgwwg ggyggwggg rrwbrrwrr", offset: (-2.5, 8))
             cube("brrbbbbbb yyyyyyryy ooboooooo", offset: (2.5, 8), back: true)
         }),
-        caption: figure.caption(position: top, text(1.5em)[Cube $1$\ $R$ $U$ $R'$ $U'$]),
+        caption: figure.caption(position: top, text(1.2em)[A = R U R' U']),
         supplement: none,
     ),
     figure(
@@ -2059,12 +2059,12 @@ Symmetry reduction is the most famous way to compress pruning table entries. We 
             cube("wwwwwwoob ggwrggwgg rggrrrrrr", offset: (-2.5, 8))
             cube("rbbbbbbbb yyyyyyyyg ooooooowy", offset: (2.5, 8), back: true)
         }),
-        caption: figure.caption(position: top, text(1.5em)[Cube $2$\ $F$ $U$ $F'$ $U'$]),
+        caption: figure.caption(position: top, text(1.2em)[B = F U F' U']),
         supplement: none,
     ),
 )
 
-They are different but they are _basically_ identical. If you replace red with green, green with orange, orange with blue, blue with red, and rotate the cube $90 degree$, you will have transformed Cube $1$ into Cube $2$. Because these two cube positions have the exact same structure of pieces, they need the same number of moves to reach a Cycle Combination Solver solution.
+They are different but they are _basically_ identical. If you replace red with green, green with orange, orange with blue, blue with red, and rotate the cube $90 degree$, you will have transformed $A$ into $B$. Because these two cube positions have the exact same structure of pieces, they need the same number of moves to reach a Cycle Combination Solver solution.
 
 We call such positions _symmetrically equivalent_. If we really wanted to be serious about pruning table compression, what we can do is store a single representative of all symmetrically equivalent cubes because they would all share the same admissible heuristic value, and keeping a separate entry for each of these positions is a waste of memory. This would compress the table by a factor of the number of ways to recolor the cube. During IDA\*, this implies we have to transform every position to its representative before querying the table. We take the lexicographically minimal binary state representation as the representative to make this process simple and easy.
 
@@ -2217,7 +2217,7 @@ Because we expect $S A S^(-1)$ to be a Rubik's Cube position, one might expect a
         cetz.canvas(length: 15pt, {
             cube("wwwwwwggg rrrggyggy wbbrrrrrr", offset: (0, 7.5))
         }),
-        caption: figure.caption(position: top, text(1.5em)[$R$ $U$]),
+        caption: figure.caption(position: top, text(1.5em)[R U]),
         supplement: none,
     ),
 
@@ -2225,7 +2225,7 @@ Because we expect $S A S^(-1)$ to be a Rubik's Cube position, one might expect a
         cetz.canvas(length: 15pt, {
             cube("wwrwwrwwr oowgggggg gggyrryrr", offset: (0, 7.5))
         }),
-        caption: figure.caption(position: top, text(1.5em)[$F'$ $U'$]),
+        caption: figure.caption(position: top, text(1.5em)[F' U']),
         supplement: none,
     ),
 )]
@@ -2234,11 +2234,9 @@ They are apparently symmetrically equivalent, yet there is no way to rotate eith
 
 $48$ symmetries is already quite a lot, but we can still do better. If we can show that both an arbitrary Rubik's Cube position and its inverse position require the same number of moves to reach a Cycle Combination Solver solution, we can once again store a single representative of the two positions and further compress the table by another factor of $2$. We call this _antisymmetry_.
 
-// there is no a-priori difference between a move and a position; they are both simply a permutation. One can think of a move as the position obtained after making that move from the identity position; similarly, one can think of a position as the composite move required to obtain that position from the identity.
+Let us prove that our presumption is true. Let $P$ and $S$ be defined as algorithms such that $P$ $S$ is an optimal solution to the Cycle Combination Solver. We can take the inverse of $P$ $S$ to get $S^(-1) P^(-1)$ of the same algorithm length, which is still an optimal solution to the Cycle Combination Solver. Taking the inverse of the "add 1" operation (which is $P$ $S$) is the "sub 1" operation; changing your frame of reference to think of "sub 1" as "add 1" yields another way to construct the exact same register. Next we _conjugate_ $S^(-1) P^(-1)$ with $S$ to get $S (S^(-1) P^(-1)) S^(-1) = P^(-1) S^(-1)$ of the same algorithm length. It is a well known truism in group theory that conjugate elements in a group cannot be distinguished by only using the properties of the group, and this includes the cycle structure we are solving for, so this is also an optimal solution to the Cycle Combination Solver.
 
-Let us show that our presumption is true. Let $P$ and $S$ be defined as algorithms such that $P$ $S$ is an optimal solution to the Cycle Combination Solver. We can take the inverse of $P$ $S$ to get $S^(-1) P^(-1)$ of the same algorithm length, which is still an optimal solution to the Cycle Combination Solver. Taking the inverse of the "add 1" operation (which is $P$ $S$) is the "sub 1" operation; changing your frame of reference to think of "sub 1" as "add 1" yields another way to construct the exact same register. Next we _conjugate_ $S^(-1) P^(-1)$ with $S$ to get $S (S^(-1) P^(-1)) S^(-1) = P^(-1) S^(-1)$ of the same algorithm length. It is a well known truism in group theory that conjugate elements in a group cannot be distinguished by only using the properties of the group, and this includes the cycle structure we are solving for, so this is also an optimal solution to the Cycle Combination Solver.
-
-We have proven that if $P$ $S$ is an optimal solution to the Cycle Combination Solver then so is $P^(-1) S^(-1)$. $S$ and $S^(-1)$ are the same algorithm length; thus, the positions reached by any arbitrary $P$ and by $P^(-1)$ require the same number of moves to reach an optimal Cycle Combination Solver solution.
+We have shown that if $P$ $S$ is an optimal solution to the Cycle Combination Solver then so is $P^(-1) S^(-1)$. $S$ and $S^(-1)$ are the same algorithm length; thus, the positions reached by any arbitrary $P$ and by $P^(-1)$ require the same number of moves to reach an optimal Cycle Combination Solver solution. This completes our proof.
 
 ==== Pruning table types
 
@@ -2342,7 +2340,7 @@ We enhance the speed of puzzle operations through the use of puzzle-specific SIM
 
 ==== Parallel IDA\*
 
-Our last trick is to enhance IDA\* through the use of parallel multithreaded IDA\* (PMIDA\* @pmida-star). PMIDA\* runs in two phases. In the first phase, we use BFS to explore the state space to a shallow depth, maintaining a queue of all of states at the last search depth. In the second phase, we use a thread pool to run IDA\* in parallel for every state in that queue, utilizing of all of the CPU cores on the host machine. It can be thought of as a simple extension to the familiar IDA\* algorithm.
+Our last trick is to enhance IDA\* through the use of parallel multithreaded IDA\* (PMIDA\* @pmida-star). PMIDA\* runs in two phases. In the first phase, we use BFS to explore the state space to a shallow depth, maintaining a queue of all of states at the last search depth. In the second phase, we use a thread pool to run IDA\* in parallel for every state in that queue, utilizing of all of the CPU cores on the host machine. To uphold the optimality guarantee, PMIDA\* synchronizes the threads using a barrier that triggers when they have all completed exploring the current level. It can be thought of as a simple extension to the familiar IDA\* algorithm.
 
 There have been many parallel IDA\* algorithms discussed in literature; how do we know PMIDA\* is the best one? We take advantage of the special fact that the Cycle Combination Solver starts searching from the solved state. In order to understand, we compare the total Rubik's Cube position counts with the Rubik's Cube position counts unique by symmetry.
 
