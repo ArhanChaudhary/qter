@@ -31,12 +31,29 @@
 
     let extra-angle = if back { 60deg } else { 0deg }
 
+    let inverse((col1, col2)) = {
+        let inv-det = 1 / (col1.at(0) * col2.at(1) - col1.at(1) * col2.at(0))
+
+        ((col2.at(1) * inv-det, -col1.at(1) * inv-det), (-col2.at(0) * inv-det, col1.at(0) * inv-det))
+    }
+
+    let make-matrices(points) = (
+        (points.at(0), points.at(1)),
+        (points.at(1), points.at(2)),
+        (points.at(2), points.at(0)),
+    ).map(inverse)
+
     // These form the front three edges of the cube and have slope 1/sqrt(3) away from the viewer. By expressing a coordinate in terms of these vectors, we can calculate the Z depth.
-    let basis = (
-        (calc.cos(30deg + extra-angle), calc.sin(30deg + extra-angle)),
-        (calc.cos(30deg + 120deg + extra-angle), calc.sin(30deg + 120deg + extra-angle)),
-        (calc.cos(30deg + 240deg + extra-angle), calc.sin(30deg + 240deg + extra-angle)),
-    )
+    let normal-matrices = make-matrices((
+        (calc.cos(30deg), calc.sin(30deg)),
+        (calc.cos(30deg + 120deg), calc.sin(30deg + 120deg)),
+        (calc.cos(30deg + 240deg), calc.sin(30deg + 240deg)),
+    ))
+    let back-matrices = make-matrices((
+        (calc.cos(30deg + 60deg), calc.sin(30deg + 60deg)),
+        (calc.cos(30deg + 120deg + 60deg), calc.sin(30deg + 120deg + 60deg)),
+        (calc.cos(30deg + 240deg + 60deg), calc.sin(30deg + 240deg + 60deg)),
+    ))
     let slope = 1 / calc.sqrt(3)
     // We would like the three corners on the edge of the outline that are nearest to the camera not to scale, so we calculate the neutral depth to make that happen
     let neutral-depth = slope + distance
@@ -48,25 +65,21 @@
         matrix.at(0).at(1) * coord.at(0) + matrix.at(1).at(1) * coord.at(1),
     )
 
-    let inv-matrices = (
-        (basis.at(0), basis.at(1)),
-        (basis.at(1), basis.at(2)),
-        (basis.at(2), basis.at(0)),
-    ).map(((col1, col2)) => {
-        let inv-det = 1 / (col1.at(0) * col2.at(1) - col1.at(1) * col2.at(0))
+    let backside-spacing = 0.3
 
-        ((col2.at(1) * inv-det, -col1.at(1) * inv-det), (-col2.at(0) * inv-det, col1.at(0) * inv-det))
-    })
-
-    let perspective-adjust(coord) = {
+    let perspective-adjust(coord, back) = {
         let depth = distance + if back { slope * 3 } else { 0 }
 
         // Express the coordinates in terms of two of the vectors
-        for matrix in inv-matrices {
+        for matrix in if back { back-matrices } else { normal-matrices } {
             let contributions = mul-coord(matrix, coord)
             // We need both coordinates to be positive; otherwise we're in the wrong sector
             if contributions.at(0) >= 0 and contributions.at(1) >= 0 {
-                let amt = (contributions.at(0) + contributions.at(1)) * slope / (by * calc.sqrt(2) * ortho-squish)
+                let amt = (
+                    (contributions.at(0) + contributions.at(1))
+                        * slope
+                        / (by * calc.sqrt(2) * ortho-squish + if back { backside-spacing } else { 0 })
+                )
                 if back {
                     depth -= amt
                 } else {
@@ -83,10 +96,6 @@
 
         (coord.at(0) * shrinkage, coord.at(1) * shrinkage)
     }
-
-    // let pt = perspective-adjust((0, -3 * calc.sqrt(2) * ortho-squish))
-    // circle(pt, radius: 0.1)
-    // content((rel: if back { (0, -1) } else { (0, 0) }, to: pt), [BRUH; #neutral-depth; #pt;])
 
     group(name: name, {
         translate(offset)
@@ -122,29 +131,51 @@
             ),
         )
 
-        let maybe-back(matrix) = if back { mat-mul(back-matrix, matrix) } else { matrix }
-
-        let transforms = (
+        let forward-transforms = (
             (
-                maybe-back((
+                (
+                    (calc.cos(135deg), calc.sin(135deg) * ortho-squish),
+                    (-calc.sin(135deg), calc.cos(135deg) * ortho-squish),
+                ),
+                (0, by),
+                "U",
+                30deg,
+            ),
+            (rot-scale-rot(45deg, 120deg), (0, 0), "F", 270deg),
+            (rot-scale-rot(135deg, 60deg), (by, 0), "R", 150deg),
+        )
+
+        let back-transforms = (
+            (
+                mat-mul(back-matrix, (
                     (calc.cos(135deg), calc.sin(135deg) * ortho-squish),
                     (-calc.sin(135deg), calc.cos(135deg) * ortho-squish),
                 )),
                 (0, by),
-                "U",
                 "B",
+                30deg,
             ),
-            (maybe-back(rot-scale-rot(45deg, 120deg)), (0, 0), "F", "D"),
-            (maybe-back(rot-scale-rot(135deg, 60deg)), (by, 0), "R", "L"),
+            (mat-mul(back-matrix, rot-scale-rot(45deg, 120deg)), (0, 0), "D", 270deg),
+            (mat-mul(back-matrix, rot-scale-rot(135deg, 60deg)), (by, 0), "L", 150deg),
         )
 
-        let transform-coords(matrix, center, coords-before) = {
+        let transforms = if back { back-transforms } else { forward-transforms }
+
+        let maybe-back-spacing(coord, angle, back) = if back {
+            (coord.at(0) + backside-spacing * calc.cos(angle), coord.at(1) + backside-spacing * calc.sin(angle))
+        } else { coord }
+
+        let transform-coords(matrix, center, back-angle, back, coords-before) = {
             let coords = (:)
 
             for (name, coord) in coords-before {
                 let coord = (coord.at(0) - center.at(0), coord.at(1) - center.at(1))
                 let ret = (:)
-                coords.insert(name, perspective-adjust(mul-coord(matrix, coord)))
+                coords.insert(name, maybe-back-spacing(
+                    perspective-adjust(mul-coord(matrix, coord), back),
+                    back-angle,
+                    back,
+                ))
             }
 
             coords
@@ -152,12 +183,12 @@
 
         let radius = 0.2
 
-        for (x, (facelets, (matrix, center, front-name, back-name))) in faces.zip(transforms).enumerate() {
+        for (x, (facelets, (matrix, center, name, back-offset-angle))) in faces.zip(transforms).enumerate() {
             for i in range(0, by) {
                 for j in range(0, by) {
                     let idx = (by - 1) - i + j * by
                     let (fill, stroke) = facelets.at(idx)
-                    let coords = transform-coords(matrix, center, (
+                    let coords = transform-coords(matrix, center, back-offset-angle, back, (
                         c1: (i + 0.03, j + 0.03),
                         c1b: (i + 0.03 + radius, j + 0.03),
                         c1a: (i + 0.03, j + 0.03 + radius),
@@ -184,8 +215,43 @@
                         bezier(coords.c1b, coords.c1a, coords.c1)
                     })
 
-                    anchor((if back { back-name } else { front-name }) + str(idx), coords.center)
+                    anchor(name + str(idx), coords.center)
                 }
+            }
+        }
+
+        if back {
+            for i in range(0, 3) {
+                let coords = transform-coords(forward-transforms.at(i).at(0), transforms.at(i).at(1), 30deg, false, (
+                    c1: (0.03, 0.03),
+                    c1b: (0.03 + radius, 0.03),
+                    c1a: (0.03, 0.03 + radius),
+                    c2: (0.03, by - 0.03),
+                    c2b: (0.03, by - 0.03 - radius),
+                    c2a: (0.03 + radius, by - 0.03),
+                    c3: (by - 0.03, by - 0.03),
+                    c3b: (by - 0.03 - radius, by - 0.03),
+                    c3a: (by - 0.03, by - 0.03 - radius),
+                    c4: (by - 0.03, 0.03),
+                    c4b: (by - 0.03, 0.03 + radius),
+                    c4a: (by - 0.03 - radius, 0.03),
+                    center: (0.5, 0.5),
+                ))
+
+                merge-path(
+                    fill: black.transparentize(93%),
+                    stroke: none,
+                    {
+                        line(coords.c1a, coords.c2b)
+                        bezier(coords.c2b, coords.c2a, coords.c2)
+                        line(coords.c2a, coords.c3b)
+                        bezier(coords.c3b, coords.c3a, coords.c3)
+                        line(coords.c3a, coords.c4b)
+                        bezier(coords.c4b, coords.c4a, coords.c4)
+                        line(coords.c4a, coords.c1b)
+                        bezier(coords.c1b, coords.c1a, coords.c1)
+                    },
+                )
             }
         }
 
@@ -197,7 +263,7 @@
                 (30deg + 120deg, "uf", "dl", "ufl", "dfl"),
                 (30deg + 240deg, "fr", "db", "dfr", "dbr"),
             ) {
-                let coords = perspective-adjust((calc.cos(angle + extra-angle), calc.sin(angle + extra-angle)))
+                let coords = perspective-adjust((calc.cos(angle + extra-angle), calc.sin(angle + extra-angle)), back)
                 let name = if n == by - 2 {
                     if back { back-corner-name } else { corner-name }
                 } else {
@@ -205,61 +271,6 @@
                 }
                 anchor(name, coords)
             }
-        }
-
-        let which-face = if back { 0 } else { 1 }
-
-        let coords = transform-coords(transforms.at(which-face).at(0), transforms.at(which-face).at(1), (
-            c1: (0.03, 0.03),
-            c1b: (0.03 + radius, 0.03),
-            c1a: (0.03, 0.03 + radius),
-            c2: (0.03, by - 0.03),
-            c2b: (0.03, by - 0.03 - radius),
-            c2a: (0.03 + radius, by - 0.03),
-            c3: (by - 0.03, by - 0.03),
-            c3b: (by - 0.03 - radius, by - 0.03),
-            c3a: (by - 0.03, by - 0.03 - radius),
-            c4: (by - 0.03, 0.03),
-            c4b: (by - 0.03, 0.03 + radius),
-            c4a: (by - 0.03 - radius, 0.03),
-            center: (0.5, 0.5),
-        ))
-
-        merge-path(
-            fill: black.transparentize(90%),
-            stroke: none,
-            {
-                line(coords.c1a, coords.c2b)
-                bezier(coords.c2b, coords.c2a, coords.c2)
-                line(coords.c2a, coords.c3b)
-                bezier(coords.c3b, coords.c3a, coords.c3)
-                line(coords.c3a, coords.c4b)
-                bezier(coords.c4b, coords.c4a, coords.c4)
-                line(coords.c4a, coords.c1b)
-                bezier(coords.c1b, coords.c1a, coords.c1)
-            },
-        )
-
-        if back {
-            let coords = transform-coords(transforms.at(2).at(0), transforms.at(2).at(1), (
-                c1: (0.03, 0.03),
-                c2: (by - 0.03, -(by - 0.03)),
-                c3: ((by - 0.03) * 2, -(by - 0.03)),
-                c4: ((by - 0.03) * 2, 0.03),
-                c5: ((by - 0.03), (by - 0.03)),
-            ))
-
-            merge-path(
-                fill: black.transparentize(95%),
-                stroke: none,
-                {
-                    line(coords.c1, coords.c2)
-                    line(coords.c2, coords.c3)
-                    line(coords.c3, coords.c4)
-                    line(coords.c4, coords.c5)
-                    line(coords.c5, coords.c1)
-                },
-            )
         }
     })
 }
