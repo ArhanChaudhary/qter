@@ -5,6 +5,7 @@
 use std::{
     collections::{BTreeSet, HashMap},
     mem,
+    num::NonZeroU16,
     sync::{Arc, LazyLock, OnceLock},
 };
 
@@ -340,12 +341,27 @@ impl PuzzleGeometry {
 
             let mut sets: Vec<KSolveSet> = Vec::new();
 
+            // Stores a tuple of (orientation number of sticker, piece index)
+            // The first sticker in the list for each piece is considered the signature facelet. Plausibly we could have a better method for that but WHO CARES LOLOLOL (TODO)
+            let mut facelet_orientation_numbers = vec![(0, 0); group.facelet_count()];
+
             for (i, orbit) in orbits.iter().enumerate() {
                 let mut amt_in_same_orbit = 1;
                 let first_rep = sticker_orbits.find(orbit[0][0]).root_idx();
                 for sticker in orbit[0].iter().skip(1) {
                     if sticker_orbits.find(*sticker).root_idx() == first_rep {
                         amt_in_same_orbit += 1;
+                    }
+                }
+
+                for (idx, piece) in orbit.iter().enumerate() {
+                    let mut reps_to_count = HashMap::new();
+
+                    for i in piece {
+                        let rep = sticker_orbits.find(*i).root_idx();
+                        let value = reps_to_count.entry(rep).or_insert(0);
+                        facelet_orientation_numbers[*i] = (*value, idx);
+                        *value += 1;
                     }
                 }
 
@@ -361,7 +377,7 @@ impl PuzzleGeometry {
                 });
             }
 
-            // The first sticker in the list for each piece is considered the signature facelet
+            println!("{facelet_orientation_numbers:?}");
 
             let mut moves: Vec<KSolveMove> = Vec::new();
 
@@ -373,6 +389,14 @@ impl PuzzleGeometry {
 
                     for piece in orbit {
                         let first_one_goes_to = perm.mapping()[piece[0]];
+                        let (extra_orientation, piece_goes_to) =
+                            facelet_orientation_numbers[first_one_goes_to];
+
+                        this_orbit_transform.push((
+                            NonZeroU16::try_from(u16::try_from(piece_goes_to + 1).unwrap())
+                                .unwrap(),
+                            u8::try_from(extra_orientation).unwrap(),
+                        ));
                     }
 
                     transformation.push(this_orbit_transform);
@@ -716,6 +740,8 @@ mod tests {
             StabilizerChain::new(&group).cardinality(),
             "43252003274489856000".parse::<Int<U>>().unwrap()
         );
+
+        // panic!("{:#?}", geometry.ksolve());
     }
 
     #[test]
