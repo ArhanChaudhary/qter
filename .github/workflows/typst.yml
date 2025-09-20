@@ -13,3 +13,7 @@ jobs:
       - name: Render Qter paper
         run: typst compile paper.typ paper.pdf
         working-directory: media/paper
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paper
+          path: media/paper/paper.pdf
