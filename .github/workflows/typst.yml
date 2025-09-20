@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - media/paper/**
+  workflow_dispatch:
 jobs:
   render-paper:
     runs-on: ubuntu-latest
