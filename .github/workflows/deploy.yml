@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - media/paper/**
+      - media/www/**
   workflow_dispatch:
 
 permissions:
