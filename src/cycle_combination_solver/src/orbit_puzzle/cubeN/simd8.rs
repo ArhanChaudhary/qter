@@ -7,6 +7,7 @@ use crate::orbit_puzzle::{
     OrbitPuzzleStateImplementor, SpecializedOrbitPuzzleState, exact_hasher_orbit,
 };
 use std::{
+    hash::Hash,
     hint::unreachable_unchecked,
     num::NonZeroU8,
     simd::{
@@ -154,7 +155,7 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
         )
     }
 
-    fn approximate_hash(&self) -> &Self {
+    fn approximate_hash(&self) -> impl Hash {
         self
     }
 }

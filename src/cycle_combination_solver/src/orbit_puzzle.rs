@@ -91,8 +91,8 @@ impl OrbitPuzzleStateImplementor {
             OrbitPuzzleStateImplementor::SliceOrbitPuzzle(s) => {
                 fxhash::hash64(s.approximate_hash())
             }
-            OrbitPuzzleStateImplementor::Cube3Edges(e) => fxhash::hash64(e.approximate_hash()),
-            OrbitPuzzleStateImplementor::CubeNCorners(c) => fxhash::hash64(c.approximate_hash()),
+            OrbitPuzzleStateImplementor::Cube3Edges(e) => fxhash::hash64(&e.approximate_hash()),
+            OrbitPuzzleStateImplementor::CubeNCorners(c) => fxhash::hash64(&c.approximate_hash()),
         }
     }
 

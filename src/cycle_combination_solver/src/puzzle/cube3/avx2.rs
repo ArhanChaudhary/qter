@@ -591,7 +591,7 @@ impl Cube3State for Cube3 {
         }
     }
 
-    fn approximate_hash_orbit(&self, orbit_type: Cube3OrbitType) -> u8x16 {
+    fn approximate_hash_orbit(&self, orbit_type: Cube3OrbitType) -> impl Hash {
         match orbit_type {
             Cube3OrbitType::Corners => self.0.extract::<CORNER_START, 16>(),
             Cube3OrbitType::Edges => self.0.extract::<EDGE_START, 16>(),

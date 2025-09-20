@@ -2,7 +2,7 @@
 //! generation.
 
 use crate::orbit_puzzle::{OrbitPuzzleStateImplementor, SpecializedOrbitPuzzleState};
-use std::{hint::unreachable_unchecked, num::NonZeroU8};
+use std::{hash::Hash, hint::unreachable_unchecked, num::NonZeroU8};
 
 pub mod avx2;
 pub mod simd8and16;
@@ -39,7 +39,7 @@ impl SpecializedOrbitPuzzleState for Cube3Edges {
         todo!()
     }
 
-    fn approximate_hash(&self) -> &Self {
+    fn approximate_hash(&self) -> impl Hash {
         self
     }
 }

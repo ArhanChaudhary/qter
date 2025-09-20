@@ -237,7 +237,7 @@ impl Cube3State for UncompressedCube3 {
         }
     }
 
-    fn approximate_hash_orbit(&self, orbit_type: Cube3OrbitType) -> UncompressedCube3Orbit {
+    fn approximate_hash_orbit(&self, orbit_type: Cube3OrbitType) -> impl Hash {
         // TODO: using an enum works, but is this slow? same with compressedcube3
         match orbit_type {
             Cube3OrbitType::Corners => UncompressedCube3Orbit::Corners((self.cp, self.co)),
@@ -486,7 +486,7 @@ impl Cube3State for Cube3 {
         }
     }
 
-    fn approximate_hash_orbit(&self, orbit_type: Cube3OrbitType) -> Cube3Orbit {
+    fn approximate_hash_orbit(&self, orbit_type: Cube3OrbitType) -> impl Hash {
         match orbit_type {
             Cube3OrbitType::Corners => Cube3Orbit::Corners(self.corners),
             Cube3OrbitType::Edges => Cube3Orbit::Edges(self.edges),

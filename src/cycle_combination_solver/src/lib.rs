@@ -1,6 +1,6 @@
 #![feature(test, slice_index_methods, portable_simd, abi_vectorcall)]
 #![warn(clippy::pedantic)]
-#![allow(clippy::similar_names, clippy::too_many_lines, refining_impl_trait)]
+#![allow(clippy::similar_names, clippy::too_many_lines)]
 
 pub(crate) mod canonical_fsm;
 pub(crate) mod orbit_puzzle;
