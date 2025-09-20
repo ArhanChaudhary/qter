@@ -13,7 +13,6 @@ use super::{
     puzzle::{PuzzleDef, PuzzleState},
 };
 use crate::{
-    SliceView, SliceViewMut,
     orbit_puzzle::OrbitPuzzleState,
     permutator::pandita2,
     puzzle::{OrbitIdentifier, SortedCycleStructure, SortedCycleStructureRef},
@@ -48,8 +47,8 @@ pub trait PruningTables<'id, P: PuzzleState<'id>> {
     where
         Self: Sized;
 
-    /// Get an admissible heuristic for a puzzle state. It is a soundness error
-    /// if this is not the case.
+    /// Get an admissible heuristic for a puzzle state. It is a logic error if
+    /// this is not the case.
     fn admissible_heuristic(&self, puzzle_state: &P) -> u8;
 
     /// The pruning table is expected to hold the sorted cycle structure so the
@@ -106,8 +105,8 @@ trait OrbitPruningTable<'id, P: PuzzleState<'id>>: 'id {
         Self: Sized;
 
     /// Get an admissible heuristic for a puzzle state for a target orbit. It
-    /// is a soundness error if this is not the case. Implementors are expected
-    /// to have a mechanism to identify the table's target orbit.
+    /// is a logic error if this is not the case. Implementors are expected to
+    /// have a mechanism to identify the table's target orbit.
     fn admissible_heuristic(&self, puzzle_state: &P) -> u8;
 }
 
@@ -417,7 +416,7 @@ impl<'id, P: PuzzleState<'id>> PruningTables<'id, P> for OrbitPruningTables<'id,
     }
 
     fn sorted_cycle_structure_ref(&self) -> SortedCycleStructureRef<'id, '_> {
-        self.sorted_cycle_structure.slice_view()
+        self.sorted_cycle_structure.as_ref()
     }
 }
 
@@ -864,7 +863,7 @@ impl<'id, P: PuzzleState<'id>, S: StorageBackend<true>> OrbitPruningTable<'id, P
                             curr_state.induces_sorted_cycle_structure(
                                 sorted_cycle_structure_orbit,
                                 orbit_def,
-                                aux_mem.slice_view_mut(),
+                                aux_mem.as_ref_mut(),
                             )
                         } {
                             table
@@ -990,7 +989,7 @@ impl<'id, P: PuzzleState<'id>> PruningTables<'id, P> for ZeroTable<'id, P> {
     }
 
     fn sorted_cycle_structure_ref(&self) -> SortedCycleStructureRef<'id, '_> {
-        self.sorted_cycle_structure.slice_view()
+        self.sorted_cycle_structure.as_ref()
     }
 }
 

@@ -4,7 +4,7 @@ use super::{
     puzzle::{Move, PuzzleDef, PuzzleState},
     puzzle_state_history::{PuzzleStateHistory, StackedPuzzleStateHistory},
 };
-use crate::{SliceViewMut, puzzle::AuxMem, start, success, working};
+use crate::{puzzle::AuxMem, start, success, working};
 use log::{Level, debug, info, log_enabled};
 use std::{time::Instant, vec::IntoIter};
 use thiserror::Error;
@@ -286,7 +286,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
                 if last_puzzle_state.induces_sorted_cycle_structure(
                     self.pruning_tables.sorted_cycle_structure_ref(),
                     self.puzzle_def.sorted_orbit_defs_ref(),
-                    mutable.aux_mem.slice_view_mut(),
+                    mutable.aux_mem.as_ref_mut(),
                 ) {
                     mutable
                         .solutions
@@ -404,7 +404,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
             if last_puzzle_state.induces_sorted_cycle_structure(
                 self.pruning_tables.sorted_cycle_structure_ref(),
                 self.puzzle_def.sorted_orbit_defs_ref(),
-                mutable.aux_mem.slice_view_mut(),
+                mutable.aux_mem.as_ref_mut(),
             ) {
                 mutable
                     .solutions

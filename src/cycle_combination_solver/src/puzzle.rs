@@ -1,4 +1,4 @@
-use crate::{SliceView, SliceViewMut, orbit_puzzle::OrbitPuzzleStateImplementor};
+use crate::orbit_puzzle::OrbitPuzzleStateImplementor;
 use generativity::{Guard, Id};
 use itertools::Itertools;
 use puzzle_geometry::ksolve::KSolve;
@@ -201,6 +201,13 @@ impl<'id> AuxMem<'id> {
     fn new(inner: Option<Box<[u8]>>, id: Id<'id>) -> Self {
         AuxMem { inner, id }
     }
+
+    pub fn as_ref_mut(&mut self) -> AuxMemRefMut<'id, '_> {
+        AuxMemRefMut {
+            inner: self.inner.as_mut().map(AsMut::as_mut),
+            _id: self.id,
+        }
+    }
 }
 
 impl AuxMemRefMut<'_, '_> {
@@ -211,20 +218,6 @@ impl AuxMemRefMut<'_, '_> {
     /// The caller must ensure that auxilliary memory exists.
     pub unsafe fn aux_mem_unchecked(&mut self) -> &mut [u8] {
         unsafe { self.inner.as_mut().unwrap_unchecked() }
-    }
-}
-
-impl<'id> SliceViewMut for AuxMem<'id> {
-    type SliceMut<'a>
-        = AuxMemRefMut<'id, 'a>
-    where
-        Self: 'a;
-
-    fn slice_view_mut(&mut self) -> Self::SliceMut<'_> {
-        AuxMemRefMut {
-            inner: self.inner.as_mut().map(AsMut::as_mut),
-            _id: self.id,
-        }
     }
 }
 
@@ -362,6 +355,14 @@ impl<'id> SortedCycleStructure<'id> {
             id: sorted_orbit_defs.id,
         })
     }
+
+    #[must_use]
+    pub fn as_ref(&self) -> SortedCycleStructureRef<'id, '_> {
+        SortedCycleStructureRef {
+            inner: &self.inner,
+            _id: self.id,
+        }
+    }
 }
 
 impl<'id> SortedOrbitDefsRef<'id, '_> {
@@ -374,20 +375,6 @@ impl<'id> SortedOrbitDefsRef<'id, '_> {
 
     fn id(&self) -> Id<'id> {
         self.id
-    }
-}
-
-impl<'id> SliceView for SortedCycleStructure<'id> {
-    type Slice<'a>
-        = SortedCycleStructureRef<'id, 'a>
-    where
-        Self: 'a;
-
-    fn slice_view(&self) -> Self::Slice<'_> {
-        SortedCycleStructureRef {
-            inner: &self.inner,
-            _id: self.id,
-        }
     }
 }
 
@@ -643,12 +630,6 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
             id,
         })
     }
-}
-
-impl SliceViewMut for () {
-    type SliceMut<'a> = ();
-
-    fn slice_view_mut(&mut self) {}
 }
 
 /// A utility function for testing. Not optimized.
@@ -993,16 +974,16 @@ mod tests {
         )
         .unwrap();
         assert!(order_1260.induces_sorted_cycle_structure(
-            sorted_cycle_structure.slice_view(),
+            sorted_cycle_structure.as_ref(),
             cube3_def.sorted_orbit_defs_ref(),
-            aux_mem.slice_view_mut(),
+            aux_mem.as_ref_mut(),
         ));
 
         let order_1260_in_cycle = apply_moves(&cube3_def, &solved, "R U2 D' B D'", 209);
         assert!(order_1260_in_cycle.induces_sorted_cycle_structure(
-            sorted_cycle_structure.slice_view(),
+            sorted_cycle_structure.as_ref(),
             cube3_def.sorted_orbit_defs_ref(),
-            aux_mem.slice_view_mut(),
+            aux_mem.as_ref_mut(),
         ));
     }
 
@@ -1037,9 +1018,9 @@ mod tests {
             SortedCycleStructure::new(&[vec![], vec![]], cube3_def.sorted_orbit_defs_ref())
                 .unwrap();
         assert!(solved.induces_sorted_cycle_structure(
-            sorted_cycle_structure.slice_view(),
+            sorted_cycle_structure.as_ref(),
             cube3_def.sorted_orbit_defs_ref(),
-            aux_mem.slice_view_mut(),
+            aux_mem.as_ref_mut(),
         ));
 
         let tests = [
@@ -1166,15 +1147,15 @@ mod tests {
             let random_state = apply_moves(&cube3_def, &solved, moves_str, 1);
 
             assert!(random_state.induces_sorted_cycle_structure(
-                expected_cts.slice_view(),
+                expected_cts.as_ref(),
                 cube3_def.sorted_orbit_defs_ref(),
-                aux_mem.slice_view_mut(),
+                aux_mem.as_ref_mut(),
             ));
 
             assert!(!solved.induces_sorted_cycle_structure(
-                expected_cts.slice_view(),
+                expected_cts.as_ref(),
                 cube3_def.sorted_orbit_defs_ref(),
-                aux_mem.slice_view_mut(),
+                aux_mem.as_ref_mut(),
             ));
 
             for (j, &(other_moves, _)) in tests.iter().enumerate() {
@@ -1183,9 +1164,9 @@ mod tests {
                 }
                 let other_state = apply_moves(&cube3_def, &solved, other_moves, 1);
                 assert!(!other_state.induces_sorted_cycle_structure(
-                    expected_cts.slice_view(),
+                    expected_cts.as_ref(),
                     cube3_def.sorted_orbit_defs_ref(),
-                    aux_mem.slice_view_mut()
+                    aux_mem.as_ref_mut()
                 ));
             }
         }
@@ -1336,9 +1317,9 @@ mod tests {
         let mut aux_mem = P::new_aux_mem(cube3_def.sorted_orbit_defs_ref());
         b.iter(|| {
             test::black_box(&order_1260).induces_sorted_cycle_structure(
-                test::black_box(sorted_cycle_structure.slice_view()),
+                test::black_box(sorted_cycle_structure.as_ref()),
                 cube3_def.sorted_orbit_defs_ref(),
-                aux_mem.slice_view_mut(),
+                aux_mem.as_ref_mut(),
             );
         });
     }
@@ -1428,10 +1409,10 @@ mod tests {
                         sorted_cycle_structure_iter
                             .next()
                             .unwrap_unchecked()
-                            .slice_view()
+                            .as_ref()
                     }),
                     cube3_def.sorted_orbit_defs_ref(),
-                    aux_mem.slice_view_mut(),
+                    aux_mem.as_ref_mut(),
                 );
         });
     }

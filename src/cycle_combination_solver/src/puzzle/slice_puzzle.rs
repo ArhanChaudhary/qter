@@ -1,11 +1,11 @@
 //! The default, generic implementation for representing puzzle states.
 
 use super::{
-    BrandedOrbitDef, OrbitIdentifier, SliceViewMut, SortedOrbitDefsRef, TransformationsMeta,
+    BrandedOrbitDef, OrbitIdentifier, SortedOrbitDefsRef, TransformationsMeta,
     TransformationsMetaError,
 };
 use crate::{
-    FACT_UNTIL_19, SliceView,
+    FACT_UNTIL_19,
     orbit_puzzle::{
         OrbitPuzzleStateImplementor,
         slice_orbit_puzzle::{
@@ -463,9 +463,9 @@ impl<'id> HeapPuzzle<'id> {
         // assert!(self.indu
         assert!(PuzzleState::induces_sorted_cycle_structure(
             self,
-            sorted_cycle_structure.slice_view(),
+            sorted_cycle_structure.as_ref(),
             sorted_orbit_defs,
-            aux_mem.slice_view_mut()
+            aux_mem.as_ref_mut()
         ));
         sorted_cycle_structure
     }
