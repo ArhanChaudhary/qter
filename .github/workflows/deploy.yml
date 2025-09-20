@@ -1,0 +1,37 @@
+name: Deploy Qter
+on:
+  push:
+    paths:
+      - media/paper/**
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  render-paper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: typst-community/setup-typst@v4
+      - name: Render Qter paper
+        run: typst compile paper.typ paper.pdf
+        working-directory: media/paper
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: media/paper/paper.pdf
+
+  deploy:
+    needs: render-paper
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
