@@ -222,25 +222,26 @@
 
         if back {
             for i in range(0, 3) {
+                let dist = 0.06
                 let coords = transform-coords(forward-transforms.at(i).at(0), transforms.at(i).at(1), 30deg, false, (
-                    c1: (0.03, 0.03),
-                    c1b: (0.03 + radius, 0.03),
-                    c1a: (0.03, 0.03 + radius),
-                    c2: (0.03, by - 0.03),
-                    c2b: (0.03, by - 0.03 - radius),
-                    c2a: (0.03 + radius, by - 0.03),
-                    c3: (by - 0.03, by - 0.03),
-                    c3b: (by - 0.03 - radius, by - 0.03),
-                    c3a: (by - 0.03, by - 0.03 - radius),
-                    c4: (by - 0.03, 0.03),
-                    c4b: (by - 0.03, 0.03 + radius),
-                    c4a: (by - 0.03 - radius, 0.03),
+                    c1: (dist, dist),
+                    c1b: (dist + radius, dist),
+                    c1a: (dist, dist + radius),
+                    c2: (dist, by - dist),
+                    c2b: (dist, by - dist - radius),
+                    c2a: (dist + radius, by - dist),
+                    c3: (by - dist, by - dist),
+                    c3b: (by - dist - radius, by - dist),
+                    c3a: (by - dist, by - dist - radius),
+                    c4: (by - dist, dist),
+                    c4b: (by - dist, dist + radius),
+                    c4a: (by - dist - radius, dist),
                     center: (0.5, 0.5),
                 ))
 
                 merge-path(
-                    fill: black.transparentize(93%),
-                    stroke: none,
+                    fill: black.transparentize(92%),
+                    stroke: (paint: black.transparentize(93%), thickness: 0.5pt),
                     {
                         line(coords.c1a, coords.c2b)
                         bezier(coords.c2b, coords.c2a, coords.c2)
@@ -584,9 +585,9 @@ Another fun thing that tweaking the "solved-goto" instruction in this way allows
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
 
-    content((-2.5, 3.1), [#set text(1.5em); $R U$])
+    content((-2.5, 3.1), [#set text(1.5em); R U])
     cube("wwwwwwggg rrrggyggy wbbrrrrrr", offset: (-2.5, 0), name: "1x")
-    content((2.5, 3.1), [#set text(1.5em); $(R U)^3$])
+    content((2.5, 3.1), [#set text(1.5em); $("R U")^3$])
     cube("yggywwbbw rrgggwggo rgyrrobbo", offset: (2.5, 0), name: "3x")
 
     circle("1x.center", radius: 1)
@@ -1633,7 +1634,7 @@ To determine the orientation of a piece on a normally colored Rubik's Cube, you 
     cube("bnbnbbnbn nnbbbbnnn nnnnnnnnb", offset: (2.3, 0), back: true)
 }))
 
-Even though the UFR edge isn't solved, we can see that the piece in the UFR position is twisted, using this recoloring. The corner in the UFR position is the DBL corner, and according to our recoloring, the yellow sticker on it is the one that's recolored blue, and since the "blue" sticker isn't facing up, the corner is twisted. If you would like, you can verify this for all of the pieces.
+Even though the UFR corner isn't solved, we can see that the piece in the UFR position is twisted, using this recoloring. The corner in the UFR position is the DBL corner, and according to our recoloring, the yellow sticker on it is the one that's recolored blue, and since the "blue" sticker isn't facing up, the corner is twisted. If you would like, you can verify this for all of the pieces.
 
 Note that this recoloring is entirely arbitrary and it's possible to consider _any_ recoloring that only exhibits orientation. However, this recoloring is standard due to its symmetry as well as properties we will describe in the next paragraph.
 
@@ -1777,7 +1778,7 @@ First, we have to consider after how many iterations each cycle returns to solve
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
 
-    content((0, 3), [#set text(1.5em); $(R U)^3$])
+    content((0, 3), [#set text(1.5em); $("R U")^3$])
     cube("yggywwbbw rrgggwggo rgyrrobbo", offset: (-2.5, 0), name: "f")
     cube("rrbwbbwbb gyywyywyy oorooroow", offset: (2.5, 0), back: true)
 
@@ -1789,7 +1790,7 @@ Next, let's consider the cycle of edges. They have a cycle of seven and don't ac
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
 
-    content((0, 3), [#set text(1.5em); $(R U)^7$])
+    content((0, 3), [#set text(1.5em); $("R U")^7$])
     cube("rwgwwwrwg bgrgggggr wrwrrrwrw", offset: (-2.5, 0))
     cube("obgbbbobb byyyyybyy ooyoooooy", offset: (2.5, 0), back: true)
 }))
@@ -1799,7 +1800,7 @@ Finally, let's consider the cycle of corners. It has length 5, so all pieces ret
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
 
-    content((0, 3), [#set text(1.5em); $(R U)^5$])
+    content((0, 3), [#set text(1.5em); $("R U")^5$])
     cube("obbwwygwr obwggwggr grworrygb", offset: (-2.5, 0))
     cube("rrwgbbybb ryywyygyy oobooroow", offset: (2.5, 0), back: true)
 }))
@@ -1811,7 +1812,7 @@ It will take three traversals through the cycle for the orientation of the piece
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
 
-    content((0, 3), [#set text(1.5em); $(R U)^15$])
+    content((0, 3), [#set text(1.5em); $("R U")^15$])
     cube("wwwwwwwgw grgggyggg rbrrrrrrr", offset: (-2.5, 0))
     cube("bobwbbbbb yyybyyyyy ooooogooo", offset: (2.5, 0), back: true)
 }))
@@ -2334,7 +2335,7 @@ We use a simple optimization described by Mérõ @pathmax called _pathmax_ to pr
     supplement: none,
 )
 
-We use a special form of symmetry reduction during the search we call _sequence symmetry_, first observed by Rokicki @sequence-symmetry and improved by our implementation. Some solution to the Cycle Combination Solver $A B C D$ conjugated by $A^(-1)$ yields $A^(-1) (A B C D) A = B C D A$, which we observe to also be a solution to the Cycle Combination Solver by the properties of conjugation as well as a rotation of the original sequence. Repeatedly applying this conjugation:
+We use a special form of symmetry reduction during the search we call _sequence symmetry_, first observed by Rokicki @sequence-symmetry and improved by our implementation. Some solution to the Cycle Combination Solver $A B C D$ conjugated by $A^(-1)$ yields $A^(-1) (A B C D) A = B C D A$, which we observe to also be a rotation of the original sequence as well as a solution to the Cycle Combination Solver by the properties of conjugation discussed earlier. Repeatedly applying this conjugation:
 
 #align(center)[#table(
     columns: 2,
@@ -2345,7 +2346,7 @@ We use a special form of symmetry reduction during the search we call _sequence 
     [$=>$], [$D^(-1) (D A B C) D = A B C D$],
 )]
 
-forms an equivalence class based on all the rotations of sequences that are all guaranteed to be solutions to the Cycle Combination Solver. The key is to search a single representative sequence in this equivalence class to avoid duplicate work. We choose the representative as the lexicographically minimal sequence because this restriction is easy to embed in IDA\* search through a simple modification to the recursive algorithm @sequence-symmetry-impl. Furthermore, we take advantage of the fact that the shortest sequence can never start and end with the moves in the same move class. Otherwise, the end could be rotated to the start and combined together, contradicting the shortest sequence assumption. Although this optimization only applies to the last depth in IDA\*, it turns out to be surprisingly effective because most of the time is spent there.
+forms an equivalence class based on all the rotations of sequences that are all solutions to the Cycle Combination Solver. The key is to search a single representative sequence in this equivalence class to avoid duplicate work. We choose the representative as the lexicographically minimal sequence because this restriction is easy to embed in IDA\* search through a simple modification to the recursive algorithm @sequence-symmetry-impl. Furthermore, we take advantage of the fact that the shortest sequence can never start and end with the moves in the same move class. Otherwise, the end could be rotated to the start and combined together, contradicting the shortest sequence assumption. Although this optimization only applies to the last depth in IDA\*, it turns out to be surprisingly effective because most of the time is spent there.
 
 We enhance the speed of puzzle operations through the use of puzzle-specific SIMD. When the Cycle Combination Solver puzzle is the Rubik's Cube, we use a SIMD-optimized compacted representation, enabling for specialized SIMD algorithms to compose two Rubik's Cube states @qter-simd2 and test for a Cycle Combination Solver solution @qter-simd1. They have both been disassembled and highly optimized at the instruction level. We leave the precise details at the prescribed references; they are outside of the scope of this article.
 
