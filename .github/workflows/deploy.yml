@@ -17,13 +17,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: typst-community/setup-typst@v4
       - name: Render Qter paper
-        run: typst compile paper.typ paper.pdf
+        run: |
+          typst compile paper.typ paper.pdf
+          mkdir dist
+          mv paper.pdf dist
         working-directory: media/paper
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: media/paper/paper.pdf
+          path: media/paper/dist
 
   deploy:
     needs: render-paper
