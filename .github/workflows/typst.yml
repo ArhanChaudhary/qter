@@ -1,0 +1,14 @@
+name: Render Typst
+on:
+  push:
+    paths:
+      - media/paper/**
+jobs:
+  render-paper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: typst-community/setup-typst@v4
+      - name: Render Qter paper
+        run: typst compile paper.typ paper.pdf
+        working-directory: media/paper
