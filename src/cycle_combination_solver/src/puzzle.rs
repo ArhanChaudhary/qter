@@ -109,7 +109,7 @@ pub enum KSolveConversionError {
 #[derive(Debug, Clone)]
 pub struct Move<'id, P: PuzzleState<'id>> {
     puzzle_state: P,
-    move_class_index: usize,
+    class_index: usize,
     name: String,
     _id: Id<'id>,
 }
@@ -394,8 +394,8 @@ impl<'id, P: PuzzleState<'id>> Move<'id, P> {
         result_1 == result_2
     }
 
-    pub fn move_class_index(&self) -> usize {
-        self.move_class_index
+    pub fn class_index(&self) -> usize {
+        self.class_index
     }
 
     pub fn puzzle_state(&self) -> &P {
@@ -556,7 +556,7 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
             if i >= ksolve.moves().len() {
                 let base_move = Move {
                     name: ksolve_move.name().to_owned(),
-                    move_class_index: 0,
+                    class_index: 0,
                     puzzle_state,
                     _id: id,
                 };
@@ -571,7 +571,7 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
             let move_class_index = move_classes.len();
             let base_move = Move {
                 name: ksolve_move.name().to_owned(),
-                move_class_index,
+                class_index: move_class_index,
                 puzzle_state,
                 _id: id,
             };
@@ -614,7 +614,7 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
                 }
                 moves.push(Move {
                     puzzle_state: expanded_puzzle_state,
-                    move_class_index,
+                    class_index: move_class_index,
                     name: expanded_name,
                     _id: id,
                 });

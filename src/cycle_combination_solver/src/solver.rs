@@ -233,7 +233,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
             //     return AdmissibleGoalHeuristic::SOLVED;
             // }
 
-            let move_class_index = move_.move_class_index();
+            let move_class_index = move_.class_index();
             // This is only ever true at the root node
             let is_root = entry_index == 0;
             // This branch should have high predictability

@@ -802,7 +802,7 @@ impl<'id, P: PuzzleState<'id>, S: StorageBackend<true>> OrbitPruningTable<'id, P
             .moves
             .iter()
             .filter_map(|move_| {
-                if orbit_move_class_indicies.contains(&move_.move_class_index()) {
+                if orbit_move_class_indicies.contains(&move_.class_index()) {
                     let (perm, ori) = move_.puzzle_state().orbit_bytes(orbit_identifier);
                     Some(
                         orbit_puzzle_solved
