@@ -2080,7 +2080,7 @@ They are different but they are _basically_ identical. If you replace red with g
 
 We call such positions _symmetrically equivalent_. If we really wanted to be serious about pruning table compression, what we can do is store a single representative of all symmetrically equivalent cubes because they would all share the same admissible heuristic value, and keeping a separate entry for each of these positions is a waste of memory. This would compress the table by a factor of the number of ways to recolor the cube. During IDA\*, this implies we have to transform every position to its representative before querying the table. We take the lexicographically minimal binary state representation as the representative to make this process simple and easy.
 
-Defining symmetrically equivalent cubes by figuring out an arbitrary way to recolor the cube isn't very efficient. The more mathematically natural way to define symmetrically equivalent cubes is with permutations. Two cube positions $A$ and $B$ are symmetrically equivalent if there exists a symmetry $S$ of the cube such that $S A S^(-1) = B$, where the $S$ operations are spatial manipulations the whole cube. We can prove that Cube 1 and Cube 2 are symmetrically equivalent using this model:
+Defining symmetrically equivalent cubes by figuring out an arbitrary way to recolor the cube isn't very efficient. The more mathematically natural way to define symmetrically equivalent cubes is with permutations. Two cube positions $A$ and $B$ are symmetrically equivalent if there exists a symmetry $S$ of the cube such that $S A S^(-1) = B$, where the $S$ operations are spatial manipulations the whole cube. We can prove that $A$ and $B$ are symmetrically equivalent using this model:
 
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
@@ -2095,12 +2095,12 @@ Defining symmetrically equivalent cubes by figuring out an arbitrary way to reco
     cube("wwwwwwwww ooooooooo ggggggggg", offset: (-9, 0), name: "two")
     content("two.north", text(1.2em)[#align(center + bottom)[$S$\ Rotate $-90degree$]], anchor: "south")
     cube("wwbwwowwo ooyoowooo ggwrggwgg", offset: (-3, 0), name: "three")
-    content("three.north", text(1.2em)[#align(center + bottom)[$A$\ Apply Cube 1]], anchor: "south")
+    content("three.north", text(1.2em)[#align(center + bottom)[$A$\ Apply $A$]], anchor: "south")
     cube("wwwwwwoob ggwrggwgg rggrrrrrr", offset: (3, 0), name: "four")
     content("four.north", text(1.2em)[#align(center + bottom)[$S^(-1)$\ Rotate $90degree$]], anchor: "south")
     content("four.east", text(2em)[$=$], anchor: "west", padding: (0, 0, 0, 5pt))
     cube("wwwwwwoob ggwrggwgg rggrrrrrr", offset: (9, 0), name: "five")
-    content("five.north", text(1.2em)[#align(center + bottom)[$B$\ Cube 2]], anchor: "south")
+    content("five.north", text(1.2em)[#align(center + bottom)[$B$\ Resultant $B$]], anchor: "south")
 }))
 
 In group theory, $S A S^(-1)$ is called a _conjugation_ of $A$ by $S$—we first perform the symmetry, apply our desired permutation, and then perform the inverse of the symmetry to restore the original reference frame. The symmetries of arbitrary polyhedra themselves form a group, called a _symmetry group_, so we can guarantee an $S^(-1)$ element exists.
@@ -2128,6 +2128,7 @@ How many distinct symmetries—all possible values of $S$—does the cube have? 
                         fill: black,
                         width: 0.1,
                         length: 0.1,
+                        stroke: (dash: none),
                     ),
                     paint: black,
                 )

@@ -112,6 +112,6 @@ Refer to [our paper](https://qter.arhan.sh/paper.pdf) for a comprehensive techni
 
 # Acknowledgements
 
-We extend our sincere thanks to Tomas Rokicki for personally providing us key insight into Rubik's Cube programming techniques throughout the past year. Qter would not have been possible without his guidance. We are immensely grateful for his time.
+We extend our sincere thanks to Tomas Rokicki for personally providing us key insight into Rubik's Cube programming techniques. Qter would not have been possible without his guidance. We are immensely grateful for his time.
 
-We also extend our gratitude to Ben Whitmore for helping us ideate the initial design of `cycle_combination_finder` and `cycle_combination_solver`
+We also extend our gratitude to Ben Whitmore for helping us ideate the initial design of the `cycle_combination_finder` and `cycle_combination_solver`
