@@ -89,7 +89,7 @@ struct SequenceSymmetryExpansion {
 struct CanonicalSequenceExpansion {
     expansion_position: usize,
     expansion_length: usize,
-    expansion: Option<Vec<usize>>,
+    expansion: Vec<usize>,
 }
 
 impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'id, P, T> {
@@ -520,21 +520,21 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
         // - Sequence symmetry
 
         if self.currently_expanding_solution.is_none() {
-            info!("AA");
             self.currently_expanding_solution = self.solutions.next();
         }
         let currently_expanding_solution = self.currently_expanding_solution.as_deref()?;
 
-        let old_expansion_info = match &self.canonical_sequence_expansion {
-            Some(cse) if cse.expansion.is_some() => None,
-            Some(cse) => Some((cse.expansion_position, cse.expansion_length)),
-            None => Some((0, 0)),
-        };
-        if let Some((old_expansion_position, old_expansion_length)) = old_expansion_info {
-            for (expansion_position, &move_index_1) in currently_expanding_solution
-                .iter()
-                .enumerate()
-                .skip(old_expansion_position + old_expansion_length)
+        // let old_expansion_info = match &self.canonical_sequence_expansion {
+        //     // Some(cse) if cse.expansion.is_some() => None,
+        //     Some(cse) => None,
+        //     // Some(cse) => Some((cse.expansion_position, cse.expansion_length)),
+        //     None => Some((0, 0)),
+        // };
+        // if let Some(_) = old_expansion_info {
+        if self.canonical_sequence_expansion.is_none() {
+            for (expansion_position, &move_index_1) in
+                currently_expanding_solution.iter().enumerate()
+            // .skip(old_expansion_position + old_expansion_length)
             {
                 let mut expansion_length = 1;
                 let mut acc = Cow::Borrowed(self.puzzle_def.moves[move_index_1].puzzle_state());
@@ -563,33 +563,29 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
                     self.canonical_sequence_expansion = Some(CanonicalSequenceExpansion {
                         expansion_position,
                         expansion_length,
-                        expansion: Some((0..expansion_length).collect_vec()),
+                        expansion: (0..expansion_length).collect_vec(),
                     });
                     break;
                 }
             }
 
-            if let Some(cse) = &self.canonical_sequence_expansion
-                && cse.expansion.is_none()
-            {
-                self.canonical_sequence_expansion = None;
-                self.currently_expanding_solution = None;
-                return self.next();
-            }
-            // dbg!(&self.canonical_sequence_expansion);
+            // if let Some(cse) = &self.canonical_sequence_expansion
+            //     && cse.expansion.is_none()
+            // {
+            //     self.canonical_sequence_expansion = None;
+            //     self.currently_expanding_solution = None;
+            //     return self.next();
+            // }
         }
 
         let reverse_canonical_sequence = |i: usize| {
             let Some(cse) = &self.canonical_sequence_expansion else {
                 return i;
             };
-            let Some(expansion) = &cse.expansion else {
-                panic!("Invariant broken")
-            };
             let Some(adjusted) = i.checked_sub(cse.expansion_position) else {
                 return i;
             };
-            match expansion.get(adjusted) {
+            match cse.expansion.get(adjusted) {
                 Some(&e) => cse.expansion_position + e,
                 None => i,
             }
@@ -644,44 +640,54 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
         {
             self.sequence_symmetry_expansion = None;
 
-            dbg!(&self.canonical_sequence_expansion);
             if let Some(cse) = &mut self.canonical_sequence_expansion {
-                let Some(expansion) = &mut cse.expansion else {
-                    panic!("Invariant broken")
-                };
-                let next_expansion_exists = pandita1(expansion);
-                // while cse.i < cse.expansion_length {
-                //     if expansion[cse.i] < cse.i {
-                //         if cse.i % 2 == 0 {
-                //             expansion.swap(0, cse.i);
-                //         } else {
-                //             let idx = expansion[cse.i];
-                //             expansion.swap(idx, cse.i);
-                //         }
-                //         expansion[cse.i] += 1;
-                //         cse.i = 0;
-                //         next_expansion_exists = true;
-                //         break;
-                //     }
-                //     expansion[cse.i] = 0;
-                //     cse.i += 1;
-                // }
-                // Use the pandita algorithm to lexicographically generate the next
-                // permutation
-                // while cse.i < cse.expansion_length {
-                //     if expansion[cse.i] < cse.expansion_length - 1 - cse.i {
-                //         expansion.swap(cse.i, expansion[cse.i]);
-                //         expansion[cse.i] += 1;
-                //         cse.i = 0;
-                //         next_expansion_exists = true;
-                //         break;
-                //     }
-                //     expansion[cse.i] = 0;
-                //     cse.i += 1;
-                // }
-
-                if !next_expansion_exists {
-                    cse.expansion = None;
+                if !pandita1(&mut cse.expansion) {
+                    let mut next_cse_exists = false;
+                    //
+                    for (expansion_position, &move_index_1) in currently_expanding_solution
+                        .iter()
+                        .enumerate()
+                        .skip(cse.expansion_position + cse.expansion_length)
+                    {
+                        let mut expansion_length = 1;
+                        let mut acc =
+                            Cow::Borrowed(self.puzzle_def.moves[move_index_1].puzzle_state());
+                        for &move_index_2 in currently_expanding_solution
+                            .iter()
+                            .skip(expansion_position + 1)
+                        {
+                            self.result_1.replace_compose(
+                                &acc,
+                                self.puzzle_def.moves[move_index_2].puzzle_state(),
+                                self.puzzle_def.sorted_orbit_defs_ref(),
+                            );
+                            self.result_2.replace_compose(
+                                self.puzzle_def.moves[move_index_2].puzzle_state(),
+                                &acc,
+                                self.puzzle_def.sorted_orbit_defs_ref(),
+                            );
+                            let commutes = self.result_1 == self.result_2;
+                            if !commutes {
+                                break;
+                            }
+                            acc = Cow::Owned(self.result_1.clone());
+                            expansion_length += 1;
+                        }
+                        if expansion_length != 1 {
+                            self.canonical_sequence_expansion = Some(CanonicalSequenceExpansion {
+                                expansion_position,
+                                expansion_length,
+                                expansion: (0..expansion_length).collect_vec(),
+                            });
+                            next_cse_exists = true;
+                            break;
+                        }
+                    }
+                    //
+                    if !next_cse_exists {
+                        self.canonical_sequence_expansion = None;
+                        self.currently_expanding_solution = None;
+                    }
                 }
             } else {
                 self.currently_expanding_solution = None;
