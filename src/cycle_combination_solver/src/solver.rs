@@ -22,7 +22,7 @@ struct CycleStructureSolverMutable<'id, P: PuzzleState<'id>, H: PuzzleStateHisto
     puzzle_state_history: StackedPuzzleStateHistory<'id, P, H>,
     aux_mem: AuxMem<'id>,
     solutions: Vec<Vec<usize>>,
-    first_move_class_index: usize,
+    first_canonical_fsm_state: CanonicalFSMState,
     nodes_visited: u64,
 }
 
@@ -242,7 +242,11 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
             let is_root = entry_index == 0;
             // This branch should have high predictability
             if is_root {
-                mutable.first_move_class_index = move_class_index;
+                // It is TODO: check(?) faster to do this first and we dont care
+                // about repeat work at the root
+                mutable.first_canonical_fsm_state = self
+                    .canonical_fsm
+                    .next_state(current_fsm_state, move_class_index);
             // We take advantage of the fact that the shortest sequence can
             // never start and end with the moves in the same move class.
             // Otherwise the end could be rotated to the start and combined
@@ -250,7 +254,12 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
             //
             // TODO: investigate optimizing this once CCS becomes more mature
             // see: https://discord.com/channels/772576325897945119/1326029986578038784/1411433393387999345
-            } else if permitted_cost == 0 && move_class_index == mutable.first_move_class_index {
+            } else if permitted_cost == 0
+                && self
+                    .canonical_fsm
+                    .next_state2(mutable.first_canonical_fsm_state, move_class_index)
+                    .is_none()
+            {
                 continue;
             }
 
@@ -391,7 +400,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
             puzzle_state_history: (&self.puzzle_def).into(),
             aux_mem: P::new_aux_mem(self.puzzle_def.sorted_orbit_defs_ref()),
             solutions: vec![],
-            first_move_class_index: 0,
+            first_canonical_fsm_state: CanonicalFSMState::default(),
             nodes_visited: 0,
         };
         // SAFETY: `H::initialize` when puzzle_state_history is created

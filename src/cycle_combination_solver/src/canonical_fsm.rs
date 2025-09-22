@@ -24,6 +24,21 @@ pub trait CanonicalFSM {
         // TODO: make this unsafe and brand it maybe
         self.next_state_lookup()[i][move_class_index]
     }
+
+    fn next_state2(
+        &self,
+        current_fsm_state: CanonicalFSMState,
+        move_class_index: usize,
+    ) -> CanonicalFSMState {
+        // None passed in means we're in the initial state
+        // None returned means the move is illegal
+        let i = match current_fsm_state {
+            Some(state) => state.get(),
+            None => 0,
+        };
+        // TODO: make this unsafe and brand it maybe
+        self.next_state_lookup()[move_class_index + 1][i - 1]
+    }
 }
 
 // Bit N is indexed by a `MoveClassIndex` value of N.
