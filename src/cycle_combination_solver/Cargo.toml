@@ -27,6 +27,3 @@ cfg_aliases = "0.2.1"
 
 [lints]
 workspace = true
-
-# [profile.release]
-# debug = true
