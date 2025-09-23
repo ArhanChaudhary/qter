@@ -37,8 +37,8 @@ A: 3x3
 13 | goto 4
 14 | halt "The number is: 0"
 15 | halt until DL DFL solved
-         "The number is"
-         L D B L' F L B' L2 F' L D'
+          "The number is"
+          L D B L' F L B' L2 F' L D'
 16 | halt until FR DRF solved
           "The number is"
           F2 L2 U2 D' R U' B L' B L' U'
@@ -98,7 +98,7 @@ This repository hosts a suite of various twisty puzzle utilities to compile *QAT
 - `cycle_combination_finder`: Discover Qter architectures on a twisty puzzle
 - `cycle_combination_solver`: Solve for a Qter architecture on a twisty puzzle
 - `pog_ans`: Implementation of [tabled asymmetric numerical systems](https://en.wikipedia.org/wiki/Asymmetric_numeral_systems#Tabled_variant_(tANS)) compression for use in pruning tables
-- `movecount_coefficient_calculator`: [Rewrite](https://www.speedsolving.com/threads/movecount-coefficient-calculator-online-tool-to-evaluate-the-speed-of-3x3-algorithms.79025/) of Vincent Trang's algorithm to score twisty puzzle move sequences by how easy they are to physically perform
+- `movecount_coefficient_calculator`: [Rewrite](https://www.speedsolving.com/threads/movecount-coefficient-calculator-online-tool-to-evaluate-the-speed-of-3x3-algorithms.79025/) of [trangium](https://github.com/trangium)'s online tool to score twisty puzzle move sequences by how easy they are to physically perform
 - `compiler`: Compile *QAT* code to the *Q* file format
 - `interpreter`: Simulate a twisty puzzle to execute *QAT* or *Q*
 
@@ -112,6 +112,6 @@ Refer to [our paper](https://qter.arhan.sh/paper.pdf) for a comprehensive techni
 
 # Acknowledgements
 
-We extend our sincere thanks to Tomas Rokicki for personally providing us key insight into Rubik's Cube programming techniques. Qter would not have been possible without his guidance. We are immensely grateful for his time.
+We extend our sincere thanks to [Tomas Rokicki](https://github.com/rokicki) for personally providing us key insight into Rubik's Cube programming techniques. Qter would not have been possible without his guidance. We are immensely grateful for his time.
 
-We also extend our gratitude to Ben Whitmore for helping us ideate the initial design of the `cycle_combination_finder` and `cycle_combination_solver`
+We also extend our gratitude to [Ben Whitmore](https://github.com/benwh1) for helping us ideate the initial design of the `cycle_combination_finder` and `cycle_combination_solver`
