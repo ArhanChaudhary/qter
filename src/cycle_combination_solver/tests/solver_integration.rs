@@ -216,6 +216,36 @@ fn test_210_optimal_cycle() {
 }
 
 #[test_log::test]
+fn test_easy_30x30x30_optimal_cycle() {
+    make_guard!(guard);
+    let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+    let sorted_cycle_structure = SortedCycleStructure::new(
+        &[vec![(1, true), (1, true)], vec![(1, true), (5, true)]],
+        cube3_def.sorted_orbit_defs_ref(),
+    )
+    .unwrap();
+    let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
+        &cube3_def,
+        vec![
+            TableTy::Exact(StorageBackendTy::Uncompressed),
+            TableTy::Zero,
+        ],
+        88_179_840,
+        cube3_def.id(),
+    )
+    .unwrap();
+    let pruning_tables =
+        OrbitPruningTables::try_generate_all(sorted_cycle_structure, generate_meta).unwrap();
+    let solver: CycleStructureSolver<Cube3, _> =
+        CycleStructureSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
+
+    let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
+    assert_eq!(solutions.solution_length(), 11);
+    while solutions.next().is_some() {}
+    assert_eq!(solutions.expanded_count(), 2112);
+}
+
+#[test_log::test]
 fn test_hard_30x30x30_optimal_cycle() {
     make_guard!(guard);
     let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
