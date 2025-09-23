@@ -7,7 +7,8 @@ use generativity::Id;
 use std::{collections::HashMap, marker::PhantomData, num::NonZeroUsize};
 
 pub trait CanonicalFSM {
-    fn next_state_lookup(&self) -> &[Vec<CanonicalFSMState>];
+    // TODO: make this unsafe and brand it maybe
+    fn raw_state_lookup(&self, a: usize, b: usize) -> CanonicalFSMState;
 
     /// The next state of the FSM given the current state and a move class.
     fn next_state(
@@ -21,23 +22,7 @@ pub trait CanonicalFSM {
             Some(state) => state.get(),
             None => 0,
         };
-        // TODO: make this unsafe and brand it maybe
-        self.next_state_lookup()[i][move_class_index]
-    }
-
-    fn next_state2(
-        &self,
-        current_fsm_state: CanonicalFSMState,
-        move_class_index: usize,
-    ) -> CanonicalFSMState {
-        // None passed in means we're in the initial state
-        // None returned means the move is illegal
-        let i = match current_fsm_state {
-            Some(state) => state.get(),
-            None => 0,
-        };
-        // TODO: make this unsafe and brand it maybe
-        self.next_state_lookup()[move_class_index + 1][i - 1]
+        self.raw_state_lookup(i, move_class_index)
     }
 }
 
@@ -169,16 +154,16 @@ impl<'id, P: PuzzleState<'id>> From<&PuzzleDef<'id, P>> for PuzzleCanonicalFSM<'
 }
 
 impl<'id, P: PuzzleState<'id>> CanonicalFSM for PuzzleCanonicalFSM<'id, P> {
-    fn next_state_lookup(&self) -> &[Vec<CanonicalFSMState>] {
-        &self.next_state_lookup
+    fn raw_state_lookup(&self, a: usize, b: usize) -> CanonicalFSMState {
+        unsafe { *self.next_state_lookup.get_unchecked(a).get_unchecked(b) }
     }
 }
 
 impl OrbitCanonicalFSM {}
 
 impl CanonicalFSM for OrbitCanonicalFSM {
-    fn next_state_lookup(&self) -> &[Vec<CanonicalFSMState>] {
-        &self.next_state_lookup
+    fn raw_state_lookup(&self, a: usize, b: usize) -> CanonicalFSMState {
+        self.next_state_lookup[a][b]
     }
 }
 

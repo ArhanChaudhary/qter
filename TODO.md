@@ -10,6 +10,7 @@
 ## SCC
 
 - CCS
+  - tests for R L U D cycle type!
   - check for logs in test cases; tracing
     - hardcode the first solution moves in the test cases to be sure
   - replace pub(crate) with getters
