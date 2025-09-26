@@ -76,7 +76,8 @@
 - 😎Architecture that avoids sharing a piece by always having two additions simultaneously which avoids parity
 - 😎Asher's repeated move post process optimization: R U R repeated = R then U R2 repeated then R'
 - 😎force conditional blocks that end with "halt" to codegen at the end of the instruction memory, optimizing a goto
-- Write a tree-sitter grammer for QAT
+- 😎Test with https://github.com/dtolnay/trybuild
+- 😎Write a tree-sitter grammer for QAT
 
 ## Interpreter/CLI
 

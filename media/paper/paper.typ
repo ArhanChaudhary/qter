@@ -356,7 +356,7 @@ You can see that the centers are attached to each other by the _core_ and are on
     cube("bbbbwbbbb oooogooooo wwwwrwwwww")
 }))
 
-it may look as if the centers are the only thing unsolved, but in fact we would actually consider _everything else_ to be unsolved. The reason is that all of the stickers are different from the center on the same side as it. People who are beginners at solving Rubik's Cubes often make the mistake of solving individual stickers instead of pieces.
+it may look as if the centers are the only thing unsolved, but in fact we would actually consider _everything else_ to be unsolved. The reason is that all of the stickers are different from the center on the same side as it. Next, people who are beginners at solving Rubik's Cubes often make the mistake of solving individual stickers instead of whole pieces.
 
 #align(center, cetz.canvas(length: 22pt, {
     cube("wooywwoow ggggggggg rrbwrborw")
@@ -453,7 +453,7 @@ It may look like we're forgetting some moves. After all, there are _three_ layer
 
 Those two cube states are actually the same because if you take the first cube and rotate it so that the green center is in front and the white center is on top again, we would see that it is exactly the same as the second cube. Since we're using the centers as a reference point, we can consider these two cube states to be exactly the same. Slice turns do have names, but we don't need to care about them for the purpose of this paper.
 
-Another thing that we will need to name are the pieces of a Rubik's Cube. Do do this, we can simply list the sides that the piece has stickers on. For example, we can talk about the "Up, Front, Right" or _UFR_ corner, or the "Front, Left" — _FL_ — edge.
+Another thing that we will need to name are the pieces of a Rubik's Cube. To do this, we can simply list the sides that the piece has stickers on. For example, we can talk about the "Up, Front, Right" or _UFR_ corner, or the "Front, Left" — _FL_ — edge.
 
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
