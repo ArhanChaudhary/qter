@@ -2306,9 +2306,17 @@ We note that, in the case where an orbit has a large number of states, we cannot
 
 === IDA\* optimizations
 
-We employ a number of tricks to improve the running time for Qter's IDA\* tree search, (roughly) separated in this subsection by paragraph.
+We employ a number of tricks to improve the running time for Qter's IDA\* tree search.
+
+==== SIMD
+
+We enhance the speed of puzzle operations through the use of puzzle-specific SIMD. When the Cycle Combination Solver puzzle is the Rubik's Cube, we use a SIMD-optimized compacted representation, enabling for specialized SIMD algorithms to compose two Rubik's Cube states @qter-simd2 and test for a Cycle Combination Solver solution @qter-simd1. They have both been disassembled and highly optimized at the instruction level. We leave the precise details at the prescribed references; they are outside of the scope of this article.
+
+==== Branching factor reduction
 
 We observe that we never want to rotate the same face twice. For example, if we perform $R$ followed by $R'$, we've just reversed the move done at the previous level of the tree. Similarly if we perform $R$ followed by another $R$, we could have simply done $\R2$ straight away. In general, any move should not be followed by another move in the same _move class_, the set of all move powers. This reduces the _branching factor_ of the child nodes from $18$ for all $18$ moves to $15$. Additionally, we don't want to search both $R L$ and $L R$ because they commute, and produce the same state. So, we assume that $R$ (or $\R2, R'$) never follows $L$ (or $\L2, L'$). In general, we only search a total ordering of commutative move classes, and this further reduces the branching factor $15$ to about $13.348$ @canonical-sequence nodes. We use an optimized finite state machine to avoid searching redundant moves.
+
+==== Pathmax
 
 We use a simple optimization described by Mérõ @pathmax called _pathmax_ to prune nodes with large child pruning values. When a child node has a large pruning value, we can set the current node cost to that value minus one and re-prune to avoid expanding the remaining child nodes. This larger value is still admissible because it is one less than a known lower bound, and the current node is one move away from all of its child nodes. This is only effective when the heuristics are _inconsistent_, or, in this case, when the pruning table entries are the minimum of two or more other values. With exact pruning tables only, this optimization will never run because the entries are exact heuristics.
 
@@ -2336,6 +2344,8 @@ We use a simple optimization described by Mérõ @pathmax called _pathmax_ to pr
     supplement: none,
 )
 
+==== Sequence symmetry
+
 We use a special form of symmetry reduction during the search we call _sequence symmetry_, first observed by Rokicki @sequence-symmetry and improved by our implementation. Some solution to the Cycle Combination Solver $A B C D$ conjugated by $A^(-1)$ yields $A^(-1) (A B C D) A = B C D A$, which we observe to also be a rotation of the original sequence as well as a solution to the Cycle Combination Solver by the properties of conjugation discussed earlier. Repeatedly applying this conjugation:
 
 #align(center)[#table(
@@ -2347,9 +2357,9 @@ We use a special form of symmetry reduction during the search we call _sequence 
     [$=>$], [$D^(-1) (D A B C) D = A B C D$],
 )]
 
-forms an equivalence class based on all the rotations of sequences that are all solutions to the Cycle Combination Solver. The key is to search a single representative sequence in this equivalence class to avoid duplicate work. We choose the representative as the lexicographically minimal sequence because this restriction is easy to embed in IDA\* search through a simple modification to the recursive algorithm @sequence-symmetry-impl. Furthermore, we take advantage of the fact that the shortest sequence can never start and end with the moves in the same move class. Otherwise, the end could be rotated to the start and combined together, contradicting the shortest sequence assumption. Although this optimization only applies to the last depth in IDA\*, it turns out to be surprisingly effective because most of the time is spent there.
+forms an equivalence class based on all the rotations of sequences that are all solutions to the Cycle Combination Solver. The key is to search a single representative sequence in this equivalence class to avoid duplicate work. We choose the representative as the lexicographically minimal sequence because this restriction is easy to embed in IDA\* search through a simple modification to the recursive algorithm @sequence-symmetry-impl.
 
-We enhance the speed of puzzle operations through the use of puzzle-specific SIMD. When the Cycle Combination Solver puzzle is the Rubik's Cube, we use a SIMD-optimized compacted representation, enabling for specialized SIMD algorithms to compose two Rubik's Cube states @qter-simd2 and test for a Cycle Combination Solver solution @qter-simd1. They have both been disassembled and highly optimized at the instruction level. We leave the precise details at the prescribed references; they are outside of the scope of this article.
+Furthermore, we take advantage of the fact that the shortest sequence can never start and end with the moves in the same move class. Otherwise, the end could be rotated to the start and combined together, contradicting the shortest sequence assumption. Although this optimization only applies to the last depth in IDA\*, it turns out to be surprisingly effective because most of the time is spent there.
 
 ==== Parallel IDA\*
 
