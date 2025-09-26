@@ -2,7 +2,7 @@ use super::puzzle::{PuzzleDef, PuzzleState, cube3::Cube3};
 use std::{marker::PhantomData, ops::Index, slice::SliceIndex};
 
 pub trait PuzzleStateHistory<'id, P: PuzzleState<'id>> {
-    const GODS_NUMBER: Option<usize>;
+    const UPPER_GODS_NUMBER_BOUND: Option<usize>;
     type Buf: Index<usize, Output = (P, usize)> + AsMut<[(P, usize)]> + AsRef<[(P, usize)]>;
 
     /// Create an initial `Self::Buf`. It must initialize the stack with a first
@@ -142,7 +142,7 @@ impl<'id, P: PuzzleState<'id>, H: PuzzleStateHistory<'id, P>> StackedPuzzleState
 }
 
 impl<'id, P: PuzzleState<'id>> PuzzleStateHistory<'id, P> for Vec<P> {
-    const GODS_NUMBER: Option<usize> = None;
+    const UPPER_GODS_NUMBER_BOUND: Option<usize> = None;
     type Buf = Vec<(P, usize)>;
 
     fn initialize(puzzle_def: &PuzzleDef<'id, P>) -> Vec<(P, usize)> {
@@ -174,7 +174,7 @@ impl<'id, const N: usize, P: PuzzleState<'id>> PuzzleStateHistory<'id, P> for [P
 where
     [P; N]: PuzzleStateHistoryArrayBuf<'id, P>,
 {
-    const GODS_NUMBER: Option<usize> = Some(N - 1);
+    const UPPER_GODS_NUMBER_BOUND: Option<usize> = Some(N - 1);
     type Buf = [(P, usize); N];
 
     fn initialize(puzzle_def: &PuzzleDef<'id, P>) -> [(P, usize); N] {

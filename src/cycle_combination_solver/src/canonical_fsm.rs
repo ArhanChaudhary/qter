@@ -7,11 +7,10 @@ use generativity::Id;
 use std::{collections::HashMap, marker::PhantomData, num::NonZeroUsize};
 
 pub trait CanonicalFSM {
-    // TODO: make this unsafe and brand it maybe
-    fn raw_state_lookup(&self, a: usize, b: usize) -> CanonicalFSMState;
+    fn next_state_lookup(&self) -> &[Vec<CanonicalFSMState>];
 
     /// The next state of the FSM given the current state and a move class.
-    fn next_state(
+    unsafe fn next_state(
         &self,
         current_fsm_state: CanonicalFSMState,
         move_class_index: usize,
@@ -22,7 +21,35 @@ pub trait CanonicalFSM {
             Some(state) => state.get(),
             None => 0,
         };
-        self.raw_state_lookup(i, move_class_index)
+        unsafe {
+            *self
+                .next_state_lookup()
+                .get_unchecked(i)
+                .get_unchecked(move_class_index)
+        }
+    }
+
+    unsafe fn reverse_state(
+        &self,
+        move_class_index: usize,
+        reversed_state: usize,
+    ) -> CanonicalFSMState {
+        let reversed_move_class_index =
+            Some(unsafe { NonZeroUsize::new_unchecked(move_class_index + 1) });
+        unsafe { self.next_state(reversed_move_class_index, reversed_state) }
+    }
+
+    unsafe fn reverse_next_state(
+        &self,
+        current_fsm_state: CanonicalFSMState,
+        move_class_index: usize,
+    ) -> usize {
+        unsafe {
+            self.next_state(current_fsm_state, move_class_index)
+                .unwrap()
+                .get()
+                - 1
+        }
     }
 }
 
@@ -154,16 +181,16 @@ impl<'id, P: PuzzleState<'id>> From<&PuzzleDef<'id, P>> for PuzzleCanonicalFSM<'
 }
 
 impl<'id, P: PuzzleState<'id>> CanonicalFSM for PuzzleCanonicalFSM<'id, P> {
-    fn raw_state_lookup(&self, a: usize, b: usize) -> CanonicalFSMState {
-        unsafe { *self.next_state_lookup.get_unchecked(a).get_unchecked(b) }
+    fn next_state_lookup(&self) -> &[Vec<CanonicalFSMState>] {
+        &self.next_state_lookup
     }
 }
 
 impl OrbitCanonicalFSM {}
 
 impl CanonicalFSM for OrbitCanonicalFSM {
-    fn raw_state_lookup(&self, a: usize, b: usize) -> CanonicalFSMState {
-        self.next_state_lookup[a][b]
+    fn next_state_lookup(&self) -> &[Vec<CanonicalFSMState>] {
+        &self.next_state_lookup
     }
 }
 
@@ -181,11 +208,11 @@ mod tests {
         let canonical_fsm: PuzzleCanonicalFSM<Cube3> = (&cube3_def).into();
 
         for move_class_index in 0..cube3_def.move_classes.len() {
-            assert!(
+            assert!(unsafe {
                 canonical_fsm
                     .next_state(CanonicalFSMState::default(), move_class_index)
                     .is_some()
-            );
+            });
         }
     }
 
@@ -195,18 +222,18 @@ mod tests {
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
         let canonical_fsm: PuzzleCanonicalFSM<Cube3> = (&cube3_def).into();
         for move_class_index in 0..cube3_def.move_classes.len() {
-            assert!(
+            assert!(unsafe {
                 canonical_fsm
                     .next_state(
                         Some(
                             canonical_fsm
                                 .next_state(CanonicalFSMState::default(), move_class_index)
-                                .unwrap()
+                                .unwrap(),
                         ),
-                        move_class_index
+                        move_class_index,
                     )
                     .is_none()
-            );
+            });
         }
     }
 
@@ -234,26 +261,30 @@ mod tests {
                     continue;
                 }
 
-                let allows_1_after_2 = canonical_fsm
-                    .next_state(
-                        Some(
-                            canonical_fsm
-                                .next_state(CanonicalFSMState::default(), move_class_index_2)
-                                .unwrap(),
-                        ),
-                        move_class_index_1,
-                    )
-                    .is_some();
-                let allows_2_after_1 = canonical_fsm
-                    .next_state(
-                        Some(
-                            canonical_fsm
-                                .next_state(CanonicalFSMState::default(), move_class_index_1)
-                                .unwrap(),
-                        ),
-                        move_class_index_2,
-                    )
-                    .is_some();
+                let allows_1_after_2 = unsafe {
+                    canonical_fsm
+                        .next_state(
+                            Some(
+                                canonical_fsm
+                                    .next_state(CanonicalFSMState::default(), move_class_index_2)
+                                    .unwrap(),
+                            ),
+                            move_class_index_1,
+                        )
+                        .is_some()
+                };
+                let allows_2_after_1 = unsafe {
+                    canonical_fsm
+                        .next_state(
+                            Some(
+                                canonical_fsm
+                                    .next_state(CanonicalFSMState::default(), move_class_index_1)
+                                    .unwrap(),
+                            ),
+                            move_class_index_2,
+                        )
+                        .is_some()
+                };
 
                 if move_class_index_1 == move_class_index_2 {
                     // No matter what the same face should not be allowed after
@@ -305,14 +336,16 @@ mod tests {
         for commute in commutes {
             for &move_class_index in &commute {
                 for &other_move_class_index in &commute {
-                    let current_then_other = canonical_fsm.next_state(
-                        Some(
-                            canonical_fsm
-                                .next_state(CanonicalFSMState::default(), move_class_index)
-                                .unwrap(),
-                        ),
-                        other_move_class_index,
-                    );
+                    let current_then_other = unsafe {
+                        canonical_fsm.next_state(
+                            Some(
+                                canonical_fsm
+                                    .next_state(CanonicalFSMState::default(), move_class_index)
+                                    .unwrap(),
+                            ),
+                            other_move_class_index,
+                        )
+                    };
                     if other_move_class_index <= move_class_index {
                         // a lesser multiple of the move class, not allowed to
                         // move the move class

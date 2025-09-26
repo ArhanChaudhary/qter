@@ -22,7 +22,7 @@ struct CycleStructureSolverMutable<'id, P: PuzzleState<'id>, H: PuzzleStateHisto
     puzzle_state_history: StackedPuzzleStateHistory<'id, P, H>,
     aux_mem: AuxMem<'id>,
     solutions: Vec<Vec<usize>>,
-    root_canonical_fsm_index: usize,
+    root_canonical_fsm_reversed_state: usize,
     nodes_visited: u64,
 }
 
@@ -240,27 +240,23 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
             if is_root {
                 // Somehow it is faster to have this before the canonical
                 // sequence optimization??
-                mutable.root_canonical_fsm_index = self
-                    .canonical_fsm
-                    // At root we are anyways at default so we might as well
-                    // hardcode it for optimization
-                    .next_state(CanonicalFSMState::default(), move_class_index)
-                    .unwrap()
-                    .get()
-                    - 1;
+                mutable.root_canonical_fsm_reversed_state = unsafe {
+                    self.canonical_fsm
+                        // At root we are anyways at default so we might as well
+                        // hardcode it for optimization
+                        .reverse_next_state(CanonicalFSMState::default(), move_class_index)
+                };
             // We take advantage of the fact that the shortest sequence can
             // never start and end with the moves in the same move class.
             // Otherwise the end could be rotated to the start and combined
             // together, thus contradicting that assumption
-            //
-            // TODO: investigate optimizing this once CCS becomes more mature
-            // see: https://discord.com/channels/772576325897945119/1326029986578038784/1411433393387999345
             // TODO: document the canonical FSM stuff here
             } else if permitted_cost == 0
-                && self
-                    .canonical_fsm
-                    .raw_state_lookup(move_class_index + 1, mutable.root_canonical_fsm_index)
-                    .is_none()
+                && unsafe {
+                    self.canonical_fsm
+                        .reverse_state(move_class_index, mutable.root_canonical_fsm_reversed_state)
+                        .is_none()
+                }
             {
                 continue;
             }
@@ -268,9 +264,10 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
             // We use a canonical FSM to enforce a total ordering of commutating
             // moves. For example, U D and D U produce equivalent states, so
             // there is no point in searching both
-            let next_fsm_state = self
-                .canonical_fsm
-                .next_state(current_fsm_state, move_class_index);
+            let next_fsm_state = unsafe {
+                self.canonical_fsm
+                    .next_state(current_fsm_state, move_class_index)
+            };
             if next_fsm_state.is_none() {
                 continue;
             }
@@ -402,7 +399,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
             puzzle_state_history: (&self.puzzle_def).into(),
             aux_mem: P::new_aux_mem(self.puzzle_def.sorted_orbit_defs_ref()),
             solutions: vec![],
-            root_canonical_fsm_index: 0,
+            root_canonical_fsm_reversed_state: 0,
             nodes_visited: 0,
         };
         // SAFETY: `H::initialize` when puzzle_state_history is created
@@ -427,7 +424,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
             } else {
                 // The loop increments `depth` so we do this manually
                 depth = 1;
-                if H::GODS_NUMBER.is_some_and(|gods_number| gods_number == 0) {
+                if H::UPPER_GODS_NUMBER_BOUND.is_some_and(|gods_number| gods_number == 0) {
                     return Err(CycleStructureSolverError::SolutionDoesNotExist);
                 }
             }
@@ -476,7 +473,8 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
                 // During pathmax we increment the depth by one, so we ensure it
                 // cannot overflow
                 if depth == u8::MAX
-                    || H::GODS_NUMBER.is_some_and(|gods_number| usize::from(depth) > gods_number)
+                    || H::UPPER_GODS_NUMBER_BOUND
+                        .is_some_and(|gods_number| usize::from(depth) > gods_number)
                 {
                     return Err(CycleStructureSolverError::SolutionDoesNotExist);
                 }
