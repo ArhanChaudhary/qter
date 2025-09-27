@@ -1669,7 +1669,7 @@ Note that corners actually have _two_ ways of being misoriented. If the blue sti
     circle("ccl.center", radius: 1)
 }))
 
-We know that $F$ and $B$ flip four edges, but what do $R$, $F$, $L$, and $B$ do to corners? Well whatever it is, they all do the same thing because all four of those moves are symmetric to each other. Therefore, we can track what happens to the corners for just one of them.
+We know that $F$ and $B$ flip four edges, but what do $R$, $F$, $L$, and $B$ do to corners? Well whatever it is, those four do the same thing because all four of those moves are symmetric to each other with respect to corners. Therefore, we can track what happens to the corners for just one of them.
 
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
