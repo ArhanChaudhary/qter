@@ -53,6 +53,7 @@ pkgs.mkShell rec {
   RUST_BACKTRACE = 1;
   RUSTC_WRAPPER = "sccache";
   SCCACHE_SERVER_PORT = "54226";
+  RUSTFLAGS = "-C target-cpu=native";
 
   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
 

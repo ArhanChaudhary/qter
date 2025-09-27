@@ -1,8 +1,12 @@
+use internment::ArcIntern;
+use qter_core::Span;
 use std::{
     num::{NonZeroU8, NonZeroU16},
-    sync::LazyLock,
+    sync::{Arc, LazyLock},
 };
 use thiserror::Error;
+
+use crate::{PuzzleGeometryDefinition, knife::PlaneCut, num::Vector, shapes::CUBE};
 
 /// A representation of a puzzle in the `KSolve` format. We choose to remain
 /// consistent with `KSolve` format and terminology because it is the
@@ -278,227 +282,270 @@ pub static KPUZZLE_5X5: LazyLock<KSolve> = LazyLock::new(|| KSolve {
 
 // This is here for testing. This should be replaced with a puzzle geometry
 // string in the future.
-pub static KPUZZLE_3X3: LazyLock<KSolve> = LazyLock::new(|| KSolve {
-    name: "3x3x3".to_owned(),
-    sets: vec![
-        KSolveSet {
-            name: "Edges".to_owned(),
-            piece_count: 12.try_into().unwrap(),
-            orientation_count: 2.try_into().unwrap(),
-        },
-        KSolveSet {
-            name: "Corners".to_owned(),
-            piece_count: 8.try_into().unwrap(),
-            orientation_count: 3.try_into().unwrap(),
-        },
-    ],
-    moves: vec![
-        KSolveMove {
-            name: "F".to_owned(),
-            transformation: nonzero_perm(vec![
-                vec![
-                    (10, 1),
-                    (1, 1),
-                    (3, 0),
-                    (4, 0),
-                    (2, 1),
-                    (6, 0),
-                    (7, 0),
-                    (8, 0),
-                    (9, 0),
-                    (5, 1),
-                    (11, 0),
-                    (12, 0),
-                ],
-                vec![
-                    (7, 2),
-                    (1, 1),
-                    (3, 0),
-                    (2, 2),
-                    (5, 0),
-                    (6, 0),
-                    (4, 1),
-                    (8, 0),
-                ],
-            ]),
-        },
-        KSolveMove {
-            name: "B".to_owned(),
-            transformation: nonzero_perm(vec![
-                vec![
-                    (1, 0),
-                    (2, 0),
-                    (6, 1),
-                    (4, 0),
-                    (5, 0),
-                    (7, 1),
-                    (11, 1),
-                    (8, 0),
-                    (9, 0),
-                    (10, 0),
-                    (3, 1),
-                    (12, 0),
-                ],
-                vec![
-                    (1, 0),
-                    (2, 0),
-                    (5, 1),
-                    (4, 0),
-                    (8, 2),
-                    (3, 2),
-                    (7, 0),
-                    (6, 1),
-                ],
-            ]),
-        },
-        KSolveMove {
-            name: "D".to_owned(),
-            transformation: nonzero_perm(vec![
-                vec![
-                    (1, 0),
-                    (9, 0),
-                    (3, 0),
-                    (2, 0),
-                    (5, 0),
-                    (4, 0),
-                    (7, 0),
-                    (8, 0),
-                    (6, 0),
-                    (10, 0),
-                    (11, 0),
-                    (12, 0),
-                ],
-                vec![
-                    (1, 0),
-                    (4, 0),
-                    (3, 0),
-                    (8, 0),
-                    (2, 0),
-                    (6, 0),
-                    (7, 0),
-                    (5, 0),
-                ],
-            ]),
-        },
-        KSolveMove {
-            name: "U".to_owned(),
-            transformation: nonzero_perm(vec![
-                vec![
-                    (1, 0),
-                    (2, 0),
-                    (3, 0),
-                    (4, 0),
-                    (5, 0),
-                    (6, 0),
-                    (7, 0),
-                    (11, 0),
-                    (9, 0),
-                    (8, 0),
-                    (12, 0),
-                    (10, 0),
-                ],
-                vec![
-                    (3, 0),
-                    (2, 0),
-                    (6, 0),
-                    (4, 0),
-                    (5, 0),
-                    (7, 0),
-                    (1, 0),
-                    (8, 0),
-                ],
-            ]),
-        },
-        KSolveMove {
-            name: "L".to_owned(),
-            transformation: nonzero_perm(vec![
-                vec![
-                    (1, 0),
-                    (2, 0),
-                    (3, 0),
-                    (4, 0),
-                    (12, 0),
-                    (6, 0),
-                    (9, 0),
-                    (8, 0),
-                    (5, 0),
-                    (10, 0),
-                    (11, 0),
-                    (7, 0),
-                ],
-                vec![
-                    (1, 0),
-                    (2, 0),
-                    (3, 0),
-                    (7, 1),
-                    (5, 0),
-                    (8, 1),
-                    (6, 2),
-                    (4, 2),
-                ],
-            ]),
-        },
-        KSolveMove {
-            name: "R".to_owned(),
-            transformation: nonzero_perm(vec![
-                vec![
-                    (4, 0),
-                    (2, 0),
-                    (8, 0),
-                    (3, 0),
-                    (5, 0),
-                    (6, 0),
-                    (7, 0),
-                    (1, 0),
-                    (9, 0),
-                    (10, 0),
-                    (11, 0),
-                    (12, 0),
-                ],
-                vec![
-                    (2, 1),
-                    (5, 2),
-                    (1, 2),
-                    (4, 0),
-                    (3, 1),
-                    (6, 0),
-                    (7, 0),
-                    (8, 0),
-                ],
-            ]),
-        },
-    ],
-    // will add more later
-    symmetries: vec![KSolveMove {
-        name: "S_U4".to_owned(),
-        transformation: nonzero_perm(vec![
-            vec![
-                (5, 1),
-                (9, 0),
-                (1, 1),
-                (10, 0),
-                (7, 1),
-                (11, 0),
-                (3, 1),
-                (12, 0),
-                (6, 0),
-                (8, 0),
-                (2, 0),
-                (4, 0),
+pub static KPUZZLE_3X3: LazyLock<KSolve> = LazyLock::new(|| {
+    KSolve::clone(
+        &*PuzzleGeometryDefinition {
+            polyhedron: CUBE.to_owned(),
+            cut_surfaces: vec![
+                Arc::from(PlaneCut {
+                    spot: Vector::new_ratios([[(1, 3), (0, 1), (0, 1)]]),
+                    normal: Vector::new([[1, 0, 0]]),
+                    name: ArcIntern::from("R"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: Vector::new_ratios([[(-1, 3), (0, 1), (0, 1)]]),
+                    normal: Vector::new([[-1, 0, 0]]),
+                    name: ArcIntern::from("L"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: Vector::new_ratios([[(0, 1), (1, 3), (0, 1)]]),
+                    normal: Vector::new([[0, 1, 0]]),
+                    name: ArcIntern::from("U"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: Vector::new_ratios([[(0, 1), (-1, 3), (0, 1)]]),
+                    normal: Vector::new([[0, -1, 0]]),
+                    name: ArcIntern::from("D"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: Vector::new_ratios([[(0, 1), (0, 1), (1, 3)]]),
+                    normal: Vector::new([[0, 0, 1]]),
+                    name: ArcIntern::from("F"),
+                }),
+                Arc::from(PlaneCut {
+                    spot: Vector::new_ratios([[(0, 1), (0, 1), (-1, 3)]]),
+                    normal: Vector::new([[0, 0, -1]]),
+                    name: ArcIntern::from("B"),
+                }),
             ],
-            vec![
-                (5, 1),
-                (1, 2),
-                (4, 1),
-                (6, 2),
-                (8, 2),
-                (7, 1),
-                (3, 2),
-                (2, 1),
-            ],
-        ]),
-    }],
+            definition: Span::new(ArcIntern::from("3x3"), 0, 3),
+        }
+        .geometry()
+        .unwrap()
+        .ksolve(),
+    )
 });
+// pub static KPUZZLE_3X3: LazyLock<KSolve> = LazyLock::new(|| KSolve {
+//     name: "3x3x3".to_owned(),
+//     sets: vec![
+//         KSolveSet {
+//             name: "Edges".to_owned(),
+//             piece_count: 12.try_into().unwrap(),
+//             orientation_count: 2.try_into().unwrap(),
+//         },
+//         KSolveSet {
+//             name: "Corners".to_owned(),
+//             piece_count: 8.try_into().unwrap(),
+//             orientation_count: 3.try_into().unwrap(),
+//         },
+//     ],
+//     moves: vec![
+//         KSolveMove {
+//             name: "F".to_owned(),
+//             transformation: nonzero_perm(vec![
+//                 vec![
+//                     (10, 1),
+//                     (1, 1),
+//                     (3, 0),
+//                     (4, 0),
+//                     (2, 1),
+//                     (6, 0),
+//                     (7, 0),
+//                     (8, 0),
+//                     (9, 0),
+//                     (5, 1),
+//                     (11, 0),
+//                     (12, 0),
+//                 ],
+//                 vec![
+//                     (7, 2),
+//                     (1, 1),
+//                     (3, 0),
+//                     (2, 2),
+//                     (5, 0),
+//                     (6, 0),
+//                     (4, 1),
+//                     (8, 0),
+//                 ],
+//             ]),
+//         },
+//         KSolveMove {
+//             name: "B".to_owned(),
+//             transformation: nonzero_perm(vec![
+//                 vec![
+//                     (1, 0),
+//                     (2, 0),
+//                     (6, 1),
+//                     (4, 0),
+//                     (5, 0),
+//                     (7, 1),
+//                     (11, 1),
+//                     (8, 0),
+//                     (9, 0),
+//                     (10, 0),
+//                     (3, 1),
+//                     (12, 0),
+//                 ],
+//                 vec![
+//                     (1, 0),
+//                     (2, 0),
+//                     (5, 1),
+//                     (4, 0),
+//                     (8, 2),
+//                     (3, 2),
+//                     (7, 0),
+//                     (6, 1),
+//                 ],
+//             ]),
+//         },
+//         KSolveMove {
+//             name: "D".to_owned(),
+//             transformation: nonzero_perm(vec![
+//                 vec![
+//                     (1, 0),
+//                     (9, 0),
+//                     (3, 0),
+//                     (2, 0),
+//                     (5, 0),
+//                     (4, 0),
+//                     (7, 0),
+//                     (8, 0),
+//                     (6, 0),
+//                     (10, 0),
+//                     (11, 0),
+//                     (12, 0),
+//                 ],
+//                 vec![
+//                     (1, 0),
+//                     (4, 0),
+//                     (3, 0),
+//                     (8, 0),
+//                     (2, 0),
+//                     (6, 0),
+//                     (7, 0),
+//                     (5, 0),
+//                 ],
+//             ]),
+//         },
+//         KSolveMove {
+//             name: "U".to_owned(),
+//             transformation: nonzero_perm(vec![
+//                 vec![
+//                     (1, 0),
+//                     (2, 0),
+//                     (3, 0),
+//                     (4, 0),
+//                     (5, 0),
+//                     (6, 0),
+//                     (7, 0),
+//                     (11, 0),
+//                     (9, 0),
+//                     (8, 0),
+//                     (12, 0),
+//                     (10, 0),
+//                 ],
+//                 vec![
+//                     (3, 0),
+//                     (2, 0),
+//                     (6, 0),
+//                     (4, 0),
+//                     (5, 0),
+//                     (7, 0),
+//                     (1, 0),
+//                     (8, 0),
+//                 ],
+//             ]),
+//         },
+//         KSolveMove {
+//             name: "L".to_owned(),
+//             transformation: nonzero_perm(vec![
+//                 vec![
+//                     (1, 0),
+//                     (2, 0),
+//                     (3, 0),
+//                     (4, 0),
+//                     (12, 0),
+//                     (6, 0),
+//                     (9, 0),
+//                     (8, 0),
+//                     (5, 0),
+//                     (10, 0),
+//                     (11, 0),
+//                     (7, 0),
+//                 ],
+//                 vec![
+//                     (1, 0),
+//                     (2, 0),
+//                     (3, 0),
+//                     (7, 1),
+//                     (5, 0),
+//                     (8, 1),
+//                     (6, 2),
+//                     (4, 2),
+//                 ],
+//             ]),
+//         },
+//         KSolveMove {
+//             name: "R".to_owned(),
+//             transformation: nonzero_perm(vec![
+//                 vec![
+//                     (4, 0),
+//                     (2, 0),
+//                     (8, 0),
+//                     (3, 0),
+//                     (5, 0),
+//                     (6, 0),
+//                     (7, 0),
+//                     (1, 0),
+//                     (9, 0),
+//                     (10, 0),
+//                     (11, 0),
+//                     (12, 0),
+//                 ],
+//                 vec![
+//                     (2, 1),
+//                     (5, 2),
+//                     (1, 2),
+//                     (4, 0),
+//                     (3, 1),
+//                     (6, 0),
+//                     (7, 0),
+//                     (8, 0),
+//                 ],
+//             ]),
+//         },
+//     ],
+//     // will add more later
+//     symmetries: vec![KSolveMove {
+//         name: "S_U4".to_owned(),
+//         transformation: nonzero_perm(vec![
+//             vec![
+//                 (5, 1),
+//                 (9, 0),
+//                 (1, 1),
+//                 (10, 0),
+//                 (7, 1),
+//                 (11, 0),
+//                 (3, 1),
+//                 (12, 0),
+//                 (6, 0),
+//                 (8, 0),
+//                 (2, 0),
+//                 (4, 0),
+//             ],
+//             vec![
+//                 (5, 1),
+//                 (1, 2),
+//                 (4, 1),
+//                 (6, 2),
+//                 (8, 2),
+//                 (7, 1),
+//                 (3, 2),
+//                 (2, 1),
+//             ],
+//         ]),
+//     }],
+// });
 
 pub static KPUZZLE_4X4: LazyLock<KSolve> = LazyLock::new(|| KSolve {
     name: "4x4x4".to_owned(),
