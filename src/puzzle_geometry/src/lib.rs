@@ -85,11 +85,12 @@ impl Face {
             .iter()
             .circular_tuple_windows()
             .any(|(a, b, c)| {
-                let line = (b.0.clone() - a.0.clone()).normalize();
-                // Projection matrix onto the line spanned by the first two points
-                let line_proj = &line * &line.clone().transpose();
+                let line1 = b.0.clone() - a.0.clone();
+                let line2 = b.0.clone() - c.0.clone();
 
-                (&line_proj * &(c.0.clone() - a.0.clone())) == (c.0.clone() - a.0.clone())
+                let abs_dot = line1.clone().dot(line2.clone()).abs();
+
+                abs_dot.clone() * abs_dot == line1.norm_squared() * line2.norm_squared()
             })
         {
             return Err(PuzzleGeometryError::FaceIsDegenerate(self.to_owned()));
@@ -648,7 +649,7 @@ fn turn_names(base_name: &ArcIntern<str>, symm: usize) -> Vec<ArcIntern<str>> {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashSet, sync::Arc};
+    use std::sync::Arc;
 
     use crate::{
         Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError,
@@ -857,42 +858,42 @@ mod tests {
             polyhedron: TETRAHEDRON.to_owned(),
             cut_surfaces: vec![
                 Arc::from(PlaneCut {
-                    spot: up.clone().normalize() / &Num::from(3),
+                    spot: up.clone() / &Num::from(9),
                     normal: up.clone(),
                     name: ArcIntern::from("A"),
                 }),
                 Arc::from(PlaneCut {
-                    spot: down1.clone().normalize() / &Num::from(3),
+                    spot: down1.clone() / &Num::from(9),
                     normal: down1.clone(),
                     name: ArcIntern::from("B"),
                 }),
                 Arc::from(PlaneCut {
-                    spot: down2.clone().normalize() / &Num::from(3),
+                    spot: down2.clone() / &Num::from(9),
                     normal: down2.clone(),
                     name: ArcIntern::from("C"),
                 }),
                 Arc::from(PlaneCut {
-                    spot: down3.clone().normalize() / &Num::from(3),
+                    spot: down3.clone() / &Num::from(9),
                     normal: down3.clone(),
                     name: ArcIntern::from("D"),
                 }),
                 Arc::from(PlaneCut {
-                    spot: (up.clone().normalize() / &Num::from(3)) * &Num::from(5),
+                    spot: (up.clone() / &Num::from(9)) * &Num::from(5),
                     normal: up.clone(),
                     name: ArcIntern::from("E"),
                 }),
                 Arc::from(PlaneCut {
-                    spot: (down1.clone().normalize() / &Num::from(3)) * &Num::from(5),
+                    spot: (down1.clone() / &Num::from(9)) * &Num::from(5),
                     normal: down1.clone(),
                     name: ArcIntern::from("F"),
                 }),
                 Arc::from(PlaneCut {
-                    spot: (down2.clone().normalize() / &Num::from(3)) * &Num::from(5),
+                    spot: (down2.clone() / &Num::from(9)) * &Num::from(5),
                     normal: down2.clone(),
                     name: ArcIntern::from("G"),
                 }),
                 Arc::from(PlaneCut {
-                    spot: (down3.clone().normalize() / &Num::from(3)) * &Num::from(5),
+                    spot: (down3.clone() / &Num::from(9)) * &Num::from(5),
                     normal: down3.clone(),
                     name: ArcIntern::from("H"),
                 }),

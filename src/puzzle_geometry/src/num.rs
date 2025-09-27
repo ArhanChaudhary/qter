@@ -324,12 +324,6 @@ impl<const N: usize> Vector<N> {
         v.into_iter().map(|v| v.clone() * v).sum::<Num>()
     }
 
-    #[must_use]
-    pub fn normalize(mut self) -> Vector<N> {
-        self.normalize_in_place();
-        self
-    }
-
     pub fn normalize_in_place(&mut self) {
         let norm = self.clone().norm();
         *self /= &norm;
@@ -566,7 +560,7 @@ pub fn rotate_to(from: Matrix<3, 2>, to: Matrix<3, 2>) -> Matrix<3, 3> {
     &to * &from.transpose()
 }
 
-/// A rotation about an axis where the 2d subspace is rotated such that `(1, 0)` is rotated to `x_axis`
+/// A rotation about an axis where the 2d subspace is rotated such that `(1, 0)` is rotated to `x_axis`. `axis` and `x_axis` must be normalized.
 ///
 /// # Panics
 ///
@@ -576,10 +570,10 @@ pub fn rotation_about(axis: Vector<3>, x_axis: Vector<2>) -> Matrix<3, 3> {
     assert!(!x_axis.is_zero());
     assert!(!axis.is_zero());
 
-    let [cos, sin] = x_axis.normalize().into_inner();
+    let [cos, sin] = x_axis.into_inner();
     let cosinv = Num::from(1) - cos.clone();
 
-    let [x, y, z] = axis.normalize().into_inner();
+    let [x, y, z] = axis.into_inner();
 
     // https://en.wikipedia.org/wiki/Rotation_matrix#Rotation_matrix_from_axis_and_angle
 
@@ -662,10 +656,10 @@ mod tests {
         assert_eq!(Vector::new([[3, 4, 0]]).norm(), Num::from(5));
         assert_eq!(Vector::new([[3, 4, 0]]).norm_squared(), Num::from(25));
 
-        assert_eq!(
-            Vector::new([[3, 3, 0]]).normalize(),
-            Vector::new([[1, 1, 0]]) / &Num::from(2).sqrt(),
-        );
+        // assert_eq!(
+        //     Vector::new([[3, 3, 0]]).normalize(),
+        //     Vector::new([[1, 1, 0]]) / &Num::from(2).sqrt(),
+        // );
 
         assert_eq!(
             Vector::new([[1, 1, 0]]).dot(Vector::new([[0, 2, 1]])),
@@ -686,7 +680,7 @@ mod tests {
         );
 
         for v in [&*DEG_180, &*DEG_120, &*DEG_90, &*DEG_72] {
-            assert_eq!(v, &v.clone().normalize());
+            assert_eq!(v.clone().norm_squared(), Num::from(1));
         }
     }
 

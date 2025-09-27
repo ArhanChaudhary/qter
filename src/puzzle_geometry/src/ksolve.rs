@@ -1742,13 +1742,16 @@ mod tests {
         let kpuzzle_3x3 = &*KPUZZLE_3X3;
         let solved = kpuzzle_3x3.solved();
 
+        let corner_idx = usize::from(kpuzzle_3x3.sets()[0].piece_count().get() != 8);
+        let edge_idx = 1 - corner_idx;
+
         assert_eq!(solved.len(), 2);
 
         let expected_edges = &(1..=12)
             .map(|i| i.try_into().unwrap())
             .zip(std::iter::repeat(0))
             .collect::<Vec<(NonZeroU16, u8)>>();
-        let actual_edges = &solved[0];
+        let actual_edges = &solved[edge_idx];
 
         assert_eq!(expected_edges, actual_edges);
 
@@ -1756,7 +1759,7 @@ mod tests {
             .map(|i| i.try_into().unwrap())
             .zip(std::iter::repeat(0))
             .collect::<Vec<(NonZeroU16, u8)>>();
-        let actual_corners = &solved[1];
+        let actual_corners = &solved[corner_idx];
 
         assert_eq!(expected_corners, actual_corners);
     }
