@@ -4,6 +4,7 @@ use crate::orbit_puzzle::{
     OrbitPuzzleStateImplementor, SpecializedOrbitPuzzleState, exact_hasher_orbit,
 };
 use std::{
+    hash::Hash,
     hint::unreachable_unchecked,
     num::NonZeroU8,
     simd::{
@@ -33,10 +34,13 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
     unsafe fn from_implementor_enum_unchecked(
         implementor_enum: &OrbitPuzzleStateImplementor,
     ) -> &Self {
+        #[cfg(avx2)]
         match implementor_enum {
             OrbitPuzzleStateImplementor::CubeNCorners(c) => c,
             _ => unsafe { unreachable_unchecked() },
         }
+        #[cfg(not(avx2))]
+        unimplemented!()
     }
 
     unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(perm: B, ori: B) -> Self {
@@ -58,7 +62,7 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
         exact_hasher(self)
     }
 
-    fn approximate_hash(&self) -> &Self {
+    fn approximate_hash(&self) -> impl Hash {
         self
     }
 }
@@ -104,10 +108,10 @@ pub fn induces_sorted_cycle_structure(
 
     // Check oriented one cycles
     if cycle_structure_pointer == usize::MAX {
-        if let Some(&first_cycle) = sorted_cycle_structure_orbit.first() {
-            if first_cycle == (1.try_into().unwrap(), true) {
-                return false;
-            }
+        if let Some(&first_cycle) = sorted_cycle_structure_orbit.first()
+            && first_cycle == (1.try_into().unwrap(), true)
+        {
+            return false;
         }
     } else if cycle_structure_pointer >= sorted_cycle_structure_orbit.len()
         || sorted_cycle_structure_orbit[cycle_structure_pointer] != (1.try_into().unwrap(), true)

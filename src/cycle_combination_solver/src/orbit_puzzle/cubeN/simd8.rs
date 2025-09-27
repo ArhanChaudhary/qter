@@ -35,10 +35,13 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
     unsafe fn from_implementor_enum_unchecked(
         implementor_enum: &OrbitPuzzleStateImplementor,
     ) -> &Self {
+        #[cfg(simd8)]
         match implementor_enum {
             OrbitPuzzleStateImplementor::CubeNCorners(c) => c,
             _ => unsafe { unreachable_unchecked() },
         }
+        #[cfg(not(simd8))]
+        unimplemented!()
     }
 
     unsafe fn from_orbit_transformation_unchecked<B: AsRef<[u8]>>(perm: B, ori: B) -> Self {
