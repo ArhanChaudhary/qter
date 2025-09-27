@@ -53,7 +53,6 @@
 ## PuzzleGeometry
 
 - ⭐Canonical ordering of stickers
-- ⭐Output ksolve stuff
 - ⭐Calculate orientation and parity constraints of the puzzle
 - ⭐Calculate the symmetries of the puzzle
 - ⭐Parse our modified puzzlegeometry definition string
