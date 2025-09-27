@@ -6,53 +6,6 @@ use super::puzzle::{PuzzleDef, PuzzleState};
 use generativity::Id;
 use std::{collections::HashMap, marker::PhantomData, num::NonZeroUsize};
 
-pub trait CanonicalFSM {
-    fn next_state_lookup(&self) -> &[Vec<CanonicalFSMState>];
-
-    /// The next state of the FSM given the current state and a move class.
-    unsafe fn next_state(
-        &self,
-        current_fsm_state: CanonicalFSMState,
-        move_class_index: usize,
-    ) -> CanonicalFSMState {
-        // None passed in means we're in the initial state
-        // None returned means the move is illegal
-        let i = match current_fsm_state {
-            Some(state) => state.get(),
-            None => 0,
-        };
-        unsafe {
-            *self
-                .next_state_lookup()
-                .get_unchecked(i)
-                .get_unchecked(move_class_index)
-        }
-    }
-
-    unsafe fn reverse_state(
-        &self,
-        move_class_index: usize,
-        reversed_state: usize,
-    ) -> CanonicalFSMState {
-        let reversed_move_class_index =
-            Some(unsafe { NonZeroUsize::new_unchecked(move_class_index + 1) });
-        unsafe { self.next_state(reversed_move_class_index, reversed_state) }
-    }
-
-    unsafe fn reverse_next_state(
-        &self,
-        current_fsm_state: CanonicalFSMState,
-        move_class_index: usize,
-    ) -> usize {
-        unsafe {
-            self.next_state(current_fsm_state, move_class_index)
-                .unwrap()
-                .get()
-                - 1
-        }
-    }
-}
-
 // Bit N is indexed by a `MoveClassIndex` value of N.
 type MoveClassMask = Vec<bool>;
 
@@ -67,10 +20,6 @@ pub struct PuzzleCanonicalFSM<'id, P: PuzzleState<'id>> {
     next_state_lookup: Vec<Vec<CanonicalFSMState>>,
     _id: Id<'id>,
     _marker: PhantomData<P>,
-}
-
-pub struct OrbitCanonicalFSM {
-    next_state_lookup: Vec<Vec<CanonicalFSMState>>,
 }
 
 impl<'id, P: PuzzleState<'id>> From<&PuzzleDef<'id, P>> for PuzzleCanonicalFSM<'id, P> {
@@ -180,17 +129,52 @@ impl<'id, P: PuzzleState<'id>> From<&PuzzleDef<'id, P>> for PuzzleCanonicalFSM<'
     }
 }
 
-impl<'id, P: PuzzleState<'id>> CanonicalFSM for PuzzleCanonicalFSM<'id, P> {
+impl<'id, P: PuzzleState<'id>> PuzzleCanonicalFSM<'id, P> {
     fn next_state_lookup(&self) -> &[Vec<CanonicalFSMState>] {
         &self.next_state_lookup
     }
-}
 
-impl OrbitCanonicalFSM {}
+    /// The next state of the FSM given the current state and a move class.
+    pub unsafe fn next_state(
+        &self,
+        current_fsm_state: CanonicalFSMState,
+        move_class_index: usize,
+    ) -> CanonicalFSMState {
+        // None passed in means we're in the initial state
+        // None returned means the move is illegal
+        let i = match current_fsm_state {
+            Some(state) => state.get(),
+            None => 0,
+        };
+        unsafe {
+            *self
+                .next_state_lookup()
+                .get_unchecked(i)
+                .get_unchecked(move_class_index)
+        }
+    }
 
-impl CanonicalFSM for OrbitCanonicalFSM {
-    fn next_state_lookup(&self) -> &[Vec<CanonicalFSMState>] {
-        &self.next_state_lookup
+    pub unsafe fn reverse_state(
+        &self,
+        move_class_index: usize,
+        reversed_state: usize,
+    ) -> CanonicalFSMState {
+        let reversed_move_class_index =
+            Some(unsafe { NonZeroUsize::new_unchecked(move_class_index + 1) });
+        unsafe { self.next_state(reversed_move_class_index, reversed_state) }
+    }
+
+    pub unsafe fn reverse_next_state(
+        &self,
+        current_fsm_state: CanonicalFSMState,
+        move_class_index: usize,
+    ) -> usize {
+        unsafe {
+            self.next_state(current_fsm_state, move_class_index)
+                .unwrap()
+                .get()
+                - 1
+        }
     }
 }
 

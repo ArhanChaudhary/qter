@@ -1,5 +1,5 @@
 use super::{
-    canonical_fsm::{CanonicalFSM, CanonicalFSMState, PuzzleCanonicalFSM},
+    canonical_fsm::{CanonicalFSMState, PuzzleCanonicalFSM},
     pruning::PruningTables,
     puzzle::{Move, PuzzleDef, PuzzleState},
     puzzle_state_history::{PuzzleStateHistory, StackedPuzzleStateHistory},
