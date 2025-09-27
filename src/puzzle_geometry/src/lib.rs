@@ -204,7 +204,7 @@ pub struct PuzzleGeometry {
 
 impl PuzzleGeometry {
     /// Get the puzzle as a permutation group over facelets
-    fn permutation_group(&self) -> Arc<PermutationGroup> {
+    pub fn permutation_group(&self) -> Arc<PermutationGroup> {
         Arc::clone(&self.calc_permutation_group().0)
     }
 
