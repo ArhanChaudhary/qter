@@ -1,4 +1,4 @@
-use super::puzzle::{PuzzleDef, PuzzleState, cube3::Cube3};
+use super::puzzle::{PuzzleDef, PuzzleState};
 use std::{marker::PhantomData, ops::Index, slice::SliceIndex};
 
 pub trait PuzzleStateHistory<'id, P: PuzzleState<'id>> {
@@ -160,15 +160,6 @@ impl<'id, P: PuzzleState<'id>> PuzzleStateHistory<'id, P> for Vec<P> {
 /// puzzle state history is always in bounds. That is, the stack pointer is
 /// always less than the length of the buffer.
 pub unsafe trait PuzzleStateHistoryArrayBuf<'id, P: PuzzleState<'id>> {}
-
-// SAFETY: God's number for the 3x3x3 is 20, so any sequence of moves that
-// finds an optimal path cannot be longer than 20 moves. 21 is used to account
-// for the solved state at the beginning of the stack.
-unsafe impl PuzzleStateHistoryArrayBuf<'_, Cube3> for [Cube3; 21] {}
-/*
- * // SAFETY: God's number for the 2x2x2 is 11. See above.
- * unsafe impl PuzzleStateHistoryArrayBuf<'_, Cube2> for [Cube2; 12] {}
- */
 
 impl<'id, const N: usize, P: PuzzleState<'id>> PuzzleStateHistory<'id, P> for [P; N]
 where

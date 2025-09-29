@@ -1,7 +1,5 @@
 //! SIMD optimized implementations for 3x3 cubes
 
-#[cfg(not(any(avx2, simd8and16)))]
-pub type Cube3<'id> = super::slice_puzzle::StackPuzzle<'id, 40>;
 use crate::{puzzle::OrbitDef, puzzle_state_history::PuzzleStateHistoryArrayBuf};
 use std::num::NonZeroU8;
 
@@ -23,7 +21,7 @@ mod common {
     use crate::orbit_puzzle::cube3::Cube3Edges;
     use crate::orbit_puzzle::cubeN::CubeNCorners;
     use crate::orbit_puzzle::{OrbitPuzzleStateImplementor, SpecializedOrbitPuzzleState};
-    use crate::puzzle::cube3::CUBE_3_SORTED_ORBIT_DEFS;
+    use crate::puzzle::cube3::{CUBE_3_SORTED_ORBIT_DEFS, portable};
     use crate::puzzle::{
         AuxMem, AuxMemRefMut, BrandedOrbitDef, OrbitDef, OrbitIdentifier, PuzzleState,
         SortedCycleStructureRef, SortedOrbitDefsRef, TransformationsMeta, TransformationsMetaError,
@@ -220,6 +218,7 @@ mod common {
     }
 
     impl_puzzle_state_for_cube3!(
+        portable::Cube3,
         cube3::simd8and16::UncompressedCube3,
         cube3::simd8and16::Cube3,
         cube3::avx2::Cube3
@@ -227,13 +226,22 @@ mod common {
 }
 
 pub(in crate::puzzle) mod avx2;
+pub(in crate::puzzle) mod portable;
 pub(in crate::puzzle) mod simd8and16;
+
+#[cfg(not(any(avx2, simd8and16)))]
+pub use portable::Cube3;
 
 #[cfg(avx2)]
 pub use avx2::Cube3;
 
 #[cfg(all(not(avx2), simd8and16))]
 pub use simd8and16::Cube3;
+
+// SAFETY: God's number for the 3x3x3 is 20, so any sequence of moves that
+// finds an optimal path cannot be longer than 20 moves. 21 is used to account
+// for the solved state at the beginning of the stack.
+unsafe impl PuzzleStateHistoryArrayBuf<'_, Cube3> for [Cube3; 21] {}
 
 // pub struct StackEvenCubeSimd<const S_24S: usize> {
 //     cp: u8x8,

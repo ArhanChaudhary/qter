@@ -9,6 +9,7 @@ use crate::{
         slice_puzzle::{exact_hasher_slice_orbit_bytes, slice_orbit_size},
     },
 };
+use itertools::Itertools;
 use std::{cmp::Ordering, hint::unreachable_unchecked, num::NonZeroU8};
 
 /// An orbit state of a puzzle that is represented as a slice of bytes. The
@@ -74,6 +75,15 @@ impl SliceOrbitPuzzle {
             slice_orbit_states[i as usize] = perm.as_ref()[i as usize];
         }
         SliceOrbitPuzzle(slice_orbit_states.into_boxed_slice())
+    }
+
+    pub unsafe fn new_solved_state(orbit_def: OrbitDef) -> Self
+    where
+        Self: Sized,
+    {
+        let perm = (0..orbit_def.piece_count.get()).collect_vec();
+        let ori = vec![0; orbit_def.piece_count.get() as usize];
+        unsafe { Self::from_orbit_transformation_and_def_unchecked(perm, ori, orbit_def) }
     }
 
     pub fn approximate_hash(&self) -> &Self {
