@@ -6,7 +6,7 @@ This is more efficient version of the optimal CCF. The goal is to return
 one structure for each combination, rather than every structure.
 There are also a few more assumptions, and as such there may be some missed combinations.
 """
-
+# TODO allow for orientation to be composite
 import timeit
 import collections
 import copy
