@@ -23,7 +23,7 @@ use std::{fmt::Debug, hint::assert_unchecked, slice};
 
 trait SlicePuzzle<'id>: PartialEq + Debug + Clone + 'id {
     fn as_slice(&self) -> &[u8];
-    fn as_slice_mut(&mut self) -> &mut [u8];
+    unsafe fn as_slice_mut(&mut self) -> &mut [u8];
     fn try_from_transformations_meta(
         transformations_meta: TransformationsMeta<'id, '_>,
         id: Id<'id>,
@@ -116,7 +116,7 @@ impl<'id, S: SlicePuzzle<'id>> PuzzleState<'id> for S {
         b: &Self,
         sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>,
     ) {
-        let slice_orbit_states_mut = self.as_slice_mut();
+        let slice_orbit_states_mut = unsafe { self.as_slice_mut() };
         let a = a.as_slice();
         let b = b.as_slice();
         debug_assert_eq!(
@@ -145,7 +145,7 @@ impl<'id, S: SlicePuzzle<'id>> PuzzleState<'id> for S {
     }
 
     fn replace_inverse(&mut self, a: &Self, sorted_orbit_defs: SortedOrbitDefsRef<'id, '_>) {
-        let slice_orbit_states_mut = self.as_slice_mut();
+        let slice_orbit_states_mut = unsafe { self.as_slice_mut() };
         let a = a.as_slice();
         debug_assert_eq!(
             sorted_orbit_defs
@@ -281,7 +281,7 @@ impl<'id, const N: usize> SlicePuzzle<'id> for StackPuzzle<'id, N> {
         &self.0
     }
 
-    fn as_slice_mut(&mut self) -> &mut [u8] {
+    unsafe fn as_slice_mut(&mut self) -> &mut [u8] {
         &mut self.0
     }
 
@@ -303,7 +303,7 @@ impl<'id> SlicePuzzle<'id> for HeapPuzzle<'id> {
         &self.0
     }
 
-    fn as_slice_mut(&mut self) -> &mut [u8] {
+    unsafe fn as_slice_mut(&mut self) -> &mut [u8] {
         &mut self.0
     }
 

@@ -3,12 +3,12 @@
 
 #![cfg_attr(any(avx2, not(simd8)), allow(dead_code, unused_variables))]
 
-use crate::orbit_puzzle::{
-    OrbitPuzzleStateImplementor, SpecializedOrbitPuzzleState, exact_hasher_orbit,
+use crate::{
+    orbit_puzzle::{OrbitPuzzleStateImplementor, SpecializedOrbitPuzzleState, exact_hasher_orbit},
+    puzzle::cube3::CUBE_3_SORTED_ORBIT_DEFS,
 };
 use std::{
     hash::Hash,
-    hint::unreachable_unchecked,
     num::NonZeroU8,
     simd::{
         cmp::{SimdPartialEq, SimdPartialOrd},
@@ -38,7 +38,7 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
         #[cfg(simd8)]
         match implementor_enum {
             OrbitPuzzleStateImplementor::CubeNCorners(c) => c,
-            _ => unsafe { unreachable_unchecked() },
+            _ => unsafe { std::hint::unreachable_unchecked() },
         }
         #[cfg(not(simd8))]
         unimplemented!()
@@ -150,8 +150,8 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
     fn exact_hasher(&self) -> u64 {
         // Use the exact same constants as 3x3 cube corners since all cubes have
         // 8 corners
-        const PIECE_COUNT: u16 = 8;
-        const ORI_COUNT: u16 = 3;
+        const ORI_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[0].orientation_count.get() as u16;
+        const PIECE_COUNT: u16 = CUBE_3_SORTED_ORBIT_DEFS[0].piece_count.get() as u16;
 
         exact_hasher_orbit::<PIECE_COUNT, ORI_COUNT, { PIECE_COUNT.next_power_of_two() as usize }>(
             self.cp, self.co,

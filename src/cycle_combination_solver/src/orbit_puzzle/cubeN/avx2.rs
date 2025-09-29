@@ -1,11 +1,12 @@
 //! A SIMD optimized implementation for N-cube corners for platforms that support AVX2.
 
+#![cfg_attr(not(avx2), allow(dead_code, unused_variables))]
+
 use crate::orbit_puzzle::{
     OrbitPuzzleStateImplementor, SpecializedOrbitPuzzleState, exact_hasher_orbit,
 };
 use std::{
     hash::Hash,
-    hint::unreachable_unchecked,
     num::NonZeroU8,
     simd::{
         cmp::{SimdPartialEq, SimdPartialOrd},
@@ -37,7 +38,7 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
         #[cfg(avx2)]
         match implementor_enum {
             OrbitPuzzleStateImplementor::CubeNCorners(c) => c,
-            _ => unsafe { unreachable_unchecked() },
+            _ => unsafe { std::hint::unreachable_unchecked() },
         }
         #[cfg(not(avx2))]
         unimplemented!()
@@ -67,7 +68,7 @@ impl SpecializedOrbitPuzzleState for CubeNCorners {
     }
 }
 
-/// Create a CubeNCorners from permutation and orientation arrays
+/// Create a `CubeNCorners` from permutation and orientation arrays
 pub fn create_from_arrays(perm: &[u8], ori: &[u8]) -> CubeNCorners {
     debug_assert_eq!(perm.len(), 8);
     debug_assert_eq!(ori.len(), 8);

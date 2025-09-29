@@ -2,6 +2,20 @@
 
 #[cfg(not(any(avx2, simd8and16)))]
 pub type Cube3<'id> = super::slice_puzzle::StackPuzzle<'id, 40>;
+use crate::{puzzle::OrbitDef, puzzle_state_history::PuzzleStateHistoryArrayBuf};
+use std::num::NonZeroU8;
+
+/// The expected sorted orbit definition for 3x3 puzzles.
+pub const CUBE_3_SORTED_ORBIT_DEFS: [OrbitDef; 2] = [
+    OrbitDef {
+        piece_count: NonZeroU8::new(8).unwrap(),
+        orientation_count: NonZeroU8::new(3).unwrap(),
+    },
+    OrbitDef {
+        piece_count: NonZeroU8::new(12).unwrap(),
+        orientation_count: NonZeroU8::new(2).unwrap(),
+    },
+];
 
 mod common {
     //! Common traits and types for the parent module.
@@ -9,14 +23,15 @@ mod common {
     use crate::orbit_puzzle::cube3::Cube3Edges;
     use crate::orbit_puzzle::cubeN::CubeNCorners;
     use crate::orbit_puzzle::{OrbitPuzzleStateImplementor, SpecializedOrbitPuzzleState};
+    use crate::puzzle::cube3::CUBE_3_SORTED_ORBIT_DEFS;
     use crate::puzzle::{
         AuxMem, AuxMemRefMut, BrandedOrbitDef, OrbitDef, OrbitIdentifier, PuzzleState,
         SortedCycleStructureRef, SortedOrbitDefsRef, TransformationsMeta, TransformationsMetaError,
         cube3,
     };
     use generativity::Id;
+    use std::fmt::Debug;
     use std::hash::Hash;
-    use std::{fmt::Debug, num::NonZeroU8};
 
     /// An orbit identifier for 3x3 cubes.
     #[derive(Debug, Clone, Copy)]
@@ -89,18 +104,6 @@ mod common {
         fn approximate_hash_orbit(&self, orbit_type: Cube3OrbitType) -> impl Hash;
     }
 
-    /// The expected sorted orbit definition for 3x3 puzzles.
-    pub const CUBE_3_SORTED_ORBIT_DEFS: [OrbitDef; 2] = [
-        OrbitDef {
-            piece_count: NonZeroU8::new(8).unwrap(),
-            orientation_count: NonZeroU8::new(3).unwrap(),
-        },
-        OrbitDef {
-            piece_count: NonZeroU8::new(12).unwrap(),
-            orientation_count: NonZeroU8::new(2).unwrap(),
-        },
-    ];
-
     impl<'id> OrbitIdentifier<'id> for Cube3OrbitType {
         fn first_orbit_identifier(_branded_orbit_def: BrandedOrbitDef<'id>) -> Self {
             Cube3OrbitType::Corners
@@ -123,9 +126,7 @@ mod common {
 
     macro_rules! impl_puzzle_state_for_cube3 {
         ($($cube3:path),* $(,)?) => {$(
-            impl<'id> PuzzleState<'id> for $cube3
-                where $cube3: Cube3State
-            {
+            impl<'id> PuzzleState<'id> for $cube3 {
                 type OrbitBytesBuf<'a> = <$cube3 as Cube3State>::OrbitBytesBuf;
                 type OrbitIdentifier = Cube3OrbitType;
 

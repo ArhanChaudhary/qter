@@ -5,7 +5,7 @@
 use super::common::{CornersTransformation, Cube3OrbitType, Cube3State, EdgesTransformation};
 use crate::{
     orbit_puzzle::exact_hasher_orbit,
-    puzzle::{SortedCycleStructureRef, cube3::common::CUBE_3_SORTED_ORBIT_DEFS},
+    puzzle::{SortedCycleStructureRef, cube3::CUBE_3_SORTED_ORBIT_DEFS},
 };
 use std::{
     fmt::{self, Formatter},

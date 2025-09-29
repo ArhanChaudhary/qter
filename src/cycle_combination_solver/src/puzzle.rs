@@ -1446,21 +1446,21 @@ mod tests {
     // --- simd8and16::UncompressedCube3 benchmarks ---
 
     #[bench]
-    #[cfg_attr(not(simd8and16), ignore)]
+    #[cfg_attr(not(simd8and16), ignore = "simd8and16 not enabled")]
     fn bench_compose_uncompressed_cube3_simd8and16(b: &mut Bencher) {
         make_guard!(guard);
         bench_compose_helper::<cube3::simd8and16::UncompressedCube3>(guard, b);
     }
 
     #[bench]
-    #[cfg_attr(not(simd8and16), ignore)]
+    #[cfg_attr(not(simd8and16), ignore = "simd8and16 not enabled")]
     fn bench_inverse_uncompressed_cube3_simd8and16(b: &mut Bencher) {
         make_guard!(guard);
         bench_inverse_helper::<cube3::simd8and16::UncompressedCube3>(guard, b);
     }
 
     #[bench]
-    #[cfg_attr(not(simd8and16), ignore)]
+    #[cfg_attr(not(simd8and16), ignore = "simd8and16 not enabled")]
     fn bench_induces_sorted_cycle_structure_uncompressed_cube3_simd8and16_worst(b: &mut Bencher) {
         make_guard!(guard);
         bench_induces_sorted_cycle_structure_worst_helper::<cube3::simd8and16::UncompressedCube3>(
@@ -1469,7 +1469,7 @@ mod tests {
     }
 
     #[bench]
-    #[cfg_attr(not(simd8and16), ignore)]
+    #[cfg_attr(not(simd8and16), ignore = "simd8and16 not enabled")]
     fn bench_induces_sorted_cycle_structure_uncompressed_cube3_simd8and16_average(b: &mut Bencher) {
         make_guard!(guard);
         bench_induces_sorted_cycle_structure_average_helper::<cube3::simd8and16::UncompressedCube3>(
@@ -1480,28 +1480,28 @@ mod tests {
     // --- simd8and16::Cube3 benchmarks ---
 
     #[bench]
-    #[cfg_attr(not(simd8and16), ignore)]
+    #[cfg_attr(not(simd8and16), ignore = "simd8and16 not enabled")]
     fn bench_compose_cube3_simd8and16(b: &mut Bencher) {
         make_guard!(guard);
         bench_compose_helper::<cube3::simd8and16::Cube3>(guard, b);
     }
 
     #[bench]
-    #[cfg_attr(not(simd8and16), ignore)]
+    #[cfg_attr(not(simd8and16), ignore = "simd8and16 not enabled")]
     fn bench_inverse_cube3_simd8and16(b: &mut Bencher) {
         make_guard!(guard);
         bench_inverse_helper::<cube3::simd8and16::Cube3>(guard, b);
     }
 
     #[bench]
-    #[cfg_attr(not(simd8and16), ignore)]
+    #[cfg_attr(not(simd8and16), ignore = "simd8and16 not enabled")]
     fn bench_induces_sorted_cycle_structure_cube3_simd8and16_worst(b: &mut Bencher) {
         make_guard!(guard);
         bench_induces_sorted_cycle_structure_worst_helper::<cube3::simd8and16::Cube3>(guard, b);
     }
 
     #[bench]
-    #[cfg_attr(not(simd8and16), ignore)]
+    #[cfg_attr(not(simd8and16), ignore = "simd8and16 not enabled")]
     fn bench_induces_sorted_cycle_structure_cube3_simd8and16_average(b: &mut Bencher) {
         make_guard!(guard);
         bench_induces_sorted_cycle_structure_average_helper::<cube3::simd8and16::Cube3>(guard, b);

@@ -1,6 +1,8 @@
 //! SIMD optimized implementations for 3x3 orbits during pruning table
 //! generation.
 
+#![allow(unused)]
+
 use crate::orbit_puzzle::{OrbitPuzzleStateImplementor, SpecializedOrbitPuzzleState};
 use std::{hash::Hash, hint::unreachable_unchecked, num::NonZeroU8};
 

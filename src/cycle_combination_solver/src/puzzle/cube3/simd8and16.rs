@@ -4,12 +4,13 @@
 
 #![cfg_attr(any(avx2, not(simd8and16)), allow(dead_code, unused_variables))]
 
-use super::common::{
-    CUBE_3_SORTED_ORBIT_DEFS, CornersTransformation, Cube3State, EdgesTransformation,
-};
+use super::common::{CornersTransformation, Cube3State, EdgesTransformation};
 use crate::{
     orbit_puzzle::exact_hasher_orbit,
-    puzzle::{SortedCycleStructureRef, cube3::common::Cube3OrbitType},
+    puzzle::{
+        SortedCycleStructureRef,
+        cube3::{CUBE_3_SORTED_ORBIT_DEFS, common::Cube3OrbitType},
+    },
 };
 use std::{
     fmt::{self, Debug, Formatter},
@@ -829,7 +830,7 @@ mod tests {
     use puzzle_geometry::ksolve::KPUZZLE_3X3;
 
     #[test]
-    #[cfg_attr(not(simd8and16), ignore)]
+    #[cfg_attr(not(simd8and16), ignore = "simd8and16 not enabled")]
     fn test_uncompressed_brute_force_inversion() {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<UncompressedCube3>::new(&KPUZZLE_3X3, guard).unwrap();
@@ -871,7 +872,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(not(simd8and16), ignore)]
+    #[cfg_attr(not(simd8and16), ignore = "simd8and16 not enabled")]
     fn test_compressed_brute_force_inversion() {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
@@ -913,7 +914,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(not(simd8and16), ignore)]
+    #[cfg_attr(not(simd8and16), ignore = "simd8and16 not enabled")]
     fn test_uncompressed_raw_inversion() {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<UncompressedCube3>::new(&KPUZZLE_3X3, guard).unwrap();
@@ -955,7 +956,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(not(simd8and16), ignore)]
+    #[cfg_attr(not(simd8and16), ignore = "simd8and16 not enabled")]
     fn test_compressed_raw_inversion() {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
@@ -997,7 +998,7 @@ mod tests {
     }
 
     #[bench]
-    #[cfg_attr(not(simd8and16), ignore)]
+    #[cfg_attr(not(simd8and16), ignore = "simd8and16 not enabled")]
     fn bench_uncompressed_brute_force_inversion(b: &mut test::Bencher) {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<UncompressedCube3>::new(&KPUZZLE_3X3, guard).unwrap();
@@ -1010,7 +1011,7 @@ mod tests {
     }
 
     #[bench]
-    #[cfg_attr(not(simd8and16), ignore)]
+    #[cfg_attr(not(simd8and16), ignore = "simd8and16 not enabled")]
     fn bench_uncompressed_raw_inversion(b: &mut test::Bencher) {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<UncompressedCube3>::new(&KPUZZLE_3X3, guard).unwrap();
@@ -1023,7 +1024,7 @@ mod tests {
     }
 
     #[bench]
-    #[cfg_attr(not(simd8and16), ignore)]
+    #[cfg_attr(not(simd8and16), ignore = "simd8and16 not enabled")]
     fn bench_compressed_brute_force_inversion(b: &mut test::Bencher) {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
@@ -1036,7 +1037,7 @@ mod tests {
     }
 
     #[bench]
-    #[cfg_attr(not(simd8and16), ignore)]
+    #[cfg_attr(not(simd8and16), ignore = "simd8and16 not enabled")]
     fn bench_compressed_raw_inversion(b: &mut test::Bencher) {
         make_guard!(guard);
         let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
