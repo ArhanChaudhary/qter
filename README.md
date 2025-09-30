@@ -6,7 +6,7 @@
 > [!NOTE]
 > Qter is currently an incomplete work-in-progress
 
-[Qter](https://qter.arhan.sh/) is a computer architecture that allows humans to perform computations by manipulating Rubik's Cube (or any twisty puzzle) by hand. Following is an example executable program that accepts an index as user input and computes the corresponding Fibonacci number, written in our custom twisty puzzle file format named *Q*. It can be physically executed by a human without needing to know how computers work.
+[Qter](https://qter.arhan.sh/) is a computer architecture that allows humans to perform computations by manipulating the Rubik's Cube (or any twisty puzzle) by hand. Following is an example executable program that accepts an index as user input and computes the corresponding Fibonacci number, written in our custom twisty puzzle file format named *Q*. It can be physically executed by a human without needing to know how computers work.
 
 `fib.q`
 <!-- some alternatives: clarity cl el janet lfe lean nlogo opa pact promela scilab -->

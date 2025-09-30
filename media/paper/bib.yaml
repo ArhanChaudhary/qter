@@ -219,3 +219,10 @@ identical-pieces:
   title: architecture.md
   url: https://github.com/cubing/twsearch/blob/0dced6e55f5612609a54c75056d00535fadee0c8/docs/architecture.md?plain=1#L407
   author: Rokicki, Tomas
+
+cubepos:
+  type: Web
+  title: cubepos.pdf
+  url: https://cube20.org/src/cubepos.pdf
+  author: Rokicki, Tomas
+  page-range: 31-33

@@ -350,7 +350,7 @@ Before we can explain how to turn a Rubik's Cube into a computer, we have to exp
     ),
 )
 
-You can see that the centers are attached to each other by the _core_ and are only able to rotate in place. This allows us to treat the centers as a fixed reference point to tell whether or not a sticker is on the correct side. For example, if we have the following scramble,
+You can see that the centers are attached to each other by the _core_ and are only able to rotate in place. This allows us to treat the centers as a fixed reference frame to tell whether or not a sticker is on the correct side. For example, if we have the following scramble,
 
 #align(center, cetz.canvas(length: 22pt, {
     cube("bbbbwbbbb oooogooooo wwwwrwwwww")
@@ -1743,7 +1743,7 @@ Now that we understand orientation, we can notate cube states in terms of permut
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
 
-    content((0, 3), [#set text(1.5em); $R U$])
+    content((0, 3), [#set text(1.5em); R U])
     cube("wwwwwwggg rrrggyggy wbbrrrrrr", offset: (-2.5, 0))
     cube("ooowbbwbb byybyybyy oogoogooy", offset: (2.5, 0), back: true)
 }))
@@ -1759,7 +1759,7 @@ Note that I'm writing down the one-cycle of the UFR corner because we will see t
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
 
-    content((0, 3), [#set text(1.5em); $R U$])
+    content((0, 3), [#set text(1.5em); R U])
     cube("bbbbbbnbn nnnbbbnnb bnnnnnnnn", offset: (-2.5, 0))
     cube("nnnbbbbnn nbbbbbnbb nnnnnnnnb", offset: (2.5, 0), back: true)
 }))
@@ -2058,29 +2058,29 @@ Symmetry reduction is the most famous way to compress pruning table entries. We 
         cetz.canvas(length: 15pt, {
             import cetz.draw: *
 
-            cube("wwowwgwwg ggyggwggg rrwbrrwrr", offset: (-2.5, 8))
-            cube("brrbbbbbb yyyyyyryy ooboooooo", offset: (2.5, 8), back: true)
+            cube("wwwwwwoob ggwrggwgg rggrrrrrr", offset: (-2.5, 0))
+            cube("rbbbbbbbb yyyyyyyyg ooooooowy", offset: (2.5, 0), back: true)
         }),
-        caption: figure.caption(position: top, text(1.2em)[A = R U R' U']),
+        caption: figure.caption(position: top, text(1.2em)[A = F U F' U']),
         supplement: none,
     ),
     figure(
         cetz.canvas(length: 15pt, {
             import cetz.draw: *
 
-            cube("wwwwwwoob ggwrggwgg rggrrrrrr", offset: (-2.5, 8))
-            cube("rbbbbbbbb yyyyyyyyg ooooooowy", offset: (2.5, 8), back: true)
+            cube("wwowwgwwg ggyggwggg rrwbrrwrr", offset: (-2.5, 0))
+            cube("brrbbbbbb yyyyyyryy ooboooooo", offset: (2.5, 0), back: true)
         }),
-        caption: figure.caption(position: top, text(1.2em)[B = F U F' U']),
+        caption: figure.caption(position: top, text(1.2em)[B = R U R' U']),
         supplement: none,
     ),
 )
 
-They are different but they are _basically_ identical. If you replace red with green, green with orange, orange with blue, blue with red, and rotate the cube $90 degree$, you will have transformed $A$ into $B$. Because these two cube positions have the exact same structure of pieces, they need the same number of moves to reach a Cycle Combination Solver solution.
+They are different but they are _basically_ identical. If you replace red with blue, blue with orange, orange with green, green with red, and rotate the cube $90 degree$ counter-clockwise, you will have transformed $A$ into $B$. Because these two cube positions have the exact same structure of pieces, they need the same number of moves to reach a Cycle Combination Solver solution.
 
-We call such positions _symmetrically equivalent_. If we really wanted to be serious about pruning table compression, what we can do is store a single representative of all symmetrically equivalent cubes because they would all share the same admissible heuristic value, and keeping a separate entry for each of these positions is a waste of memory. This would compress the table by a factor of the number of ways to recolor the cube. During IDA\*, this implies we have to transform every position to its representative before querying the table. We take the lexicographically minimal binary state representation as the representative to make this process simple and easy.
+We call such positions _symmetrically equivalent_. If we really wanted to be serious about pruning table compression, what we can do is store a single representative of all symmetrically equivalent cubes because they would all share the same admissible heuristic value, and keeping a separate entry for each of these positions is a waste of memory. This would compress the table by the number of valid recolorings of the cube.
 
-Defining symmetrically equivalent cubes by figuring out an arbitrary way to recolor the cube isn't very efficient. The more mathematically natural way to define symmetrically equivalent cubes is with permutations. Two cube positions $A$ and $B$ are symmetrically equivalent if there exists a symmetry $S$ of the cube such that $S A S^(-1) = B$, where the $S$ operations are spatial manipulations the whole cube. We can prove that $A$ and $B$ are symmetrically equivalent using this model:
+Defining symmetrically equivalent cubes by figuring out an arbitrary way to recolor the cube isn't very efficient. The more mathematically precise way to define symmetrically equivalent cubes is with permutations. Two cube positions $A$ and $B$ are symmetrically equivalent if there exists a symmetry $S$ of the cube such that $S A S^(-1) = B$, where the $S$ operations are spatial manipulations the whole cube. We can prove that $A$ and $B$ are symmetrically equivalent using this model:
 
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
@@ -2092,20 +2092,20 @@ Defining symmetrically equivalent cubes by figuring out an arbitrary way to reco
     cube("wwwwwwwww ggggggggg rrrrrrrrr", offset: (0, 7.5), name: "one")
     content("one.north", text(1.2em)[#align(center + bottom)[Solved\ (reference frame)]], anchor: "south")
 
-    cube("wwwwwwwww ooooooooo ggggggggg", offset: (-9, 0), name: "two")
-    content("two.north", text(1.2em)[#align(center + bottom)[$S$\ Rotate $-90degree$]], anchor: "south")
-    cube("wwbwwowwo ooyoowooo ggwrggwgg", offset: (-3, 0), name: "three")
+    cube("wwwwwwwww rrrrrrrrr bbbbbbbbb", offset: (-9, 0), name: "two")
+    content("two.north", text(1.2em)[#align(center + bottom)[$S$\ Rotate $90degree$]], anchor: "south")
+    cube("wwwwwwggo rrwbrrwrr brrbbbbbb", offset: (-3, 0), name: "three")
     content("three.north", text(1.2em)[#align(center + bottom)[$A$\ Apply $A$]], anchor: "south")
-    cube("wwwwwwoob ggwrggwgg rggrrrrrr", offset: (3, 0), name: "four")
-    content("four.north", text(1.2em)[#align(center + bottom)[$S^(-1)$\ Rotate $90degree$]], anchor: "south")
+    cube("wwowwgwwg ggyggwggg rrwbrrwrr", offset: (3, 0), name: "four")
+    content("four.north", text(1.2em)[#align(center + bottom)[$S^(-1)$\ Rotate $-90degree$]], anchor: "south")
     content("four.east", text(2em)[$=$], anchor: "west", padding: (0, 0, 0, 5pt))
-    cube("wwwwwwoob ggwrggwgg rggrrrrrr", offset: (9, 0), name: "five")
+    cube("wwowwgwwg ggyggwggg rrwbrrwrr", offset: (9, 0), name: "five")
     content("five.north", text(1.2em)[#align(center + bottom)[$B$\ Resultant $B$]], anchor: "south")
 }))
 
 In group theory, $S A S^(-1)$ is called a _conjugation_ of $A$ by $S$—we first perform the symmetry, apply our desired permutation, and then perform the inverse of the symmetry to restore the original reference frame. The symmetries of arbitrary polyhedra themselves form a group, called a _symmetry group_, so we can guarantee an $S^(-1)$ element exists.
 
-How many distinct symmetries—all possible values of $S$—does the cube have? The symmetry group of the cube $M$ consists of 24 rotational symmetries and 24 _mirror_ reflectional symmetries, for a total of 48 distinct symmetries. We illustrate one (of very many) ways to uniquely construct all of these symmetries.
+How many distinct symmetries—all possible values of $S$—does the cube have? The symmetry group of the cube $M$ consists of 24 rotational symmetries and 24 _mirror_ symmetries, for a total of 48 distinct symmetries. You can think of the mirror symmetries by imagining holding a Rubik's Cube position in a mirror to get a mirror image of that position. In this reflectional domain, we again apply the $24$ rotational symmetries. We illustrate one (of very many) ways to uniquely construct all of these symmetries, with the mirror symmetry highlighted in red.
 
 #figure(
     cetz.canvas(length: 130pt, {
@@ -2149,8 +2149,8 @@ How many distinct symmetries—all possible values of $S$—does the cube have? 
                 line((1 + c, 1 - c, c), (1 - c, 1 + c, -c), stroke: x_thickness)
                 line((1 + c, 1 - c, -c), (1 - c, 1 + c, c), stroke: x_thickness)
                 content((1.06, 1.31, -0.1), text(size: 13pt)[$3$x])
-                arc((1.28, 1.14, -0.1), start: 0deg, stop: 330deg, radius: (1.5 / 13, 1.2 / 13), mark: (
-                    end: ">",
+                arc((1.28, 1.11, -0.1), start: -33deg, stop: 290deg, radius: (1.5 / 13, 1.2 / 13), mark: (
+                    start: ">",
                     scale: 0.4,
                 ))
                 content("first-line.end", move(dx: 5pt, dy: -15pt)[#text(size: 13pt)[$S_(U\R\B3)$]])
@@ -2169,8 +2169,8 @@ How many distinct symmetries—all possible values of $S$—does the cube have? 
                 line((a, 1, a), (b, 1, b), stroke: x_thickness)
                 line((a, 1, b), (b, 1, a), stroke: x_thickness)
                 content((0.74, 1.46, 0.55), text(size: 13pt)[$4$x])
-                arc((0.61, 1.35, 0.5), start: 37deg, stop: 364deg, radius: (1.7 / 13, 1 / 13), mark: (
-                    end: ">",
+                arc((0.63, 1.35, 0.5), start: 18deg, stop: 332deg, radius: (1.7 / 13, 1 / 13), mark: (
+                    start: ">",
                     scale: 0.4,
                 ))
                 content("second-line.end", text(size: 13pt)[$S_(\U4)$], padding: (0, 0, 25pt, 0))
@@ -2202,8 +2202,8 @@ How many distinct symmetries—all possible values of $S$—does the cube have? 
                 line((0, b, a), (0, a, b), stroke: x_thickness)
                 line((1, a, a), (1, b, b), stroke: x_thickness)
                 line((1, a, b), (1, b, a), stroke: x_thickness)
-                arc((1.46, 0.61, 0.5), start: 100deg, stop: 430deg, radius: (1.2 / 13, 1.4 / 13), mark: (
-                    end: ">",
+                arc((1.46, 0.61, 0.5), start: 98deg, stop: 421deg, radius: (1.2 / 13, 1.4 / 13), mark: (
+                    start: ">",
                     scale: 0.4,
                 ))
                 content((1.52, 0.73, 0.5), text(size: 13pt)[$2$x])
@@ -2221,88 +2221,123 @@ $
     M = {(S_(U\R\B3))^a dot (S_(\R2))^b dot (S_(\U4))^c dot (S_(\F\B2))^d | a in {0,1,2}, b in {0, 1}, c in {0, 1, 2, 3}, d in {0, 1}}
 $
 
-Because we expect $S A S^(-1)$ to be a Rubik's Cube position, one might expect all symmetries of $M$ to be valid transformations of the Rubik's Cube. But this is not the case with the mirror symmetry, which is the one illustrated above in red. Consider these two Rubik's Cube positions:
+We discussed how symmetry conjugation temporarily changes a position's frame of reference before subsequently restoring it. Without any further context this would be fine, but in programming we efficiently represent a Rubik's Cube position by treating the centers as a fixed reference frame to avoid storing their states. This optimization is critical for speed because it makes position composition faster and minimizes data overhead. The ensuing caveat is that we _must_ always refer to a fixed frame of reference, and we have to rethink how symmetry conjugation works. The solution is simple: we define the change of reference frame as a _position_ such that, when composed, it transforms the pieces around the fixed frame of reference. The established theory still holds.
 
-#align(center)[#grid(
-    columns: 2,
-    column-gutter: 30pt,
-    figure(
-        cetz.canvas(length: 15pt, {
-            cube("wwwwwwggg rrrggyggy wbbrrrrrr", offset: (0, 7.5))
-        }),
-        caption: figure.caption(position: top, text(1.5em)[R U]),
-        supplement: none,
-    ),
+#figure(cetz.canvas(length: 15pt, {
+    import cetz.draw: *
 
-    figure(
-        cetz.canvas(length: 15pt, {
-            cube("wwrwwrwwr oowgggggg gggyrryrr", offset: (0, 7.5))
-        }),
-        caption: figure.caption(position: top, text(1.5em)[F' U']),
-        supplement: none,
-    ),
-)]
+    set-style(content: (
+        padding: (0, 0, 7pt, 0),
+    ))
 
-They are apparently symmetrically equivalent, yet there is no way to rotate either position to transform one to the other. The solution is to think of holding either position in a mirror to get a mirror reflection of that position—a non-rotational symmetry of the cube. In this reflectional domain, we can again apply the $24$ rotational symmetries to our advantage. One would finally be able to see that these two positions are in fact symmetrically equivalent. It turns out that the mirror symmetry negates the corner orientations in a such way that makes this operation physically unrealizable on the Rubik's Cube. Fortunately this doesn't break our logic: applying the inverse symmetry at the last step of the conjugation brings the mirrored Rubik's Cube back to a valid position.
+    cube("nnnnwnnnn nnnngnnnn nnnnrnnnn", offset: (-2.5, 8))
+    cube("nnnnbnnnn nnnnynnnn nnnnonnnn", offset: (2.5, 8), back: true)
+    content((0, 10.25), text(1.2em)[#align(center + bottom)[Fixed frame of reference]], anchor: "south")
+
+    set-style(content: (
+        padding: (0, 0, 10pt, 0),
+    ))
+
+    cube("wwwwwwwww bbbbgbbbb rrrrrrrrr", offset: (-10, 0), name: "five")
+    content(
+        "five.north",
+        align(center + bottom)[#text(1.2em)[$S_(F\B2)$]\ #text(fill: red)[Invalid state]],
+        anchor: "south",
+    )
+    cube("wwwwwwwww rrrrgrrrr bbbbrbbbb", offset: (-3.33, 0), name: "two")
+    content(
+        "two.north",
+        align(center + bottom)[#text(1.2em)[$S_(\U4)$]\ #text(fill: red)[Invalid state]],
+        anchor: "south",
+    )
+    cube("rrrrwrrrr yyyygyyyy bbbbrbbbb", offset: (3.33, 0), name: "three")
+    content("three.north", align(center + bottom)[#text(1.2em)[$S_(\UR\B3)$]\ Valid state], anchor: "south")
+    cube("yyyywyyyy bbbbgbbbb rrrrrrrrr", offset: (10, 0), name: "four")
+    content("four.north", align(center + bottom)[#text(1.2em)[$S_(\R2)$]\ Valid state], anchor: "south")
+
+    cube("ooooboooo yyyyyyyyy ggggogggg", offset: (-10, -5), back: true)
+    cube("ooooboooo yyyyyyyyy ggggogggg", offset: (-3.33, -5), back: true)
+    cube("wwwwbwwww ooooyoooo ggggogggg", offset: (3.33, -5), back: true)
+    cube("ggggbgggg wwwwywwww ooooooooo", offset: (10, -5), back: true)
+}))
+
+The takeaway is in the observation that every symmetry position has the centers in the same spatial orientation.
+
+Notice that the $S_(F\B2)$ and $S_(\U4)$ symmetries are invalid states with this fixed reference frame—the latter because of the parity constraint, and the former because the mirror image produces a nonsensical reflectional coloring. _This does not matter_ because the inconsistencies are un-done when $S^(-1)$ is applied; thus the conjugation $S A S^(-1)$ always results in a valid position.
 
 $48$ symmetries is already quite a lot, but we can still do better. If we can show that both an arbitrary Rubik's Cube position and its inverse position require the same number of moves to reach a Cycle Combination Solver solution, we can once again store a single representative of the two positions and further compress the table by another factor of $2$. We call this _antisymmetry_.
 
-Let us prove that our presumption is true. Let $P$ and $S$ be defined as algorithms such that $P$ $S$ is an optimal solution to the Cycle Combination Solver. We can take the inverse of $P$ $S$ to get $S^(-1) P^(-1)$ of the same algorithm length, which is still an optimal solution to the Cycle Combination Solver. Taking the inverse of the "add 1" operation (which is $P$ $S$) is the "sub 1" operation; changing your frame of reference to think of "sub 1" as "add 1" yields another way to construct the exact same register. Next we _conjugate_ $S^(-1) P^(-1)$ with $S$ to get $S (S^(-1) P^(-1)) S^(-1) = P^(-1) S^(-1)$ of the same algorithm length. It is a well known truism in group theory that conjugate elements in a group cannot be distinguished by only using the properties of the group, and this includes the cycle structure we are solving for, so this is also an optimal solution to the Cycle Combination Solver.
+Let us prove that our presumption is true.
 
-We have shown that if $P$ $S$ is an optimal solution to the Cycle Combination Solver then so is $P^(-1) S^(-1)$. $S$ and $S^(-1)$ are the same algorithm length; thus, the positions reached by any arbitrary $P$ and by $P^(-1)$ require the same number of moves to reach an optimal Cycle Combination Solver solution. This completes our proof.
++ Let $P$ and $S$ be defined as algorithms such that $P$ $S$ is an optimal solution to the Cycle Combination Solver.
+
++ We take the inverse of $P$ $S$ to get $S^(-1) P^(-1)$ of the same algorithm length, which is still an optimal solution to the Cycle Combination Solver. Taking the inverse of the "add 1" operation (which is $P$ $S$) is the "sub 1" operation; changing your frame of reference to think of "sub 1" as "add 1" yields another way to construct the exact same register.
+
++ We conjugate $S^(-1) P^(-1)$ with $S$ to get $S (S^(-1) P^(-1)) S^(-1) = P^(-1) S^(-1)$ of the same algorithm length. Conjugate elements in a permutation group preserve the cycle structure, hence this is also an optimal solution to the Cycle Combination Solver. To understand why, we examine the general
+
+    permutations-as-bijective-functions \
+    if $B$ takes element x to y then $A B A^(-1)$ must take element $A(x)$ to $A(y)$ \
+    so any cycle $(x_1, ..., x_n)$ becomes $(A(x_1), ..., A(x_n))$ \
+    if $B(x) = y$ then $(A B A^(-1))(A(x)) = A(B(A^(-1)(A(x)))) = A(B(x)) = A(y)$
+
++ We have shown that if $P$ $S$ is an optimal solution to the Cycle Combination Solver then so is $P^(-1) S^(-1)$. $S$ and $S^(-1)$ are the same algorithm length; thus, the positions reached by any arbitrary $P$ and by $P^(-1)$ require the same number of moves to reach an optimal Cycle Combination Solver solution. This completes our proof.
+
+Symmetry and antisymmetry reduction comes with a cost. During IDA\* search, every position must be transformed to its "symmetry and antisymmetry" representative before using it to query the pruning table. To do so we conjugate the position by the $48$ symmetries and the inverse by the $48$ antisymmetries to explore all the possible representatives. To identify the representative position after each conjugation, we look at its raw binary state representation and choose the lexicographic minimum (i.e. the minimum comparing byte-by-byte). Multiple symmetries may produce the representative position, however that is okay because we never actually care about which symmetry conjugation did so.
+
+The symmetry reduction algorithm as described so far would be slow—we need to perform 96 symmetry conjugations, and each is about as expensive as two moves. We use the following trick, first implemented by Rokicki @cubepos: instead of computing the full conjugation for every symmetry, we compute the permutation elements one-at-a-time. We take the least resulting first value and filter for the symmetries that give us that value. Then, we calculate the second permutation element, and find the least possible value for that, and so on. We usually only perform a single full conjugation, reducing the cost of symmetry and antisymmetry reduction significantly.
 
 ==== Pruning table types
-
-WIP (NOT DONE)
-
-The Cycle Combination Solver supports four different types pruning tables and three different data compression types. They are dynamically chosen at runtime based on a maximum memory limit option.
 
 The Cycle Combination Solver uses a separate pruning table per the puzzle orbits. For the Rubik's Cube, that means one pruning table for the corners and one for the edges. To get an admissible heuristic for an individual position, we query each pruning table based on the states of the position's corresponding orbits and take the maximum value as our query result. A brief example: if querying a Rubik's Cube state returns $3$ on the corners pruning table and $5$ on the edges pruning table, then its admissible heuristic is the maximum of the two, $5$. We established that larger heuristic values are better, and the optimality guarantee still stands because each individual pruning table is already admissible.
 
 Generating a pruning table involves searching the Rubik's Cube tree but from the Cycle Combination Solver solution states instead of from the solved state, and storing the amount of moves required to reach each state found.
 
-the exact pruning table, the approximate pruning table, the cycle structure pruning table, and the fixed pruning table.
+The Cycle Combination Solver supports four different types pruning tables: the exact pruning table, the approximate pruning table, the cycle structure pruning table, and the fixed pruning table. They are dynamically chosen at runtime based on a maximum memory limit option.
 
-Don't store keys
+*The implementation of pruning table types is not yet fully understood; we defer the primary part of this section for later.*
 
-antisymmetry means we have to premove
+// Don't store keys
 
-show that postmoves(inv(P)) = inv(premove(P))
+// antisymmetry means we have to premove
 
-The exact pruning table . This is formally known as a perfect hash table.
+// show that postmoves(inv(P)) = inv(premove(P))
 
-Exact:
-- P H F
-- IDDFS
-- Scanning
-- Backwards scanning
+// The exact pruning table . This is formally known as a perfect hash table.
 
-Approximate:
-- Each entry in a pruning table represents many puzzle positions.
-- Lossy compression
+// Exact:
+// - P H F
+// - IDDFS
+// - Scanning
+// - Backwards scanning
 
-Cycle structure:
+// Approximate:
+// - Each entry in a pruning table represents many puzzle positions.
+// - Lossy compression
 
-Populating the pruning table is a form of search, but from the start position; since the start position has full symmetry, this means that generating the pruning table to a particular depth is similarly reduced.
+// Cycle structure:
+
+// Populating the pruning table is a form of search, but from the start position; since the start position has full symmetry, this means that generating the pruning table to a particular depth is similarly reduced.
 
 Finally, the Cycle Combination Solver generates the pruning tables and performs IDA\* search at the same time. It would not be very optimal for the Cycle Combination Solver to spend all of its time generating the pruning tables only for the actual searching part to be easy. It balances out querying and generation. Starting from an uninitialized pruning table, if the number of queries exceeds the number of set values by a factor of $3$, it pauses the search to generate a deeper layer of that pruning table and then continues.
 
 ==== Pruning table compression
 
-WIP (NOT DONE)
+The Cycle Combination Solver supports four different types pruning tables and three different data compression types. They are dynamically chosen at runtime based on a maximum memory limit option.
 
-It also supports no compression, "nxopt" compression, and tabled asymmetric numeral systems compression (tANS)
+*The implementation of pruning table compression is not yet fully understood; we defer this section for later.*
 
-- tANS
-    - a potentially better pruning table implementation over the traditional 2-bit and "base" value approach.
+// It also supports no compression, "nxopt" compression, and tabled asymmetric numeral systems compression (tANS)
 
-There's a relatively new entropy coding algorithm called "tabled asymmetric numeral systems" (tANS), where encoding and decoding a symbol consists only of a table lookup and some additions and bitwise operations, so it's very fast and close to the limit of the source coding theorem.
+// - tANS
+//     - a potentially better pruning table implementation over the traditional 2-bit and "base" value approach.
 
-We wrote a simple sagemath script (which I can send if you like) to roughly estimate how many more pruning values this would allow you to fit. It seems to be highly parameter sensitive, but for a 32GB table, 512 bit blocks, and 'n' = 439 (I manually tuned this for the best results), the two bit method (by my math) is able to store \~2.3 trillion correct pruning values and this new method should be able to store \~7.5 trillion correct pruning values.
+// There's a relatively new entropy coding algorithm called "tabled asymmetric numeral systems" (tANS), where encoding and decoding a symbol consists only of a table lookup and some additions and bitwise operations, so it's very fast and close to the limit of the source coding theorem.
 
-The big tradeoff with this method would be CPU time, because the chunk can't be randomly accessed and on average half the symbols in the block would need to be decoded. The blocks could be shrunk to mitigate this, but tANS has a constant space overhead as well as the maximum depth metadata, so it would come at the cost of storage. Distance entropy algorithm
+// We wrote a simple sagemath script (which I can send if you like) to roughly estimate how many more pruning values this would allow you to fit. It seems to be highly parameter sensitive, but for a 32GB table, 512 bit blocks, and 'n' = 439 (I manually tuned this for the best results), the two bit method (by my math) is able to store \~2.3 trillion correct pruning values and this new method should be able to store \~7.5 trillion correct pruning values.
 
-We note that, in the case where an orbit has a large number of states, we cannot further split up the state space into multiple smaller pruning tables; we are only allowed to use a single pruning table per orbit. This is unlike Korf's optimal solver, which split up the 981 billion edge states of the Rubik's Cube into two smaller pruning tables of a more manageable 42 million states each. Instead of storing all of those 981 billion edge states, the only option for the Cycle Combination Solver is to resort to selecting a less accurate pruning table that takes up less memory. There are two reasons why: first, the cycle structure is an interdependent property of the entire orbit that cannot be subdivided. A state with our target cycle structure can possibly permute all of the edges on the Rubik's Cube, so it would be nontrivial to look at just a subset of the edges and confidently produce an admissible heuristic. Second, we don't even know where each edge will end up in a Cycle Combination Solver solution . We have not closely examined if such a pruning table is possible for the Cycle Combination Solver, but we expect this problem to be at best nontrivial.
+// The big tradeoff with this method would be CPU time, because the chunk can't be randomly accessed and on average half the symbols in the block would need to be decoded. The blocks could be shrunk to mitigate this, but tANS has a constant space overhead as well as the maximum depth metadata, so it would come at the cost of storage. Distance entropy algorithm
+
+// We note that, in the case where an orbit has a large number of states, we cannot further split up the state space into multiple smaller pruning tables; we are only allowed to use a single pruning table per orbit. This is unlike Korf's optimal solver, which split up the 981 billion edge states of the Rubik's Cube into two smaller pruning tables of a more manageable 42 million states each. Instead of storing all of those 981 billion edge states, the only option for the Cycle Combination Solver is to resort to selecting a less accurate pruning table that takes up less memory. There are two reasons why: first, the cycle structure is an interdependent property of the entire orbit that cannot be subdivided. A state with our target cycle structure can possibly permute all of the edges on the Rubik's Cube, so it would be nontrivial to look at just a subset of the edges and confidently produce an admissible heuristic. Second, we don't even know where each edge will end up in a Cycle Combination Solver solution . We have not closely examined if such a pruning table is possible for the Cycle Combination Solver, but we expect this problem to be at best nontrivial.
 
 === IDA\* optimizations
 
@@ -2360,6 +2395,9 @@ We use a special form of symmetry reduction during the search we call _sequence 
 forms an equivalence class based on all the rotations of sequences that are all solutions to the Cycle Combination Solver. The key is to search a single representative sequence in this equivalence class to avoid duplicate work. We choose the representative as the lexicographically minimal sequence because this restriction is easy to embed in IDA\* search through a simple modification to the recursive algorithm @sequence-symmetry-impl.
 
 Furthermore, we take advantage of the fact that the shortest sequence can never start and end with the moves in the same move class. Otherwise, the end could be rotated to the start and combined together, contradicting the shortest sequence assumption. Although this optimization only applies to the last depth in IDA\*, it turns out to be surprisingly effective because most of the time is spent there.
+
+// TODO: A B C A B vs A B A B C
+// TODO: commutative endings
 
 ==== Parallel IDA\*
 
