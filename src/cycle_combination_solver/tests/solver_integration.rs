@@ -33,7 +33,7 @@ fn test_identity_cycle_structure() {
     cube3_def = solver.into_puzzle_def_and_pruning_tables().0;
 
     let pruning_tables = OrbitPruningTables::try_generate_all(
-        identity_cycle_structure.clone(),
+        identity_cycle_structure,
         OrbitPruningTablesGenerateMeta::new_with_table_types(
             &cube3_def,
             vec![TableTy::Zero, TableTy::Zero],
@@ -188,17 +188,11 @@ fn test_210_optimal_cycle() {
         cube3_def.sorted_orbit_defs_ref(),
     )
     .unwrap();
-    let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
-        &cube3_def,
-        vec![TableTy::Zero, TableTy::Zero],
-        88_179_840,
-        cube3_def.id(),
-    )
-    .unwrap();
-    let pruning_tables =
-        OrbitPruningTables::try_generate_all(sorted_cycle_structure, generate_meta).unwrap();
-    let solver: CycleStructureSolver<Cube3, _> =
-        CycleStructureSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
+    let solver: CycleStructureSolver<Cube3, _> = CycleStructureSolver::new(
+        cube3_def,
+        ZeroTable::try_generate_all(sorted_cycle_structure, ()).unwrap(),
+        SearchStrategy::AllSolutions,
+    );
 
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
     assert_eq!(solutions.solution_length(), 5);
@@ -288,17 +282,11 @@ fn test_3c_optimal_cycle() {
         cube3_def.sorted_orbit_defs_ref(),
     )
     .unwrap();
-    let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
-        &cube3_def,
-        vec![TableTy::Zero, TableTy::Zero],
-        88_179_840,
-        cube3_def.id(),
-    )
-    .unwrap();
-    let pruning_tables =
-        OrbitPruningTables::try_generate_all(sorted_cycle_structure, generate_meta).unwrap();
-    let solver: CycleStructureSolver<Cube3, _> =
-        CycleStructureSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
+    let solver: CycleStructureSolver<Cube3, _> = CycleStructureSolver::new(
+        cube3_def,
+        ZeroTable::try_generate_all(sorted_cycle_structure, ()).unwrap(),
+        SearchStrategy::AllSolutions,
+    );
 
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
     assert_eq!(solutions.solution_length(), 8);
@@ -315,17 +303,11 @@ fn test_8c8e_optimal_cycle() {
         cube3_def.sorted_orbit_defs_ref(),
     )
     .unwrap();
-    let generate_meta = OrbitPruningTablesGenerateMeta::new_with_table_types(
-        &cube3_def,
-        vec![TableTy::Zero, TableTy::Zero],
-        88_179_840,
-        cube3_def.id(),
-    )
-    .unwrap();
-    let pruning_tables =
-        OrbitPruningTables::try_generate_all(sorted_cycle_structure, generate_meta).unwrap();
-    let solver: CycleStructureSolver<Cube3, _> =
-        CycleStructureSolver::new(cube3_def, pruning_tables, SearchStrategy::AllSolutions);
+    let solver: CycleStructureSolver<Cube3, _> = CycleStructureSolver::new(
+        cube3_def,
+        ZeroTable::try_generate_all(sorted_cycle_structure, ()).unwrap(),
+        SearchStrategy::AllSolutions,
+    );
 
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
 

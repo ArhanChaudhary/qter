@@ -132,7 +132,7 @@ pub struct SortedOrbitDefsRef<'id, 'a> {
     id: Id<'id>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SortedCycleStructure<'id> {
     pub inner: Vec<Vec<(NonZeroU8, bool)>>,
     id: Id<'id>,
