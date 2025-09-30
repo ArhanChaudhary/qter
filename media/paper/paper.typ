@@ -2273,18 +2273,17 @@ Let us prove that our presumption is true.
 
 + We take the inverse of $P$ $S$ to get $S^(-1) P^(-1)$ of the same algorithm length, which is still an optimal solution to the Cycle Combination Solver. Taking the inverse of the "add 1" operation (which is $P$ $S$) is the "sub 1" operation; changing your frame of reference to think of "sub 1" as "add 1" yields another way to construct the exact same register.
 
-+ We conjugate $S^(-1) P^(-1)$ with $S$ to get $S (S^(-1) P^(-1)) S^(-1) = P^(-1) S^(-1)$ of the same algorithm length. Conjugate elements in a permutation group preserve the cycle structure, hence this is also an optimal solution to the Cycle Combination Solver. To understand why, we examine the general
++ We conjugate $S^(-1) P^(-1)$ with $S$ to get $S (S^(-1) P^(-1)) S^(-1) = P^(-1) S^(-1)$ of the same algorithm length. It turns out that conjugate elements in a permutation group exhibit the same cycle structure, hence this is also an optimal solution to the Cycle Combination Solver. To understand why, we simplify the problem and examine the general case of two conjugate elements in a permutation group $A$ and $A B A^(-1)$. If permutation $B$ takes element $x$ to $y$, then $A B A^(-1)$ takes element $A(x)$ to $A(y)$. Indeed,
 
-    permutations-as-bijective-functions \
-    if $B$ takes element x to y then $A B A^(-1)$ must take element $A(x)$ to $A(y)$ \
-    so any cycle $(x_1, ..., x_n)$ becomes $(A(x_1), ..., A(x_n))$ \
-    if $B(x) = y$ then $(A B A^(-1))(A(x)) = A(B(A^(-1)(A(x)))) = A(B(x)) = A(y)$
+    $ (A B A^(-1))(A(x)) = A(B(A^(-1)(A(x)))) = A(B(x)) = A(y) $
+
+    So every cycle ($x_1, x_2, dots, x_n$) of $B$ is taken to the cycle $(A(x_1), A(x_2), dots, A(x_n))$ of $A B A^(-1)$. Viewing permutations as bijective maps of its elements, conjugation only relabels the elements moved by $B$. It does not change the cycle lengths nor how many cycles there are. We apply this proof with $A = S$ and $B = S^(-1)P^(-1)$.
 
 + We have shown that if $P$ $S$ is an optimal solution to the Cycle Combination Solver then so is $P^(-1) S^(-1)$. $S$ and $S^(-1)$ are the same algorithm length; thus, the positions reached by any arbitrary $P$ and by $P^(-1)$ require the same number of moves to reach an optimal Cycle Combination Solver solution. This completes our proof.
 
-Symmetry and antisymmetry reduction comes with a cost. During IDA\* search, every position must be transformed to its "symmetry and antisymmetry" representative before using it to query the pruning table. To do so we conjugate the position by the $48$ symmetries and the inverse by the $48$ antisymmetries to explore all the possible representatives. To identify the representative position after each conjugation, we look at its raw binary state representation and choose the lexicographic minimum (i.e. the minimum comparing byte-by-byte). Multiple symmetries may produce the representative position, however that is okay because we never actually care about which symmetry conjugation did so.
+Symmetry and antisymmetry reduction comes with a cost. During IDA\* search, every position must be transformed to its "symmetry and antisymmetry" representative before using it to query the pruning table. To do so we conjugate the position by the $48$ symmetries and the inverse by the $48$ antisymmetries to explore all the possible representatives. To identify the representative position after each conjugation, we look at its raw binary state representation and choose the lexicographic minimum (i.e. the minimum comparing byte-by-byte). Multiple symmetries may produce the representative position, however that is okay because we never actually care about which symmetry conjugation did so. The result is still the same.
 
-The symmetry reduction algorithm as described so far would be slow—we need to perform 96 symmetry conjugations, and each is about as expensive as two moves. We use the following trick, first implemented by Rokicki @cubepos: instead of computing the full conjugation for every symmetry, we compute the permutation elements one-at-a-time. We take the least resulting first value and filter for the symmetries that give us that value. Then, we calculate the second permutation element, and find the least possible value for that, and so on. We usually only perform a single full conjugation, reducing the cost of symmetry and antisymmetry reduction significantly.
+The symmetry reduction algorithm as described so far would be slow—we need to perform 96 symmetry conjugations, and each is about as expensive as two moves. We use the following trick described by Rokicki @twsearch-architecture: instead of computing the full conjugation for every symmetry conjugation, we compute the elements one-at-a-time. We take the least possible value for the first element of all the symmetry conjugations and filter for the ones that give us that value. Then, we compute all the second symmetry conjugation elements, find the least possible value for that, and so on. This reduces the cost of symmetry and antisymmetry reduction significantly, and we usually only perform a single full conjugation.
 
 ==== Pruning table types
 
@@ -2454,7 +2453,7 @@ We squeeze out our last bit of juice by overlapping pruning table memory latency
 
 === Larger twisty puzzles
 
-The overwhelming majority of our research has been within the realm of the Rubik's Cube, and so far, we have yet to run the Cycle Combination Solver on non-Rubik's cube twisty puzzles. While we are confident all of our theory generalizes to larger twisty puzzles (with minor implementation detail differences @identical-pieces), there is a practical concern we expect to run into.
+The overwhelming majority of our research has been within the realm of the Rubik's Cube, and so far, we have yet to run the Cycle Combination Solver on non-Rubik's cube twisty puzzles. While we are confident all of our theory generalizes to larger twisty puzzles (with minor implementation detail differences @twsearch-architecture), there is a practical concern we expect to run into.
 
 Optimally solving the 4x4x4 Rubik's Cube has been theorized to take "roughly as much time as computing God's number for the 3x3x3," @optimal-4x4 around 35 CPU-years @cube20. It may very well be the case that the Cycle Combination Solver, even with all its optimization tricks, will never be able to solution to a Cycle Combination Finder cycle structure for larger twisty puzzles. Thus, we are forced to sacrifice optimality in one of three ways:
 

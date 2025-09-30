@@ -10,6 +10,8 @@
 ## SCC
 
 - CCS
+  - document solver.rs
+    - update part of paper while at it
   - use enum dispatch for pruning table
   - tests for R L U D cycle type!
   - check for logs in test cases; tracing
@@ -45,7 +47,7 @@
   - you NEED to account for parity constraints when calculating orbit size; address this in schreier sims
   - ⭐solved state for 4x4
   - ⭐antisymmetry
-  - ⭐make fsm lookup unsafe when pg is done
+  - 😎mulcmp3 and mul3 optimizations from twsearch
   - can we use move tables? look into at the end
   - Schreier Sims & generating algs using it
   - Generate a pruning table starting from the scramble instead of the solved state and then began the search from the solved state

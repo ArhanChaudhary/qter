@@ -214,10 +214,10 @@ kociemba-symmetry:
   author: Kociemba, Herbert
   title: Equivalent Cubes and Symmetry
 
-identical-pieces:
+twsearch-architecture:
   type: Web
   title: architecture.md
-  url: https://github.com/cubing/twsearch/blob/0dced6e55f5612609a54c75056d00535fadee0c8/docs/architecture.md?plain=1#L407
+  url: https://github.com/cubing/twsearch/blob/0dced6e55f5612609a54c75056d00535fadee0c8/docs/architecture.md
   author: Rokicki, Tomas
 
 cubepos:
