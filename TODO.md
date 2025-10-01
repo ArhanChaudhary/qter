@@ -13,7 +13,6 @@
   - document solver.rs
     - update part of paper while at it
   - use enum dispatch for pruning table
-  - tests for R L U D cycle type!
   - check for logs in test cases; tracing
     - hardcode the first solution moves in the test cases to be sure
   - replace pub(crate) with getters
@@ -48,10 +47,10 @@
   - ⭐solved state for 4x4
   - ⭐antisymmetry
   - 😎mulcmp3 and mul3 optimizations from twsearch
+  - 😎PGE
   - can we use move tables? look into at the end
   - Schreier Sims & generating algs using it
   - Generate a pruning table starting from the scramble instead of the solved state and then began the search from the solved state
-- ⭐Phase 1
 
 ## PuzzleGeometry
 

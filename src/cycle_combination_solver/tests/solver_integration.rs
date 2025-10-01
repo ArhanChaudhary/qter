@@ -316,6 +316,47 @@ fn test_8c8e_optimal_cycle() {
     assert_eq!(solutions.expanded_count(), 960);
 }
 
+#[test_log::test]
+fn test_consecutive_commutative_moves() {
+    make_guard!(guard);
+    let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+    let sorted_cycle_structure = SortedCycleStructure::new(
+        &[
+            vec![
+                (1, true),
+                (1, true),
+                (1, true),
+                (1, true),
+                (2, true),
+                (2, true),
+            ],
+            vec![(6, false), (6, false)],
+        ],
+        cube3_def.sorted_orbit_defs_ref(),
+    )
+    .unwrap();
+    let solver: CycleStructureSolver<Cube3, _> = CycleStructureSolver::new(
+        cube3_def,
+        ZeroTable::try_generate_all(sorted_cycle_structure, ()).unwrap(),
+        SearchStrategy::AllSolutions,
+    );
+
+    let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
+
+    assert_eq!(solutions.solution_length(), 4);
+    while solutions.next().is_some() {
+        info!(
+            "{:<2}",
+            solutions
+                .expanded_solution()
+                .iter()
+                .map(|move_| move_.name())
+                .format(" ")
+        );
+    }
+    assert_eq!(solutions.expanded_count(), 96);
+}
+
 #[allow(dead_code)]
 struct OptimalCycleStructureTest {
     moves_str: &'static str,
