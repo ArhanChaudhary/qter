@@ -63,6 +63,7 @@
 - ⭐Calculate the symmetries of the puzzle
 - ⭐Parse our modified puzzlegeometry definition string
 - ⭐Reorganize parts of qter_core into here, rename `puzzle_theory` or something, and release as a crate on crates.io
+- Spherical cuts
 
 ## QAT
 
