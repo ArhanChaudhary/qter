@@ -400,7 +400,7 @@ To represent double turns or counterclockwise turns, we append a `2` or a `'` re
     cube("wwwwwwwww ooogggggg gggrrrrrr", offset: (0, 0))
 }))
 
-In this paper, we will use what is known as the _half turn metric_, which means that we consider U2 to be a single move. An alternative choice would be the _quarter turn metric_ which would consider U2 to be two moves, however that is less common and we won't use it in this paper. Here is a full table of all 18 moves for reference:
+Here is a full table of all 18 moves for reference:
 
 
 #figure(cetz.canvas(length: 15pt, {
@@ -503,7 +503,7 @@ You may notice that subtracting one is equivalent to adding three, because (U') 
 
 === Bigger numbers
 
-If the biggest number Qter could represent was three, it would not be an effective tool for computation. Thankfully, the Rubik's Cube has 43 quintillion states, leaving us lots of room to do better than just four. Consider the algorithm (R U). What if instead of saying that (U) adds one, we say that (R U) adds one? We can play the same game using this algorithm. The solved cube represents zero, (R U) represents one, (R U R U) represents two, etc. This algorithm performs a much more complicated action on the cube, so we should be able to represent more numbers. In fact, the maximum number we can represent this way is 104, and the cube re-solves itself after 105 iterations. We would say that the algorithm has "order 105".
+If the biggest number Qter could represent was three, it would not be an effective tool for computation. Thankfully, the Rubik's Cube has 43 quintillion states, leaving us lots of room to do better than just four. Consider the algorithm (R U). What if instead of saying that (U) adds one, we say that (R U) adds one? We can play the same game using this algorithm. The solved cube represents zero, (R U) represents one, (R U R U) represents two, etc. This algorithm performs a much more complicated action on the cube, so we should be able to represent more numbers. In fact, the maximum number we can represent this way is 104, and the cube re-solves itself after 105 iterations. We would say that the algorithm has _order 105_.
 
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
@@ -563,7 +563,18 @@ The simplest example of this are the algorithms (U) and (D'). You can see that (
     cube("wwwwwwwww rrrgggooo bbbrrrggg", offset: (15.1, 0))
 }))
 
-As described, `solved-goto` would only branch if the entire cube is solved, however since each algorithm affects a distinct area of the cube, it's possible for a human to determine whether a _single_ register is zero, by inspecting whether a particular section of the cube is solved. In the example in the above figure representing (1, 0), it's easy to tell that the second register is zero because the entire bottom layer of the cube is solved. We can modify the "solved-goto" instruction to input a list of pieces, all of which must be solved for the branch to be taken, but not necessarily any more. The following illustrates a successful `solved-goto UF UFR` instruction that would require jumping to a different part of the program, as well as an unsuccessful one that would require going to the next instruction.
+As described, `solved-goto` would only branch if the entire cube is solved, however since each algorithm affects a distinct area of the cube, it's possible for a human to determine whether a _single_ register is zero, by inspecting whether a particular section of the cube is solved. Remember that "solved" means that all of the stickers are the same color as the corresponding center.
+
+#figure(cetz.canvas(length: 15pt, {
+    import cetz.draw: *
+
+    content((-9.9, 3.1), [#set text(1.5em); (0, ?)])
+    cube("wwwwwwwww ggggggrrr rrrrrrbbb", offset: (-9.9, 0))
+    content((-4.9, 3.1), [#set text(1.5em); (?, 0)])
+    cube("wwwwwwwww bbbgggggg ooorrrrrr", offset: (-4.9, 0))
+}))
+
+For the first cube in the above figure, it's easy to tell that the first register is zero because the entire top layer of the cube is solved. We can modify the "solved-goto" instruction to input a list of pieces, all of which must be solved for the branch to be taken, but not necessarily any more. The following illustrates a successful `solved-goto UF UFR` instruction that would require jumping to a different part of the program, as well as an unsuccessful one that would require going to the next instruction.
 
 #figure(scale(30%, reflow: true, image("Goto States.png")))
 
@@ -1947,6 +1958,8 @@ In order to understand how to optimally solve for a cycle structure, we briefly 
 We thank Scherpius @computer-puzzling for his overview of the ideas in these next few sections.
 
 === Optimal solving background
+
+First, what do we by "optimal" or "shortest"? We need to choose a _metric_ for counting the number of moves in an algorithm, and there are a variety of ways to do so. In this paper, we will use what is known as the _half turn metric_, which means that we consider U2 to be a single move. An alternative choice would be the _quarter turn metric_ which would consider U2 to be two moves, however that is less common in the literature and we won't use it in this paper.
 
 In an optimal Rubik's Cube solver, we are given a random state, and we must find the shortest algorithm that brings the Rubik's Cube to the solved state. Analogously, the Cycle Combination Solver starts from the solved state and finds the shortest algorithm that brings the puzzle to a state with our specified cycle structure. The only thing that's fundamentally changed is something trivial — the goal condition. We bring up optimal _solving_ because this allows us to reuse its techniques which have been studied for the past 30 years @korf.
 
