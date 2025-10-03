@@ -117,7 +117,7 @@ pub trait UsedSizeBytes {
 }
 
 pub struct OrbitPruningTables<'id, P: PuzzleState<'id>> {
-    orbit_pruning_tables: Box<[Box<dyn OrbitPruningTable<'id, P>>]>,
+    orbit_pruning_tables: Box<[OrbitPruningTableImplementor<'id, P>]>,
     sorted_cycle_structure: SortedCycleStructure<'id>,
 }
 
@@ -183,6 +183,29 @@ pub struct CycleStructureOrbitPruningTable<'id, O: OrbitIdentifier<'id>> {
     data: Box<[OrbitPruneHeuristic]>,
     orbit_identifier: O,
     _id: Id<'id>,
+}
+
+pub enum OrbitPruningTableImplementor<'id, P: PuzzleState<'id>> {
+    ApproximateUncompressedOrbitPruningTable(
+        ApproximateOrbitPruningTable<'id, UncompressedStorageBackend<false>, P::OrbitIdentifier>,
+    ),
+    ApproximateNxoptOrbitPruningTable(
+        ApproximateOrbitPruningTable<'id, NxoptStorageBackend<false>, P::OrbitIdentifier>,
+    ),
+    ApproximateTansOrbitPruningTable(
+        ApproximateOrbitPruningTable<'id, TANSStorageBackend<false>, P::OrbitIdentifier>,
+    ),
+    ExactUncompressedOrbitPruningTable(
+        ExactOrbitPruningTable<'id, UncompressedStorageBackend<true>, P::OrbitIdentifier>,
+    ),
+    ExactNxoptOrbitPruningTable(
+        ExactOrbitPruningTable<'id, NxoptStorageBackend<true>, P::OrbitIdentifier>,
+    ),
+    ExactTansOrbitPruningTable(
+        ExactOrbitPruningTable<'id, TANSStorageBackend<true>, P::OrbitIdentifier>,
+    ),
+    CycleStructureOrbitPruningTable(CycleStructureOrbitPruningTable<'id, P::OrbitIdentifier>),
+    ZeroOrbitTable(ZeroOrbitTable),
 }
 
 /// This type isn't actually entirely useless; I will use it for tables that
@@ -269,6 +292,39 @@ impl UsedSizeBytes for MaxSizeBytes {
 impl UsedSizeBytes for TANSDistributionEstimation {
     fn used_size_bytes(&self) -> usize {
         self.max_size_bytes
+    }
+}
+
+impl<'id, P: PuzzleState<'id>> OrbitPruningTableImplementor<'id, P> {
+    fn admissible_heuristic(&self, puzzle_state: &P) -> u8 {
+        use OrbitPruningTableImplementor as OPTI;
+        match self {
+            OPTI::ApproximateUncompressedOrbitPruningTable(approximate_orbit_pruning_table) => {
+                approximate_orbit_pruning_table.admissible_heuristic(puzzle_state)
+            }
+            OPTI::ApproximateNxoptOrbitPruningTable(approximate_orbit_pruning_table) => {
+                approximate_orbit_pruning_table.admissible_heuristic(puzzle_state)
+            }
+            OPTI::ApproximateTansOrbitPruningTable(approximate_orbit_pruning_table) => {
+                approximate_orbit_pruning_table.admissible_heuristic(puzzle_state)
+            }
+            OPTI::ExactUncompressedOrbitPruningTable(exact_orbit_pruning_table) => {
+                exact_orbit_pruning_table.admissible_heuristic(puzzle_state)
+            }
+            OPTI::ExactNxoptOrbitPruningTable(exact_orbit_pruning_table) => {
+                exact_orbit_pruning_table.admissible_heuristic(puzzle_state)
+            }
+            OPTI::ExactTansOrbitPruningTable(exact_orbit_pruning_table) => {
+                exact_orbit_pruning_table.admissible_heuristic(puzzle_state)
+            }
+            OPTI::CycleStructureOrbitPruningTable(cycle_structure_orbit_pruning_table) => {
+                cycle_structure_orbit_pruning_table.admissible_heuristic(puzzle_state)
+            }
+            OPTI::ZeroOrbitTable(zero_orbit_table) => {
+                zero_orbit_table.admissible_heuristic(puzzle_state)
+            }
+            // _ => unreachable!(),
+        }
     }
 }
 
@@ -388,11 +444,11 @@ impl<'id, P: PuzzleState<'id>> PruningTables<'id, P> for OrbitPruningTables<'id,
                 max_size_bytes,
             };
 
-            let (orbit_pruning_table, used_size_bytes) =
+            let (orbit_pruning_table_implementor, used_size_bytes) =
                 try_generate_orbit_pruning_table_with_table_type(generate_meta, maybe_table_type)?;
 
             remaining_size_bytes -= used_size_bytes;
-            orbit_pruning_tables.push(orbit_pruning_table);
+            orbit_pruning_tables.push(orbit_pruning_table_implementor);
         }
 
         let orbit_pruning_tables = OrbitPruningTables {
@@ -410,8 +466,8 @@ impl<'id, P: PuzzleState<'id>> PruningTables<'id, P> for OrbitPruningTables<'id,
     fn admissible_heuristic(&self, puzzle_state: &P) -> u8 {
         self.orbit_pruning_tables
             .iter()
-            .fold(0, |best_bound, orbit_pruning_table| {
-                best_bound.max(orbit_pruning_table.admissible_heuristic(puzzle_state))
+            .fold(0, |best_bound, orbit_pruning_table_implementor| {
+                best_bound.max(orbit_pruning_table_implementor.admissible_heuristic(puzzle_state))
             })
     }
 
@@ -421,11 +477,11 @@ impl<'id, P: PuzzleState<'id>> PruningTables<'id, P> for OrbitPruningTables<'id,
 }
 
 macro_rules! table_fn {
-    ($fn_name:ident, $table:ident, $storage:ident, $exact:ident) => {
+    ($fn_name:ident, $table:ident, $storage:ident, $exact:ident, $variant:ident) => {
         fn $fn_name<'id, 'a, P: PuzzleState<'id>>(
             generate_meta: OrbitPruningTableGenerationMeta<'id, 'a, P>,
         ) -> Result<
-            (Box<dyn OrbitPruningTable<'id, P>>, usize),
+            (OrbitPruningTableImplementor<'id, P>, usize),
             (
                 OrbitPruningTableGenerationError,
                 OrbitPruningTableGenerationMeta<'id, 'a, P>,
@@ -435,23 +491,22 @@ macro_rules! table_fn {
             let start = Instant::now();
             let (table, used_size_bytes) =
                 $table::<$storage<{ $exact }>, P::OrbitIdentifier>::try_generate(generate_meta)?;
-            let generated = (
-                Box::new(table) as Box<dyn OrbitPruningTable<_>>,
-                used_size_bytes,
-            );
             info!(
                 success!("Generated {} in {:.3}s"),
                 stringify!($table),
                 start.elapsed().as_secs_f64()
             );
-            Ok(generated)
+            Ok((
+                OrbitPruningTableImplementor::$variant(table),
+                used_size_bytes,
+            ))
         }
     };
     ($fn_name:ident, $table:ident) => {
         fn $fn_name<'id, 'a, P: PuzzleState<'id>>(
             generate_meta: OrbitPruningTableGenerationMeta<'id, 'a, P>,
         ) -> Result<
-            (Box<dyn OrbitPruningTable<'id, P>>, usize),
+            (OrbitPruningTableImplementor<'id, P>, usize),
             (
                 OrbitPruningTableGenerationError,
                 OrbitPruningTableGenerationMeta<'id, 'a, P>,
@@ -460,33 +515,29 @@ macro_rules! table_fn {
             info!(start!("Generating {}"), stringify!($table));
             let start = Instant::now();
             let (table, used_size_bytes) = $table::try_generate(generate_meta)?;
-            let generated = (
-                Box::new(table) as Box<dyn OrbitPruningTable<_>>,
-                used_size_bytes,
-            );
             info!(
                 success!("Generated {} in {:.3}s"),
                 stringify!($table),
                 start.elapsed().as_secs_f64()
             );
-            Ok(generated)
+            Ok((OrbitPruningTableImplementor::$table(table), used_size_bytes))
         }
     };
 }
 
-table_fn! { try_generate_approximate_uncompressed_orbit_table,     ApproximateOrbitPruningTable,   UncompressedStorageBackend, false }
-table_fn! { try_generate_approximate_nxopt_orbit_table,            ApproximateOrbitPruningTable,   NxoptStorageBackend,        false }
-table_fn! { try_generate_approximate_tans_orbit_table,             ApproximateOrbitPruningTable,   TANSStorageBackend,         false }
-table_fn! { try_generate_exact_uncompressed_orbit_table,           ExactOrbitPruningTable,         UncompressedStorageBackend, true  }
-table_fn! { try_generate_exact_nxopt_orbit_table,                  ExactOrbitPruningTable,         NxoptStorageBackend,        true  }
-table_fn! { try_generate_exact_tans_orbit_table,                   ExactOrbitPruningTable,         TANSStorageBackend,         true  }
-table_fn! { try_generate_cycle_structure_uncompressed_orbit_table, CycleStructureOrbitPruningTable                                   }
-table_fn! { try_generate_zero_orbit_table,                         ZeroOrbitTable                                                    }
+table_fn! { try_generate_approximate_uncompressed_orbit_table,     ApproximateOrbitPruningTable,   UncompressedStorageBackend, false, ApproximateUncompressedOrbitPruningTable }
+table_fn! { try_generate_approximate_nxopt_orbit_table,            ApproximateOrbitPruningTable,   NxoptStorageBackend,        false, ApproximateNxoptOrbitPruningTable }
+table_fn! { try_generate_approximate_tans_orbit_table,             ApproximateOrbitPruningTable,   TANSStorageBackend,         false, ApproximateTansOrbitPruningTable }
+table_fn! { try_generate_exact_uncompressed_orbit_table,           ExactOrbitPruningTable,         UncompressedStorageBackend, true,  ExactUncompressedOrbitPruningTable }
+table_fn! { try_generate_exact_nxopt_orbit_table,                  ExactOrbitPruningTable,         NxoptStorageBackend,        true,  ExactNxoptOrbitPruningTable }
+table_fn! { try_generate_exact_tans_orbit_table,                   ExactOrbitPruningTable,         TANSStorageBackend,         true,  ExactTansOrbitPruningTable }
+table_fn! { try_generate_cycle_structure_uncompressed_orbit_table, CycleStructureOrbitPruningTable }
+table_fn! { try_generate_zero_orbit_table,                         ZeroOrbitTable }
 
 fn try_generate_orbit_pruning_table_with_table_type<'id, P: PuzzleState<'id>>(
     generate_meta: OrbitPruningTableGenerationMeta<'id, '_, P>,
     table_type: Option<TableTy>,
-) -> Result<(Box<dyn OrbitPruningTable<'id, P>>, usize), OrbitPruningTableGenerationError> {
+) -> Result<(OrbitPruningTableImplementor<'id, P>, usize), OrbitPruningTableGenerationError> {
     match table_type {
         Some(TableTy::Exact(StorageBackendTy::Uncompressed)) => {
             try_generate_exact_uncompressed_orbit_table(generate_meta).map_err(|(err, _)| err)
@@ -517,7 +568,7 @@ fn try_generate_orbit_pruning_table_with_table_type<'id, P: PuzzleState<'id>>(
 
 fn generate_orbit_pruning_table<'id, P: PuzzleState<'id>>(
     mut generate_meta: OrbitPruningTableGenerationMeta<'id, '_, P>,
-) -> (Box<dyn OrbitPruningTable<'id, P>>, usize) {
+) -> (OrbitPruningTableImplementor<'id, P>, usize) {
     for try_table_fn in [
         try_generate_exact_uncompressed_orbit_table,
         try_generate_exact_tans_orbit_table,
