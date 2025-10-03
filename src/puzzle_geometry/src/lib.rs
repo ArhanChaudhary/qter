@@ -158,7 +158,8 @@ impl Face {
 
         // Transforms a 2D space into the 3D subspace
         // Make it orthogonal because that's nice to have
-        let make_3d = Matrix::new([basis1.into_inner(), basis2.into_inner()]).mk_orthonormal();
+        let make_3d =
+            Matrix::new([basis1.vec_into_inner(), basis2.vec_into_inner()]).mk_orthonormal();
         // Project points in 3D space into the subspace and into the 2D space
         // The transpose is the pseudo-inverse because `make_3d` is orthonormal and has full column rank
         let make_2d = make_3d.clone().transpose();
@@ -527,8 +528,8 @@ impl PuzzleGeometryDefinition {
         for name in names {
             let stickers = stickers
                 .iter()
-                .filter(|v| v.1.contains(name))
-                .map(|(face, centroid)| (face, centroid.clone()))
+                .filter(|(_, names)| names.contains(name))
+                .map(|(face, included_in)| (face, included_in.clone()))
                 .collect_vec();
 
             // The center of mass must be preserved over rotations therefore any axis of symmetry must pass through it.
@@ -546,7 +547,18 @@ impl PuzzleGeometryDefinition {
                 edge.1 -= center_of_mass.clone();
             }
 
+            // Compute the vector that we think is facing "out". Our heuristic will be to calculate the centroid of all of the points farthest away from the centroid of our stickers. Then, "outside" will face exactly away from that second centroid. The justification is that since the side facing out is tiled with stickers whereas the side facing in is not, then the centroid will be closer to that outer face. That means that the points farthest away from the centroid will be on the back face. By taking their centroid, we get a point that is behind the centroid. Therefore, negating that vector gives a point in front of the centroid.
+            // In cases with symmetry where this centroid is exactly the normal centroid, we take out to be the difference between this centroid and the predefined center of the whole shape (which is just the origin).
+
+            // Take the first point from each edge since we would rather not process points twice as many times as we have to
+            let farthest_points = edges.iter().map(|v| &v.0).max_set_by_key(|v| (*v).clone().norm_squared());
+            let len = farthest_points.len();
+            let second_centroid = farthest_points.into_iter().cloned().sum::<Vector<3>>() / &Num::from(len);
+
+            let out_direction = if second_centroid.is_zero() { center_of_mass.clone() } else { -second_centroid };
+
             // Narrow down the edges that could potentially map to each other so that we don't have to try all of them
+            // Currently, we only classify edges by the distance from the origin of the two endpoints
             let mut edge_classifications: Vec<((Num, Num), Vec<(Matrix<3, 1>, Matrix<3, 1>)>)> =
                 Vec::new();
 
@@ -567,6 +579,7 @@ impl PuzzleGeometryDefinition {
                 edge_classifications.push(((a, b), vec![edge.clone()]));
             }
 
+            // Find the smallest set of edges that can map together and operate on them.
             let edges_that_might_map_together = edge_classifications
                 .into_iter()
                 .min_by_key(|v| v.1.len())
@@ -574,8 +587,8 @@ impl PuzzleGeometryDefinition {
                 .1;
 
             let from = Matrix::new([
-                edges_that_might_map_together[0].0.clone().into_inner(),
-                edges_that_might_map_together[0].1.clone().into_inner(),
+                edges_that_might_map_together[0].0.clone().vec_into_inner(),
+                edges_that_might_map_together[0].1.clone().vec_into_inner(),
             ]);
 
             let matrices = edges_that_might_map_together
@@ -583,8 +596,27 @@ impl PuzzleGeometryDefinition {
                 .flat_map(|(a, b)| [(a.clone(), b.clone()), (b, a)])
                 .skip(1)
                 .map(|v| {
-                    let to = Matrix::new([v.0.into_inner(), v.1.into_inner()]);
+                    let to = Matrix::new([v.0.vec_into_inner(), v.1.vec_into_inner()]);
                     rotate_to(from.clone(), to)
+                })
+                .filter(|v| {
+                    // Remove counterclockwise rotations; it would be cursed if `R` was counterclockwise
+                    let v = v.inner();
+                    // This is the axis about which the turn would be counter-clockwise
+                    // https://en.wikipedia.org/wiki/Rotation_matrix#Determining_the_axis
+                    let axis = Vector::new([[
+                        v[1][2].clone() - v[2][1].clone(),
+                        v[2][0].clone() - v[0][2].clone(),
+                        v[0][1].clone() - v[1][0].clone(),
+                    ]]);
+
+                    // If the axis is the zero vector, then the rotation is either 0 or 180 degrees and there isn't a sense of "clockwise"
+                    if axis.is_zero() {
+                        return true;
+                    }
+
+                    // If the counterclockwise axis is facing out, then this turn is counterclockwise and we should not process it. If this was truly a valid turn, then we will see the clockwise version by seeing the edge in the clockwise direction.
+                    axis.dot(out_direction.clone()).cmp_zero().is_gt()
                 });
 
             let cloud = EdgeCloud::new(edges);

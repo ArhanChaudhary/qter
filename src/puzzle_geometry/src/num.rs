@@ -348,13 +348,13 @@ impl<const N: usize> Vector<N> {
     }
 
     #[must_use]
-    pub fn into_inner(self) -> [Num; N] {
+    pub fn vec_into_inner(self) -> [Num; N] {
         let [v] = self.0;
         v
     }
 
     #[must_use]
-    pub fn inner(&self) -> &[Num; N] {
+    pub fn vec_inner(&self) -> &[Num; N] {
         let [v] = &self.0;
         v
     }
@@ -364,8 +364,8 @@ impl Vector<3> {
     #[must_use]
     #[expect(clippy::similar_names)]
     pub fn cross(self, other: Vector<3>) -> Vector<3> {
-        let [v1x, v1y, v1z] = self.into_inner();
-        let [v2x, v2y, v2z] = other.into_inner();
+        let [v1x, v1y, v1z] = self.vec_into_inner();
+        let [v2x, v2y, v2z] = other.vec_into_inner();
 
         Vector::new([[
             v1y.clone() * v2z.clone() - v1z.clone() * v2y.clone(),
@@ -424,6 +424,16 @@ impl<const O: usize, const I: usize> Matrix<O, I> {
         });
 
         Matrix(new_data.map(|v| v.map(|v| unsafe { v.assume_init() })))
+    }
+
+    #[must_use]
+    pub fn into_inner(self) -> [[Num; O]; I] {
+        self.0
+    }
+
+    #[must_use]
+    pub fn inner(&self) -> &[[Num; O]; I] {
+        &self.0
     }
 }
 
@@ -509,6 +519,14 @@ impl<const O: usize, const I: usize> Div<&Num> for Matrix<O, I> {
     }
 }
 
+impl<const O: usize, const I: usize> Neg for Matrix<O, I> {
+    type Output = Matrix<O, I>;
+
+    fn neg(self) -> Self::Output {
+        Matrix(self.0.map(|v| v.map(|v| -v)))
+    }
+}
+
 impl<const O: usize, const M: usize, const I: usize> Mul<&Matrix<M, I>> for &Matrix<O, M> {
     type Output = Matrix<O, I>;
 
@@ -551,11 +569,11 @@ pub fn rotate_to(from: Matrix<3, 2>, to: Matrix<3, 2>) -> Matrix<3, 3> {
     // Add a third column to prevent the final output from being underspecified
     let [v1, v2] = from.0.map(|v| Vector::new([v]));
     let v3 = v1.clone().cross(v2.clone());
-    let from = Matrix::new([v1, v2, v3].map(Vector::into_inner));
+    let from = Matrix::new([v1, v2, v3].map(Vector::vec_into_inner));
 
     let [v1, v2] = to.0.map(|v| Vector::new([v]));
     let v3 = v1.clone().cross(v2.clone());
-    let to = Matrix::new([v1, v2, v3].map(Vector::into_inner));
+    let to = Matrix::new([v1, v2, v3].map(Vector::vec_into_inner));
 
     &to * &from.transpose()
 }
@@ -570,10 +588,10 @@ pub fn rotation_about(axis: Vector<3>, x_axis: Vector<2>) -> Matrix<3, 3> {
     assert!(!x_axis.is_zero());
     assert!(!axis.is_zero());
 
-    let [cos, sin] = x_axis.into_inner();
+    let [cos, sin] = x_axis.vec_into_inner();
     let cosinv = Num::from(1) - cos.clone();
 
-    let [x, y, z] = axis.into_inner();
+    let [x, y, z] = axis.vec_into_inner();
 
     // https://en.wikipedia.org/wiki/Rotation_matrix#Rotation_matrix_from_axis_and_angle
 
@@ -648,6 +666,8 @@ mod tests {
             Vector::new([[1, 2, 3]]) + Vector::new([[2, 4, 6]]),
             Vector::new([[3, 6, 9]])
         );
+
+        assert_eq!(-Vector::new([[3, 2, 1]]), Vector::new([[-3, -2, -1]]));
 
         assert!(!Vector::new([[0, 3, 0]]).is_zero());
         assert!(Vector::new([[0, 0, 0]]).is_zero());
