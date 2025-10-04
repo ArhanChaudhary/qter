@@ -3,6 +3,7 @@
 #![allow(clippy::float_cmp)]
 
 use std::{
+    cmp::Ordering,
     collections::{BTreeSet, HashMap},
     mem,
     num::NonZeroU16,
@@ -477,6 +478,8 @@ impl PuzzleGeometry {
                 });
             }
 
+            moves.sort_by(|a, b| turn_compare(a.name(), b.name()));
+
             Arc::new(KSolve {
                 name: self.definition.to_string(),
                 sets,
@@ -551,11 +554,19 @@ impl PuzzleGeometryDefinition {
             // In cases with symmetry where this centroid is exactly the normal centroid, we take out to be the difference between this centroid and the predefined center of the whole shape (which is just the origin).
 
             // Take the first point from each edge since we would rather not process points twice as many times as we have to
-            let farthest_points = edges.iter().map(|v| &v.0).max_set_by_key(|v| (*v).clone().norm_squared());
+            let farthest_points = edges
+                .iter()
+                .map(|v| &v.0)
+                .max_set_by_key(|v| (*v).clone().norm_squared());
             let len = farthest_points.len();
-            let second_centroid = farthest_points.into_iter().cloned().sum::<Vector<3>>() / &Num::from(len);
+            let second_centroid =
+                farthest_points.into_iter().cloned().sum::<Vector<3>>() / &Num::from(len);
 
-            let out_direction = if second_centroid.is_zero() { center_of_mass.clone() } else { -second_centroid };
+            let out_direction = if second_centroid.is_zero() {
+                center_of_mass.clone()
+            } else {
+                -second_centroid
+            };
 
             // Narrow down the edges that could potentially map to each other so that we don't have to try all of them
             // Currently, we only classify edges by the distance from the origin of the two endpoints
@@ -679,18 +690,56 @@ fn turn_names(base_name: &ArcIntern<str>, symm: usize) -> Vec<ArcIntern<str>> {
     names_begin
 }
 
+fn turn_compare(a: &str, b: &str) -> Ordering {
+    // Separates a turn name into the name, number, and whether it's prime
+    fn separate(name: &str) -> (&str, &str, bool) {
+        println!("{name}");
+        let (without_prime, prime) = match name.strip_suffix('\'') {
+            Some(prefix) => (prefix, true),
+            None => (name, false),
+        };
+
+        let without_number = without_prime.trim_end_matches(|c: char| c.is_ascii_digit());
+
+        (
+            without_number,
+            without_prime.split_at(without_number.len()).1,
+            prime,
+        )
+    }
+
+    let (a_name, a_numbers, a_prime) = separate(a);
+    let (b_name, b_numbers, b_prime) = separate(b);
+
+    match a_name.cmp(b_name) {
+        Ordering::Equal => match a_prime.cmp(&b_prime) {
+            Ordering::Equal => {
+                let ordering = match a_numbers.len().cmp(&b_numbers.len()) {
+                    Ordering::Equal => a_numbers.cmp(b_numbers),
+                    ordering => ordering,
+                };
+
+                if a_prime {
+                    ordering.reverse()
+                } else {
+                    ordering
+                }
+            }
+            ordering => ordering,
+        },
+        ordering => ordering,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{cmp::Ordering, collections::BinaryHeap, sync::Arc};
 
     use crate::{
-        Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError,
-        knife::PlaneCut,
-        num::{Num, Vector},
-        shapes::{CUBE, TETRAHEDRON},
-        turn_names,
+        knife::PlaneCut, ksolve::KSolveMove, num::{Num, Vector}, shapes::{CUBE, TETRAHEDRON}, turn_compare, turn_names, Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError
     };
     use internment::ArcIntern;
+    use itertools::Itertools;
     use qter_core::{Int, Span, U, schreier_sims::StabilizerChain};
 
     #[test]
@@ -843,6 +892,9 @@ mod tests {
 
         let ksolve = geometry.ksolve();
 
+        // Make sure all of the moves are sorted properly
+        assert_eq!(ksolve.moves().iter().map(KSolveMove::name).collect_vec(), vec!["B", "B2", "B'", "D", "D2", "D'", "F", "F2", "F'", "L", "L2", "L'", "R", "R2", "R'", "U", "U2", "U'"]);
+
         assert_eq!(ksolve.moves().len(), 18);
 
         assert_eq!(ksolve.sets().len(), 2);
@@ -948,5 +1000,22 @@ mod tests {
             StabilizerChain::new(&group).cardinality(),
             "75582720".parse::<Int<U>>().unwrap()
         );
+    }
+
+    #[test]
+    fn test_turn_compare() {
+        assert_eq!(turn_compare("A", "B"), Ordering::Less);
+        assert_eq!(turn_compare("A'", "B"), Ordering::Less);
+        assert_eq!(turn_compare("B'", "B"), Ordering::Greater);
+        assert_eq!(turn_compare("B'", "B'"), Ordering::Equal);
+        assert_eq!(turn_compare("B2'", "B2'"), Ordering::Equal);
+        assert_eq!(turn_compare("B2'", "B2"), Ordering::Greater);
+        assert_eq!(turn_compare("B2", "B2'"), Ordering::Less);
+        assert_eq!(turn_compare("B2", "B3"), Ordering::Less);
+        assert_eq!(turn_compare("B3", "B2"), Ordering::Greater);
+        assert_eq!(turn_compare("B3", "B3"), Ordering::Equal);
+        assert_eq!(turn_compare("B2'", "B3'"), Ordering::Greater);
+        assert_eq!(turn_compare("B12'", "B3'"), Ordering::Less);
+        assert_eq!(turn_compare("B3'", "B12'"), Ordering::Greater);
     }
 }

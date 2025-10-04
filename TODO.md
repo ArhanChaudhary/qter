@@ -55,7 +55,6 @@
 ## PuzzleGeometry
 
 - ⭐Detect identical pieces
-- ⭐Make it so move classes are outputted in consecutive order (A A2 A3 ... A' B B2 B3 ... B')
 - ⭐Figure out algebraics
 - ⭐Canonical ordering of stickers
 - ⭐Calculate orientation and parity constraints of the puzzle
