@@ -175,10 +175,10 @@ where
     RealAlgebraicNumber: From<T>,
 {
     fn from(value: T) -> Self {
-        // Self(NumVal::Algebraic(RealAlgebraicNumber::from(value)))
-        Self(NumVal::Float(approx_float(RealAlgebraicNumber::from(
-            value,
-        ))))
+        Self(NumVal::Algebraic(RealAlgebraicNumber::from(value)))
+        // Self(NumVal::Float(approx_float(RealAlgebraicNumber::from(
+        //     value,
+        // ))))
     }
 }
 

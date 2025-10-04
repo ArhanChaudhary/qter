@@ -56,6 +56,7 @@
 
 - ⭐Detect identical pieces
 - ⭐Figure out algebraics
+  - Acceptance criterion: All default puzzles can be processed in <1s with exact arithmetic
 - ⭐Canonical ordering of stickers
 - ⭐Calculate orientation and parity constraints of the puzzle
 - ⭐Calculate the symmetries of the puzzle
