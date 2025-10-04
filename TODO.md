@@ -54,7 +54,6 @@
 
 ## PuzzleGeometry
 
-- ⭐Guarantee that base moves are clockwise
 - ⭐Detect identical pieces
 - ⭐Make it so move classes are outputted in consecutive order (A A2 A3 ... A' B B2 B3 ... B')
 - ⭐Figure out algebraics
