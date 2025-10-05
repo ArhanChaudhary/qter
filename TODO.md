@@ -9,16 +9,18 @@
 
 ## SCC
 
+- all valid ways to recolor the cube reword
+- indistinguishable -> almost indistinguishable
+- 13.348 where did that come from in the paper
 - CCS
   - document solver.rs
     - update part of paper while at it
-  - use enum dispatch for pruning table
   - check for logs in test cases; tracing
     - hardcode the first solution moves in the test cases to be sure
-  - replace pub(crate) with getters
+  - dont pack bit vector for AuxMem
+  - 😎replace pub(crate) with getters
   - try out a different exact hasher
   - spam debug_assert!()
-  - dont pack bit vector for AuxMem
   - solve for all cycle structures from CCF at once vs many runs of single cycle structure at a time
   - ⭐pruning table
     - generate table during the solve

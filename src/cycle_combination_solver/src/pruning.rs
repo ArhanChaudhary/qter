@@ -63,9 +63,8 @@ pub trait StorageBackend<const EXACT: bool>: 'static {
     /// Initialize the storage backend from an entry count.
     fn initialize_from_meta(initialization_meta: Self::InitializationMeta) -> Self;
 
-    // TODO: almost certainly these signatures need changing. For example adding
-    // orbit FSMs as arguments. I've left the API fairly flexible; Henry you can
-    // change this however.
+    // TODO: almost certainly these signatures need changing. I've left the API
+    // fairly flexible; Henry you can change this however.
     fn initialization_meta_from_entry_count(entry_count: usize) -> Self::InitializationMeta;
 
     fn initialization_meta_from_max_size_bytes(max_size_bytes: usize) -> Self::InitializationMeta;
@@ -621,7 +620,7 @@ impl<const EXACT: bool> StorageBackend<EXACT> for NxoptStorageBackend<EXACT> {
     }
 
     fn admissible_heuristic_hash(&self, hash: u64) -> u8 {
-        todo!();
+        0
     }
 
     fn heuristic_hash(&self, hash: u64) -> OrbitPruneHeuristic {
@@ -663,7 +662,7 @@ impl<const EXACT: bool> StorageBackend<EXACT> for TANSStorageBackend<EXACT> {
     }
 
     fn admissible_heuristic_hash(&self, hash: u64) -> u8 {
-        todo!();
+        0
     }
 
     fn heuristic_hash(&self, hash: u64) -> OrbitPruneHeuristic {
@@ -942,7 +941,7 @@ impl<'id, P: PuzzleState<'id>> OrbitPruningTable<'id, P>
     }
 
     fn admissible_heuristic(&self, puzzle_state: &P) -> u8 {
-        let hash = todo!();
+        0
     }
 }
 

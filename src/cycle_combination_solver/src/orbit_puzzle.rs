@@ -19,7 +19,7 @@ pub mod slice_orbit_puzzle;
 /// A puzzle state interface for manipulating orbits during pruning table
 /// generation. Users may either use the generic `SliceOrbitPuzzle` or define
 /// fast puzzle-specific implementations for their orbits.
-#[enum_dispatch(OrbitPuzzleStateImplementors)]
+#[enum_dispatch]
 pub trait OrbitPuzzleState: Clone {
     /// Compose two orbit puzzle states in place
     unsafe fn replace_compose(

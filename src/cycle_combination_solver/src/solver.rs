@@ -408,7 +408,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
         // Manually check depth 0 because the `permitted_cost == 0` check was
         // moved inside of the main loop in `search_for_solution`.
         if depth == 0 {
-            debug!(working!("Searching depth {}..."), depth);
+            debug!(working!("Searching depth limit {}..."), depth);
             let depth_start = Instant::now();
             // The return values here don't matter since it's not used in the
             // below loop so we can get rid of `true` and `false`
@@ -448,7 +448,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
                 .puzzle_state_history
                 .resize_if_needed(usize::from(depth));
             loop {
-                debug!(working!("Searching depth {}..."), depth);
+                debug!(working!("Searching depth limit {}..."), depth);
                 let depth_start = Instant::now();
                 // `entry_index` must be zero here so the root level so sequence
                 // symmetry doesn't access OOB move history entries.
@@ -490,7 +490,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
         }
 
         info!(
-            success!("{} raw solutions at depth {} found in {:.3}s"),
+            success!("Found {} raw solutions at depth {} in {:.3}s"),
             mutable.solutions.len(),
             depth,
             start.elapsed().as_secs_f64()
