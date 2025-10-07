@@ -1476,55 +1476,6 @@ $
                                                              & = () \
 $
 
-For the sake of example, let's do some proofs using the group axioms @elementary-proofs. These will apply to _all_ groups, not just the Rubik's Cube. First, lets show that $a^(-1) · a = e$. We already know that $a · a^(-1) = e$, but does that imply that $a$ and $a^(-1)$ commute with each other? We can simply begin with the same thing on both sides of an equality and do algebra to it:
-
-$
-    (a^(-1) · a) & = (a^(-1) · a)                                  && "Reflexivity" \
-    (a^(-1) · a) & = (a^(-1) · a) · e                              && "Identity axiom" \
-      a^(-1) · a & = a^(-1) · a · (a^(-1) · (a^(-1))^(-1)) #h(1em) && "Inverse axiom" \
-      a^(-1) · a & = a^(-1) · (a · a^(-1)) · (a^(-1))^(-1)         && "Associativity" \
-      a^(-1) · a & = a^(-1) · e · (a^(-1))^(-1)                    && "Inverse axiom" \
-      a^(-1) · a & = a^(-1) · (a^(-1))^(-1)                        && "Identity axiom" \
-      a^(-1) · a & = e                                             && "Inverse axiom" \
-$
-
-Second, let's show that $e · a = a$ for all $a$. We already know that $a · e = a$ from the axioms, but can we prove it the other way around? Lets begin with the following equation which is once again true by reflexivity and do algebra to it.
-
-$
-    e · a & = e · a                  && "Reflexivity" \
-    e · a & = a · a^(-1) · a #h(2em) && "Inverse axiom" \
-    e · a & = a · e                  && "Backwards-inverse theorem from above" \
-    e · a & = a                      && "Identity axiom" \
-$
-
-Third, let's prove that inverses must be unique. For contradiction, lets assume that $b$ and $c$ are _different_ inverses of $a$, meaning $a · b = e$ and $a · c = e$.
-
-$
-        a · b & = e                 && "Assumption" \
-        a · b & = a · c             && "Assumption" \
-    b · a · b & = b · a · c #h(2em) && "Pre-apply" b "on both sides" \
-        e · b & = e · c             && "Backwards-inverse theorem" \
-            b & = c                 && "Backwards-identity theorem" \
-$
-
-Since we were able to derive that $b = c$, this contradicts our assumption, proving that there only exists a unique inverse for each element. This also implies that $(a^(-1))^(-1) = a$ because we know that $a^(-1) · a = e$ and $a^(-1) · (a^(-1))^(-1) = e$ and since inverses are unique, those must be the same.
-
-Finally, let's prove that applying one element to itself over and over again will eventually loop around to the identity. In other words, for each element $a$ of a group, there exists some number $x >= 1$ such that $a^x = e$. You may notice that we actually took this as an assumption throughout our explanation of how Qter works.
-
-We also have to assume that the group is _finite_, because for infinite groups it's easily possible for this to not work. A simple counterexample would be taking your group to be the integers under addition. That follows all of the group axioms and if you add one to itself over and over, it will never loop around back to one. Thankfully, the Rubik's Cube (and all twisty puzzles) are finite groups, so we can get away with only caring about those.
-
-Let $s$ be the number of elements in the group, its _order_, and consider the list of elements $[a^i "for" i "in" [0..s+1)]$. Note that the first element is the identity because we're taking $a$ to the zeroth power. The length of this list is one greater than the size of the group, therefore, by the pigeonhole principle, there must be at least one duplicate item in the list.
-
-#figure(
-    scale(20%, reflow: true, image("TooManyPigeons.jpg")),
-    caption: [10 pigeons in 9 holes. The top-left hole has two pigeons. Image source: @pigeons-in-holes],
-    numbering: none,
-)
-
-Let $x$ and $y$ be the indices of the first and second occurrences of the _first_ duplicate item in the list. There may be a many duplicated items, but we want the first one. From here, there are two possibilities. If $x$ is zero, then it looped around to the identity element in $y$ iterations and the theorem is true in this case.
-
-If $x$ is non-zero, then it must be the case that  $a^(x - 1) != a^(y - 1)$. Otherwise, that would break our assumption that $x$ and $y$ are the indices of the _first_ duplicate item in the list because $a^(x-1)$ would have been duplicated at the $y-1$ position which is less than $y$. By construction, we have that $a^(x - 1) · a = a^(y - 1) · a$. We can cancel $a$ on both sides using its inverse and show that $a^(x - 1) = a^(y - 1)$. This is a contradiction, making this second case impossible. Therefore, only the first case is possible and the theorem is true.
-
 Now that we understand the Rubik's Cube in the language of mathematics, we need a way to represent it in the language of computing. To do this, we will construct a group that is different from the Rubik's Cube group but that has identical structure to it. Our new group will be possible to represent in a computer — after all, you can't shove a Rubik's Cube into your CPU, both your CPU and Rubik's Cube will break! :)
 
 ==== Permutation groups
