@@ -144,15 +144,6 @@ solving-permgroup:
   page-range: 186–193
   series: "ISSAC '98"
 
-canonical-sequence:
-  type: book
-  author: Singmaster, David
-  title: Notes on Rubik’s Magic Cube
-  edition: 5
-  page-range: 34
-  publisher: Enslow Publishers
-  date: 1981
-
 pathmax:
   type: article
   author: Mérõ, László

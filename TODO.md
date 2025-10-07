@@ -9,10 +9,8 @@
 
 ## SCC
 
-- all valid ways to recolor the cube reword
-- indistinguishable -> almost indistinguishable
-- 13.348 where did that come from in the paper
 - CCS
+  - figure out move ordering dependence
   - document solver.rs
     - update part of paper while at it
   - check for logs in test cases; tracing

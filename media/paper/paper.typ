@@ -1912,9 +1912,9 @@ We thank Scherpius @computer-puzzling for his overview of the ideas in these nex
 
 First, what do we mean by "optimal" or "shortest"? We need to choose a _metric_ for counting the number of moves in an algorithm, and there are a variety of ways to do so. In this paper, we will use what is known as the _half turn metric_, which means that we consider U2 to be a single move. An alternative choice would be the _quarter turn metric_ which would consider U2 to be two moves, however that is less common in the literature and we won't use it in this paper.
 
-In an optimal Rubik's Cube solver, we are given a random state, and we must find the shortest algorithm that brings the Rubik's Cube to the solved state. Analogously, the Cycle Combination Solver starts from the solved state and finds the shortest algorithm that brings the puzzle to a state with our specified cycle structure. The only thing that's fundamentally changed is something trivial — the goal condition. We bring up optimal _solving_ because this allows us to reuse its techniques which have been studied for the past 30 years @korf.
+In an optimal Rubik's Cube solver, we are given a random position, and we must find the shortest algorithm that brings the Rubik's Cube to the solved state. Analogously, the Cycle Combination Solver starts from the solved state and finds the shortest algorithm that brings the puzzle to a position with our specified cycle structure. The only thing that's fundamentally changed is something trivial — the goal condition. We bring up optimal _solving_ because this allows us to reuse its techniques which have been studied for the past 30 years @korf.
 
-It would be reasonable to expect there to be a known structural property of the Rubik's Cube that makes optimal solving easy. Indeed, to find a _good_ solution to the Rubik's Cube, the technique of Kociemba's algorithm @kociembas-algorithm cleverly utilizes a specific subgroup to solve up to 3900 individual states per second _near_ optimally @cube20. However, we want to do better than that.
+It would be reasonable to expect there to be a known structural property of the Rubik's Cube that makes optimal solving easy. Indeed, to find a _good_ solution to the Rubik's Cube, the technique of Kociemba's algorithm @kociembas-algorithm cleverly utilizes a specific subgroup to solve up to 3900 individual position per second _near_ optimally @cube20. However, we want to do better than that.
 
 Unfortunately, to find an _optimal_ solution, the only known approach is to brute force all combinations of moves sequences until the Rubik's Cube is solved. To add some insult to injury, Demaine @np-complete proved that optimal $N times N times N$ cube solving is NP-complete. However, this doesn't mean we can't optimize the brute force approach. We will discuss a variety of improvements that can be made, but the runtime is likely to necessarily be exponential.
 
@@ -1975,7 +1975,7 @@ A more formal way to think about the Cycle Combination Solver is to think of the
     line((to: "tree.g0-3", rel: (0.9, -1)), (to: "tree.0-3-0", rel: (4.5, 1.2)))
 }))
 
-Our goal is now to find a node with the specified cycle structure at the _topmost_ level of the tree, a solution of the optimal move length. Those familiar with data structures and algorithms will think of the most obvious approach to this form of tree searching: breadth-first search (BFS). BFS is an algorithm that explores all nodes in a level before moving on to the next one. Indeed, BFS guarantees optimality, and works in theory, but not in practice: extra memory is needed to keep track of child nodes that are yet to be explored. At every level, the number of nodes scales by a factor $18$, and so does the extra memory needed. At a depth level of just $8$, BFS would require storing $18^9$ or roughly 200 billion Rubik's Cube states in memory, which is not practical. We need to do better.
+Our goal is now to find a node with the specified cycle structure at the _topmost_ level of the tree, a solution of the optimal move length. Those familiar with data structures and algorithms will think of the most obvious approach to this form of tree searching: breadth-first search (BFS). BFS is an algorithm that explores all nodes in a level before moving on to the next one. Indeed, BFS guarantees optimality, and works in theory, but not in practice: extra memory is needed to keep track of child nodes that are yet to be explored. At every level, the number of nodes scales by a factor $18$, and so does the extra memory needed. At a depth level, or sequence length, of just $8$, BFS would require storing $18^9$ (number of depth 9 nodes) or roughly 200 billion Rubik's Cube states in memory. This is clearly not practical. We need to do better.
 
 We now consider a sibling algorithm to BFS: depth-first search (DFS). DFS is an algorithm that explores all nodes as deep as possible before backtracking. It strikes our interest because the memory overhead is minimal; all you need to keep track of is the path taken to reach a node, something that can be easily managed during the search. However, because we explore nodes depth-first, it offers no guarantee about optimality, so we still have a problem.
 
@@ -1985,7 +1985,7 @@ A simple modification to DFS can make it always find the optimal solution. We tw
 
 IDDFS solves the memory issue, but is lacking in speed because tree searching is still slow. The overwhelming majority of paths explored lead to no solution. What would be nice is if we could somehow know whether all paths that continue from a given node are dead ends without having to check by brute-force.
 
-For this, we introduce the idea of a _pruning table_. For any given Rubik's Cube state, a pruning table tells you a lower bound on the number of moves needed to reach a Cycle Combination Solver solution. Suppose we are running IDDFS until depth $12$, and we've done 5 moves so far. Say we are at this node.
+For this, we introduce the idea of a _pruning table_. For any given Rubik's Cube position, a pruning table tells you a lower bound on the number of moves needed to reach a Cycle Combination Solver solution. Suppose we are running IDDFS until depth $12$, and we've done 5 moves so far. Say we are at this node.
 
 #figure(
     cetz.canvas(length: 15pt, {
@@ -2042,7 +2042,7 @@ Symmetry reduction is the most famous way to compress pruning table entries. We 
 
 They are different but they are _basically_ identical. If you replace red with blue, blue with orange, orange with green, green with red, and rotate the cube $90 degree$ counter-clockwise, you will have transformed $A$ into $B$. Because these two cube positions have the exact same structure of pieces, they need the same number of moves to reach a Cycle Combination Solver solution.
 
-We call such positions _symmetrically equivalent_. If we really wanted to be serious about pruning table compression, what we can do is store a single representative of all symmetrically equivalent cubes because they would all share the same admissible heuristic value, and keeping a separate entry for each of these positions is a waste of memory. This would compress the table by the number of valid recolorings of the cube.
+We call such positions _symmetrically equivalent_. If we really wanted to be serious about pruning table compression, what we can do is store a single representative of all symmetrically equivalent cubes because they would all share the same admissible heuristic value, and keeping a separate entry for each of these positions is a waste of memory.
 
 Defining symmetrically equivalent cubes by figuring out an arbitrary way to recolor the cube isn't very efficient. The more mathematically precise way to define symmetrically equivalent cubes is with permutations. Two cube positions $A$ and $B$ are symmetrically equivalent if there exists a symmetry $S$ of the cube such that $S A S^(-1) = B$, where the $S$ operations are spatial manipulations the whole cube. We can prove that $A$ and $B$ are symmetrically equivalent using this model:
 
@@ -2069,7 +2069,7 @@ Defining symmetrically equivalent cubes by figuring out an arbitrary way to reco
 
 In group theory, $S A S^(-1)$ is called a _conjugation_ of $A$ by $S$—we first perform the symmetry, apply our desired permutation, and then perform the inverse of the symmetry to restore the original reference frame. The symmetries of arbitrary polyhedra themselves form a group, called a _symmetry group_, so we can guarantee an $S^(-1)$ element exists.
 
-How many distinct symmetries—all possible values of $S$—does the cube have? The symmetry group of the cube $M$ consists of 24 rotational symmetries and 24 _mirror_ symmetries, for a total of 48 distinct symmetries. You can think of the mirror symmetries by imagining holding a Rubik's Cube position in a mirror to get a mirror image of that position. In this reflectional domain, we again apply the $24$ rotational symmetries. We illustrate one (of very many) ways to uniquely construct all of these symmetries, with the mirror symmetry highlighted in red.
+Symmetry reduction compresses the pruning table by the number distinct symmetries—all possible values of $S$—of the cube, so how many are there? The symmetry group of the cube $M$ consists of 24 rotational symmetries and 24 _mirror_ symmetries, for a total of 48 distinct symmetries. You can think of the mirror symmetries by imagining holding a Rubik's Cube position in a mirror to get a mirror image of that position. In this reflectional domain, we again apply the $24$ rotational symmetries. We illustrate one (of very many) ways to uniquely construct all of these symmetries, with the mirror symmetry highlighted in red.
 
 #figure(
     cetz.canvas(length: 130pt, {
@@ -2133,7 +2133,7 @@ How many distinct symmetries—all possible values of $S$—does the cube have? 
                 line((a, 1, a), (b, 1, b), stroke: x_thickness)
                 line((a, 1, b), (b, 1, a), stroke: x_thickness)
                 content((0.74, 1.46, 0.55), text(size: 13pt)[$4$x])
-                arc((0.63, 1.35, 0.5), start: 18deg, stop: 332deg, radius: (1.7 / 13, 1 / 13), mark: (
+                arc((0.63, 1.35, 0.5), start: 10deg, stop: 325deg, radius: (1.7 / 13, 1 / 13), mark: (
                     start: ">",
                     scale: 0.4,
                 ))
@@ -2185,7 +2185,7 @@ $
     M = {(S_(U\R\B3))^a dot (S_(\R2))^b dot (S_(\U4))^c dot (S_(\F\B2))^d | a in {0,1,2}, b in {0, 1}, c in {0, 1, 2, 3}, d in {0, 1}}
 $
 
-We discussed how symmetry conjugation temporarily changes a position's frame of reference before subsequently restoring it. Without any further context this would be fine, but in programming we efficiently represent a Rubik's Cube position by treating the centers as a fixed reference frame to avoid storing their states. This optimization is critical for speed because it makes position composition faster and minimizes data overhead. The ensuing caveat is that we _must_ always refer to a fixed frame of reference, and we have to rethink how symmetry conjugation works. The solution is simple: we define the change of reference frame as a _position_ such that, when composed, it transforms the pieces around the fixed frame of reference. The established theory still holds.
+We discussed how symmetry conjugation temporarily changes a position's frame of reference before subsequently restoring it. Without any further context this would be fine, but in programming we efficiently represent a Rubik's Cube position by treating the centers as a fixed reference frame to avoid storing their states. This optimization is critical for speed because it makes position composition faster and minimizes data overhead. The ensuing caveat is that we _must_ always refer to a fixed frame of reference, so we have to rethink how symmetry conjugation works. The solution is simple, and the established theory still holds: we define the change of reference frame as a _position_ such that, when composed with the solved state, it transforms the pieces around the fixed frame of reference.
 
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
@@ -2205,19 +2205,19 @@ We discussed how symmetry conjugation temporarily changes a position's frame of 
     cube("wwwwwwwww bbbbgbbbb rrrrrrrrr", offset: (-10, 0), name: "five")
     content(
         "five.north",
-        align(center + bottom)[#text(1.2em)[$S_(F\B2)$]\ #text(fill: red)[Invalid state]],
+        align(center + bottom)[#text(1.2em)[$S_(F\B2)$]\ #text(fill: red)[Invalid position]],
         anchor: "south",
     )
     cube("wwwwwwwww rrrrgrrrr bbbbrbbbb", offset: (-3.33, 0), name: "two")
     content(
         "two.north",
-        align(center + bottom)[#text(1.2em)[$S_(\U4)$]\ #text(fill: red)[Invalid state]],
+        align(center + bottom)[#text(1.2em)[$S_(\U4)$]\ #text(fill: red)[Invalid position]],
         anchor: "south",
     )
     cube("rrrrwrrrr yyyygyyyy bbbbrbbbb", offset: (3.33, 0), name: "three")
-    content("three.north", align(center + bottom)[#text(1.2em)[$S_(\UR\B3)$]\ Valid state], anchor: "south")
+    content("three.north", align(center + bottom)[#text(1.2em)[$S_(\UR\B3)$]\ Valid position], anchor: "south")
     cube("yyyywyyyy bbbbgbbbb rrrrrrrrr", offset: (10, 0), name: "four")
-    content("four.north", align(center + bottom)[#text(1.2em)[$S_(\R2)$]\ Valid state], anchor: "south")
+    content("four.north", align(center + bottom)[#text(1.2em)[$S_(\R2)$]\ Valid position], anchor: "south")
 
     cube("ooooboooo yyyyyyyyy ggggogggg", offset: (-10, -5), back: true)
     cube("ooooboooo yyyyyyyyy ggggogggg", offset: (-3.33, -5), back: true)
@@ -2227,7 +2227,7 @@ We discussed how symmetry conjugation temporarily changes a position's frame of 
 
 The takeaway is in the observation that every symmetry position has the centers in the same spatial orientation.
 
-Notice that the $S_(F\B2)$ and $S_(\U4)$ symmetries are invalid states with this fixed reference frame—the latter because of the parity constraint, and the former because the mirror image produces a nonsensical reflectional coloring. _This does not matter_ because the inconsistencies are un-done when $S^(-1)$ is applied; thus the conjugation $S A S^(-1)$ always results in a valid position.
+Notice that the $S_(F\B2)$ and $S_(\U4)$ symmetries are invalid positions with this fixed reference frame—the latter because of the parity constraint, and the former because the mirror image produces a reflectional coloring. _This does not matter_ because the inconsistencies are un-done when $S^(-1)$ is applied; thus the conjugation $S A S^(-1)$ always results in a valid position.
 
 $48$ symmetries is already quite a lot, but we can still do better. If we can show that both an arbitrary Rubik's Cube position and its inverse position require the same number of moves to reach a Cycle Combination Solver solution, we can once again store a single representative of the two positions and further compress the table by another factor of $2$. We call this _antisymmetry_.
 
@@ -2241,13 +2241,13 @@ Let us prove that our presumption is true.
 
     $ (A B A^(-1))(A(x)) = A(B(A^(-1)(A(x)))) = A(B(x)) = A(y) $
 
-    So every cycle ($x_1, x_2, dots, x_n$) of $B$ is taken to the cycle $(A(x_1), A(x_2), dots, A(x_n))$ of $A B A^(-1)$. Viewing permutations as bijective maps of its elements, conjugation only relabels the elements moved by $B$. It does not change the cycle lengths nor how many cycles there are. We apply this proof with $A = S$ and $B = S^(-1)P^(-1)$.
+    So every cycle ($x_1, x_2, dots, x_n$) of $B$ is taken to the cycle $(A(x_1), A(x_2), dots, A(x_n))$ of $A B A^(-1)$. Viewing permutations as bijective maps of its elements, conjugation only relabels the elements moved by $B$. It does not change the cycle lengths nor how many cycles there are. We apply this corollary with $A = S$ and $B = S^(-1)P^(-1)$.
 
 + We have shown that if $P$ $S$ is an optimal solution to the Cycle Combination Solver then so is $P^(-1) S^(-1)$. $S$ and $S^(-1)$ are the same algorithm length; thus, the positions reached by any arbitrary $P$ and by $P^(-1)$ require the same number of moves to reach an optimal Cycle Combination Solver solution. This completes our proof.
 
 Symmetry and antisymmetry reduction comes with a cost. During IDA\* search, every position must be transformed to its "symmetry and antisymmetry" representative before using it to query the pruning table. To do so we conjugate the position by the $48$ symmetries and the inverse by the $48$ antisymmetries to explore all the possible representatives. To identify the representative position after each conjugation, we look at its raw binary state representation and choose the lexicographic minimum (i.e. the minimum comparing byte-by-byte). Multiple symmetries may produce the representative position, however that is okay because we never actually care about which symmetry conjugation did so. The result is still the same.
 
-The symmetry and antisymmetry reduction algorithm as described so far would be slow—we need to perform 96 symmetry conjugations, and each is about as expensive as two moves. We use the following trick described by Rokicki @twsearch-architecture: instead of computing the full conjugation for every symmetry conjugation, we compute the elements one-at-a-time. We take the least possible value for the first element of all the symmetry conjugations and filter for the ones that give us that value. Then, we compute all the second symmetry conjugation elements, find the least possible value for that, and so on. This reduces the cost of symmetry and antisymmetry reduction significantly, and we usually only perform a single full conjugation.
+The symmetry and antisymmetry reduction algorithm as described so far would be slow—we need to perform 96 symmetry conjugations, and each is about as expensive as two moves. We use the following trick described by Rokicki @twsearch-architecture: instead of computing the full conjugation for every symmetry conjugation, we compute the elements one-at-a-time. We take the least possible value for the first element of all the symmetry conjugations and filter for the ones that give us that value. Then, we compute all the second symmetry conjugation elements, find the least possible value for that, and so on. This optimization usually only ends up performing a single full symmetry conjugation.
 
 ==== Pruning table types
 
@@ -2257,7 +2257,7 @@ Generating a pruning table involves searching the Rubik's Cube tree but from the
 
 The Cycle Combination Solver supports four different types pruning tables: the exact pruning table, the approximate pruning table, the cycle structure pruning table, and the fixed pruning table. They are dynamically chosen at runtime based on a maximum memory limit option.
 
-*The implementation of pruning table types is not yet fully understood; we defer the primary part of this section for later.*
+*We defer our discussion of pruning table types for a later revision.*
 
 // Don't store keys
 
@@ -2285,11 +2285,9 @@ Finally, the Cycle Combination Solver generates the pruning tables and performs 
 
 ==== Pruning table compression
 
-The Cycle Combination Solver supports four different types pruning tables and three different data compression types. They are dynamically chosen at runtime based on a maximum memory limit option.
+The Cycle Combination Solver supports three different data compression types: no compression, nxopt compression, and tabled asymmetric numeral systems (tANS) compression. They are dynamically chosen at runtime based on a maximum memory limit option.
 
-*The implementation of pruning table compression is not yet fully understood; we defer this section for later.*
-
-// It also supports no compression, "nxopt" compression, and tabled asymmetric numeral systems compression (tANS)
+*We defer our discussion of pruning table compression for a later revision.*
 
 // - tANS
 //     - a potentially better pruning table implementation over the traditional 2-bit and "base" value approach.
@@ -2304,15 +2302,71 @@ The Cycle Combination Solver supports four different types pruning tables and th
 
 === IDA\* optimizations
 
-We employ a number of tricks to improve the running time for Qter's IDA\* tree search.
+We employ a number of tricks to improve the running time of the Cycle Combination Solver's IDA\* tree search.
 
 ==== SIMD
 
-We enhance the speed of puzzle operations through the use of puzzle-specific SIMD. When the Cycle Combination Solver puzzle is the Rubik's Cube, we use a SIMD-optimized compacted representation, enabling for specialized SIMD algorithms to compose two Rubik's Cube states @qter-simd2 and test for a Cycle Combination Solver solution @qter-simd1. They have both been disassembled and highly optimized at the instruction level. We leave the precise details at the prescribed references; they are outside of the scope of this article.
+We enhance the speed of puzzle operations through the use of puzzle-specific SIMD on AVX2 and Neon instruction set architectures. Namely, the `VPSHUFB` instruction on AVX2 and the `tbl.8`/`tbl.16` instructions on Neon perform permutation composition in one clock cycle, enabling for specialized SIMD algorithms to compose two Rubik's Cube states @qter-simd2 and test for a Cycle Combination Solver solution @qter-simd1. They have both been disassembled and highly optimized at the instruction level. Additionally, the puzzle-specific SIMD uses compacted representations optimized for the permutation composition instructions. For example, it uses a representation of a Rubik's Cube state that can fit in a single `YMM` CPU register on AVX2 and in the `D` and `Q` CPU registers on Neon.
 
-==== Branching factor reduction
+Pruning table generation also uses puzzle-specific SIMD. To generate a pruning table on the corners orbit, we need to use a different Rubik's Cube representation because we don't want to waste CPU caring about what happens to edges. So, every orbit has its own specialized SIMD representation and algorithms.
 
-We observe that we never want to rotate the same face twice. For example, if we perform $R$ followed by $R'$, we've just reversed the move done at the previous level of the tree. Similarly if we perform $R$ followed by another $R$, we could have simply done $\R2$ straight away. In general, any move should not be followed by another move in the same _move class_, the set of all move powers. This reduces the _branching factor_ of the child nodes from $18$ for all $18$ moves to $15$. Additionally, we don't want to search both $R L$ and $L R$ because they commute, and produce the same state. So, we assume that $R$ (or $\R2, R'$) never follows $L$ (or $\L2, L'$). In general, we only search a total ordering of commutative move classes, and this further reduces the branching factor $15$ to about $13.348$ @canonical-sequence nodes. We use an optimized finite state machine to avoid searching redundant moves.
+*We leave the precise details at the prescribed references; we defer our discussion of how the SIMD algorithms work for a later revision.*
+
+==== Canonical sequences
+
+At every increasing depth level of the IDA\* search tree we explore $18$ times as many nodes. We formally call this number the _branching factor_—the average number of child nodes visited by a parent node. A few clever observations can reduce the branching factor.
+
+We observe that we never want to rotate the same face twice. For example, if we perform $R$ followed by $R'$, we've just reversed the move done at the previous level of the tree. Similarly if we perform $R$ followed by another $R$, we could have simply done $\R2$ straight away. In general, any move should not be followed by another move in the same _move class_, the set of all move powers. This reduces the branching factor of the child nodes from $18$ for all $18$ moves to $15$. Additionally, we don't want to search both $R L$ and $L R$ because they commute, and result in the same net action. So, we assume that $R$ (or $\R2, R'$) never follows $L$ (or $\L2, L'$), and in general, we only permit searching commutative move classes strictly in a single order only. Sequences that satisfy these two conditions are called _canonical sequences_.
+
+What does the second condition reduce our branching factor from $15$ to? We start by counting the number of canonical sequences at length $N$, denoted $a_n$, using a recurrence relation. We consider the last move of the sequence $M_1$, the second to last move $M_2$, and the third to last move $M_3$. The recurrence relation can be constructed by analyzing two cases:
+
+- Case 1: $M_1$ and $M_2$ do not commute.
+
+    In this case, $a_n$ is simply $a_(n-1)$ multiplied by the number of possibilities of $M_1$. Since $M_1$ and $M_2$ do not commute, $M_1$ cannot be $M_2$ ($-1$) nor its opposite face ($-1$). Therefore, $M_1$ must be one of $6 - 1 - 1 = 4$ move classes, or one of the $4 * 3 = 12$ possible moves. We can establish that the first component in the recurrence relation for $a_n$ is $12a_(n-1)$.
+
+- Case 2: $M_1$ and $M_2$ commute.
+
+    We need to be careful to only count $M_1$ and $M_2$ one time so we count them in pairs. In this case, $a_n$ is simply $a_(n-2)$ multiplied by the number of strictly ordered $(M_1, M_2)$ pairs. There are $3$ pairs of commutative move classes: $\FB, \UD, "and" \RL$. We have to discard one of these pairs because $M_3$ necessarily commutes with the move classes in one of these pairs since the union of all of these pairs is every move. Such a canonical sequence where the subsequence $M_3 M_2 M_1$ all commute cannot exist because one of those moves will always violate the strict move class ordering. For example, if $M_1$ is $L$ and $M_2$ is $R$, then there is no possible option for $M_3$ that makes the full sequence a canonical sequence.
+
+    Each move class in each pair can perform three moves, which implies that each pair contributes $3 * 3 = 9$ possible moves. Overall we find this number to be $(3 - 1) * 9 = 18$ possible moves. We can establish that the second component in the recurrence relation for $a_n$ is $18a_(n-2)$.
+
+$a_n$ can be thought of as the superposition of these two cases. Hence, $a_n = 12a_(n-1) + 18a_(n-2)$. The standard recurrence relation solving process follows:
+
+$
+    & a_n = r^n \
+    & r^n = 12r^(n-1) + 18r^(n-2) \
+    & r^(n-2)(-r^2 + 12r + 18) = 0 \
+    & r = (-12 plus.minus sqrt(12^2 - 4(-1)(18))) / (2(-1)) \
+    & r_1 = 6 + 3sqrt(6) tilde.eq 13.348 \
+    & cancel(r_2 = 6 - 3sqrt(6) tilde.eq -1.348, cross: #true) \
+    & a_n tilde.eq 13.348^n
+$
+
+Our new branching factor is approximately $13.348$!
+
+You might have noticed that $a_n$ for $n >= 1$ is fractional implying a fractional number of nodes visited. It turns out that $a_n$ is not an exact bound on the number of distinct positions at sequence length $N$ but merely an upper bound. This is because the formula overcounts, and the actual number is always lower: it considers canonical sequences that produce equivalent states such as $\R2$ $\L2$ $\U2$ $\D2$ and $\U2$ $\D2$ $\R2$ $\L2$ as two distinct positions. It turns out it is extremely nontrivial to describe and account for these equivalences, to the point where it's not worth doing so: at shallow and medium depths, $a_n$ roughly stays within $10%$ of the actual distinct position count.  The Cycle Combination Solver considers the extra work negligible and searches equivalent canoncial sequences anyways. The Big O time complexity of the IDA\* search algorithm can be realized as $O(13.348^n)$.
+
+The Cycle Combination Solver uses an optimized finite state machine to perform the canonical sequence optimization.
+
+==== Sequence symmetry
+
+We use a special form of symmetry reduction during the search we call _sequence symmetry_, first observed by Rokicki @sequence-symmetry and improved by our implementation. Some solution to the Cycle Combination Solver $A B C D$ conjugated by $A^(-1)$ yields $A^(-1) (A B C D) A = B C D A$, which we observe to also be a rotation of the original sequence as well as a solution to the Cycle Combination Solver by the properties of conjugation discussed earlier. Repeatedly applying this conjugation:
+
+$
+       & A^(-1) (A B C D) A = B C D A \
+    => & B^(-1) (B C D A) B = C D A B \
+    => & C^(-1) (C D A B) C = D A B C \
+    => & D^(-1) (D A B C) D = A B C D \
+$
+
+forms an equivalence class based on all the rotations of sequences that are all solutions to the Cycle Combination Solver. The key is to search a single representative sequence in this equivalence class to avoid duplicate work. We choose the representative as the lexicographically minimal sequence because this restriction is easy to embed in IDA\* search through a simple modification to the recursive algorithm @sequence-symmetry-impl.
+
+We can extend our prior definition of canoncial sequences to include sequence symmetry as a third condition. How does sequence symmetry affect the number of canonical sequnces at depth $N$? Because a sequence of length $N$ has $N$ rotations, sequence symmetry logically divides total number of nodes visited by $N$, but only in the best case. The canonical sequence $R$ $U$ $R$ $U$ $R$ $U$ only has $2$ members in its rotational equivalence class, not $6$, so the average value to divide by is actually a bit less than $N$. It follows that the average number of canonical sequences at depth $N$ is bound by $Omega(13.348^n/n)$ and $O(13.348^n)$. Less-than-formal testing has shown this number to typically be right in the middle of these two bounds.
+
+Furthermore, we take advantage of the fact that the shortest sequence can never start and end with moves in the same move class. Otherwise, the end could be rotated to the start and combined together, contradicting the shortest sequence assumption. This optimization only applies to the last depth in IDA\*, it turns out to be surprisingly effective because most of the time is spent there.
+
+// TODO: commutative endings
+// TODO:  does not affect the time complexity
 
 ==== Pathmax
 
@@ -2341,26 +2395,6 @@ We use a simple optimization described by Mérõ @pathmax called _pathmax_ to pr
     caption: text(size: 12pt)[IDA\* pathmax at $"depth"=5, "depth limit"=8$],
     supplement: none,
 )
-
-==== Sequence symmetry
-
-We use a special form of symmetry reduction during the search we call _sequence symmetry_, first observed by Rokicki @sequence-symmetry and improved by our implementation. Some solution to the Cycle Combination Solver $A B C D$ conjugated by $A^(-1)$ yields $A^(-1) (A B C D) A = B C D A$, which we observe to also be a rotation of the original sequence as well as a solution to the Cycle Combination Solver by the properties of conjugation discussed earlier. Repeatedly applying this conjugation:
-
-#align(center)[#table(
-    columns: 2,
-    stroke: none,
-    [], [$A^(-1) (A B C D) A = B C D A$],
-    [$=>$], [$B^(-1) (B C D A) B = C D A B$],
-    [$=>$], [$C^(-1) (C D A B) C = D A B C$],
-    [$=>$], [$D^(-1) (D A B C) D = A B C D$],
-)]
-
-forms an equivalence class based on all the rotations of sequences that are all solutions to the Cycle Combination Solver. The key is to search a single representative sequence in this equivalence class to avoid duplicate work. We choose the representative as the lexicographically minimal sequence because this restriction is easy to embed in IDA\* search through a simple modification to the recursive algorithm @sequence-symmetry-impl.
-
-Furthermore, we take advantage of the fact that the shortest sequence can never start and end with the moves in the same move class. Otherwise, the end could be rotated to the start and combined together, contradicting the shortest sequence assumption. Although this optimization only applies to the last depth in IDA\*, it turns out to be surprisingly effective because most of the time is spent there.
-
-// TODO: A B C A B vs A B A B C
-// TODO: commutative endings
 
 ==== Parallel IDA\*
 
