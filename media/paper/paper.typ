@@ -1478,7 +1478,7 @@ $
 
 Now that we understand the Rubik's Cube in the language of mathematics, we need a way to represent it in the language of computing. To do this, we will construct a group that is different from the Rubik's Cube group but that has identical structure to it. Our new group will be possible to represent in a computer — after all, you can't shove a Rubik's Cube into your CPU, both your CPU and Rubik's Cube will break! :)
 
-==== Permutation groups
+=== Permutation groups
 
 There are lots of other things that can form groups, but the things that we're interested in are _permutations_, which are re-arrangements of items in a set. For example, we could notate a permutation like
 
