@@ -1,4 +1,4 @@
-use core::num;
+#![allow(unused)]
 use std::fmt;
 
 use puzzle_geometry::ksolve::{KPUZZLE_3X3, KSolveSet};
@@ -291,7 +291,7 @@ fn possible_order_test(
             }
 
             let mut new_cycle: u16;
-            let mut new_available: u16;
+            let new_available: u16;
             // if this orbit orients using the same prime as the power, add a cycle
             if orbit_orient > 1 && registers[s.register].prime_powers[s.power] % orbit_orient == 0 {
                 let flippers = s.assignments[s.register][o].len() as u16

@@ -74,7 +74,7 @@ impl GlobalRegs {
     fn facelets(
         &self,
         register: &RegisterReference,
-    ) -> Result<ByPuzzleType<FaceletsInfo>, Rich<'static, char, Span>> {
+    ) -> Result<ByPuzzleType<'_, FaceletsInfo>, Rich<'static, char, Span>> {
         let reg_info = self.get_reg(register);
 
         match reg_info {

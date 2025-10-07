@@ -131,7 +131,7 @@ impl<S: SetInfo> UnionFind<S> {
     /// Panics if the item is outside the range of numbers in the union-find.
     #[must_use]
     #[expect(clippy::missing_panics_doc)]
-    pub fn find(&self, item: usize) -> FindResult<S> {
+    pub fn find(&self, item: usize) -> FindResult<'_, S> {
         let (entry, path_meta) = &self.sets[item];
 
         match entry {

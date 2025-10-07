@@ -186,7 +186,7 @@ fn coding_function<S: State, T: Debug>(
     let p = ranges[symbol];
 
     assert!(
-        (p != S::zero()),
+        p != S::zero(),
         "Got a symbol with range zero: {symbol}; {ranges:?}; {fsm:?}"
     );
 

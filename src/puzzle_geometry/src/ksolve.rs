@@ -2,7 +2,7 @@ use internment::ArcIntern;
 use qter_core::Span;
 use std::{
     num::{NonZeroU8, NonZeroU16},
-    sync::{Arc, LazyLock},
+    sync::LazyLock,
 };
 use thiserror::Error;
 

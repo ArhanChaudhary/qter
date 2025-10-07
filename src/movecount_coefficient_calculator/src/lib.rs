@@ -202,11 +202,11 @@ impl AlgSpeed {
         r_grip: i8,
         initial_speed: f64,
     ) -> TestResult {
-        let mut left = HandState::new(l_grip);
-        let mut right = HandState::new(r_grip);
-        let mut speed = initial_speed;
-        let mut grip = 1;
-        let mut ud_grip = -1;
+        let left = HandState::new(l_grip);
+        let right = HandState::new(r_grip);
+        let speed = initial_speed;
+        let grip = 1;
+        let ud_grip = -1;
         // let mut prev_speed = None;
         // let mut first_move_speed = None;
 
