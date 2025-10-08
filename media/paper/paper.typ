@@ -2318,7 +2318,7 @@ Pruning table generation also uses puzzle-specific SIMD. To generate a pruning t
 
 At every increasing depth level of the IDA\* search tree we explore $18$ times as many nodes. We formally call this number the _branching factor_—the average number of child nodes visited by a parent node. A few clever observations can reduce the branching factor.
 
-We observe that we never want to rotate the same face twice. For example, if we perform $R$ followed by $R'$, we've just reversed the move done at the previous level of the tree. Similarly if we perform $R$ followed by another $R$, we could have simply done $\R2$ straight away. In general, any move should not be followed by another move in the same _move class_, the set of all move powers. This reduces the branching factor of the child nodes from $18$ for all $18$ moves to $15$. Additionally, we don't want to search both $R L$ and $L R$ because they commute, and result in the same net action. So, we assume that $R$ (or $\R2, R'$) never follows $L$ (or $\L2, L'$), and in general, we only permit searching distinct commutative move classes strictly in a single order only. Move sequences that satisfy these two conditions are called _canonical sequences_—move sequences
+We observe that we never want to rotate the same face twice. For example, if we perform $R$ followed by $R'$, we've just reversed the move done at the previous level of the tree. Similarly if we perform $R$ followed by another $R$, we could have simply done $\R2$ straight away. In general, any move should not be followed by another move in the same _move class_, the set of all move powers. This reduces the branching factor of the child nodes from $18$ for all $18$ moves to $15$. Additionally, we don't want to search both $R L$ and $L R$ because they commute, and result in the same net action. So, we assume that $R$ (or $\R2, R'$) never follows $L$ (or $\L2, L'$), and in general, we only permit searching distinct commutative move classes strictly in a single order only. Move sequences that satisfy these two conditions are called _canonical sequences_. Canonical sequences are special because these two conditions make it easu to check if a move sequence is redundant.
 
 What does the second condition reduce our branching factor from $15$ to? We start by counting the number of canonical sequences at length $N$, denoted $a_n$, using a recurrence relation. We consider the last move of the sequence $M_1$, the second to last move $M_2$, and the third to last move $M_3$. The recurrence relation can be constructed by analyzing two cases:
 
@@ -2333,7 +2333,6 @@ What does the second condition reduce our branching factor from $15$ to? We star
     Each move class in each pair can perform three moves, which implies that each pair contributes $3 * 3 = 9$ possible moves. Overall we find this number to be $(3 - 1) * 9 = 18$ possible moves. We can establish that the second component in the recurrence relation for $a_n$ is $18a_(n-2)$.
 
 $a_n$ can be thought of as the superposition of these two cases with the base cases $a_1 = 18 "and" a_2 = 243$ (exercise to the reader: figure out where these come from). Hence, $a_n = 12a_(n-1) + 18a_(n-2), n > 2$. The standard recurrence relation solving process follows (with $n > 2$):
-
 
 $
     & r^n = 12r^(n-1) + 18r^(n-2) \
@@ -2351,7 +2350,7 @@ $
     & a_n tilde.eq 0.102(13.348)^n - 0.102(-1.348)^n \
 $
 
-The $0.102(13.348)^n$ term is the dominating term; our new branching factor is approximately $13.348$!
+The $0.102(13.348)^n$ term dominates $-0.102(-1.348)^n$; our new branching factor is approximately $13.348$!
 
 It turns out that $a_n$ is not an exact bound on the number of distinct positions at sequence length $N$ but merely an upper bound. This is because the formula overcounts, and the actual number is always lower: it considers canonical sequences that produce equivalent states such as $\R2$ $\L2$ $\U2$ $\D2$ and $\U2$ $\D2$ $\R2$ $\L2$ as two distinct positions. It turns out it is extremely nontrivial to describe and account for these equivalences, to the point where it's not worth doing so: at shallow and medium depths, $a_n$ roughly stays within $10%$ of the actual distinct position count. The Cycle Combination Solver considers the extra work negligible and searches equivalent canoncial sequences anyways. The Big O time complexity of $a_n$ as well as the IDA\* search algorithm can be realized as $O(13.348^n)$, an improvement over the prior $O(18^n)$.
 
