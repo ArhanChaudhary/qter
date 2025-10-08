@@ -82,11 +82,6 @@ pigeons-in-holes:
     - en:User:BenFrantzDale
     - en:User:McKay
 
-iddfs-time-complexity:
-  type: Web
-  url: https://en.wikipedia.org/wiki/Iterative_deepening_depth-first_search#Time_complexity
-  title: Iterative deepening depth-first search
-
 spacetime:
   type: Web
   url: https://en.wikipedia.org/wiki/Space%E2%80%93time_tradeoff

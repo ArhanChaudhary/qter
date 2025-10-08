@@ -1916,7 +1916,7 @@ In an optimal Rubik's Cube solver, we are given a random position, and we must f
 
 It would be reasonable to expect there to be a known structural property of the Rubik's Cube that makes optimal solving easy. Indeed, to find a _good_ solution to the Rubik's Cube, the technique of Kociemba's algorithm @kociembas-algorithm cleverly utilizes a specific subgroup to solve up to 3900 individual position per second _near_ optimally @cube20. However, we want to do better than that.
 
-Unfortunately, to find an _optimal_ solution, the only known approach is to brute force all combinations of moves sequences until the Rubik's Cube is solved. To add some insult to injury, Demaine @np-complete proved that optimal $N times N times N$ cube solving is NP-complete. However, this doesn't mean we can't optimize the brute force approach. We will discuss a variety of improvements that can be made, but the runtime is likely to necessarily be exponential.
+Unfortunately, to find an _optimal_ solution, the only known approach is to brute force all combinations of moves sequences until the Rubik's Cube is solved. To add some insult to injury, Demaine @np-complete proved that optimal $N times N times N$ cube solving is NP-complete. However, this doesn't mean we can't optimize the brute force approach. We will discuss a variety of improvements that can be made, some specific to the Cycle Combination Solver only, but unless there is a significant advancement in group theory relating to the problem it is solving the runtime is necessarily going to be exponential.
 
 === Tree searching
 
@@ -1979,7 +1979,7 @@ Our goal is now to find a node with the specified cycle structure at the _topmos
 
 We now consider a sibling algorithm to BFS: depth-first search (DFS). DFS is an algorithm that explores all nodes as deep as possible before backtracking. It strikes our interest because the memory overhead is minimal; all you need to keep track of is the path taken to reach a node, something that can be easily managed during the search. However, because we explore nodes depth-first, it offers no guarantee about optimality, so we still have a problem.
 
-A simple modification to DFS can make it always find the optimal solution. We tweak the DFS implementation so that it explores up until a specified depth and then doesn't explore further. We repeatedly run this implementation at increasing depth limits until a solution _is_ found. Put simply, you do a DFS of depth 1, then of depth 2, and so on. This idea is known as iterative-deepening depth-first search (IDDFS), a hybrid of a breadth-first and depth-first search. IDDFS does repeat some work each iteration, but it turns out that the time complexity is actually identical @iddfs-time-complexity and the memory saved is worth it.
+A simple modification to DFS can make it always find the optimal solution. We tweak the DFS implementation so that it explores up until a specified depth, testing whether each node at this depth is a solution, without exploring further. We repeatedly run this implementation at increasing depth limits until a solution _is_ found. Put simply, you do a DFS of depth 1, then of depth 2, and so on. This idea is known as iterative-deepening depth-first search (IDDFS), a hybrid of a breadth-first and depth-first search. IDDFS does repeat some work each iteration, but the cost is always small relative to the last layer because the Rubik's Cube search tree grows exponentially. The insignificance of the repeat work is further exacerbated given that even more time is spent at the last layer running the test for a solution. Because the majority of the time is spent at the last layer, the asymptotic time complexity of $O(18^n)$ in Big-O notation is actually identical to BFS and the memory saved is worth it. We will gradually improve this time complexity bound throughout the rest of this section.
 
 === Pruning
 
@@ -2005,6 +2005,8 @@ The use of pruning tables in this fashion was originated by Korf @korf in his op
 How are we supposed to store all 43 quintillion positions of the Rubik's Cube in memory? Well, we don't: different types of pruning tables solve this problem by sacrificing either information or accuracy to take up less space. Hence, pruning tables give an admissible heuristic instead of the exact number of moves needed to reach a Cycle Combination Solver solution.
 
 Loosely speaking, pruning tables can be thought of as a form of meet-in-the-middle search, more generally known as a space—time trade-off @spacetime. Even when running the Cycle Combination Solver on the same puzzle, we _must_ generate a new pruning table for every unique cycle structure. It turns out this is still worth it. Pruning tables reduce the search depth of the tree, and the improvements are dramatic because the number of nodes at increasing depths grows exponentially. But there is no free lunch: we have to pay for this speedup by memory.
+
+In terms of the asymptotic time complexity, pruning tables unfortunately have no effect. If we consider $O(18^(n - k)$ to be the new time complexity where $k$ is some constant that emulates reducing the search depth of the tree, the expression simplifies to $O(18^n/18^k)$ or back to $O(18^n)$ because Big-O notation ignores constant factors.
 
 === Pruning table design
 
@@ -2281,7 +2283,7 @@ The Cycle Combination Solver supports four different types pruning tables: the e
 
 // Populating the pruning table is a form of search, but from the start position; since the start position has full symmetry, this means that generating the pruning table to a particular depth is similarly reduced.
 
-Finally, the Cycle Combination Solver generates the pruning tables and performs IDA\* search at the same time. It would not be very optimal for the Cycle Combination Solver to spend all of its time generating the pruning tables only for the actual searching part to be easy. It balances out querying and generation. Starting from an uninitialized pruning table, if the number of queries exceeds the number of set values by a factor of $3$, it pauses the search to generate a deeper layer of that pruning table and then continues.
+Finally, the Cycle Combination Solver generates the pruning tables and performs IDA\* search at the same time. It would not be very efficient for the Cycle Combination Solver to spend all of its time generating the pruning tables only for the actual searching part to be easy. It balances out querying and generation. Starting from an uninitialized pruning table, if the number of queries exceeds the number of set values by a factor of $3$, it pauses the search to generate a deeper layer of that pruning table and then continues.
 
 ==== Pruning table compression
 
@@ -2316,7 +2318,7 @@ Pruning table generation also uses puzzle-specific SIMD. To generate a pruning t
 
 At every increasing depth level of the IDA\* search tree we explore $18$ times as many nodes. We formally call this number the _branching factor_—the average number of child nodes visited by a parent node. A few clever observations can reduce the branching factor.
 
-We observe that we never want to rotate the same face twice. For example, if we perform $R$ followed by $R'$, we've just reversed the move done at the previous level of the tree. Similarly if we perform $R$ followed by another $R$, we could have simply done $\R2$ straight away. In general, any move should not be followed by another move in the same _move class_, the set of all move powers. This reduces the branching factor of the child nodes from $18$ for all $18$ moves to $15$. Additionally, we don't want to search both $R L$ and $L R$ because they commute, and result in the same net action. So, we assume that $R$ (or $\R2, R'$) never follows $L$ (or $\L2, L'$), and in general, we only permit searching commutative move classes strictly in a single order only. Sequences that satisfy these two conditions are called _canonical sequences_.
+We observe that we never want to rotate the same face twice. For example, if we perform $R$ followed by $R'$, we've just reversed the move done at the previous level of the tree. Similarly if we perform $R$ followed by another $R$, we could have simply done $\R2$ straight away. In general, any move should not be followed by another move in the same _move class_, the set of all move powers. This reduces the branching factor of the child nodes from $18$ for all $18$ moves to $15$. Additionally, we don't want to search both $R L$ and $L R$ because they commute, and result in the same net action. So, we assume that $R$ (or $\R2, R'$) never follows $L$ (or $\L2, L'$), and in general, we only permit searching distinct commutative move classes strictly in a single order only. Move sequences that satisfy these two conditions are called _canonical sequences_—move sequences
 
 What does the second condition reduce our branching factor from $15$ to? We start by counting the number of canonical sequences at length $N$, denoted $a_n$, using a recurrence relation. We consider the last move of the sequence $M_1$, the second to last move $M_2$, and the third to last move $M_3$. The recurrence relation can be constructed by analyzing two cases:
 
@@ -2330,21 +2332,28 @@ What does the second condition reduce our branching factor from $15$ to? We star
 
     Each move class in each pair can perform three moves, which implies that each pair contributes $3 * 3 = 9$ possible moves. Overall we find this number to be $(3 - 1) * 9 = 18$ possible moves. We can establish that the second component in the recurrence relation for $a_n$ is $18a_(n-2)$.
 
-$a_n$ can be thought of as the superposition of these two cases. Hence, $a_n = 12a_(n-1) + 18a_(n-2)$. The standard recurrence relation solving process follows:
+$a_n$ can be thought of as the superposition of these two cases with the base cases $a_1 = 18 "and" a_2 = 243$ (exercise to the reader: figure out where these come from). Hence, $a_n = 12a_(n-1) + 18a_(n-2), n > 2$. The standard recurrence relation solving process follows (with $n > 2$):
+
 
 $
-    & a_n = r^n \
     & r^n = 12r^(n-1) + 18r^(n-2) \
     & r^(n-2)(-r^2 + 12r + 18) = 0 \
     & r = (-12 plus.minus sqrt(12^2 - 4(-1)(18))) / (2(-1)) \
-    & r_1 = 6 + 3sqrt(6) tilde.eq 13.348 \
-    & cancel(r_2 = 6 - 3sqrt(6) tilde.eq -1.348, cross: #true) \
-    & a_n tilde.eq 13.348^n
+    & r_(1,2) = 6 plus.minus 3sqrt(6) \
+    & a_n = A r_1^(n-2) + B r_2^(n-2) = A/r_1^2 r_1^n + B/r_2^2 r_2^n \
+    & cases(
+             a_1 = 18 \
+              a_2 = A & + B                     &  = 243 \
+          a_3 = A r_1 & + B r_2 = 12a_2 + 18a_1 & = 3240,
+      ) \
+    & "Solve for" A "and" B \
+    & "..." \
+    & a_n tilde.eq 0.102(13.348)^n - 0.102(-1.348)^n \
 $
 
-Our new branching factor is approximately $13.348$!
+The $0.102(13.348)^n$ term is the dominating term; our new branching factor is approximately $13.348$!
 
-You might have noticed that $a_n$ for $n >= 1$ is fractional implying a fractional number of nodes visited. It turns out that $a_n$ is not an exact bound on the number of distinct positions at sequence length $N$ but merely an upper bound. This is because the formula overcounts, and the actual number is always lower: it considers canonical sequences that produce equivalent states such as $\R2$ $\L2$ $\U2$ $\D2$ and $\U2$ $\D2$ $\R2$ $\L2$ as two distinct positions. It turns out it is extremely nontrivial to describe and account for these equivalences, to the point where it's not worth doing so: at shallow and medium depths, $a_n$ roughly stays within $10%$ of the actual distinct position count.  The Cycle Combination Solver considers the extra work negligible and searches equivalent canoncial sequences anyways. The Big O time complexity of the IDA\* search algorithm can be realized as $O(13.348^n)$.
+It turns out that $a_n$ is not an exact bound on the number of distinct positions at sequence length $N$ but merely an upper bound. This is because the formula overcounts, and the actual number is always lower: it considers canonical sequences that produce equivalent states such as $\R2$ $\L2$ $\U2$ $\D2$ and $\U2$ $\D2$ $\R2$ $\L2$ as two distinct positions. It turns out it is extremely nontrivial to describe and account for these equivalences, to the point where it's not worth doing so: at shallow and medium depths, $a_n$ roughly stays within $10%$ of the actual distinct position count. The Cycle Combination Solver considers the extra work negligible and searches equivalent canoncial sequences anyways. The Big O time complexity of $a_n$ as well as the IDA\* search algorithm can be realized as $O(13.348^n)$, an improvement over the prior $O(18^n)$.
 
 The Cycle Combination Solver uses an optimized finite state machine to perform the canonical sequence optimization.
 
@@ -2361,12 +2370,22 @@ $
 
 forms an equivalence class based on all the rotations of sequences that are all solutions to the Cycle Combination Solver. The key is to search a single representative sequence in this equivalence class to avoid duplicate work. We choose the representative as the lexicographically minimal sequence because this restriction is easy to embed in IDA\* search through a simple modification to the recursive algorithm @sequence-symmetry-impl.
 
-We can extend our prior definition of canoncial sequences to include sequence symmetry as a third condition. How does sequence symmetry affect the number of canonical sequnces at depth $N$? Because a sequence of length $N$ has $N$ rotations, sequence symmetry logically divides total number of nodes visited by $N$, but only in the best case. The canonical sequence $R$ $U$ $R$ $U$ $R$ $U$ only has $2$ members in its rotational equivalence class, not $6$, so the average value to divide by is actually a bit less than $N$. It follows that the average number of canonical sequences at depth $N$ is bound by $Omega(13.348^n/n)$ and $O(13.348^n)$. Less-than-formal testing has shown this number to typically be right in the middle of these two bounds.
+We can extend our prior definition of canoncial sequences to include sequence symmetry as a third condition. How does sequence symmetry affect the number of canonical sequnces at depth $N$? Because a sequence of length $N$ has $N$ rotations, sequence symmetry logically divides total number of nodes visited by $N$, but only in the best case. The canonical sequence $R$ $U$ $R$ $U$ $R$ $U$ only has $2$ members in its rotational equivalence class, not $6$, so the average value to divide by is actually a bit less than $N$. It follows that the average number of canonical sequences at depth $N$ (and the asymptotic time complexity) is bound by $Omega(13.348^n/n)$ and $O(13.348^n)$. Less-than-formal testing has shown this number to typically be right in the middle of these two bounds.
 
-Furthermore, we take advantage of the fact that the shortest sequence can never start and end with moves in the same move class. Otherwise, the end could be rotated to the start and combined together, contradicting the shortest sequence assumption. This optimization only applies to the last depth in IDA\*, it turns out to be surprisingly effective because most of the time is spent there.
+Furthermore, we take advantage of the fact that the shortest sequence can never start and end with commutative moves. Otherwise, the end could be rotated to the start and combined together, contradicting the shortest sequence assumption.
 
-// TODO: commutative endings
-// TODO:  does not affect the time complexity
+Because this optimization only applies to the last depth in IDA\*, it does not affect the time complexity and only prevents running the test to determine if a node is a solution. It turns out to be surprisingly effective at reducing the average time per node because most of the time is spent at the last layer.
+
+// Lemma:
+// If some optimal solution X Y ... Z s.t. X and Z are commutative can be searched, never actually search it 
+
+// Proof:
+// => Z X Y ... is a solution by a sequence rotation 
+//     => X and Z cannot be in the same move class, else they could be combined together to produce the more optimal solution W Y ... . X cannot be in a greater move class than Z because Z X Y ... would be a lexicographically lesser solution. Our initial conditions imposed that X Y ... Z can be searched therefore X must be in a lesser move class than Z
+//     => this solution isn't searched because X is in a lesser move class then Z, and X Y ... Z is a lexicographically lesser sequence rotation
+// => X Z Y ... is a solution by canonical sequences
+//     => this solution is searched because there because X Y ... Z cannot be shown to be necessarily lesser lexicographically; they both start with X and there is no established relation between Y and Z
+// => Both must search the same equivalent node, duplicating work. Thus we can choose to discard the X Y ... Z case
 
 ==== Pathmax
 
