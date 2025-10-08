@@ -2372,20 +2372,20 @@ forms an equivalence class based on all the rotations of sequences that are all 
 
 We can extend our prior definition of canoncial sequences to include sequence symmetry as a third condition. How does sequence symmetry affect the number of canonical sequnces at depth $N$? Because a sequence of length $N$ has $N$ rotations, sequence symmetry logically divides total number of nodes visited by $N$, but only in the best case. The canonical sequence $R$ $U$ $R$ $U$ $R$ $U$ only has $2$ members in its rotational equivalence class, not $6$, so the average value to divide by is actually a bit less than $N$. It follows that the average number of canonical sequences at depth $N$ (and the asymptotic time complexity) is bound by $Omega(13.348^n/n)$ and $O(13.348^n)$. Less-than-formal testing has shown this number to typically be right in the middle of these two bounds.
 
-Furthermore, we take advantage of the fact that the shortest sequence can never start and end with commutative moves. Otherwise, the end could be rotated to the start and combined together, contradicting the shortest sequence assumption.
+Furthermore, we take advantage of the fact that the shortest sequence can never start and end with moves in the same move class. Otherwise, the end could be rotated to the start and combined together, contradicting the shortest sequence assumption.
 
 Because this optimization only applies to the last depth in IDA\*, it does not affect the time complexity and only prevents running the test to determine if a node is a solution. It turns out to be surprisingly effective at reducing the average time per node because most of the time is spent at the last layer.
 
-// Lemma:
-// If some optimal solution X Y ... Z s.t. X and Z are commutative can be searched, never actually search it 
+Lemma:
+If some optimal solution X Y ... Z s.t. X and Z are commutative can be searched, never actually search it 
 
-// Proof:
-// => Z X Y ... is a solution by a sequence rotation 
-//     => X and Z cannot be in the same move class, else they could be combined together to produce the more optimal solution W Y ... . X cannot be in a greater move class than Z because Z X Y ... would be a lexicographically lesser solution. Our initial conditions imposed that X Y ... Z can be searched therefore X must be in a lesser move class than Z
-//     => this solution isn't searched because X is in a lesser move class then Z, and X Y ... Z is a lexicographically lesser sequence rotation
-// => X Z Y ... is a solution by canonical sequences
-//     => this solution is searched because there because X Y ... Z cannot be shown to be necessarily lesser lexicographically; they both start with X and there is no established relation between Y and Z
-// => Both must search the same equivalent node, duplicating work. Thus we can choose to discard the X Y ... Z case
+Proof:
+=> Z X Y ... is a solution by a sequence rotation 
+    => X and Z cannot be in the same move class, else they could be combined together to produce the more optimal solution W Y ... . X cannot be in a greater move class than Z because Z X Y ... would be a lexicographically lesser solution. Our initial conditions imposed that X Y ... Z can be searched therefore X must be in a lesser move class than Z
+    => this solution isn't searched because X is in a lesser move class then Z, and X Y ... Z is a lexicographically lesser sequence rotation
+=> X Z Y ... is a solution by canonical sequences
+    => this solution is searched because there because X Y ... Z cannot be shown to be necessarily lesser lexicographically; they both start with X and there is no established relation between Y and Z
+=> Both must search the same equivalent node, duplicating work. Thus we can choose to discard the X Y ... Z case
 
 ==== Pathmax
 

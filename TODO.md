@@ -7,50 +7,49 @@
 
 - crashlog
 
-## SCC
+## CCS
 
-- CCS
-  - figure out move ordering dependence
-  - document solver.rs
-    - update part of paper while at it
-  - check for logs in test cases; tracing
-    - hardcode the first solution moves in the test cases to be sure
-  - dont pack bit vector for AuxMem
-  - 😎replace pub(crate) with getters
-  - try out a different exact hasher
-  - spam debug_assert!()
-  - solve for all cycle structures from CCF at once vs many runs of single cycle structure at a time
-  - ⭐pruning table
-    - generate table during the solve
-      - if the number of probes exceeds the number of set values in the table by a certain factor (3x?) it considers generating another level of the table, if there is enough memory to do so
-    - cartesian product tables
-      - seed only one value
-      - <https://discord.com/channels/772576325897945119/1326029986578038784/1347580846647017482>
-    - fix storage backend initialization meta
-    - tANS table compression
-    - cycle type pruning table
-      - with fewer state spaces, go back to an exact pruning table
-      - generate the cycle type table before the approximate table and roughly guess the average pruning value
-      - <https://discord.com/channels/772576325897945119/1326029986578038784/1374906236956573806>
-    - ⭐each thread fills in 1024 entires at a time
-    - ⭐exact: dfs at low levels instead of scanning
-  - search
-    - ⭐stabilizer
-      - Look into fixing a corner for even cubes/other puzzles
-    - ⭐standard symmetry
-      - ⭐Doug's canon_into function simplified and explained in #programming
-      - ⭐reread kociemba's website and h48.md
-    - ⭐multithreading
-      - heuristically sort based on sqrt(3)/sqrt(2) and canonical seq (h48.md)
-      - microthreading
-  - you NEED to account for parity constraints when calculating orbit size; address this in schreier sims
-  - ⭐solved state for 4x4
-  - ⭐antisymmetry
-  - 😎mulcmp3 and mul3 optimizations from twsearch
-  - 😎PGE
-  - can we use move tables? look into at the end
-  - Schreier Sims & generating algs using it
-  - Generate a pruning table starting from the scramble instead of the solved state and then began the search from the solved state
+- figure out move ordering dependence
+- document solver.rs
+  - update part of paper while at it
+- check for logs in test cases; tracing
+  - hardcode the first solution moves in the test cases to be sure
+- dont pack bit vector for AuxMem
+- 😎replace pub(crate) with getters
+- try out a different exact hasher
+- spam debug_assert!()
+- solve for all cycle structures from CCF at once vs many runs of single cycle structure at a time
+- ⭐pruning table
+  - generate table during the solve
+    - if the number of probes exceeds the number of set values in the table by a certain factor (3x?) it considers generating another level of the table, if there is enough memory to do so
+  - cartesian product tables
+    - seed only one value
+    - <https://discord.com/channels/772576325897945119/1326029986578038784/1347580846647017482>
+  - fix storage backend initialization meta
+  - tANS table compression
+  - cycle type pruning table
+    - with fewer state spaces, go back to an exact pruning table
+    - generate the cycle type table before the approximate table and roughly guess the average pruning value
+    - <https://discord.com/channels/772576325897945119/1326029986578038784/1374906236956573806>
+  - ⭐each thread fills in 1024 entires at a time
+  - ⭐exact: dfs at low levels instead of scanning
+- search
+  - ⭐stabilizer
+    - Look into fixing a corner for even cubes/other puzzles
+  - ⭐standard symmetry
+    - ⭐Doug's canon_into function simplified and explained in #programming
+    - ⭐reread kociemba's website and h48.md
+  - ⭐multithreading
+    - heuristically sort based on sqrt(3)/sqrt(2) and canonical seq (h48.md)
+    - microthreading
+- you NEED to account for parity constraints when calculating orbit size; address this in schreier sims
+- ⭐solved state for 4x4
+- ⭐antisymmetry
+- 😎mulcmp3 and mul3 optimizations from twsearch
+- 😎PGE
+- can we use move tables? look into at the end
+- Schreier Sims & generating algs using it
+- Generate a pruning table starting from the scramble instead of the solved state and then began the search from the solved state
 
 ## PuzzleGeometry
 
