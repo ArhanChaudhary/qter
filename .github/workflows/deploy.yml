@@ -10,6 +10,10 @@ on:
       - .github/workflows/deploy.yml
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
 permissions:
   contents: write
   pages: write
