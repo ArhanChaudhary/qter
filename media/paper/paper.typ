@@ -2376,16 +2376,16 @@ Furthermore, we take advantage of the fact that the shortest sequence can never 
 
 Because this optimization only applies to the last depth in IDA\*, it does not affect the time complexity and only prevents running the test to determine if a node is a solution. It turns out to be surprisingly effective at reducing the average time per node because most of the time is spent at the last layer.
 
-Lemma:
-If some optimal solution X Y ... Z s.t. X and Z are commutative can be searched, never actually search it 
+// Lemma:
+// If some optimal solution X Y ... Z s.t. X and Z are commutative can be searched, never actually search it 
 
-Proof:
-=> Z X Y ... is a solution by a sequence rotation 
-    => X and Z cannot be in the same move class, else they could be combined together to produce the more optimal solution W Y ... . X cannot be in a greater move class than Z because Z X Y ... would be a lexicographically lesser solution. Our initial conditions imposed that X Y ... Z can be searched therefore X must be in a lesser move class than Z
-    => this solution isn't searched because X is in a lesser move class then Z, and X Y ... Z is a lexicographically lesser sequence rotation
-=> X Z Y ... is a solution by canonical sequences
-    => this solution is searched because there because X Y ... Z cannot be shown to be necessarily lesser lexicographically; they both start with X and there is no established relation between Y and Z
-=> Both must search the same equivalent node, duplicating work. Thus we can choose to discard the X Y ... Z case
+// Proof:
+// => Z X Y ... is a solution by a sequence rotation 
+//     => X and Z cannot be in the same move class, else they could be combined together to produce the more optimal solution W Y ... . X cannot be in a greater move class than Z because Z X Y ... would be a lexicographically lesser solution. Our initial conditions imposed that X Y ... Z can be searched therefore X must be in a lesser move class than Z
+//     => this solution isn't searched because X is in a lesser move class then Z, and X Y ... Z is a lexicographically lesser sequence rotation
+// => X Z Y ... is a solution by canonical sequences
+//     => this solution is searched because there because X Y ... Z cannot be shown to be necessarily lesser lexicographically; they both start with X and there is no established relation between Y and Z
+// => Both must search the same equivalent node, duplicating work. Thus we can choose to discard the X Y ... Z case
 
 ==== Pathmax
 
