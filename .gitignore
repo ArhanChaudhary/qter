@@ -3,3 +3,4 @@
 .direnv
 .ipynb_checkpoints
 profile.json.gz
+*.FCBak
