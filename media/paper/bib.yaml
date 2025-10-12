@@ -181,12 +181,6 @@ random-graph:
   date: 2024
   url: https://arxiv.org/abs/2410.20630
 
-rayon:
-  type: repository
-  url: https://github.com/rayon-rs/rayon
-  title: Rayon
-  date: 2019
-
 twsearch:
   type: repository
   url: https://github.com/cubing/twsearch

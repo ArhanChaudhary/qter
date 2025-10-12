@@ -9,6 +9,7 @@
 
 ## CCS
 
+- F B cycle type is NOT checked!!
 - figure out move ordering dependence
 - document solver.rs
   - update part of paper while at it
@@ -36,6 +37,7 @@
 - search
   - ⭐stabilizer
     - Look into fixing a corner for even cubes/other puzzles
+    - use this data structure https://discord.com/channels/772576325897945119/1326029986578038784/1414832577369342023
   - ⭐standard symmetry
     - ⭐Doug's canon_into function simplified and explained in #programming
     - ⭐reread kociemba's website and h48.md
