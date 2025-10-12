@@ -48,19 +48,26 @@
 - 😎mulcmp3 and mul3 optimizations from twsearch
 - 😎PGE
 - can we use move tables? look into at the end
-- Schreier Sims & generating algs using it
 - Generate a pruning table starting from the scramble instead of the solved state and then began the search from the solved state
+
+### Schreier Sims
+- ⭐Optimal stabilizer chain
+- Allow variations in the number of pieces solved by each link in the chain
+- Create a heuristic for picking which pieces to solve in which order
+- Assess feasibility of generalizing Thisthethwaite-like methods to arbitrary puzzles
+- NISS
+- Trembling
 
 ## PuzzleGeometry
 
 - ⭐Detect identical pieces
-- ⭐Figure out algebraics
-  - Acceptance criterion: All default puzzles can be processed in <1s with exact arithmetic
-- ⭐Canonical ordering of stickers
 - ⭐Calculate orientation and parity constraints of the puzzle
 - ⭐Calculate the symmetries of the puzzle
-- ⭐Parse our modified puzzlegeometry definition string
-- ⭐Reorganize parts of qter_core into here, rename `puzzle_theory` or something, and release as a crate on crates.io
+- Figure out algebraics
+  - Acceptance criterion: All default puzzles can be processed in <1s with exact arithmetic
+- Canonical ordering of stickers
+- Parse our modified puzzlegeometry definition string
+- Reorganize parts of qter_core into here, rename `puzzle_theory` or something, and release as a crate on crates.io
 - Spherical cuts
 
 ## QAT
@@ -69,7 +76,7 @@
 - ⭐QAT Macros
   - ⭐Actual expansion
   - ⭐Lua stuff
-- Architecture switching
+- 😎Architecture switching
 - ⭐Memory tapes
   - ⭐Implement in QAT
 - Dynamically shuffle sub-cycles with syntax X ← A\*B\*C\*D, Y ← E\*F\*G\*H
