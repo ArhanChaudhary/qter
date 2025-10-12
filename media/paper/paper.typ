@@ -2327,7 +2327,7 @@ What does the second condition reduce our branching factor from $15$ to? We star
 
     Each move class in each pair can perform three moves, which implies that each pair contributes $3 * 3 = 9$ possible moves. Overall we find this number to be $(3 - 1) * 9 = 18$ possible moves. We can establish that the second component in the recurrence relation for $a_n$ is $18a_(n-2)$.
 
-$a_n$ can be thought of as the superposition of these two cases with the base cases $a_1 = 18 "and" a_2 = 243$ (exercise to the reader: figure out where these come from). Hence, $a_n = 12a_(n-1) + 18a_(n-2), n > 2$. The standard recurrence relation solving process follows (with $n > 2$):
+$a_n$ can be thought of as the superposition of these two cases with the base cases $a_1 = 18 "and" a_2 = 243$ (exercise to the reader: figure out where these come from). Hence, $a_n = 12a_(n-1) + 18a_(n-2), n > 2$. The standard recurrence relation solving process follows:
 
 $
     & r^n = 12r^(n-1) + 18r^(n-2) \
@@ -2376,9 +2376,9 @@ We first observe that if $A B$ $...$ $C$ is a solution, then $C A B$ $...$ is al
 
 If $C A B$ $...$ is a solution, then $A C B$ $...$ is also a solution because $A$ and $C$ commute. By the transitive property, if $A B$ $...$ is a solution, then so is $A C B$ $...$. Both of these sequences are independently searched and tested as a solution because there is no direct "commutative move ordering" or sequence symmetry relation between then. This is redundant work; we choose to discard the $A B$ $...$ $C$ case. This completes our proof.
 
-We alluded to an edge case when we said "_almost_ never." If $B$ doesn't exist, or if every move from $B ...$ commutes with $A$ and $C$, then this optimization will skip canonical sequences where every move commutes with each other; for example $F$ $B$ on the Rubik's Cube. The number of skipped sequences is so insignificant that we manually search for these sequences before running IDA\*.
+This optimization only applies to the last depth in IDA\*, so it only prevents running the test to check if a node is a solution and does not affect the time complexity. It turns out to be surprisingly effective at reducing the average time per node because most of the time is spent at the last depth.
 
-This optimization only applies to the last depth in IDA\*, so only prevents running the test to check if a node is a solution and does not affect the time complexity. It turns out to be surprisingly effective at reducing the average time per node because most of the time is spent at the last depth.
+We alluded to an edge case when we said "_almost_ never." If $B$ doesn't exist, or if every move from $B$ $...$ commutes with $A$ and $C$, then this optimization will skip canonical sequences where every move commutes with each other; for example $F$ $B$ on the Rubik's Cube. The number of skipped sequences is so small that we have the bandwidth to manually search and test these sequences for solutions before running IDA\*.
 
 ==== Pathmax
 
