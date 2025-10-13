@@ -54,6 +54,7 @@
 
 ### Schreier Sims
 - ⭐Optimal stabilizer chain
+  - Bookmark: https://dl.acm.org/doi/10.1145/281508.281611
 - Allow variations in the number of pieces solved by each link in the chain
 - Create a heuristic for picking which pieces to solve in which order
 - Assess feasibility of generalizing Thisthethwaite-like methods to arbitrary puzzles
