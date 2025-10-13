@@ -278,6 +278,7 @@
 
 #set par(justify: true)
 #set heading(numbering: "1.1.1.a)")
+#set page(numbering: "1")
 
 #align(center, [
 
@@ -2374,7 +2375,7 @@ Furthermore, we take advantage of the fact that the optimal solution sequence _a
 
 We first observe that if $A B$ $...$ $C$ is a solution, then $C A B$ $...$ is also a solution by a sequence rotation. This tells us that $A$ and $C$ cannot be in the same move class or else they could be combined to produce the shorter solution $D B$ $...$ . Such a shorter solution would have been found at the previous depth limit, implying that $A B$ $...$ $C$ never would have been explored making this situation an impossibility. This also tells us that $A$ also cannot be in a greater move class than $C$ because $C A B$ $...$ would be a lexicographically lesser than $A B$ $...$ $C$, contradicting our earlier proof that IDA\* only searches the lexicographically minimal sequence rotation (the representative). Therefore, $A$ must be in a lesser move class than $C$.
 
-If $C A B$ $...$ is a solution, then $A C B$ $...$ is also a solution because $A$ and $C$ commute. By the transitive property, if $A B$ $...$ is a solution, then so is $A C B$ $...space.nobreak$ . Both of these sequences are independently searched and tested as a solution because there is no direct "commutative move ordering" or sequence symmetry relation between then. This is redundant work; we choose to discard the $A B$ $...$ $C$ case. This completes our proof.
+If $C A B$ $...$ is a solution, then $A C B$ $...$ is also a solution because $A$ and $C$ commute. By the transitive property, if $A B$ $...$ $C$ is a solution, then so is $A C B$ $...space.nobreak$ . Both of these sequences are independently searched and tested as a solution because there is no direct "commutative move ordering" or sequence symmetry relation between them. This is redundant work; we choose to discard the $A B$ $...$ $C$ case. This completes our proof.
 
 This optimization only applies to the last depth in IDA\*, so it only prevents running the test to check if a node is a solution and does not affect the time complexity. It turns out to be surprisingly effective at reducing the average time per node because most of the time is spent at the last depth.
 
