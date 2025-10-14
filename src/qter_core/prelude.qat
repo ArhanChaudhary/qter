@@ -281,7 +281,7 @@ end-lua
 
     -- should parse nested for loops such as `repeat j from $i to 10 { ... }`
     -- because the outer $i should be evaluated first
-    ($times:int $var:ident from $start:int to $end:int $code:block) => {
+    ($var:ident from $start:int to $end:int $code:block) => {
         lua repeat_($code, $start, $end, $var)
     }
 }

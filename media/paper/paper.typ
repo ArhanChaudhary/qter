@@ -486,7 +486,7 @@ This system is able to uniquely identify all of the pieces. Finally, a sequence 
 
 Now that you understand what a Rubik's Cube is and the fundamental mechanics, we can explain the ideas of using it to perform computation. The most important thing for a computer to be able to do is represent numbers. Let's take a solved cube and call it "zero".
 
-The fundamental unit of computation in Qter is an _algorithm_, or a sequence of moves to apply to the cube. The fundamental unit of computation on a classical computer is addition, so let's see what happens when we apply the simplest algorithm, just turning the top face, and call it addition. What does this buy us?
+The fundamental unit of computation in Qter is an _algorithm_, or a sequence of moves to apply to the cube. The fundamental unit of computation on a classical computer is addition, so let's see what happens when we apply the simplest algorithm, just turning the top face, and call it addition by one. What does this buy us?
 
 #image("Light U States.png")
 
@@ -1170,7 +1170,7 @@ set <register1> to <register2>
 Set the contents of the first register to the contents of the second while zeroing out the contents of the second
 
 ```janet
-set <number> to <number>
+set <register> to <number>
 ```
 Set the contents of the first register to the number specified
 
@@ -1197,12 +1197,12 @@ Execute the code block if the register does not equal the number supplied, other
 ```janet
 if equals <register1> <register2> using <register3> <{}> [else <{}>]
 ```
-Execute the code block if the first two registers are equal, while passing in a third register to use as bookkeeping that will be set to zero. Otherwise executes the `else` block if supplied. All three registers must have equal order. This is validated at compile-time.
+Execute the code block if the first two registers are equal, while passing in a third register to use as bookkeeping that will be set to zero. Otherwise executes the `else` block if supplied. All three registers must have equal order. This is validated at compile-time. The equality check is implemented by decrementing both registers until one of them is zero, so the bookkeeping register is used to save the amount of times decremented.
 
 ```janet
 if not-equals <register1> <register2> using <register3> <{}> [else <{}>]
 ```
-Execute the code block if the first two registers are _not_ equal, while passing in a third register to use as bookkeeping that will be set to zero. Otherwise executes the `else` block if supplied. All three registers must have equal order. This is validated at compile-time.
+Execute the code block if the first two registers are _not_ equal, while passing in a third register to use as bookkeeping that will be set to zero. Otherwise executes the `else` block if supplied. All three registers must have equal order. This is validated at compile-time. The equality check is implemented identically to `if equals ... using ...`.
 
 ```janet
 loop <{}>
@@ -1259,7 +1259,7 @@ repeat <number> [<ident>] <{}>
 Repeat the code block the number of times supplied, optionally providing a loop index with the name specified. The index will be emitted as a `.define` statement.
 
 ```janet
-repeat <number> <ident> from <number1> to <number2> <{}>
+repeat <ident> from <number1> to <number2> <{}>
 ```
 Repeat the code block for each number in the range [number1, number2)
 
@@ -1277,13 +1277,13 @@ Multiply the first two registers, storing the result in the first register and z
 
 Now we're getting to the more theoretical side, as well as into a design space that we're still exploring. Things can easily change.
 
-There are plenty of cool programs one can write using the system described above, but it's certainly not turing complete. The fundamental reason is that we only have finite memory... For example it would be impossible to write a QAT compiler in QAT because there's simply not enough memory to even store a whole program on a Rubik's Cube. In principle, anything would be possible with infinite Rubik's Cubes, but it wouldn't be practical to give all of them names since you can't put infinite names in a program. How can we organize them instead?
+There are plenty of cool programs one can write using the system described above, but it's certainly not Turing complete. The fundamental reason is that we only have finite memory... For example it would be impossible to write a QAT compiler in QAT because there's simply not enough memory to even store a whole program on a Rubik's Cube. In principle, anything would be possible with infinite Rubik's Cubes, but it wouldn't be practical to give all of them names since you can't put infinite names in a program. How can we organize them instead?
 
-The traditional solution to this problem that is used by classical computers is _pointers_. You assign every piece of memory a number and allow that number to be stored in memory itself. Each piece of memory essentially has a unique name — its number — and you can calculate which pieces of memory needed at runtime as necessary. However, this system won't work for qter because we would like to avoid requiring the user to manually decode registers outside of halting. We allow the `print` instruction to exist because it doesn't affect what the program does and can simply be ignored at the user's discretion.
+The traditional solution to this problem that is used by classical computers is _pointers_. You assign every piece of memory a number and allow that number to be stored in memory itself. Each piece of memory essentially has a unique name — its number — and you can calculate which pieces of memory are needed at runtime as necessary. However, this system won't work for qter because we would like to avoid requiring the user to manually decode registers outside of halting. We allow the `print` instruction to exist because it doesn't affect what the program does and can simply be ignored at the user's discretion.
 
 Even if we did allow pointers, it wouldn't be a foundation for the usage of infinite memory. The maximum number that a single Rubik's Cube could represent if you use the whole cube for one register is 1259. Therefore, we could only possibly assign numbers to 1260 Rubik's Cubes, which would still not be nearly enough memory to compile a QAT program.
 
-Since our language is so minimal, we can take inspiration from perhaps the most famous barely-turing-complete language out there (sorry in advance)... Brainfuck!! Brainfuck consists of an infinite list of numbers and a single pointer (stored externally) to the "current" number that is being operated on. A Brainfuck program consists of a list of the following operations:
+Since our language is so minimal, we can take inspiration from perhaps the most famous barely-Turing-complete language out there (sorry in advance)... Brainfuck!! Brainfuck consists of an infinite list of numbers and a single pointer (stored externally) to the "current" number that is being operated on. A Brainfuck program consists of a list of the following operations:
 
 - `>` Move the pointer to the right
 - `<` Move the pointer to the left
@@ -1294,7 +1294,7 @@ Since our language is so minimal, we can take inspiration from perhaps the most 
 - `[` Jump past the matching `]` if the number at the pointer is zero
 - `]` Jump to the matching `[` if the number at the pointer is non-zero
 
-The similarity to Qter is immediately striking and it provides a blueprint for how we can support infinite cubes. We can give Qter and infinite list of cubes called a _memory tape_ and instructions to move left and right, and that would make Qter turing-complete. Now Brainfuck is intentionally designed to be a "turing tarpit" and to make writing programs as annoying as possible, but we don't want that. For the sake of our sanity, we support having multiple memory tapes and naming them, so you don't have to think about potentially messing up other pieces of data while traversing for something else. To model a tape in a hand-computation of a qter program, one could have a bunch of Rubik's Cubes on a table laid out in a row and a physical pointer like an arrow cut out of paper to model the pointer. One could also set the currently pointed-to Rubik's Cube aside.
+The similarity to Qter is immediately striking and it provides a blueprint for how we can support infinite cubes. We can give Qter an infinite list of cubes called a _memory tape_ and instructions to move left and right, and that would make Qter Turing-complete. Now Brainfuck is intentionally designed to be a "Turing tarpit" and to make writing programs as annoying as possible, but we don't want that. For the sake of our sanity, we support having multiple memory tapes and naming them, so you don't have to think about potentially messing up other pieces of data while traversing for something else. To model a tape in a hand-computation of a qter program, one could have a bunch of Rubik's Cubes on a table laid out in a row and a physical pointer like an arrow cut out of paper to model the pointer. One could also set the currently pointed-to Rubik's Cube aside.
 
 Lets see how we can tweak Q and QAT to interact with memory tapes. First, we need a way to declare them in both languages. In Q, you can write
 
@@ -1385,7 +1385,7 @@ First, we have to build a foundation of how we can represent Rubik's Cubes in th
 - For all elements $a$, $b$, $c$, $(a · b) · c = a · (b · c)$. In other words, the operation is associative.
 - For each $a$ in the group, there exists $a^(-1)$ such that $a · a^(-1) = e$. In other words, every element has an _inverse_ with respect to the group operation.
 
-Importantly, commutativity is _not_ required. So let's see how this definition applies to the Rubik's Cube. To form a group, we need a _set_, and for the Rubik's Cube, this set is all $4.3·10^(19)$ possible cube states and scrambles. For example, the solved state is an element of the set. If you turn the top face then that's an element of the set. If you just scramble your cube randomly and do any sequence of moves, then even that's part of the set.
+Importantly, commutativity is _not_ required. So let's see how this definition applies to the Rubik's Cube. To form a group, we need a _set_, and for the Rubik's Cube, this set is all $4.3·10^(19)$ possible cube states and scrambles, excluding rotations. For example, the solved state is an element of the set. If you turn the top face then that's an element of the set. If you just scramble your cube randomly and do any sequence of moves, then even that's part of the set.
 
 Next, we need an _operation_. For the Rubik's Cube, this will be jamming together the algorithms that reach the two cube states. We will call this operation _composition_ because it is very similar to function composition.
 
@@ -1489,7 +1489,7 @@ $
     & 2         && 1         && 4         && 3         && 0 \
 $
 
-where the arrows define the rearrangement. Note that we can have permutations of any number of items rather than just five. We can leave out the top row of the mapping because it will always be the numbers in order, so we could notate it $2, 1, 4, 3, 0$. We can see that this permutation can also be thought of as a bijective function between the numbers ${0, 1, 2, 3, 4}$ and themselves.
+where the arrows define the rearrangement. Note that we can have permutations of any number of items rather than just five. We can leave out the top row of the mapping because it will always be the numbers in order, so we could notate it $2, 1, 4, 3, 0$. We can see that this permutation can also be thought of as an invertible, or _bijective_, function between the numbers ${0, 1, 2, 3, 4}$ and themselves.
 
 So now, lets construct a group. The set of all permutations of a particular size, five in this example, will be the set representing our group. Then, we need an operation. Since permutations are basically functions, permutation composition can simply be function composition!
 
@@ -1538,7 +1538,7 @@ Now, if we restrict our set of permutations to only contain the permutations tha
 
 It may appear as if our definition of the Rubik's cube group includes too many elements: after all, each sticker on a Rubik's cube has seven identical twins, but we're giving them different numbers and treating them as if they were unique. If there existed an algorithm that could swap two stickers of the same color, then our definition would count those as different states whereas they would really be the same state. However, we don't have to worry about this because all of the _pieces_ on a cube are unique. The only way to swap two stickers would be to swap two pieces, and that would definitely produce a different cube state. Note that we don't get to make that assumption for puzzles like the 4x4x4 which have identical center pieces, however we are conveniently not writing about the 4x4x4 because our code doesn't even work for that yet #emoji.face.shush;.
 
-One final term to define is an _orbit_. An orbit is a collection of stickers (or whatever elements being permuted, in full generality) such that for each pair of stickers, there exists a sequence of moves that moves one sticker to another's place. On a Rubik's Cube, there are two orbits: the corners and the edges. There obviously doesn't exist an algorithm that can move a corner sticker to an edge sticker's place or vice versa, therefore the corners and edges form separate orbits. Intuitively, you can find orbits of any permutation subgroup by coloring the stickers using the most colors possible such that the colors don't change when applying moves.
+One final term to define is an _orbit_. An orbit is a collection of stickers (or whatever elements are being permuted, in full generality) such that if there exists a sequence of moves that moves one sticker in the orbit to another sticker's place, then that other sticker must be in the same orbit as the first. On a Rubik's Cube, there are two orbits: the corners and the edges. There obviously doesn't exist an algorithm that can move a corner sticker to an edge sticker's place or vice versa, therefore the corners and edges form separate orbits. Intuitively, you can find orbits of any permutation subgroup by coloring the stickers using the most colors possible such that the colors don't change when applying moves.
 
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
@@ -1570,20 +1570,27 @@ Now, we need to show some properties of how the Rubik's Cube group works. First,
     circle("fr.fr", radius: 1)
 }))
 
-You can see that happening here, where the UFR corner is twisted in place in the first example and the FR edge is flipped in place in the second example. This shows that _just_ encoding the positions of the pieces under-specifies the entire cube state, so we need to take orientation into account.
+You can see that happening here, where the UFR corner is _twisted_ in place in the first example and the FR edge is _flipped_ in place in the second example. This shows that _just_ encoding the positions of the pieces under-specifies the entire cube state, so we need to take orientation into account.
 
-In general, any edge or corner can exist in any other edge or corner position in any orientation. So how can we encode this orientation in full generality? It's easy to tell that the UFR corner and FR edge are twisted and flipped respectively in the above examples, but when the pieces are not in their solved positions, how can we decide which orientation counts as twisted/flipped or not?
+In general, any edge or corner can exist in any other edge or corner position in any orientation. So how can we encode this orientation in full generality? It's easy to tell that the UFR corner and FR edge are twisted and flipped respectively in the above examples because the pieces can be solved by simply rotating them in place. However, when the pieces are not in their solved positions, there is no way to solve them just by rotating them in place. We need some kind of reference frame to decide how to label a piece's orientation regardless of where it is on the cube. How can we define this reference frame?
 
-What we can do is imagine a special recoloring of the cube such that all pieces are indistinguishable but still show orientation. If the pieces aren't distinguishable, then they're _always_ in their solved positions since you can't tell them apart. Then it's easy to define orientation in full generality. Here is a recoloring that does that:
+Since the problem is that pieces can be unsolved, what we can do is imagine a special recoloring of the cube such that all pieces are indistinguishable but still show orientation. If the pieces aren't distinguishable, then they're _always_ in their "solved positions" since you can't tell them apart. Then it's easy to define orientation in full generality. Here is a recoloring that does that:
 
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
+
+    cube("wwwwwwwww ggggggggg rrrrrrrrr", offset: (-2.5, 0))
+    cube("bbbbbbbbb yyyyyyyyy ooooooooo", offset: (2.5, 0), back: true)
+
+    line((5, 0), (8, 0), mark: (end: "straight"))
+
+    translate((13, 0))
 
     cube("bbbbbbbbb nnnbbbnnn nnnnnnnnn", offset: (-2.5, 0))
     cube("nnnbbbnnn bbbbbbbbb nnnnnnnnn", offset: (2.5, 0), back: true)
 }))
 
-To determine the orientation of a piece on a normally colored Rubik's Cube, you can pretend that the Rubik's Cube is actually following this coloring and imagine what the cube state would look like:
+You can imagine that we are taking a Rubik's cube and replacing all of the stickers with new stickers of the respective colors. The reason that we can do this is that we already know how to represent the locations of pieces using a permutation group, so it is valid to throw out the knowledge of a piece's location while figuring out how to represent orientation. To determine the orientation of a piece on a normally colored Rubik's Cube, you can take the algorithm to get to that cube state and apply it to our specially recolored cube:
 
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
@@ -1599,11 +1606,11 @@ To determine the orientation of a piece on a normally colored Rubik's Cube, you 
     cube("bnbnbbnbn nnbbbbnnn nnnnnnnnb", offset: (2.3, 0), back: true)
 }))
 
-Even though the UFR corner isn't solved, we can see that the piece in the UFR position is twisted, using this recoloring. The corner in the UFR position is the DBL corner, and according to our recoloring, the yellow sticker on it is the one that's recolored blue, and since the "blue" sticker isn't facing up, the corner is twisted. If you would like, you can verify this for all of the pieces.
+Even though the UFR corner isn't in its solved position, we can still say that the piece in the UFR position is twisted because the blue sticker isn't facing up, like it is in the recolored solved state. You would be able to "solve" that piece—make it look like the respective position in the recolored solved state—by simply rotating it in place. This gives us a reference frame to define orientation for a piece regardless of where it is located on the cube.
 
-Note that this recoloring is entirely arbitrary and it's possible to consider _any_ recoloring that only exhibits orientation. However, this recoloring is standard due to its symmetry as well as properties we will describe in the next paragraph.
+Note that this recoloring is entirely arbitrary and it's possible to consider _any_ recoloring of the solved state such that all pieces are indistinguishable but still exhibit orientation, as long as you are consistent with your choice. However, this recoloring is standard due to its nice symmetries as well as properties we will describe in the next paragraph.
 
-Based on this recoloring, you can see that the move set $⟨U, D, R 2, F 2, L 2, B 2⟩$ preserves orientation of all of the pieces, and on top of that, $R$ and $L$ preserve edge orientation but not corner orientation. The moves $F$ and $B$ flip four edges, while $R$, $F$, $L$, and $B$ twist four corners.
+Based on this recoloring, you can see that the move set $⟨U, D, R 2, F 2, L 2, B 2⟩$ preserves orientation of all of the pieces, and on top of that, $R$ and $L$ preserve orientation of the edges but not of the corners. The moves $F$ and $B$ flip four edges, while $R$, $F$, $L$, and $B$ twist four corners.
 
 
 #figure(cetz.canvas(length: 15pt, {
@@ -1620,7 +1627,7 @@ Based on this recoloring, you can see that the move set $⟨U, D, R 2, F 2, L 2,
     cube("nnnbbbnnn bbbbbbnnn nnnnnnbbb", offset: (2.5, 0), back: true)
 }))
 
-Note that corners actually have _two_ ways of being misoriented. If the blue sticker on the corner is twisted clockwise with respect to the blue center on the top or bottom, we say that its orientation is one, and if it's counter-clockwise, we say that its orientation is two. Otherwise, it is zero.
+Note that corners actually have _two_ ways of being misoriented. If the corner is twisted clockwise, we say that its orientation is one, and if it's counter-clockwise, we say that its orientation is two. Otherwise, it is zero.
 
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
@@ -1634,7 +1641,7 @@ Note that corners actually have _two_ ways of being misoriented. If the blue sti
     circle("ccl.center", radius: 1)
 }))
 
-We know that $F$ and $B$ flip four edges, but what do $R$, $F$, $L$, and $B$ do to corners? Well whatever it is, those four do the same thing because all four of those moves are symmetric to each other with respect to corners. Therefore, we can track what happens to the corners for just one of them.
+We know that $F$ and $B$ flip four edges, but what do $R$, $F$, $L$, and $B$ do to corners? Well whatever it is, those four do the same thing because all four of those moves are symmetric to each other with respect to corners in our recoloring. Therefore, we can track what happens to the corners for just one of them.
 
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
@@ -1656,7 +1663,7 @@ We know that $F$ and $B$ flip four edges, but what do $R$, $F$, $L$, and $B$ do 
     content((rel: "A.mid", to: (-0.3, -0.1)), anchor: "east", stroke: white, [#set text(1.5em); +2])
 }))
 
-This should make logical sense. If you apply $R$ twice, the corners don't get twisted, which you can see in the figure. If you perform $R$ twice, each corner will get a $+1$ twist and a $+2$ twist, which sums to three, except that three wraps around to zero.
+This should make logical sense. We already know that if you apply $R$ twice, the corners don't get twisted, and that can be seen in the figure as well. If you perform $R$ twice, each corner will get a $+1$ twist and a $+2$ twist, which sums to three, except that three wraps around to zero.
 
 From here, we can prove that for _any_ cube position, if you sum the orientations of all of the corners, you get zero. Any quarter turn about $R$, $F$, $L$, and $B$ adds a total of $1 + 2 + 1 + 2 = 6$ twists to the corners, which wraps around to zero. Therefore, moves cannot change the total orientation sum so it always remains zero. This shows why a single corner twist is unsolvable on the Rubik's Cube:
 
@@ -1668,9 +1675,9 @@ From here, we can prove that for _any_ cube position, if you sum the orientation
     cube("bbbbbbbbb yyyyyyyyy ooooooooo", offset: (2.5, 0), back: true)
 }))
 
-The orientation sum for the corners in this position is one (one for the twisted corners plus zero for the rest), however it's impossible to apply just one twist using moves, and the corner orientation sum will always be one regardless of the moves that you do.
+The orientation sum for the corners in this position is one (one for the twisted corner plus zero for the rest), however it's impossible to apply just one twist using moves, and the corner orientation sum will always be one regardless of the moves that you do.
 
-Similarly, we can show that the orientation sum of _edges_ is also always zero. If we call the non-flipped state "zero" and the flipped state "one", then $F$ and $B$ turns both flip four edges, adding $+4$ to the edge orientation sum of the cube, which wraps around to zero. Therefore, a single edge flip is unsolvable too:
+Similarly, we can show that the orientation sum of _edges_ is also always zero. If we call the non-flipped state "zero" and the flipped state "one", then the $F$ and $B$ turns both flip four edges, adding $+4$ to the edge orientation sum of the cube, which wraps around to zero. Therefore, a single edge flip is unsolvable too:
 
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
