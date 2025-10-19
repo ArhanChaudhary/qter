@@ -16,6 +16,16 @@
     "n": (rgb("#dddddd"), none), ///gray,
 )
 
+#let appendix(body) = {
+  set heading(numbering: "A", supplement: [Appendix])
+  counter(heading).update(0)
+  body
+}
+
+#set par(justify: true)
+#set heading(numbering: "1.1.1.a)")
+#set page(numbering: "1")
+
 #let cube(faces, offset: (0, 0), scale-amt: 1, distance: 5, back: false, name: "") = {
     import cetz.draw: *
 
@@ -276,10 +286,6 @@
     })
 }
 
-#set par(justify: true)
-#set heading(numbering: "1.1.1.a)")
-#set page(numbering: "1")
-
 #align(center, [
 
     #v(2em)
@@ -321,6 +327,7 @@ _We also extend our gratitude to Ben Whitmore for helping us ideate the initial 
 #pagebreak()
 
 #outline()
+#outline(target: heading.where(supplement: [Appendix]), title: [Appendix])
 
 = Background
 
@@ -1928,7 +1935,7 @@ In an optimal Rubik's Cube solver, we are given a random position, and we must f
 
 It would be reasonable to expect there to be a known structural property of the Rubik's Cube that makes optimal solving easy. Indeed, to find a _good_ solution to the Rubik's Cube, the technique of Kociemba's algorithm @kociembas-algorithm cleverly utilizes a specific subgroup to solve up to 3900 individual position per second _near_ optimally @cube20. However, we want to do better than that.
 
-Unfortunately, to find an _optimal_ solution, the only known approach is to brute force all combinations of moves sequences until the Rubik's Cube is solved. To add some insult to injury, Demaine @np-complete proved that optimal $N times N times N$ cube solving is NP-complete. However, this doesn't mean we can't optimize the brute force approach. We will discuss a variety of improvements that can be made, some specific to the Cycle Combination Solver only, but unless there is a significant advancement in group theory relating to the problem it is solving the runtime is necessarily going to be exponential.
+Unfortunately, to find an _optimal_ solution, the only known approach is to brute force all combinations of move sequences until the Rubik's Cube is solved. To add some insult to injury, Demaine @np-complete proved that optimal $N times N times N$ cube solving is NP-complete. However, this doesn't mean we can't optimize the brute force approach. We will discuss a variety of improvements that can be made, some specific to the Cycle Combination Solver only, but unless there is a significant advancement in group theory relating to the problem it is solving, the runtime is necessarily going to be exponential.
 
 === Tree searching <time-complexity-1>
 
@@ -1987,17 +1994,17 @@ A more formal way to think about the Cycle Combination Solver is to think of the
     line((to: "tree.g0-3", rel: (0.9, -1)), (to: "tree.0-3-0", rel: (4.5, 1.2)))
 }))
 
-Our goal is now to find a node with the specified cycle structure at the _topmost_ level of the tree, a solution of the optimal move length. Those familiar with data structures and algorithms will think of the most obvious approach to this form of tree searching: breadth-first search (BFS). BFS is an algorithm that explores all nodes in a level before moving on to the next one. Indeed, BFS guarantees optimality, and works in theory, but not in practice: extra memory is needed to keep track of child nodes that are yet to be explored. At every level, the number of nodes scales by a factor $18$, and so does the extra memory needed. At a depth level, or sequence length, of just $8$, BFS would require storing $18^9$ (number of depth 9 nodes) or roughly 200 billion Rubik's Cube states in memory. This is clearly not practical. We need to do better.
+Our goal is now to find a node with the specified cycle structure at the _topmost_ level of the tree, a solution of the optimal move length. Those familiar with data structures and algorithms will think of the most obvious approach to this form of tree searching: breadth-first search (BFS). BFS is an algorithm that explores all nodes in a level before moving on to the next one. Indeed, BFS guarantees optimality, and works in theory, but not in practice: extra memory is needed to keep track of child nodes that are yet to be explored. At every level, the number of nodes scales by a factor $18$, and so does the extra memory needed. At a depth level i.e. sequence length of just $8$, BFS would require storing $18^9$ depth-9 nodes or roughly 200 billion Rubik's Cube states in memory. This is clearly not practical; we need to do better.
 
 We now consider a sibling algorithm to BFS: depth-first search (DFS). DFS is an algorithm that explores all nodes as deep as possible before backtracking. It strikes our interest because the memory overhead is minimal; all you need to keep track of is the path taken to reach a node, something that can be easily managed during the search. However, because we explore nodes depth-first, it offers no guarantee about optimality, so we still have a problem.
 
-A simple modification to DFS can make it always find the optimal solution. We tweak the DFS implementation so that it explores up until a specified depth, testing whether each node at this depth is a solution, without exploring further. We repeatedly run this implementation at increasing depth limits until a solution _is_ found. Put simply, you do a DFS of depth 1, then of depth 2, and so on. This idea is known as iterative-deepening depth-first search (IDDFS), a hybrid of a breadth-first and depth-first search. IDDFS does repeat some work each iteration, but the cost is always small relative to the last depth because the Rubik's Cube search tree grows exponentially. The insignificance of the repeat work is further exacerbated given that even more time is spent at the last depth running the test for a solution. Because the majority of the time is spent at the last depth, the asymptotic time complexity of $O(18^n)$ in Big O notation is actually identical to BFS and the memory saved is worth it. We will gradually improve this time complexity bound throughout the rest of this section.
+A simple modification to DFS can make it always find the optimal solution. We tweak the DFS implementation so that it explores up until a specified depth, testing whether each node at this depth is a solution, without exploring further. We repeatedly run this implementation at increasing depth limits until a solution _is_ found. Put simply, you do a DFS of depth 1, then of depth 2, and so on. This idea is known as iterative-deepening depth-first search (IDDFS), a hybrid of a breadth-first and depth-first search. IDDFS does repeat some work each iteration, but the cost is always small relative to the last depth because the Rubik's Cube search tree grows exponentially. The insignificance of the repeat work is further exacerbated given that even more time is spent at the last depth running the test for a solution. Because the majority of the time is spent at the last depth $d$, the asymptotic time complexity of $O(18^d)$ in Big O notation is actually identical to BFS while solving the memory problem. We will gradually improve this time complexity bound throughout the rest of this section.
 
 === Pruning
 
 IDDFS solves the memory issue, but is lacking in speed because tree searching is still slow. The overwhelming majority of paths explored lead to no solution. What would be nice is if we could somehow know whether all paths that continue from a given node are dead ends without having to check by brute-force.
 
-For this, we introduce the idea of a _pruning table_. For any given Rubik's Cube position, a pruning table tells you a lower bound on the number of moves needed to reach a Cycle Combination Solver solution. Suppose we are running IDDFS until depth $12$, and we've done 5 moves so far. Say we are at this node.
+For this, we introduce the idea of a _pruning table_. For any given Rubik's Cube position, a pruning table tells you a lower bound on the number of moves needed to reach a Cycle Combination Solver solution. Suppose we are running IDDFS until depth $12$, we've done 5 moves so far, and we have reached this nodfe.
 
 #figure(
     cetz.canvas(length: 15pt, {
@@ -2016,9 +2023,13 @@ The use of pruning tables in this fashion was originated by Korf @korf in his op
 
 How are we supposed to store all 43 quintillion positions of the Rubik's Cube in memory? Well, we don't: different types of pruning tables solve this problem by sacrificing either information or accuracy to take up less space. Hence, pruning tables give an admissible heuristic instead of the exact number of moves needed to reach a Cycle Combination Solver solution.
 
-Loosely speaking, pruning tables can be thought of as a form of meet-in-the-middle search, more generally known as a space—time trade-off @spacetime. Even when running the Cycle Combination Solver on the same puzzle, we _must_ generate a new pruning table for every unique cycle structure. It turns out this is still worth it. Pruning tables reduce the search depth of the tree, and the improvements are dramatic because the number of nodes at increasing depths grows exponentially. But there is no free lunch: we have to pay for this speedup by memory.
+Loosely speaking, pruning tables can be thought of as a form of meet-in-the-middle search, more generally known as a space—time trade-off @spacetime. Even when running the Cycle Combination Solver on the same puzzle, we _must_ generate a new pruning table for every unique cycle structure. It turns out this is still worth it. In general, we can characterize the effectiveness of a pruning table by its expected admissible heuristic, $p$. Pruning tables reduce the search depth of the tree because they have the effect of preventing searching the last $p$ depths, and the improvements are dramatic because the number of nodes at increasing depths grows exponentially. But there is no free lunch: we have to pay for this speedup by memory.
 
-In terms of the asymptotic time complexity, pruning tables unfortunately have no effect. If we consider $O(18^(n - k)$ to be the new time complexity where $k$ is some constant that emulates reducing the search depth of the tree, the expression simplifies to $O(18^n/18^k)$ or back to $O(18^n)$ because Big-O notation ignores constant factors.
+We are left with a need to examine the asymptotic time complexity IDA\*. An IDA\* search to depth limit $d$ is similar to an IDDFS search to depth limit $d - p$, implying a time complexity of IDA\* is $O(18^(d - p))$ (recall how the last depth is the dominating factor). One might even be eagar to consider these two searches exactly equivalent, but Korf describes a perhaps surprising discrepancy: the number of nodes visited by IDA\* is empirically far greater, up to a magnitude of two. Nodes with large pruning values are quickly pruned, while nodes with small pruning values survive to spawn more nodes. Thus, IDA\* search is biased in favor of smaller heuristic values, and the expected admissible heuristic is actually lesser.
+
+Next we will conjecture that $p$ is logarithmically correlated to the number of states the pruning table can store, which we denote as the amount of memory used $m$. We first assume the branching factor $b$ is constant and then notice the minimum depth that is stored in the pruning table is approximately $floor(log_b m)$. Since there are exponentially more states at the last depth, $p$ is negligibly less than this depth; hence, $p ~ log_b m$. In reality, the branching factor is not constant and always less than its theoretical value, eventually converging to zero. The pruning table distribution in general is nontrivial to analyze. This implies our estimate of $p ~ log_b m$ is an egregious overestimate of the actual average pruning value, but we proceed with this approximation because IDA\* is biased in favor of smaller heuristic values. These two biases cancel each other out to some extent.
+
+As such, $O(18^(d - p)) = O(18^(d - log_18 m)) = O(18^d/m)$. Empirically and analytically, doubling the size of the pruning table halves the CPU time required to perform a search.
 
 === Pruning table design
 
@@ -2054,11 +2065,11 @@ Symmetry reduction is the most famous way to compress pruning table entries. We 
     ),
 )
 
-They are different but they are _basically_ identical. If you replace red with blue, blue with orange, orange with green, green with red, and rotate the cube $90 degree$ counter-clockwise, you will have transformed $A$ into $B$. Because these two cube positions have the exact same structure of pieces, they need the same number of moves to reach a Cycle Combination Solver solution.
+They are different but they are _basically_ identical. If you replace red with blue, blue with orange, orange with green, green with red, you will have transformed $A$ into $B$. Because these two cube positions have the exact same structure of pieces, they need the same number of moves to reach a Cycle Combination Solver solution.
 
 We call such positions _symmetrically equivalent_. If we really wanted to be serious about pruning table compression, what we can do is store a single representative of all symmetrically equivalent cubes because they would all share the same admissible heuristic value, and keeping a separate entry for each of these positions is a waste of memory.
 
-Defining symmetrically equivalent cubes by figuring out an arbitrary way to recolor the cube isn't very efficient. The more mathematically precise way to define symmetrically equivalent cubes is with permutations. Two cube positions $A$ and $B$ are symmetrically equivalent if there exists a symmetry $S$ of the cube such that $S A S^(-1) = B$, where the $S$ operations are spatial manipulations the whole cube. We can prove that $A$ and $B$ are symmetrically equivalent using this model:
+Defining symmetrically equivalent cubes by figuring out an arbitrary way to recolor the cube is a very handwavy way to think about it, nor is it very efficient. The more mathematically precise way to define symmetrically equivalent cubes is with permutations. Two cube positions $A$ and $B$ are symmetrically equivalent if there exists a symmetry $S$ of the cube such that $S A S^(-1) = B$, where the $S$ operations are spatial manipulations the whole cube. We can prove that $A$ and $B$ are symmetrically equivalent using this model:
 
 #figure(cetz.canvas(length: 15pt, {
     import cetz.draw: *
@@ -2267,9 +2278,9 @@ The symmetry and antisymmetry reduction algorithm as described so far would be s
 
 The Cycle Combination Solver uses a separate pruning table per the puzzle orbits. For the Rubik's Cube, that means one pruning table for the corners and one for the edges. To get an admissible heuristic for an individual position, we query each pruning table based on the states of the position's corresponding orbits and take the maximum value. A brief example: if querying a Rubik's Cube state returns $3$ on the corners pruning table and $5$ on the edges pruning table, then its admissible heuristic is the maximum of the two, $5$. We established that larger heuristic values are better, and the optimality guarantee still stands because each individual pruning table is already admissible.
 
-Generating a pruning table involves searching the Rubik's Cube tree but from the Cycle Combination Solver solution states instead of from the solved state, and storing the amount of moves required to reach each state found.
+Generating a pruning table for an orbit is done in two phases. First, we enumerate every single position of the orbit and mark solutions of the Cycle Combination Solver. Then, we search the Rubik's Cube tree but from these solution states instead of from the solved state, and storing the amount of moves required to reach each state found as the admissible heuristic.
 
-The Cycle Combination Solver supports four different types pruning tables: the exact pruning table, the approximate pruning table, the cycle structure pruning table, and the fixed pruning table. They are dynamically chosen at runtime based on a maximum memory limit option.
+The Cycle Combination Solver supports four different types of pruning tables: the exact pruning table, the approximate pruning table, the cycle structure pruning table, and the fixed pruning table. They are dynamically chosen at runtime based on a maximum memory limit option.
 
 *We defer our discussion of pruning table types for a later revision.*
 
@@ -2288,7 +2299,7 @@ The Cycle Combination Solver supports four different types pruning tables: the e
 // Cycle structure:
 // Populating the pruning table is a form of search
 
-Finally, the Cycle Combination Solver generates the pruning tables and performs IDA\* search at the same time. It would not be very efficient for the Cycle Combination Solver to spend all of its time generating the pruning tables only for the actual searching part to be easy. It balances out querying and generation. Starting from an uninitialized pruning table, if the number of queries exceeds the number of set values by a factor of $3$, it pauses the search to generate a deeper layer of that pruning table and then continues.
+Finally, the Cycle Combination Solver generates the pruning tables and performs IDA\* search at the same time. It would not be very efficient for the Cycle Combination Solver to spend all of its time generating the pruning tables only for the actual searching part to be easy, so it balances out querying and generation; starting from an uninitialized pruning table, if the number of queries exceeds the number of set values by a factor of $3$, it pauses the search to generate a deeper layer of that pruning table and then continues.
 
 ==== Pruning table compression
 
@@ -2333,11 +2344,11 @@ What does the second condition reduce our branching factor from $15$ to? We star
 
 - Case 2: $M_1$ and $M_2$ commute.
 
-    We need to be careful to only count $M_1$ and $M_2$ one time so we count them in pairs. In this case, $a_n$ is simply $a_(n-2)$ multiplied by the number of strictly ordered $(M_1, M_2)$ pairs. There are $3$ pairs of commutative move classes: $\FB, \UD, "and" \RL$. We have to discard one of these pairs because $M_3$ necessarily commutes with the move classes in one of these pairs since the union of all of these pairs is every move. Such a canonical sequence where the subsequence $M_3 M_2 M_1$ all commute cannot exist because one of those moves will always violate the strict move class ordering. For example, if $M_1$ is $L$ and $M_2$ is $R$, then there is no possible option for $M_3$ that makes the full sequence a canonical sequence.
+    We need to be careful to only count $M_1$ and $M_2$, one time so we count them in pairs. In this case, $a_n$ is simply $a_(n-2)$ multiplied by the number of strictly ordered $(M_1, M_2)$ pairs. There are $3$ pairs of commutative move classes: $\FB, \UD, "and" \RL$. We have to discard one of these pairs because $M_3$ necessarily commutes with the move classes in one of these pairs since the union of all of these pairs is every move. Such a canonical sequence where the subsequence $M_3 M_2 M_1$ all commute cannot exist because one of those moves will always violate the strict move class ordering. For example, if $M_1$ is $L$ and $M_2$ is $R$, then there is no possible option for $M_3$ that makes the full sequence a canonical sequence.
 
     Each move class in each pair can perform three moves, which implies that each pair contributes $3 * 3 = 9$ possible moves. Overall we find this number to be $(3 - 1) * 9 = 18$ possible moves. We can establish that the second component in the recurrence relation for $a_n$ is $18a_(n-2)$.
 
-$a_n$ can be thought of as the superposition of these two cases with the base cases $a_1 = 18 "and" a_2 = 243$ (exercise to the reader: figure out where these come from). Hence, $a_n = 12a_(n-1) + 18a_(n-2), n > 2$. The standard recurrence relation solving process follows:
+$a_n$ can be thought of as the superposition of these two cases with the base cases $a_1 = 18 "and" a_2 = 243$ (exercise to the reader: figure out where these come from). Hence, $a_n = 12a_(n-1) + 18a_(n-2) "for" n > 2$. The standard recurrence relation can be solved as follows:
 
 $
     & r^n = 12r^(n-1) + 18r^(n-2) \
@@ -2357,13 +2368,13 @@ $
 
 The $1.362(13.348)^n$ term dominates $0.138(-1.348)^n$ as $n$ approaches infinity; our new branching factor is approximately $13.348$!
 
-It turns out that $a_n$ is not an exact bound on the number of distinct positions at sequence length $N$ but merely an upper bound. This is because the formula overcounts, and the actual number is always lower: it considers canonical sequences that produce equivalent states such as $\R2$ $\L2$ $\U2$ $\D2$ and $\U2$ $\D2$ $\R2$ $\L2$ as two distinct positions. It turns out it is extremely nontrivial to describe and account for these equivalences, to the point where it's not worth doing so: at shallow and medium depths, $a_n$ roughly stays within $10%$ of the actual distinct position count. The Cycle Combination Solver considers the extra work negligible and searches equivalent canonical sequences anyways. The Big O time complexity of $a_n$ as well as the IDA\* search algorithm can be realized as $O(13.348^n)$, an improvement over the $O(18^n)$ from @time-complexity-1.
+It turns out that $a_n$ is not an exact bound on the number of distinct positions at sequence length $N$ but merely an upper bound. This is because the formula overcounts, and the actual number is always lower: it considers canonical sequences that produce equivalent states such as $\R2$ $\L2$ $\U2$ $\D2$ and $\U2$ $\D2$ $\R2$ $\L2$ as two distinct positions. It turns out it is extremely nontrivial to describe and account for these equivalences, to the point where it's not worth doing so: at shallow and medium depths, $a_n$ roughly stays within $10%$ of the actual distinct position count. The Cycle Combination Solver considers the extra work negligible and searches equivalent canonical sequences anyways. The Big O time complexity of IDA\* can be realized as $O(13.348^d/m)$, an improvement over $O(18^d/m)$ from @time-complexity-1.
 
 The Cycle Combination Solver uses an optimized finite state machine to perform the canonical sequence optimization.
 
 ==== Sequence symmetry <time-complexity-2>
 
-We use a special form of symmetry reduction during the search we call _sequence symmetry_, first observed by Rokicki @sequence-symmetry and improved by our implementation. Some solution to the Cycle Combination Solver $A B C D$ conjugated by $A^(-1)$ yields $A^(-1) (A B C D) A = B C D A$, which we observe to also be a rotation of the original sequence as well as a solution to the Cycle Combination Solver by the properties of conjugation discussed earlier. Repeatedly applying this conjugation:
+We use a special form of symmetry reduction during the search we call _sequence symmetry_, first observed by Rokicki @sequence-symmetry and improved by our implementation. Some solution to the Cycle Combination Solver $A B C D$ conjugated by $A^(-1)$ yields $A^(-1) (A B C D) A = B C D A$, which we observe to be a rotation of the original sequence as well as a solution to the Cycle Combination Solver by the properties of conjugation discussed earlier. Repeatedly applying this conjugation:
 
 $
        & A^(-1) (A B C D) A = B C D A \
@@ -2374,25 +2385,25 @@ $
 
 forms an equivalence class based on all the rotations of sequences that are all solutions to the Cycle Combination Solver. The key is to search a single representative sequence in this equivalence class to avoid duplicate work.
 
-Similarly to symmetry conjugation, we choose the representative as the lexicographically minimal sequence on a move-by-move basis (with a move class ordering relation defined). Unlike symmetry conjugation, we don't manually apply all sequence rotations to find the representative; rather, we embed sequence symmetry as a modification to the recursive IDA\* algorithm such that it only ever searches the representative sequence. We do this by observing that if a _representative sequence_ starts with move $A$, then every other move cannot be lexicographically lesser than it. If this observation were to be false, we could keep on rotating the sequence until the offending move is at the beginning of the sequence, and since that move is lexicographically lesser than $A$ that sequence rotation would be the true representative. This contradicts the initial _representative sequence_ assumption. We permit moves that are lexicographically equal to $A$ (i.e. in the same move class) but change the next recursive step to repeat the logic on the move _after_ $A$. The overall effect is that the IDA\* algorithm only visits move sequences such no later subsequence is lexicographically lesser than the beginning of the move sequence. This suffices for the complete sequence symmetry optimization.
+Similarly to symmetry conjugation, we choose the representative as the lexicographically minimal sequence on a move-by-move basis (with a move class ordering relation defined). Unlike symmetry conjugation, we don't manually apply all sequence rotations to find the representative; rather, we embed sequence symmetry as a modification to the recursive IDA\* algorithm such that it only ever searches the representative sequence. We do this by observing that if a _representative sequence_ starts with move $A$, then every other move cannot be lexicographically lesser than it. If this observation were to be false, we could keep on rotating the sequence until the offending move is at the beginning of the sequence, and since that move is lexicographically lesser than $A$ that sequence rotation would be the true representative. This contradicts the initial _representative sequence_ assumption. We permit moves that are lexicographically equal to $A$ (i.e. in the same move class) but change the next recursive step to repeat the logic on the move _after_ $A$. The overall effect is that the IDA\* algorithm only visits move sequences such that no later subsequence is lexicographically lesser than the beginning of the move sequence. This suffices for the complete sequence symmetry optimization.
 
 The modification described is not yet foolproof. The sequence $A B A B C A B$ would technically be valid as there is no later subsequence lesser than the beginning, but the actual lexicographically minimal representative is the $A B A B A B C$ sequence rotation. The "later subsequence" of the true representative wraps around from the end to the beginning. So, extra care must be taken at the last depth to manually account for the wrapping behavior. We only apply this to the last depth, so sequences like $A B A B C A B C$ are still searched by the next depth limit of IDA\*.
 
-We can extend our prior definition of canonical sequences to include sequence symmetry as a third condition. How does sequence symmetry affect the number of canonical sequences at depth $N$? Because a sequence of length $N$ has $N$ sequence rotations, sequence symmetry logically divides the total number of nodes visited by $N$, but only in the best case. The canonical sequence $R$ $U$ $R$ $U$ $R$ $U$ only has $2$ members in its sequence rotational equivalence class, not $6$, so the average value to divide by is actually a bit less than $N$. It follows that the average number of canonical sequences at depth $N$ (and the IDA\* asymptotic time complexity) is bound by $Omega(13.348^n/n)$ and $O(13.348^n)$. Testing has shown this number to typically be right in the middle of these two bounds.
+We can extend our prior definition of canonical sequences to include sequence symmetry as a third condition. How does sequence symmetry affect the number of canonical sequences at depth $N$? Because a sequence of length $N$ has $N$ sequence rotations, sequence symmetry logically divides the total number of nodes visited by $N$, but only in the best case. The canonical sequence $R$ $U$ $R$ $U$ $R$ $U$ only has $2$ members in its sequence rotational equivalence class, not $6$, so the average value to divide by is actually a bit less than $N$. It follows that the average number of canonical sequences at depth $N$ (and the IDA\* asymptotic time complexity) is bound by $Omega(13.348^n/(\mn))$ and $O(13.348^n/m)$. Testing has shown this number to typically be right in the middle of these two bounds.
 
-Furthermore, we take advantage of the fact that the optimal solution sequence _almost_ never starts and ends with commutative moves. We claim that the IDA\* algorithm _almost_ never needs to test $A B$ $...$ $C$ such that $A$ and $C$ commute for a solution. The proof is as follows.
+Furthermore, we take advantage of the fact that the optimal solution sequence _almost never_ starts and ends with commutative moves. We claim that the IDA\* algorithm _almost never_ needs to test $A B$ $...$ $C$ such that $A$ and $C$ commute for a solution. The proof is as follows.
 
-We first observe that if $A B$ $...$ $C$ is a solution, then $C A B$ $...$ is also a solution by a sequence rotation. This tells us that $A$ and $C$ cannot be in the same move class or else they could be combined to produce the shorter solution $D B$ $...$ . Such a shorter solution would have been found at the previous depth limit, implying that $A B$ $...$ $C$ never would have been explored making this situation an impossibility. This also tells us that $A$ also cannot be in a greater move class than $C$ because $C A B$ $...$ would be a lexicographically lesser than $A B$ $...$ $C$, contradicting our earlier proof that IDA\* only searches the lexicographically minimal sequence rotation (the representative). Therefore, $A$ must be in a lesser move class than $C$.
+We first observe that if $A B$ $...$ $C$ is a solution, then $C A B$ $...$ is also a solution by a sequence rotation. This tells us that $A$ and $C$ cannot be in the same move class or else they could be combined to produce the shorter solution $D B$ $...$ . Such a shorter solution would have been found at the previous depth limit, implying that $A B$ $...$ $C$ never would have been explored, making this situation an impossibility. This also tells us that $A$ also cannot be in a greater move class than $C$ because $C A B$ $...$ would be a lexicographically lesser than $A B$ $...$ $C$, contradicting our earlier proof that IDA\* only searches the lexicographically minimal sequence rotation (the representative). Therefore, $A$ must be in a lesser move class than $C$.
 
 If $C A B$ $...$ is a solution, then $A C B$ $...$ is also a solution because $A$ and $C$ commute. By the transitive property, if $A B$ $...$ $C$ is a solution, then so is $A C B$ $...space.nobreak$ . Both of these sequences are independently searched and tested as a solution because there is no direct "commutative move ordering" or sequence symmetry relation between them. This is redundant work; we choose to discard the $A B$ $...$ $C$ case. This completes our proof.
 
 This optimization only applies to the last depth in IDA\*, so it only prevents running the test to check if a node is a solution and does not affect the time complexity. It turns out to be surprisingly effective at reducing the average time per node because most of the time is spent at the last depth.
 
-We alluded to an edge case when we said "_almost_ never." If $B$ doesn't exist, or if every move from $B$ $...$ commutes with $A$ and $C$, then this optimization will skip canonical sequences where every move commutes with each other; for example $F$ $B$ on the Rubik's Cube. The number of skipped sequences is so small that we have the bandwidth to manually search and test these sequences for solutions before running IDA\*.
+We alluded to an edge case when we said "_almost never_." If $B$ doesn't exist, or if every move from $B$ $...$ commutes with $A$ and $C$, then this optimization will skip canonical sequences where every move commutes with each other; for example $F$ $B$ on the Rubik's Cube. The number of skipped sequences is so small that we have the bandwidth to manually search and test these sequences for solutions before running IDA\*.
 
 ==== Pathmax
 
-We use a simple optimization described by Mérõ @pathmax called _pathmax_ to prune nodes with large child pruning values. When a child node has a large pruning value, we can set the current node cost to that value minus one and re-prune to avoid expanding the remaining child nodes. This larger value is still admissible because it is one less than a known lower bound, and the current node is one move away from all of its child nodes. This is only effective when the heuristics are _inconsistent_, or, in this case, when the pruning table entries are the minimum of two or more other values. With exact pruning tables only, this optimization will never run because the entries are perfect heuristics that cannot exhibit this type of discrepency.
+We use a simple optimization described by Mérõ @pathmax called _pathmax_ to prune nodes with large child pruning heuristics. When a child node has a large pruning heuristic, we can set the current node cost to that value minus one and re-prune to avoid expanding the remaining child nodes. This larger heuristic is still admissible because it is one less than a known lower bound, and the current node is one move away from all of its child nodes. This is only effective when the heuristics are _inconsistent_, or, in this case, when the pruning table entries are the minimum of two or more other values. With exact pruning tables only, this optimization will never run because the entries are perfect heuristics that cannot exhibit this type of discrepency.
 
 #figure(
     diagram(
@@ -2422,13 +2433,13 @@ We use a simple optimization described by Mérõ @pathmax called _pathmax_ to pr
 
 Our last trick is to enhance IDA\* through the use of parallel multithreaded IDA\* (PMIDA\* @pmida-star). PMIDA\* runs in two phases. In the first phase, we use BFS to explore the state space to a shallow depth, maintaining a queue of all of states at the last search depth. In the second phase, we use a thread pool to run IDA\* in parallel for every state in that queue, utilizing of all of the CPU cores on the host machine. To uphold the optimality guarantee, PMIDA\* synchronizes the threads using a barrier that triggers when they have all completed exploring the current level. It can be thought of as a simple extension to the familiar IDA\* algorithm.
 
-There have been many parallel IDA\* algorithms discussed in literature; how do we know PMIDA\* is the best one? We take advantage of the special fact that the Cycle Combination Solver starts searching from the solved state. In order to understand, we compare the total Rubik's Cube position counts with the Rubik's Cube position counts unique by symmetry.
+There have been many parallel IDA\* algorithms discussed in literature; how do we know PMIDA\* is the best one? We take advantage of the special fact that the Cycle Combination Solver starts searching from the solved state. In order to understand this, we compare the total Rubik's Cube position counts with the Rubik's Cube position counts that are unique by symmetry.
 
 #grid(
     columns: (1fr, 1fr),
     align: center + bottom,
     grid.cell(breakable: false)[
-        Rubik's Cube Position Counts @sym-counts
+        Rubik's Cube position counts @sym-counts
         #table(
             columns: (auto, auto, auto),
             table.header([*Depth*], [*Count*], [*Branching\ factor*]),
@@ -2445,7 +2456,7 @@ There have been many parallel IDA\* algorithms discussed in literature; how do w
         )
     ],
     grid.cell(breakable: false)[
-        Rubik's Cube Position Counts Unique by \ Symmetry $+$ Antisymmetry @sym-counts
+        Rubik's Cube position counts unique by \ symmetry $+$ antisymmetry @sym-counts
         #table(
             columns: (auto, auto, auto),
             table.header([*Depth*], [*Count*], [*Branching\ factor*]),
@@ -2463,53 +2474,24 @@ There have been many parallel IDA\* algorithms discussed in literature; how do w
     ],
 )
 
-Recall that our theoretical branching factor is $13.348$. In the table of Rubik's Cube position counts, the branching factor roughly matches this number. However, at the shallow depths of Rubik's Cube position counts unique by symmetry $+$ antisymmetry, our branching factor is much less because there are duplicate positions when performing moves from the solved state. Intuitively, this should make sense: the Rubik's Cube is not scrambled enough to start producing unique positions. It is easy to pick out two sequences of length two that are not unique by symmetry; for example $\R2$ $U$ and $\R2$ $F$. The branching factor converges to its theoretical value as the Rubik's Cube becomes more scrambled because symmetric positions become more rare. In fact, it was shown by Qu @random-graph that scrambling the Rubik's Cube can literally be modelled as a Markov chain (it's almost indistinguishable from a random walk of a graph). Hence, it is unlikely for two random move sequences of the same length to produce positions equivalent by symmetry. We know that such collisions _do_ happen because the branching factor doesn't actually reach the $13.348$ value, but we consider them negligible.
+Recall that our theoretical branching factor is $13.348$. In the table of Rubik's Cube position counts, the branching factor roughly matches this number. However, at the shallow depths of the table of Rubik's Cube position counts unique by symmetry $+$ antisymmetry, our branching factor is much less because there are duplicate positions when performing moves from the solved state. Intuitively, this should make sense: the Rubik's Cube is not scrambled enough to start producing unique positions. It is easy to pick out two sequences of length two that are not unique by symmetry; for example $\R2$ $U$ and $\R2$ $F$. The branching factor converges to its theoretical value as the Rubik's Cube becomes more scrambled because symmetric positions become more rare. In fact, it was shown by Qu @random-graph that scrambling the Rubik's Cube can literally be modelled as a Markov chain (it's almost indistinguishable from a random walk of a graph). Hence, it is unlikely for two random move sequences of the same length to produce positions equivalent by symmetry. We know that such collisions _do_ happen because the branching factor doesn't actually reach the $13.348$ value, but we consider them negligible.
 
-The effectiveness of the PMIDA\* algorithm stems from combining all of these observations. When our initial shallow BFS search is done, we filter out the many symmetrically equivalent positions from the queue to avoid redundant work before we start parallelizing IDA\*. The savings are incredibly dramatic: at depth $4$, for example, we prune the number of nodes from $43239$ to $509$, a factor close to the familiar $96$. Once we do that, and the cube starts to become sufficiently scrambled, we are confident to claim that each IDA\* thread worker explores their own independent regions of the search space and duplicates a negligible amount of work.
+The effectiveness of the PMIDA\* algorithm stems from combining all of these observations. When our initial shallow BFS search is done, we filter out the many symmetrically equivalent positions from the queue to avoid redundant work before we start parallelizing IDA\*. The savings are incredibly dramatic: at depth $4$, for example, we symmetry reduce the number of nodes from $43239$ to $509$. This is a reduction by $~84.9$, a factor that is close to the familiar $96$ (the number of symmetries $+$ antisymmetries). Once we do that, and the cube starts to become sufficiently scrambled, we are confident to claim that each IDA\* thread worker explores their own independent regions of the search space and duplicates a negligible amount of work.
 
 We make note that there are almost always going to be more positions in the queue to parallelize than available OS threads. We use an optimized thread pool work stealing algorithm for our multithreaded implementation.
 
 We squeeze out our last bit of juice by overlapping pruning table memory latency with the computation. It has been empirically observed that random access into the pruning table memory is the dominating factor for Rubik's Cube solvers. Modern processors include prefetching instructions that tell the memory system to speculatively load a particular memory location into cache without stalling the execution pipeline to do so. Our PMIDA\* implementation uses a technique described by Rokicki @microthreading called _microthreading_ to spend CPU time on different subsearches while waiting for the memory to come to a query. It splits up each thread into eight "slivers" of control. Each sliver calculates a pruning table query memory address, does a prefetch, and moves on to the next sliver. When that sliver gets control again, only then does it reference the actual memory. By handling many subsearches simultaneously, microthreading minimizes the CPU idle time.
 
-How does PMIDA\* affect the asymptotic time complexity? We established in @time-complexity-2 an upper bound of $O(13.348^n)$. The time required by PMIDA\* can be computed by adding the time of the first and second phases. In the first phase the time required for the BFS is $O(13.348^d)$ where $d$ is the aforementioned shallow depth. In the second phase we split the work across $t$ independent threads and ignore nodes before depth $d$, so the time required is $O((13.348^n/s - 13.348^d) slash t)$ where $s$ is the number of symmetries $+$ antisymmetries. The PMIDA\* time complexity is thus $O(13.348^d + (13.348^n/s - 13.348^d) slash t)$, but we consider $d$ to be very small and $s$ to be a neglible constant. As such the final time complexity becomes $O(13.348^n/t)$ @pmida-star. We can apply the exact same logic to our lower bound, and we get $Omega(13.348^n/(\nt))$.
+How does PMIDA\* affect the asymptotic time complexity? We established in @time-complexity-2 an upper bound of $O(13.348^d/m)$. The time required by PMIDA\* can be computed by adding the time of the first and second phases. In the first phase the time required for the BFS is $O(13.348^(d_1))$ where $d_1$ is the aforementioned shallow depth. In the second phase we symmetry reduce at the shallow depth, split the work across $t$ independent threads, and ignore nodes before depth $d_1$. The time required is $O((13.348^d/(\ms) - 13.348^(d_1)) slash t)$ where $s$ is the number of symmetries $+$ antisymmetries. The PMIDA\* time complexity is thus $O(13.348^(d_1) + (13.348^d/(\ms) - 13.348^(d_1)) slash t)$, but we consider $d_1$ to be very small and $s$ to be a negligible constant. As such the final time complexity becomes $O(13.348^d/(\mt))$. We can apply the exact same logic to our lower bound, and we get $Omega(13.348^d/(d\mt))$.
 
 === Larger twisty puzzles
 
-The overwhelming majority of our research has been within the realm of the Rubik's Cube, and so far, we have yet to run the Cycle Combination Solver on non-Rubik's cube twisty puzzles. While we are confident all of our theory generalizes to larger twisty puzzles (with minor implementation detail differences @twsearch-architecture), there is a practical concern we expect to run into.
+The overwhelming majority of our research has been within the realm of the Rubik's Cube, and so far, we have yet to run the Cycle Combination Solver on non-Rubik's Cube twisty puzzles. While we are confident all of our theory generalizes to larger twisty puzzles (with minor implementation detail differences @twsearch-architecture), there is a practical concern we expect to run into.
 
-Optimally solving the 4x4x4 Rubik's Cube has been theorized to take "roughly as much time as computing God's number for the 3x3x3," @optimal-4x4 around 35 CPU-years @cube20. It may very well be the case that the Cycle Combination Solver, even with all its optimization tricks, will never be able to solution to a Cycle Combination Finder cycle structure for larger twisty puzzles. Thus, we are forced to sacrifice optimality in one of three ways:
+Optimally solving the 4x4x4 Rubik's Cube has been theorized to take roughly as much time as computing the minimum number of moves to solve any 3x3x3 Rubik's Cube @optimal-4x4, which took around 35 CPU-years @cube20. It may very well be the case that the Cycle Combination Solver, even with all its optimization tricks, will never be able to find a solution to a Cycle Combination Finder cycle structure for larger twisty puzzles. Thus, we are forced to sacrifice optimality in one of three ways:
 
-- We can write _multiphase_ solvers for these larger puzzles. Multiphase solvers are specialized to the specific puzzle, and they work by incrementally bringing the twisty puzzle to a "closer to solved" state in a reasonable number of moves. However, designing a multiphase solver is profoundly more involved compared to designing an optimal solver. This approach is unsustainable because we cannot write a multiphase solver for every possible input twisty puzzle.
-- We can resort to methods to solve arbitrary permutation groups. The most promising method of which is to utilize something called a strong generating set @sgs in various ways we won't get into. The GAP computer algebra system implements this method in the `PreImagesRepresentative` function. Here is an example run of GAP solving the random scramble $F$ $L'$ $D'$ $\B2$ $U'$ $B'$ $U$ $\B2$ $\R2$ $F'$ $\R2$ $\U2$ $F'$ $\R2$ $F$ $\U2$ $B'$ $\R2$ $F'$ $R$ $\B2$ in just over two seconds using the strong generating set method.
-    ```gap
-    gap> U := ( 1, 3, 8, 6)( 2, 5, 7, 4)( 9,33,25,17)(10,34,26,18)(11,35,27,19);;
-    gap> L := ( 9,11,16,14)(10,13,15,12)( 1,17,41,40)( 4,20,44,37)( 6,22,46,35);;
-    gap> F := (17,19,24,22)(18,21,23,20)( 6,25,43,16)( 7,28,42,13)( 8,30,41,11);;
-    gap> R := (25,27,32,30)(26,29,31,28)( 3,38,43,19)( 5,36,45,21)( 8,33,48,24);;
-    gap> B := (33,35,40,38)(34,37,39,36)( 3, 9,46,32)( 2,12,47,29)( 1,14,48,27);;
-    gap> D := (41,43,48,46)(42,45,47,44)(14,22,30,38)(15,23,31,39)(16,24,32,40);;
-    gap> random_scramble := F*L^-1*D^-1*B^2*U^-1*B^-1*U*B^2*R^2*F^-1*R^2*U^2*F^-1*R^2*F *U^2*B^-1*R^2*F^-1*R*B^2;;
-    gap> cube := Group(U, L, F, R, B, D);;
-    gap> generator_names := ["U", "L", "F", "R", "B", "D"];;
-    gap> hom := EpimorphismFromFreeGroup(cube:names:=generator_names);;
-    gap> ext_rep := ExtRepOfObj(PreImagesRepresentative(hom, random_scramble));;
-    gap> time;
-    2180
-    gap> for i in Reversed([1..Length(ext_rep) / 2]) do
-    >     Print(generator_names[ext_rep[i * 2 - 1]]);
-    >     count := ext_rep[i * 2];
-    >     if count in [-2, 2] then
-    >         Print("2");
-    >     elif count in [-3, 1] then
-    >         Print("'");
-    >     else
-    >         Print(" ");
-    >     fi;
-    >     Print(" ");
-    > od;
-    U  B2 R2 F  B' R' B  R  F  R  F' R' U' D  R  D' F' U  L  F2 U  L' U2 F  D  F' D' L  U  L2 U' B  L  B' U' L' U' L' B' U' B  U' L  U  L' U  L  U  F  U' F' L  U  F  U' F' L' U  F' U' L' U  L  F  L  U2 L' U' L  U' L' U2 F  U  R  U' R' F' U' F  R  U  R' F' L' B' U2 B  U  L
-    ```
-    The algorithms produced by the strong generating sets can quickly become large. In the future, we plan to investigate the work of Egner @solving-permgroup and apply his techniques to keep the algorithm lengths in check.
+- We can write _multiphase_ solvers for these larger puzzles. Multiphase solvers are specialized to the specific puzzle, and they work by incrementally bringing the twisty puzzle to a "closer to solved" state in a reasonable number of moves. However, designing a multiphase solver is profoundly more involved compared to designing an optimal solver. This approach is unsustainable because it is impractical and difficult to write a multiphase solver for every possible twisty puzzle.
+- We can resort to methods to solve arbitrary permutation groups. We speculate that the most promising method of which may be to utilize something called a strong generating set @sgs. The GAP computer algebra system implements this method in the `PreImagesRepresentative` function as illustrated in <gap>. The algorithms produced by the strong generating sets can quickly become large. In the future, we plan to investigate the work of Egner @solving-permgroup and apply his techniques to keep the algorithm lengths in check.
 - When all other options have been exhausted, we must resort to designing our cycle structure algorithms by hand. This approach would likely follow the blindfolded twisty puzzle solving method of permuting a three or five pieces at a time. Contrary to popular belief, the blindfolded solving method is simple, and it is generalizable to arbitrary twisty puzzles.
 
 === Movecount Coefficient Calculator
@@ -2522,14 +2504,52 @@ Thus, the Cycle Combination Solver first finds _all_ optimal solutions of the sa
 
 The Cycle Combination Solver as described so far only finds the optimal solution for single register for a Qter architecture given by the Cycle Combination Finder. Now we need to re-run the Cycle Combination Solver for the remaining registers to find their optimal solutions.
 
-Re-running the Cycle Combination Solver brings about one additional requirement: the pieces affected by previously found register algorithms must be fixed in place. We do this to ensure incrementing register $A$ doesn't affect the state of register $B$; logically this kind of side-effect is nonsensical and is important to prevent. So, all register algorithms in a Qter architecture must commute. Fixing pieces also means we can no longer use symmetry reduction because two symmetrically equivalent puzzles may fix different sets of pieces.
+Re-running the Cycle Combination Solver brings about one additional requirement: the pieces affected by previously found register algorithms must be fixed in place. We do this to ensure incrementing register $A$ doesn't affect the state of register $B$; logically this kind of side-effect is nonsensical and important to prevent. The moves performed while incrementing register $A$ _can_ actually move these fixed pieces around whereever they want—what only matters is that these pieces are returned to their original positions. In other words, all of the register incrementation algorithms in a Qter architecture must commute.
 
-How can we be so sure that the second register found is the optimal solution possible? Yes, while the Cycle Combination Solver finds the optimal solution given the fixed pieces constraint, what if a slightly longer first register algorithm results in a significantly shorter second register algorithm? The Cycle Combination Solver does not concern itself with this problem, and it instead uses a greedy algorithm. It sorts the Cycle Combination Finder registers by their sizes (i.e. the number of states) in descending order. We observe that the average length of the optimal solution increases as more pieces on the puzzle are fixed because there are more restrictions. Solving each cycle structure in this order ensures that registers with larger sizes are prioritized with shorter algorithms because they are more likely to be incremented in a $Q$ program than smaller sized registers.
+Fixing pieces also means we can no longer use symmetry reduction because two symmetrically equivalent puzzles may fix different sets of pieces.
+
+How can we be so sure that the second register found is the optimal solution possible? Yes, while the Cycle Combination Solver finds the optimal solution given the fixed pieces constraint, what if a slightly longer first register algorithm results in a significantly shorter second register algorithm? In this sense it is extremely difficult to find the provably optimal Qter architecture because of all of these possiblities. The Cycle Combination Solver does not concern itself with this problem, and it instead uses a greedy algorithm. It sorts the Cycle Combination Finder registers by their sizes (i.e. the number of states) in descending order. We observe that the average length of the optimal solution increases as more pieces on the puzzle are fixed because there are more restrictions. Solving each cycle structure in this order ensures that registers with larger sizes are prioritized with shorter algorithms because they are more likely to be incremented in a $Q$ program than smaller sized registers.
 
 = Conclusion
 
 In this article, we gave a comprehensive description of Qter from the perspective of a user, as well as from the perspective of the underlying mathematics and algorithms. If you read the whole thing, you now have the necessary background knowledge to even contribute to Qter. You've probably figured out that Qter is useful as nothing more than a piece of art or as an educational tool, but it's fulfilled that role better than we could have ever imagined.
 
 Our journey with Qter is not even close to over, but given our track record at recruiting people to help us, yours probably is. We hope that we were able to give you the "WOW!" factor that we felt (and are still feeling) while putting this thing together. We're just a bunch of randos, and we built Qter out of knowledge scoured from Wikipedia, scraps of advice from strangers, and flashes of creativity and inspiration. We hope that we have inspired _you_ to find your own Qter to obsess over for years.
+
+#[
+#show: appendix
+
+= GAP programming <gap>
+
+We provide an example run of GAP solving the random scramble $F$ $L'$ $D'$ $\B2$ $U'$ $B'$ $U$ $\B2$ $\R2$ $F'$ $\R2$ $\U2$ $F'$ $\R2$ $F$ $\U2$ $B'$ $\R2$ $F'$ $R$ $\B2$ in just over two seconds using the strong generating set method.
+```gap
+gap> U := ( 1, 3, 8, 6)( 2, 5, 7, 4)( 9,33,25,17)(10,34,26,18)(11,35,27,19);;
+gap> L := ( 9,11,16,14)(10,13,15,12)( 1,17,41,40)( 4,20,44,37)( 6,22,46,35);;
+gap> F := (17,19,24,22)(18,21,23,20)( 6,25,43,16)( 7,28,42,13)( 8,30,41,11);;
+gap> R := (25,27,32,30)(26,29,31,28)( 3,38,43,19)( 5,36,45,21)( 8,33,48,24);;
+gap> B := (33,35,40,38)(34,37,39,36)( 3, 9,46,32)( 2,12,47,29)( 1,14,48,27);;
+gap> D := (41,43,48,46)(42,45,47,44)(14,22,30,38)(15,23,31,39)(16,24,32,40);;
+gap> random_scramble := F*L^-1*D^-1*B^2*U^-1*B^-1*U*B^2*R^2*F^-1*R^2*U^2*F^-1*R^2*F *U^2*B^-1*R^2*F^-1*R*B^2;;
+gap> cube := Group(U, L, F, R, B, D);;
+gap> generator_names := ["U", "L", "F", "R", "B", "D"];;
+gap> hom := EpimorphismFromFreeGroup(cube:names:=generator_names);;
+gap> ext_rep := ExtRepOfObj(PreImagesRepresentative(hom, random_scramble));;
+gap> time;
+2180
+gap> for i in Reversed([1..Length(ext_rep) / 2]) do
+>     Print(generator_names[ext_rep[i * 2 - 1]]);
+>     count := ext_rep[i * 2];
+>     if count in [-2, 2] then
+>         Print("2");
+>     elif count in [-3, 1] then
+>         Print("'");
+>     else
+>         Print(" ");
+>     fi;
+>     Print(" ");
+> od;
+U  B2 R2 F  B' R' B  R  F  R  F' R' U' D  R  D' F' U  L  F2 U  L' U2 F  D  F' D' L  U  L2 U' B  L  B' U' L' U' L' B' U' B  U' L  U  L' U  L  U  F  U' F' L  U  F  U' F' L' U  F' U' L' U  L  F  L  U2 L' U' L  U' L' U2 F  U  R  U' R' F' U' F  R  U  R' F' L' B' U2 B  U  L
+```
+]
 
 #bibliography("bib.yaml")
