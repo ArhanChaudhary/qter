@@ -64,6 +64,7 @@
 ## PuzzleGeometry
 
 - ⭐Detect identical pieces
+- ⭐Implement better face cutting algorithm
 - ⭐Calculate orientation and parity constraints of the puzzle
 - ⭐Calculate the symmetries of the puzzle
 - Figure out algebraics
