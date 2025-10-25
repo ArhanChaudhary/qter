@@ -4,14 +4,15 @@ use std::{
     fs::{self, File},
     io::{self, BufRead, BufReader, Read, Write},
     path::PathBuf,
-    process::{ChildStdin, ChildStdout, Command, Stdio},
-    sync::{Arc, OnceLock},
-    thread,
+    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    sync::{Arc, Mutex, OnceLock},
+    thread::{self, available_parallelism},
     time::Duration,
 };
 
 use interpreter::puzzle_states::{PuzzleState, SimulatedPuzzle};
 use itertools::Itertools;
+use owo_colors::OwoColorize;
 use qter_core::{
     Int, U,
     architectures::{Algorithm, Permutation, PermutationGroup},
@@ -72,6 +73,36 @@ const QTER_EDGELETS: [[usize; 2]; 12] = [
 
 static CORNER_MAPPING: OnceLock<HashMap<[char; 3], (usize, [usize; 3])>> = OnceLock::new();
 static EDGE_MAPPING: OnceLock<HashMap<[char; 2], (usize, [usize; 2])>> = OnceLock::new();
+
+fn solve_rob_twophase(
+    perm: &Permutation,
+    cube3: &PermutationGroup,
+) -> Result<Algorithm, std::io::Error> {
+    static ROB_TWOPHASE: Mutex<Option<Child>> = Mutex::new(None);
+
+    let mut maybe_rob_twophase = ROB_TWOPHASE.lock().unwrap();
+
+    let rob_twophase = match &mut *maybe_rob_twophase {
+        Some(v) => v,
+        None => {
+            maybe_rob_twophase.insert(Command::new("rob-twophase")
+                .args(["-c", "-m", "30", "-t"])
+                .arg(match available_parallelism() {
+                    Ok(v) => v.to_string(),
+                    Err(e) => {
+                        eprintln!(
+                            "{} {e}",
+                            "Failed to get available parallelism; defaulting to 1:".yellow()
+                        );
+                        (1).to_string()
+                    }
+                })
+                .spawn()?)
+        },
+    };
+
+    todo!()
+}
 
 pub struct Cube3Robot {
     permutation: OnceCell<Permutation>,
@@ -149,7 +180,7 @@ impl RobotLike for Cube3Robot {
 
         let robot_stdin = RefCell::new(robot_process.stdin.take().unwrap());
         let robot_stdout = RefCell::new(robot_process.stdout.take().unwrap());
-        let mut ret = Cube3Robot {
+        let ret = Cube3Robot {
             permutation: OnceCell::new(),
             robot_stdin,
             robot_stdout,
@@ -163,7 +194,6 @@ impl RobotLike for Cube3Robot {
             &["Preset 7: Safe for Qter", "[ Enter ] Ready to Solve"],
             "[  Esc  ] Exit Program",
         );
-        RobotLike::solve(&mut ret);
         ret
     }
 
@@ -297,7 +327,7 @@ impl<R: RobotLike> PuzzleState for RobotState<R> {
     }
 
     fn solve(&mut self) {
-        todo!()
+        self.robot.solve();
     }
 }
 
