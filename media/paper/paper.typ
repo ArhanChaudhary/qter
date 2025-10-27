@@ -330,9 +330,9 @@ The Rubik's Cube.
     cube("wwwwwwwww ggggggggg rrrrrrrrr")
 }))
 
-We've all seen it before; it is one of the most recognizable objects on Planet Earth. Do you know how to solve one? If you're the average person, you probably don't, but it's actually much easier than you think. Instructions for how to solve one can fit into just two pages @solution—that's only 4% of the length of this article! But what if I told you that "solving" was only scratching the surface of things that you can do with a Rubik's Cube, like painting on a canvas with only one color. It turns out that there's a whole world of color out there, and we are ready to show it to you.
+We've all seen it before; it is one of the most recognizable objects on Planet Earth. But do you know how to solve one? If you're the average person, you probably don't, but it's actually much easier than you think. Instructions for how to solve one can fit into just two pages @solution—that's only 4% of the length of this article! But what if I told you that "solving" was only scratching the surface of things that you can do with a Rubik's Cube, like painting on a canvas with only white paint: you can make endless varieties of strokes and swirls, but it always has the same result: a blank canvas—a solved cube. It turns out that there's a whole world of color out there, and we are ready to show it to you.
 
-What if I gave you a different set of Rubik's Cube instructions, not for _solving_ it, but perhaps for something else.
+What if I gave you a different set of Rubik's Cube instructions, not for _solving_ it, but perhaps for something else. You don't need to know how to read this, for we will teach you later...
 
 #grid(columns: 2)[
     ```l
@@ -373,9 +373,7 @@ What if I gave you a different set of Rubik's Cube instructions, not for _solvin
     ```
 ]
 
-You don't need to know how to read this, for we will teach you later...
-
-...but if you repeat the "`input`" scramble $n$ times, follow the instructions from top to bottom, and reach the "`halt`" instruction, your Rubik's Cube will _not_ be solved, but rather hold a very special scramble. If you repeat the `halt` scramble over and over again, the cube will actually become solved, and the number of times that you have to repeat it until that happens is the $n$th Fibonacci number. You just used your Rubik's Cube as a computer by following a seemingly arbitrary set of instructions. But how is that even possible?
+...but if you repeat the "`input`" scramble $n$ times, follow the instructions from top to bottom, and reach the "`halt`" instruction, your Rubik's Cube will _not_ be solved, but rather hold a very special scramble. If you repeat the `halt` scramble on it over and over again, the cube will actually become solved. How many times do you have to repeat it until it becomes solved? The $n$th Fibonacci number times. You just used your Rubik's Cube as a computer. But how is that even possible?
 
 == Background
 
