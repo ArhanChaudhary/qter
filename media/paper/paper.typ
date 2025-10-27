@@ -329,7 +329,60 @@ _We also extend our gratitude to Ben Whitmore for helping us ideate the initial 
 #outline()
 #outline(target: heading.where(supplement: [Appendix]), title: [Appendix])
 
-= Background
+= Introduction
+
+The Rubik's Cube.
+
+#figure(cetz.canvas({
+    cube("wwwwwwwww ggggggggg rrrrrrrrr")
+}))
+
+We've all seen it before; it is one of the most recognizable objects on Planet Earth. But... do you know how to solve one? If you're the average person, you probably don't, but it's actually much easier than you think. Instructions for how to solve one can fit into just two pages @solution—that's only 4% of the length of this article! But what if I told you that "solving" was only scratching the surface of things that you can do to a Rubik's cube, like painting on a canvas with only white paint. It turns out that there's a whole world of color out there, and we will show it to you in this article.
+
+What if I gave you a different set of instructions, not for _solving_ a cube, but perhaps for something else. You don't need to know how to read this, we will teach you later...
+
+#grid(columns: 2)[
+    ```l
+    1 | input "Which Fibonacci number to calculate:"
+               B2 U2 L F' R B L2 D2 B R' F L
+               max-input 8
+    2 | solved-goto UFR 14
+    3 | D L' F L2 B L' F' L B' D' L'
+    4 | L' F' R B' D2 L2 B' R' F L' U2 B2
+    5 | solved-goto UFR 15
+    6 | repeat until DL DFL solved
+                L U' B R' L B' L' U'
+                L U R2 B R2 D2 R2 D'
+    7 | L' F' R B' D2 L2 B' R' F L' U2 B2
+    8 | solved-goto UFR 16
+    9 | repeat until FR DRF solved
+                D' B' U2 B D' F' D L' D2
+                F' R' D2 F2 R F2 R2 U' R'
+    ```
+][
+    ```l
+    10 | L' F' R B' D2 L2 B' R' F L' U2 B2
+    11 | solved-goto UFR 17
+    12 | repeat until UF solved
+                B R2 D' R B D F2 U2 D'
+                F' L2 F D2 F B2 D' L' U'
+    13 | goto 4
+    14 | halt "The number is: 0"
+    15 | halt until DL DFL solved
+             "The number is"
+             L D B L' F L B' L2 F' L D'
+    16 | halt until FR DRF solved
+              "The number is"
+              F2 L2 U2 D' R U' B L' B L' U'
+    17 | halt until UF solved
+              "The number is"
+              U L' R' F' U' F' L' F2 L U R
+    ```
+]
+
+...but when you repeat the input scramble $n$ times, follow the instructions, and hit a _halt_ instruction, your cube will _not_ be solved, but rather hold a very special scramble. If you repeat the halt scramble over and over again, the cube will actually become solved, and the amount of times that you have to repeat it until that happens is the $n$th Fibonacci number. You just used your Rubik's cube as a computer. But how is that even possible?
+
+== Background
 
 Before we can explain how to turn a Rubik's Cube into a computer, we have to explain what a Rubik's Cube _is_ and the fundamental mathematics behind how it works. First, a Rubik's Cube is made out of three kinds of pieces: _Corners_, _Edges_, and _Centers_.
 

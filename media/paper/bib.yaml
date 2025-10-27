@@ -206,3 +206,10 @@ cubepos:
   url: https://cube20.org/src/cubepos.pdf
   author: Rokicki, Tomas
   page-range: 31-33
+
+solution:
+  type: Web
+  title: Rubik's Cube Solution — Reference Sheet
+  url: https://cube.garron.us/solution.pdf
+  author: Lucas Garron
+  date: 2019-07-25
