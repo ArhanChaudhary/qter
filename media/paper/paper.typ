@@ -330,9 +330,9 @@ The Rubik's Cube.
     cube("wwwwwwwww ggggggggg rrrrrrrrr")
 }))
 
-We've all seen it before; it is one of the most recognizable objects on Planet Earth. But... do you know how to solve one? If you're the average person, you probably don't, but it's actually much easier than you think. Instructions for how to solve one can fit into just two pages @solution—that's only 4% of the length of this article! But what if I told you that "solving" was only scratching the surface of things that you can do to a Rubik's cube, like painting on a canvas with only white paint. It turns out that there's a whole world of color out there, and we will show it to you in this article.
+We've all seen it before; it is one of the most recognizable objects on Planet Earth. Do you know how to solve one? If you're the average person, you probably don't, but it's actually much easier than you think. Instructions for how to solve one can fit into just two pages @solution—that's only 4% of the length of this article! But what if I told you that "solving" was only scratching the surface of things that you can do with a Rubik's Cube, like painting on a canvas with only one color. It turns out that there's a whole world of color out there, and we are ready to show it to you.
 
-What if I gave you a different set of instructions, not for _solving_ a cube, but perhaps for something else. You don't need to know how to read this, we will teach you later...
+What if I gave you a different set of Rubik's Cube instructions, not for _solving_ it, but perhaps for something else.
 
 #grid(columns: 2)[
     ```l
@@ -373,7 +373,9 @@ What if I gave you a different set of instructions, not for _solving_ a cube, bu
     ```
 ]
 
-...but when you repeat the input scramble $n$ times, follow the instructions, and hit a _halt_ instruction, your cube will _not_ be solved, but rather hold a very special scramble. If you repeat the halt scramble over and over again, the cube will actually become solved, and the amount of times that you have to repeat it until that happens is the $n$th Fibonacci number. You just used your Rubik's cube as a computer. But how is that even possible?
+You don't need to know how to read this, for we will teach you later...
+
+...but if you repeat the "`input`" scramble $n$ times, follow the instructions from top to bottom, and reach the "`halt`" instruction, your Rubik's Cube will _not_ be solved, but rather hold a very special scramble. If you repeat the `halt` scramble over and over again, the cube will actually become solved, and the number of times that you have to repeat it until that happens is the $n$th Fibonacci number. You just used your Rubik's Cube as a computer by following seemingly arbitrary instructions. But how is that even possible?
 
 == Background
 
@@ -2435,7 +2437,7 @@ Similarly to symmetry conjugation, we choose the representative as the lexicogra
 
 The modification described is not yet foolproof. The sequence $A B A B C A B$ would technically be valid as there is no later subsequence lesser than the beginning, but the actual lexicographically minimal representative is the $A B A B A B C$ sequence rotation. The "later subsequence" of the true representative wraps around from the end to the beginning. So, extra care must be taken at the last depth to manually account for the wrapping behavior. We only apply this to the last depth, so sequences like $A B A B C A B C$ are still searched by the next depth limit of IDA\*.
 
-We can extend our prior definition of canonical sequences to include sequence symmetry as a third condition. How does sequence symmetry affect the number of canonical sequences at depth $N$? Because a sequence of length $N$ has $N$ sequence rotations, sequence symmetry logically divides the total number of nodes visited by $N$, but only in the best case. The canonical sequence $R$ $U$ $R$ $U$ $R$ $U$ only has $2$ members in its sequence rotational equivalence class, not $6$, so the average value to divide by is actually a bit less than $N$. It follows that the average number of canonical sequences at depth $N$ (and the IDA\* asymptotic time complexity) is bound by $Omega(13.348^n/(\mn))$ and $O(13.348^n/m)$. Testing has shown this number to typically be right in the middle of these two bounds.
+We can extend our prior definition of canonical sequences to include sequence symmetry as a third condition. How does sequence symmetry affect the number of canonical sequences at depth $N$? Because a sequence of length $N$ has $N$ sequence rotations, sequence symmetry logically divides the total number of nodes visited by $N$, but only in the best case. The canonical sequence $R$ $U$ $R$ $U$ $R$ $U$ only has $2$ members in its sequence rotational equivalence class, not $6$, so the average value to divide by is actually a bit less than $N$. It follows that the average number of canonical sequences at depth $N$ (and the IDA\* asymptotic time complexity) is bound by $Omega(13.348^d/(\md))$ and $O(13.348^d/m)$. Testing has shown this number to typically be right in the middle of these two bounds.
 
 Furthermore, we take advantage of the fact that the optimal solution sequence _almost never_ starts and ends with commutative moves. We claim that the IDA\* algorithm _almost never_ needs to test $A B$ $...$ $C$ such that $A$ and $C$ commute for a solution. The proof is as follows.
 
