@@ -16,12 +16,6 @@
     "n": (rgb("#dddddd"), none), ///gray,
 )
 
-#let appendix(body) = {
-  set heading(numbering: "A", supplement: [Appendix])
-  counter(heading).update(0)
-  body
-}
-
 #set par(justify: true)
 #set heading(numbering: "1.1.1.a)")
 #set page(numbering: "1")
@@ -327,7 +321,6 @@ _We also extend our gratitude to Ben Whitmore for helping us ideate the initial 
 #pagebreak()
 
 #outline()
-#outline(target: heading.where(supplement: [Appendix]), title: [Appendix])
 
 = Introduction
 
@@ -2569,10 +2562,7 @@ In this article, we gave a comprehensive description of Qter from the perspectiv
 
 Our journey with Qter is not even close to over, but given our track record at recruiting people to help us, yours probably is. We hope that we were able to give you the "WOW!" factor that we felt (and are still feeling) while putting this thing together. We're just a bunch of randos, and we built Qter out of knowledge scoured from Wikipedia, scraps of advice from strangers, and flashes of creativity and inspiration. We hope that we have inspired _you_ to find your own Qter to obsess over for years.
 
-#[
-#show: appendix
-
-= GAP programming <gap>
+= Appendix A: GAP programming <gap>
 
 We provide an example run of GAP solving the random scramble $F$ $L'$ $D'$ $\B2$ $U'$ $B'$ $U$ $\B2$ $\R2$ $F'$ $\R2$ $\U2$ $F'$ $\R2$ $F$ $\U2$ $B'$ $\R2$ $F'$ $R$ $\B2$ in just over two seconds using the strong generating set method.
 ```gap
@@ -2603,6 +2593,5 @@ gap> for i in Reversed([1..Length(ext_rep) / 2]) do
 > od;
 U  B2 R2 F  B' R' B  R  F  R  F' R' U' D  R  D' F' U  L  F2 U  L' U2 F  D  F' D' L  U  L2 U' B  L  B' U' L' U' L' B' U' B  U' L  U  L' U  L  U  F  U' F' L  U  F  U' F' L' U  F' U' L' U  L  F  L  U2 L' U' L  U' L' U2 F  U  R  U' R' F' U' F  R  U  R' F' L' B' U2 B  U  L
 ```
-]
 
 #bibliography("bib.yaml")
