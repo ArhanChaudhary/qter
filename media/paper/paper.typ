@@ -375,7 +375,7 @@ What if I gave you a different set of Rubik's Cube instructions, not for _solvin
 
 You don't need to know how to read this, for we will teach you later...
 
-...but if you repeat the "`input`" scramble $n$ times, follow the instructions from top to bottom, and reach the "`halt`" instruction, your Rubik's Cube will _not_ be solved, but rather hold a very special scramble. If you repeat the `halt` scramble over and over again, the cube will actually become solved, and the number of times that you have to repeat it until that happens is the $n$th Fibonacci number. You just used your Rubik's Cube as a computer by following seemingly arbitrary instructions. But how is that even possible?
+...but if you repeat the "`input`" scramble $n$ times, follow the instructions from top to bottom, and reach the "`halt`" instruction, your Rubik's Cube will _not_ be solved, but rather hold a very special scramble. If you repeat the `halt` scramble over and over again, the cube will actually become solved, and the number of times that you have to repeat it until that happens is the $n$th Fibonacci number. You just used your Rubik's Cube as a computer by following a seemingly arbitrary set of instructions. But how is that even possible?
 
 == Background
 
