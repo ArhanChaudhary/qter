@@ -330,7 +330,7 @@ The Rubik's Cube.
     cube("wwwwwwwww ggggggggg rrrrrrrrr")
 }))
 
-We've all seen it before; it is one of the most recognizable objects on Planet Earth. But do you know how to solve one? If you're the average person, you probably don't, but it's actually much easier than you think. Instructions for how to solve one can fit into just two pages @solution—that's only 4% of the length of this article! But what if I told you that "solving" was only scratching the surface of things that you can do with a Rubik's Cube, like painting on a canvas with only white paint: you can make endless varieties of strokes and swirls, but it always has the same result: a blank canvas—a solved cube. It turns out that there's a whole world of color out there, and we are ready to show it to you.
+We've all seen it before; it is one of the most recognizable objects on Planet Earth. But do you know how to solve one? If you're the average person, you probably don't, but it's actually much easier than you think. Instructions for how to solve one can fit into just two pages @solution—that's only 4% of the length of this article! But what if I told you that "solving" was only scratching the surface of things that you can do with a Rubik's Cube. It's like painting on a canvas with only white paint: you can make endless varieties of strokes and swirls, but it always has the same result: a blank canvas—a solved cube. It turns out that there's a whole world of color out there, and we are ready to show it to you.
 
 What if I gave you a different set of Rubik's Cube instructions, not for _solving_ it, but perhaps for something else. You don't need to know how to read this, for we will teach you later...
 
