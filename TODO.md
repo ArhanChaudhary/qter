@@ -63,13 +63,15 @@
 
 ## PuzzleGeometry
 
+- ⭐Canonical ordering of stickers
+- Canonical ordering of pieces
+- Canonical ordering of orbits
 - ⭐Detect identical pieces
 - ⭐Implement better face cutting algorithm
 - ⭐Calculate orientation and parity constraints of the puzzle
 - ⭐Calculate the symmetries of the puzzle
 - Figure out algebraics
   - Acceptance criterion: All default puzzles can be processed in <1s with exact arithmetic
-- Canonical ordering of stickers
 - Parse our modified puzzlegeometry definition string
 - Reorganize parts of qter_core into here, rename `puzzle_theory` or something, and release as a crate on crates.io
 - Spherical cuts

@@ -171,6 +171,10 @@ impl Face {
             offset,
         }
     }
+
+    fn centroid(&self) -> Vector<3> {
+        self.points.iter().map(|v| &v.0).cloned().sum::<Vector<3>>() / &Num::from(self.points.len())
+    }
 }
 
 /// Encodes the information about the plane on which a face lies.
@@ -499,11 +503,16 @@ impl PuzzleGeometryDefinition {
     /// not have the expected symmetries, this function will return an error.
     #[expect(clippy::missing_panics_doc)]
     pub fn geometry(self) -> Result<PuzzleGeometry, PuzzleGeometryError> {
-        let mut faces: Vec<(Face, Vec<ArcIntern<str>>)> = vec![];
+        let mut faces: Vec<(Face, Vector<3>)> = vec![];
         for face in self.polyhedron.0 {
             face.is_valid()?;
-            faces.push((face, vec![]));
+            let centroid = face.centroid();
+            faces.push((face, centroid));
         }
+
+        faces.sort_by(|a, b| point_compare(&a.1, &b.1));
+
+        let mut faces: Vec<(Face, Vec<ArcIntern<str>>)> = faces.into_iter().map(|(face, _)| (face, Vec::new())).collect();
 
         for cut_surface in &self.cut_surfaces {
             let mut new_faces = Vec::new();
@@ -731,12 +740,60 @@ fn turn_compare(a: &str, b: &str) -> Ordering {
     }
 }
 
+/// Sort all of the faces from top-to-bottom first, counter-clockwise second, and in-to-out third.
+fn point_compare(a: &Vector<3>, b: &Vector<3>) -> Ordering {
+    fn region(x: &Num, z: &Num) -> u8 {
+        match (x.cmp_zero(), z.cmp_zero()) {
+            (Ordering::Less, Ordering::Equal | Ordering::Less) => 1,
+            (Ordering::Equal | Ordering::Greater, Ordering::Less) => 2,
+            (Ordering::Greater, Ordering::Greater | Ordering::Equal) => 3,
+            (Ordering::Less | Ordering::Equal, Ordering::Greater) => 4,
+            (Ordering::Equal, Ordering::Equal) => 5,
+            }
+    }
+
+    fn de_rotate(x: Num, z: Num, region: u8) -> (Num, Num) {
+        match region {
+            1 => (x, z),
+            2 => (z, -x),
+            3 => (-x, -z),
+            4 => (-z, x),
+            _ => unreachable!(),
+        }
+    }
+
+    let [x1, y1, z1] = a.vec_inner();
+    let [x2, y2, z2] = b.vec_inner();
+
+    match y1.cmp(y2) {
+        Ordering::Equal => {
+            let r1 = region(x1, z1);
+            let r2 = region(x2, z2);
+
+            match r1.cmp(&r2) {
+                Ordering::Equal => {
+                    if r1 == 5 {
+                        return Ordering::Equal;
+                    }
+
+                    let (x1, z1) = de_rotate(x1.clone(), z1.clone(), r1);
+                    let (x2, z2) = de_rotate(x2.clone(), z2.clone(), r2);
+
+                    [(z1.clone()/x1.clone()), z1.abs()].cmp(&[(z2.clone()/x2), z2.abs()])
+                }
+                v => v,
+            }
+        }
+        v => v,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::{cmp::Ordering, collections::BinaryHeap, sync::Arc};
+    use std::{cmp::Ordering, sync::Arc};
 
     use crate::{
-        knife::PlaneCut, ksolve::KSolveMove, num::{Num, Vector}, shapes::{CUBE, TETRAHEDRON}, turn_compare, turn_names, Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError
+        knife::PlaneCut, ksolve::KSolveMove, num::{Num, Vector}, point_compare, shapes::{CUBE, TETRAHEDRON}, turn_compare, turn_names, Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError
     };
     use internment::ArcIntern;
     use itertools::Itertools;
@@ -836,6 +893,52 @@ mod tests {
     }
 
     #[test]
+    fn test_point_compare() {
+        fn test<N: Into<Num>>(x1: N, y1: N, z1: N, x2: N, y2: N, z2: N, expected: Ordering) {
+            let a = Vector::new([[x1, y1, z1]]);
+            let b = Vector::new([[x2, y2, z2]]);
+            assert_eq!(point_compare(&a, &b), expected, "{a:?}, {b:?}");
+            assert_eq!(point_compare(&b, &a), expected.reverse(), "{b:?}, {a:?}");
+            assert_eq!(point_compare(&a, &a), Ordering::Equal, "{a:?}, {a:?}");
+            assert_eq!(point_compare(&b, &b), Ordering::Equal, "{a:?}, {a:?}");
+        }
+
+        // Top to bottom first
+        test(1, 1, 1, 1, 0, 1, Ordering::Greater);
+        test(1, -10, 1, 1, 0, 1, Ordering::Less);
+
+        // Counterclockwise second; boundary condition
+        test(-1, 0, 0, 0, 0, -1, Ordering::Less);
+        test(0, 0, -1, 1, 0, 0, Ordering::Less);
+        test(1, 0, 0, 0, 0, 1, Ordering::Less);
+        test(0, 0, 1, -1, 0, 0, Ordering::Greater);
+
+        // Non-boundary condition
+        test(-1, 0, -1, 1, 0, -1, Ordering::Less);
+        test(1, 0, -1, 1, 0, 1, Ordering::Less);
+        test(1, 0, 1, -1, 0, 1, Ordering::Less);
+        test(-1, 0, 1, -1, 0, -1, Ordering::Greater);
+
+        // Same region, different angle, same distance
+        test(-2, 0, -1, -1, 0, -2, Ordering::Less);
+        test(1, 0, -2, 2, 0, -1, Ordering::Less);
+        test(2, 0, 1, 1, 0, 2, Ordering::Less);
+        test(-1, 0, 2, -2, 0, 1, Ordering::Less);
+
+        // Same region, different angle, different distance
+        test(-3, 0, -1, -1, 0, -2, Ordering::Less);
+        test(1, 0, -2, 3, 0, -1, Ordering::Less);
+        test(3, 0, 1, 1, 0, 2, Ordering::Less);
+        test(-1, 0, 2, -3, 0, 1, Ordering::Less);
+
+        // Same region, same angle, different distance
+        test(-1, 0, -1, -2, 0, -2, Ordering::Less);
+        test(1, 0, -1, 2, 0, -2, Ordering::Less);
+        test(1, 0, 1, 2, 0, 2, Ordering::Less);
+        test(-1, 0, 1, -2, 0, 2, Ordering::Less);
+    }
+
+    #[test]
     fn three_by_three() {
         let cube = PuzzleGeometryDefinition {
             polyhedron: CUBE.to_owned(),
@@ -893,7 +996,13 @@ mod tests {
         let ksolve = geometry.ksolve();
 
         // Make sure all of the moves are sorted properly
-        assert_eq!(ksolve.moves().iter().map(KSolveMove::name).collect_vec(), vec!["B", "B2", "B'", "D", "D2", "D'", "F", "F2", "F'", "L", "L2", "L'", "R", "R2", "R'", "U", "U2", "U'"]);
+        assert_eq!(
+            ksolve.moves().iter().map(KSolveMove::name).collect_vec(),
+            vec![
+                "B", "B2", "B'", "D", "D2", "D'", "F", "F2", "F'", "L", "L2", "L'", "R", "R2",
+                "R'", "U", "U2", "U'"
+            ]
+        );
 
         assert_eq!(ksolve.moves().len(), 18);
 
