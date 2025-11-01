@@ -444,8 +444,6 @@ impl PuzzleGeometry {
                 });
             }
 
-            // println!("{facelet_orientation_numbers:?}");
-
             let mut moves: Vec<KSolveMove> = Vec::new();
 
             let mut sticker_to_piece_mapping = vec![0; group.facelet_count()];
