@@ -132,10 +132,9 @@ impl<T> Cycle<T> {
 pub(crate) fn do_cut<S: CutSurface + ?Sized>(
     surface: &S,
     face: &Face,
+    subspace_info: &FaceSubspaceInfo,
 ) -> Result<Vec<(Face, Option<ArcIntern<str>>)>, PuzzleGeometryError> {
     assert!(!face.points.is_empty());
-
-    let subspace_info = face.subspace_info();
 
     // Convert the list of 3d points into a list of 2d edges, split on boundaries, with the edge's region included.
     let mut edges = Cycle(
@@ -503,6 +502,7 @@ mod tests {
                 name: ArcIntern::from("R"),
             },
             &face,
+            &face.subspace_info(),
         )
         .unwrap();
         println!("{cutted:?}");

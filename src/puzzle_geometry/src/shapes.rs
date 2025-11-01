@@ -47,29 +47,29 @@ pub static TETRAHEDRON: LazyLock<Polyhedron> = LazyLock::new(|| {
 pub static CUBE: LazyLock<Polyhedron> = LazyLock::new(|| {
     let up = Face {
         points: vec![
-            Point(Vector::new([[1, 1, 1]])),
-            Point(Vector::new([[-1, 1, 1]])),
             Point(Vector::new([[-1, 1, -1]])),
             Point(Vector::new([[1, 1, -1]])),
+            Point(Vector::new([[1, 1, 1]])),
+            Point(Vector::new([[-1, 1, 1]])),
         ],
         color: ArcIntern::from("white"),
     };
 
-    let z_rot = rotation_about(Vector::new([[0, 0, -1]]), DEG_90.clone());
-
-    let mut right = up.transformed(&z_rot);
-    right.color = ArcIntern::from("red");
-    let mut down = right.transformed(&z_rot);
-    down.color = ArcIntern::from("yellow");
-    let mut left = down.transformed(&z_rot);
-    left.color = ArcIntern::from("orange");
-
-    let x_rot = rotation_about(Vector::new([[1, 0, 0]]), DEG_90.clone());
+    let x_rot = rotation_about(Vector::new([[-1, 0, 0]]), DEG_90.clone());
 
     let mut front = up.transformed(&x_rot);
     front.color = ArcIntern::from("green");
-    let mut back = up.transformed(&x_rot.transpose());
+    let mut down = front.transformed(&x_rot);
+    down.color = ArcIntern::from("yellow");
+
+    let y_rot = rotation_about(Vector::new([[0, -1, 0]]), DEG_90.clone());
+
+    let mut right = front.transformed(&y_rot);
+    right.color = ArcIntern::from("red");
+    let mut back = right.transformed(&y_rot);
     back.color = ArcIntern::from("blue");
+    let mut left = back.transformed(&y_rot);
+    left.color = ArcIntern::from("orange");
 
     Polyhedron(vec![up, right, down, left, front, back])
 });

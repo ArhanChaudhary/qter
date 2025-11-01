@@ -63,7 +63,6 @@
 
 ## PuzzleGeometry
 
-- ⭐Canonical ordering of stickers
 - Canonical ordering of pieces
 - Canonical ordering of orbits
 - ⭐Detect identical pieces

@@ -181,11 +181,21 @@ impl Face {
 #[derive(Clone, Debug)]
 pub struct FaceSubspaceInfo {
     /// A matrix that converts a 2D vector to a 3D one in the subspace parallel to the face. To get a point on the face's plane, add `offset`.
-    pub make_3d: Matrix<3, 2>,
+    make_3d: Matrix<3, 2>,
     /// Projects a 3D vector into the subspace parallel to the face. Given a point on the face's plane, subtract `offset` first.
-    pub make_2d: Matrix<2, 3>,
+    make_2d: Matrix<2, 3>,
     /// The offset of the face from the origin. Subspaces must always include the origin due to how subspaces work mathematically so when projecting in/out, it is necessary to take the offset into account.
-    pub offset: Vector<3>,
+    offset: Vector<3>,
+}
+
+impl FaceSubspaceInfo {
+    pub fn make_3d(&self, vec: &Vector<2>) -> Vector<3> {
+        (&self.make_3d * &vec) + self.offset.clone()
+    }
+
+    pub fn make_2d(&self, vec: Vector<3>) -> Vector<2> {
+        &self.make_2d * &(vec - self.offset.clone())
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -512,27 +522,40 @@ impl PuzzleGeometryDefinition {
 
         faces.sort_by(|a, b| point_compare(&a.1, &b.1));
 
-        let mut faces: Vec<(Face, Vec<ArcIntern<str>>)> = faces.into_iter().map(|(face, _)| (face, Vec::new())).collect();
+        let mut stickers: Vec<(Face, Vec<ArcIntern<str>>)> = Vec::new();
 
-        for cut_surface in &self.cut_surfaces {
-            let mut new_faces = Vec::new();
+        for (face, _) in faces {
+            let subspace_info = face.subspace_info();
 
-            for (face, name_components) in faces {
-                new_faces.extend(do_cut(&**cut_surface, &face)?.into_iter().map(
-                    move |(new_face, name_component)| {
-                        let mut name_components = name_components.clone();
-                        if let Some(component) = name_component {
-                            name_components.push(component);
-                        }
-                        (new_face, name_components)
-                    },
-                ));
+            let mut face_stickers = vec![(face, vec![])];
+
+            for cut_surface in &self.cut_surfaces {
+                let mut new_stickers = Vec::new();
+
+                for (sticker, name_components) in face_stickers {
+                    new_stickers.extend(
+                        do_cut(&**cut_surface, &sticker, &subspace_info)?
+                            .into_iter()
+                            .map(move |(new_face, name_component)| {
+                                let mut name_components = name_components.clone();
+                                if let Some(component) = name_component {
+                                    name_components.push(component);
+                                }
+                                (new_face, name_components)
+                            }),
+                    );
+                }
+
+                face_stickers = new_stickers;
             }
 
-            faces = new_faces;
-        }
+            face_stickers.sort_by_cached_key(|v| {
+                let [[x, y]] = subspace_info.make_2d(v.0.centroid()).into_inner();
+                [-y, x]
+            });
 
-        let stickers = faces;
+            stickers.extend(face_stickers);
+        }
 
         let mut turns = HashMap::new();
         let names = stickers.iter().flat_map(|v| v.1.iter()).unique();
@@ -702,7 +725,6 @@ fn turn_names(base_name: &ArcIntern<str>, symm: usize) -> Vec<ArcIntern<str>> {
 fn turn_compare(a: &str, b: &str) -> Ordering {
     // Separates a turn name into the name, number, and whether it's prime
     fn separate(name: &str) -> (&str, &str, bool) {
-        println!("{name}");
         let (without_prime, prime) = match name.strip_suffix('\'') {
             Some(prefix) => (prefix, true),
             None => (name, false),
@@ -749,7 +771,7 @@ fn point_compare(a: &Vector<3>, b: &Vector<3>) -> Ordering {
             (Ordering::Greater, Ordering::Greater | Ordering::Equal) => 3,
             (Ordering::Less | Ordering::Equal, Ordering::Greater) => 4,
             (Ordering::Equal, Ordering::Equal) => 5,
-            }
+        }
     }
 
     fn de_rotate(x: Num, z: Num, region: u8) -> (Num, Num) {
@@ -765,7 +787,7 @@ fn point_compare(a: &Vector<3>, b: &Vector<3>) -> Ordering {
     let [x1, y1, z1] = a.vec_inner();
     let [x2, y2, z2] = b.vec_inner();
 
-    match y1.cmp(y2) {
+    match y2.cmp(y1) {
         Ordering::Equal => {
             let r1 = region(x1, z1);
             let r2 = region(x2, z2);
@@ -779,7 +801,7 @@ fn point_compare(a: &Vector<3>, b: &Vector<3>) -> Ordering {
                     let (x1, z1) = de_rotate(x1.clone(), z1.clone(), r1);
                     let (x2, z2) = de_rotate(x2.clone(), z2.clone(), r2);
 
-                    [(z1.clone()/x1.clone()), z1.abs()].cmp(&[(z2.clone()/x2), z2.abs()])
+                    [(z1.clone() / x1.clone()), z1.abs()].cmp(&[(z2.clone() / x2), z2.abs()])
                 }
                 v => v,
             }
@@ -793,11 +815,17 @@ mod tests {
     use std::{cmp::Ordering, sync::Arc};
 
     use crate::{
-        knife::PlaneCut, ksolve::KSolveMove, num::{Num, Vector}, point_compare, shapes::{CUBE, TETRAHEDRON}, turn_compare, turn_names, Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError
+        Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError,
+        knife::PlaneCut,
+        ksolve::KSolveMove,
+        num::{Num, Vector},
+        point_compare,
+        shapes::{CUBE, TETRAHEDRON},
+        turn_compare, turn_names,
     };
     use internment::ArcIntern;
     use itertools::Itertools;
-    use qter_core::{Int, Span, U, schreier_sims::StabilizerChain};
+    use qter_core::{Int, Span, U, architectures::Permutation, schreier_sims::StabilizerChain};
 
     #[test]
     fn test_turn_names() {
@@ -904,8 +932,8 @@ mod tests {
         }
 
         // Top to bottom first
-        test(1, 1, 1, 1, 0, 1, Ordering::Greater);
-        test(1, -10, 1, 1, 0, 1, Ordering::Less);
+        test(1, 1, 1, 1, 0, 1, Ordering::Less);
+        test(1, -10, 1, 1, 0, 1, Ordering::Greater);
 
         // Counterclockwise second; boundary condition
         test(-1, 0, 0, 0, 0, -1, Ordering::Less);
@@ -964,13 +992,13 @@ mod tests {
                     name: ArcIntern::from("D"),
                 }),
                 Arc::from(PlaneCut {
-                    spot: Vector::new_ratios([[(0, 1), (0, 1), (1, 3)]]),
-                    normal: Vector::new([[0, 0, 1]]),
+                    spot: Vector::new_ratios([[(0, 1), (0, 1), (-1, 3)]]),
+                    normal: Vector::new([[0, 0, -1]]),
                     name: ArcIntern::from("F"),
                 }),
                 Arc::from(PlaneCut {
-                    spot: Vector::new_ratios([[(0, 1), (0, 1), (-1, 3)]]),
-                    normal: Vector::new([[0, 0, -1]]),
+                    spot: Vector::new_ratios([[(0, 1), (0, 1), (1, 3)]]),
+                    normal: Vector::new([[0, 0, 1]]),
                     name: ArcIntern::from("B"),
                 }),
             ],
@@ -991,6 +1019,68 @@ mod tests {
         assert_eq!(
             StabilizerChain::new(&group).cardinality(),
             "43252003274489856000".parse::<Int<U>>().unwrap()
+        );
+
+        // https://www.math.rwth-aachen.de/homes/GAP/WWW2/Doc/Examples/rubik.html
+        assert_eq!(
+            group.get_generator("U").unwrap(),
+            &Permutation::from_cycles(vec![
+                vec![0, 2, 7, 5],
+                vec![1, 4, 6, 3],
+                vec![8, 32, 24, 16],
+                vec![9, 33, 25, 17],
+                vec![10, 34, 26, 18]
+            ])
+        );
+        assert_eq!(
+            group.get_generator("L").unwrap(),
+            &Permutation::from_cycles(vec![
+                vec![8, 10, 15, 13],
+                vec![9, 12, 14, 11],
+                vec![0, 16, 40, 39],
+                vec![3, 19, 43, 36],
+                vec![5, 21, 45, 34]
+            ])
+        );
+        assert_eq!(
+            group.get_generator("F").unwrap(),
+            &Permutation::from_cycles(vec![
+                vec![16, 18, 23, 21],
+                vec![17, 20, 22, 19],
+                vec![5, 24, 42, 15],
+                vec![6, 27, 41, 12],
+                vec![7, 29, 40, 10]
+            ])
+        );
+        assert_eq!(
+            group.get_generator("R").unwrap(),
+            &Permutation::from_cycles(vec![
+                vec![24, 26, 31, 29],
+                vec![25, 28, 30, 27],
+                vec![2, 37, 42, 18],
+                vec![4, 35, 44, 20],
+                vec![7, 32, 47, 23]
+            ])
+        );
+        assert_eq!(
+            group.get_generator("B").unwrap(),
+            &Permutation::from_cycles(vec![
+                vec![32, 34, 39, 37],
+                vec![33, 36, 38, 35],
+                vec![2, 8, 45, 31],
+                vec![1, 11, 46, 28],
+                vec![0, 13, 47, 26]
+            ])
+        );
+        assert_eq!(
+            group.get_generator("D").unwrap(),
+            &Permutation::from_cycles(vec![
+                vec![40, 42, 47, 45],
+                vec![41, 44, 46, 43],
+                vec![13, 21, 29, 37],
+                vec![14, 22, 30, 38],
+                vec![15, 23, 31, 39]
+            ])
         );
 
         let ksolve = geometry.ksolve();
