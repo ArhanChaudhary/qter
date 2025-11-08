@@ -1,0 +1,11 @@
+[package]
+name = "robot"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bitflags = "2.10.0"
+rppal = "0.22.1"
+
+[lints]
+workspace = true
