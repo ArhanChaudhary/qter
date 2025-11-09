@@ -1,5 +1,9 @@
+#![warn(clippy::pedantic)]
+
 mod uart;
 
+use crate::uart::GConf;
+use rppal::gpio::{Gpio, Level, OutputPin};
 use std::{
     env,
     fmt::Display,
@@ -8,69 +12,37 @@ use std::{
     time::{Duration, Instant},
 };
 
-use rppal::gpio::{Gpio, Level, OutputPin};
+const STEP_PIN: u8 = 13;
+const DIR_PIN: u8 = 19;
 
-use crate::uart::GConf;
+enum WhichUart {
+    Uart0, // TX: 14, RX: 15 (BCM)
+    Uart2, // TX: 0, RX: 1 (BCM)
+}
+use WhichUart::*;
+const UARTS: [(WhichUart, u8); 6] = [
+    (Uart0, 0),
+    (Uart0, 1),
+    (Uart0, 2),
+    (Uart2, 0),
+    (Uart2, 1),
+    (Uart2, 2),
+];
 
-const STEP_PIN: u8 = 20;
-const DIR_PIN: u8 = 21;
-
-struct Delayer {
-    now: Instant,
+struct Ticker {
+    tick: Instant,
 }
 
-impl Delayer {
+impl Ticker {
     fn new() -> Self {
         Self {
-            now: Instant::now(),
+            tick: Instant::now(),
         }
     }
 
     fn wait(&mut self, delay: Duration) {
-        // fn sleep_until(instant: Instant) {
-        //     let x = instant.saturating_duration_since(Instant::now());
-        //     if x.is_zero() {
-        //         eprintln!("bad");
-        //     }
-        //     thread::sleep(x);
-        // }
-
-        fn sleep_until(instant: Instant) {
-            if Instant::now() < instant {
-                while Instant::now() < instant {
-                    core::hint::spin_loop();
-                }
-            } else {
-                // eprintln!("bad");
-            }
-        }
-
-        self.now = self.now + delay;
-        sleep_until(self.now);
-    }
-}
-
-fn read_num(prompt: impl Display) -> u32 {
-    loop {
-        if let Some(v) = read_num_opt(&prompt) {
-            break v;
-        }
-        eprintln!("try again");
-    }
-}
-
-fn read_num_opt(prompt: impl Display) -> Option<u32> {
-    let mut line = String::new();
-    loop {
-        line.clear();
-        eprint!("{prompt}");
-        stdin().read_line(&mut line).unwrap();
-        if line.trim().is_empty() {
-            break None;
-        } else if let Ok(v) = line.trim().parse::<u32>() {
-            break Some(v);
-        }
-        eprintln!("try again");
+        self.tick += delay;
+        thread::sleep(self.tick.saturating_duration_since(Instant::now()));
     }
 }
 
@@ -78,7 +50,7 @@ fn main() {
     let mut args = env::args();
     let subcommand = args.nth(1);
     match subcommand.as_deref() {
-        Some("uart") => return uart_main(),
+        Some("uart") => return run_uart_repl(),
         Some("uart-init") => {
             let mut uart = uart::mk_uart("/dev/ttyAMA0");
 
@@ -161,22 +133,11 @@ fn main() {
             };
         };
 
-        run2(&mut step, freq, Duration::from_secs(4), spr);
-
-        // let mut freq_accum = 0.0;
-        // loop {
-        //     freq_accum += 100.0;
-        //     if freq_accum >= freq {
-        //         run(&mut step, freq, Duration::from_secs(4), spr);
-        //         break;
-        //     } else {
-        //         run(&mut step, freq_accum, Duration::from_secs_f32(0.1), spr);
-        //     }
-        // }
+        run_pulse_width_modulation(&mut step, freq, Duration::from_secs(4), spr);
     }
 }
 
-fn run(step: &mut OutputPin, freq: f64, mut dur: Duration, spr: u32) {
+fn run_pulse_width_modulation(step: &mut OutputPin, freq: f64, mut dur: Duration, spr: u32) {
     let delay = Duration::from_secs(1).div_f64(2.0 * freq);
 
     eprintln!("delay = {:?}", delay * 2);
@@ -185,12 +146,12 @@ fn run(step: &mut OutputPin, freq: f64, mut dur: Duration, spr: u32) {
 
     eprint!("Running for {dur:?}...");
 
-    let mut delayer = Delayer::new();
+    let mut ticker = Ticker::new();
     while !dur.is_zero() {
         step.set_high();
-        delayer.wait(delay);
+        ticker.wait(delay);
         step.set_low();
-        delayer.wait(delay);
+        ticker.wait(delay);
 
         dur = dur.saturating_sub(delay * 2);
     }
@@ -198,51 +159,7 @@ fn run(step: &mut OutputPin, freq: f64, mut dur: Duration, spr: u32) {
     eprintln!(" done.");
 }
 
-fn run2(step: &mut OutputPin, freq: f64, mut dur: Duration, spr: u32) {
-    let delay = Duration::from_secs(1).div_f64(2.0 * freq);
-
-    eprintln!("delay = {:?}", delay * 2);
-    eprintln!("freq = {:.1} Hz", freq);
-    eprintln!("speed = {:.3} rev/s", freq / spr as f64);
-
-    eprint!("Spinning up...");
-
-    let mut freq_accum = f64::min(500.0, freq);
-    let mut delayer = Delayer::new();
-
-    loop {
-        let delay = Duration::from_secs(1).div_f64(2.0 * freq_accum);
-
-        step.set_high();
-        delayer.wait(delay);
-        step.set_low();
-        delayer.wait(delay);
-
-        let dt = delay * 2;
-        freq_accum += 500.0 * dt.as_secs_f64();
-        if freq_accum > freq {
-            break;
-        }
-    }
-
-    eprintln!(" done.");
-
-    eprint!("Running for {dur:?}...");
-
-    while !dur.is_zero() {
-        step.set_high();
-        delayer.wait(delay);
-        step.set_low();
-        delayer.wait(delay);
-
-        let dt = delay * 2;
-        dur = dur.saturating_sub(dt);
-    }
-
-    eprintln!(" done.");
-}
-
-fn uart_main() {
+fn run_uart_repl() {
     let mut uart = uart::mk_uart("/dev/ttyAMA0");
     eprintln!("GCONF = register 0, n = 10, RW");
     eprintln!("GSTAT = register 1, n = 3, R+WC");
@@ -270,28 +187,15 @@ fn uart_main() {
 }
 
 fn run_move_seq<'a>(iter: impl Iterator<Item = &'a str>) {
-    const FREQ: f64 = 3.0 * 200.0;
+    const FREQ: f64 = 6.0 * 200.0;
     // can't be const bc `div_f64` isn't const
     let delay = Duration::from_secs(1).div_f64(2.0 * FREQ);
 
     // BCM scheme
     // change length to 6 once we have all 6 motors
-    const STEP_PINS: [u8; 2] = [20, 19];
-    const DIR_PINS: [u8; 2] = [21, 26];
+    const STEP_PINS: [u8; 2] = [13, 20];
+    const DIR_PINS: [u8; 2] = [19, 21];
 
-    enum WhichUart {
-        Uart0, // TX: 14, RX: 15 (BCM)
-        Uart2, // TX: 0, RX: 1 (BCM)
-    }
-    use WhichUart::*;
-    const UARTS: [(WhichUart, u8); 6] = [
-        (Uart0, 0),
-        (Uart0, 2),
-        (Uart0, 0), // fill in the rest of these once we have all 6 motors
-        (Uart0, 0), // ...
-        (Uart0, 0), // ...
-        (Uart0, 0), // ...
-    ];
 
     let iter = iter.map(parse_move);
 
@@ -309,7 +213,7 @@ fn run_move_seq<'a>(iter: impl Iterator<Item = &'a str>) {
     });
 
     let mut uart0 = uart::mk_uart("/dev/ttyAMA0");
-    let mut uart2 = uart::mk_uart("/dev/ttyAMA2");
+    let mut uart2 = uart::mk_uart("/dev/ttyAMA1");
 
     for (i, (which_uart, address)) in UARTS.into_iter().enumerate() {
         // remove once we have all 6 motors
@@ -337,19 +241,44 @@ fn run_move_seq<'a>(iter: impl Iterator<Item = &'a str>) {
         thread::sleep(Duration::from_millis(1));
     }
 
-    for (motor, qturns) in iter {
-        let dir = &mut dirs[motor];
-        let step = &mut steps[motor];
+    for (motor_index, qturns) in iter {
+        let dir = &mut dirs[motor_index];
+        let step = &mut steps[motor_index];
 
+        thread::sleep(Duration::from_millis(500));
         dir.write(if qturns < 0 { Level::Low } else { Level::High });
         let step_count = qturns.unsigned_abs() * 50;
-        let mut delayer = Delayer::new();
+        let mut ticker = Ticker::new();
         for _ in 0..step_count {
             step.set_high();
-            delayer.wait(delay);
+            ticker.wait(delay);
             step.set_low();
-            delayer.wait(delay);
+            ticker.wait(delay);
         }
+    }
+}
+
+fn read_num(prompt: impl Display) -> u32 {
+    loop {
+        if let Some(v) = read_num_opt(&prompt) {
+            break v;
+        }
+        eprintln!("try again");
+    }
+}
+
+fn read_num_opt(prompt: impl Display) -> Option<u32> {
+    let mut line = String::new();
+    loop {
+        line.clear();
+        eprint!("{prompt}");
+        stdin().read_line(&mut line).unwrap();
+        if line.trim().is_empty() {
+            break None;
+        } else if let Ok(v) = line.trim().parse::<u32>() {
+            break Some(v);
+        }
+        eprintln!("try again");
     }
 }
 

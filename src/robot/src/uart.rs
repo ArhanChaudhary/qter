@@ -1,64 +1,12 @@
-use std::time::Duration;
-
 use bitflags::bitflags;
 use rppal::uart::{Parity, Uart};
+use std::time::Duration;
 
 // Can be anywhere from 9,000 to 500,000?
-// Keep in mind it also needs to be equal to one of the allowed values on the raspi
+// Keep in mind it also needs to be equal to one of the allowed values on the
+// Raspberry Pi 4 Model B
 const BAUD_RATE: u32 = 460_800;
-
-pub fn mk_uart(path: &str) -> Uart {
-    Uart::with_path(path, BAUD_RATE, Parity::None, 8, 1).unwrap()
-}
-
-fn write_packet(address: u8, register: u8, val: u32) -> [u8; 8] {
-    assert!(address < 4);
-    assert!(register & 0x80 == 0);
-    let val = val.to_be_bytes();
-
-    let mut out = [
-        0b_0000_0101,
-        address,
-        register | 0x80,
-        val[0],
-        val[1],
-        val[2],
-        val[3],
-        0,
-    ];
-    set_crc(&mut out);
-    out
-}
-
-fn read_packet(address: u8, register: u8) -> [u8; 4] {
-    assert!(address < 4);
-    assert!(register & 0x80 == 0);
-
-    let mut out = [0b_0000_0101, address, register, 0];
-    set_crc(&mut out);
-    out
-}
-
-// copied and adapted from datasheet
-fn calc_crc<const N: usize>(data: &[u8; N]) -> u8 {
-    let mut crc = 0u8;
-    for i in 0..N - 1 {
-        let mut current_byte = data[i];
-        for _ in 0..8 {
-            if (crc >> 7) ^ (current_byte & 0x01) > 0 {
-                crc = (crc << 1) ^ 0x07;
-            } else {
-                crc = crc << 1;
-            }
-            current_byte >>= 1;
-        }
-    }
-    crc
-}
-
-fn set_crc<const N: usize>(data: &mut [u8; N]) {
-    data[N - 1] = calc_crc(data);
-}
+const REGISTER_MSB: u8 = 1 << 7;
 
 // 0x0, n = 10, RW
 bitflags! {
@@ -85,29 +33,144 @@ bitflags! {
 
 // read IFCNT from 0x2, n = 8
 
-pub fn write(uart: &mut Uart, address: u8, register: u8, val: u32) {
-    let packet = write_packet(address, register, val);
-    uart.set_write_mode(true).unwrap();
-    eprint!(
-        "TX [0b{:08b}, 0x{:02x}, 0x{:02x}, 0x{:02x}, 0x{:02x}, 0x{:02x}, 0x{:02x}, 0x{:02x}]...",
-        packet[0], packet[1], packet[2], packet[3], packet[4], packet[5], packet[6], packet[7],
-    );
-    uart.write(&packet).unwrap();
-    eprintln!(" done.");
+/// Create a new `Uart` from a device path.
+pub fn mk_uart(path: &str) -> Uart {
+    let uart = Uart::with_path(
+        path,
+        BAUD_RATE,
+        // omit the parity bit
+        Parity::None,
+        // transfer 8 bits at a time
+        8,
+        // TMC2209 ends transmission with a single stop bit
+        1,
+    )
+    .unwrap();
+    // for each subsequent read, read and block until 4 bytes (size of read
+    // packet) are available
+    // TODO: we want reads to be non-blocking
+    // uart.set_read_mode(4, Duration::ZERO).unwrap();
+    uart
 }
 
-fn read_(uart: &mut Uart) -> (u8, u8, Option<u32>) {
-    let mut buf = [0; 4];
+/// The 32-bit UART read packet is specified as follows:
+///
+/// 1010----
+/// AA------
+/// DDDDDDDD
+/// CCCCCCCC
+///
+/// - = unused (0)
+/// A = TMC2209 node address (0-3)
+/// D = data bytes
+/// C = CRC
+///
+/// See page 19 of https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
+fn mk_read_packet(address: u8, register: u8) -> [u8; 4] {
+    // we only have three TMCs connected
+    assert!(address < 3);
+    // this bit must be zero
+    assert!(register & REGISTER_MSB == 0);
+
+    let mut out = [0b_1010_0000u8.reverse_bits(), address, register, 0];
+    out[3] = calc_crc(&out);
+    out
+}
+
+/// The 64-bit UART write packet is specified as follows:
+///
+/// 1010----
+/// AA------
+/// RRRRRRR1
+/// DDDDDDDD
+/// DDDDDDDD
+/// DDDDDDDD
+/// DDDDDDDD
+/// CCCCCCCC
+///
+/// - = unused (0)
+/// A = TMC2209 node address (0-3)
+/// R = register (0-127)
+/// D = data bytes
+/// C = CRC
+///
+/// See page 18 of https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
+fn mk_write_packet(address: u8, register: u8, val: u32) -> [u8; 8] {
+    // we only have three TMCs connected
+    assert!(address < 3);
+    // this bit must be one
+    assert!(register & REGISTER_MSB == 0);
+
+    let val = val.to_be_bytes();
+    let mut out = [
+        0b_1010_0000u8.reverse_bits(),
+        address,
+        register | REGISTER_MSB,
+        val[0],
+        val[1],
+        val[2],
+        val[3],
+        0,
+    ];
+    out[7] = calc_crc(&out);
+    out
+}
+
+/// Read a register through UART given a TMC2209 node address.
+pub fn read(uart: &mut Uart, address: u8, register: u8) -> u32 {
+    let read_packet = mk_read_packet(address, register);
+    // TODO: we need to make it non-blocking
+    uart.set_write_mode(true).unwrap();
+    eprint!(
+        "TX [0b{:08b}, 0x{:02x}, 0x{:02x}, 0x{:02x}]...",
+        read_packet[0], read_packet[1], read_packet[2], read_packet[3]
+    );
+    uart.write(&read_packet).unwrap();
+    eprintln!(" sent read packet.");
+
+    loop {
+        let (address2, register2, val) = read_raw(uart);
+        if address2 == 0xFF
+            && register2 == register
+            && let Some(val) = val
+        {
+            break val;
+        }
+    }
+}
+
+/// Read from UART and return the TMC node address, register address, and
+/// payload.
+/// 
+/// The 64-bit UART read access reply packet is specified as follows:
+/// 
+/// 1010----
+/// 11111111
+/// RRRRRRR0
+/// DDDDDDDD
+/// DDDDDDDD
+/// DDDDDDDD
+/// DDDDDDDD
+/// CCCCCCCC
+/// 
+/// - = unused (0)
+/// R = register (0-127)
+/// D = data bytes
+/// C = CRC
+fn read_raw(uart: &mut Uart) -> (u8, u8, Option<u32>) {
     uart.set_read_mode(4, Duration::ZERO).unwrap();
-    eprint!("RX...");
+    
+    eprint!(" reading.");
+    let mut buf = [0; 4];
     uart.read(&mut buf).unwrap();
     eprintln!(
-        " done: [0b{:08b}, 0x{:02x}, 0x{:02x}, 0x{:02x}]",
+        " RX: [0b{:08b}, 0x{:02x}, 0x{:02x}, 0x{:02x}]",
         buf[0], buf[1], buf[2], buf[3]
     );
+    
     let address = buf[1];
-    let register = buf[2] & !0x80;
-    let has_data = buf[2] & 0x80 > 0 || address == 0xff;
+    let register = buf[2] & !REGISTER_MSB;
+    let has_data = buf[2] & REGISTER_MSB != 0 || address == 0xff;
     let data = if has_data {
         let mut buf = {
             let mut new_buf = [0; 8];
@@ -135,23 +198,32 @@ fn read_(uart: &mut Uart) -> (u8, u8, Option<u32>) {
     (address, register, data)
 }
 
-pub fn read(uart: &mut Uart, address: u8, register: u8) -> u32 {
-    let packet = read_packet(address, register);
+/// Write to a register through UART given a TMC2209 node address.
+pub fn write(uart: &mut Uart, address: u8, register: u8, val: u32) {
+    let packet = mk_write_packet(address, register, val);
     uart.set_write_mode(true).unwrap();
     eprint!(
-        "TX [0b{:08b}, 0x{:02x}, 0x{:02x}, 0x{:02x}]...",
-        packet[0], packet[1], packet[2], packet[3]
+        "TX [0b{:08b}, 0x{:02x}, 0x{:02x}, 0x{:02x}, 0x{:02x}, 0x{:02x}, 0x{:02x}, 0x{:02x}]...",
+        packet[0], packet[1], packet[2], packet[3], packet[4], packet[5], packet[6], packet[7],
     );
     uart.write(&packet).unwrap();
     eprintln!(" done.");
+}
 
-    loop {
-        let (address2, register2, val) = read_(uart);
-        if address2 == 0xFF
-            && register2 == register
-            && let Some(val) = val
-        {
-            break val;
+/// Copied and adapted from page 20 of
+/// https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
+fn calc_crc<const N: usize>(data: &[u8; N]) -> u8 {
+    let mut crc = 0u8;
+    for i in 0..N - 1 {
+        let mut current_byte = data[i];
+        for _ in 0..8 {
+            if (crc >> 7) ^ (current_byte & 0x01) > 0 {
+                crc = (crc << 1) ^ 0x07;
+            } else {
+                crc = crc << 1;
+            }
+            current_byte >>= 1;
         }
     }
+    crc
 }
