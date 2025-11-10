@@ -5,6 +5,7 @@ mod uart;
 use crate::uart::GConf;
 use rppal::gpio::{Gpio, Level, OutputPin};
 use std::{
+    collections::HashMap,
     env,
     fmt::Display,
     io::stdin,
@@ -15,8 +16,6 @@ use std::{
 const STEPS_PER_REVOLUTION: u32 = 200;
 
 struct TMC2209Config {
-    which_uart: WhichUart,
-    node_address: u8,
     step_pin: u8,
     dir_pin: u8,
     #[allow(unused)]
@@ -25,7 +24,11 @@ struct TMC2209Config {
     en_pin: u8,
 }
 
-struct TMC2209Configs([TMC2209Config; 6]);
+struct RobotConfig {
+    tmc_2209_configs: [TMC2209Config; 6],
+    revolutions_per_second: f64,
+    move_to_motor_index: HashMap<String, usize>,
+}
 
 // BCM scheme
 // change length to 6 once we have all 6 motors
@@ -41,84 +44,83 @@ struct Ticker {
 fn main() {
     let mut args = env::args();
     let subcommand = args.nth(1);
-    let tmc_2209_configs = TMC2209Configs::default();
+    let robot_config = RobotConfig::default();
     match subcommand.as_deref() {
         Some("uart") => run_uart_repl(),
         Some("uart-init") => run_uart_init(),
         Some("move-seq") => {
             let next_arg = args.next().unwrap();
             run_move_seq(
-                tmc_2209_configs,
+                robot_config,
                 next_arg.split(" ").map(str::trim).filter(|v| !v.is_empty()),
             );
         }
         Some("motor") => {
             let motor_index = read_num("Enter the motor index: ") as usize;
             let microsteps = read_num("Enter number of microsteps: ");
-            run_motor_repl(tmc_2209_configs, motor_index, microsteps);
+            run_motor_repl(robot_config, motor_index, microsteps);
         }
         _ => eprintln!("Try again."),
     }
 }
 
-impl Default for TMC2209Configs {
+impl Default for RobotConfig {
     fn default() -> Self {
-        TMC2209Configs([
-            TMC2209Config {
-                which_uart: WhichUart::Uart0,
-                node_address: 0,
-                step_pin: 13,
-                dir_pin: 19,
+        RobotConfig {
+            revolutions_per_second: 3.0,
+            move_to_motor_index: HashMap::from([
+                ("R".to_string(), 0),
+                ("L".to_string(), 1),
+                ("U".to_string(), 2),
+                ("D".to_string(), 3),
+                ("F".to_string(), 4),
+                ("B".to_string(), 5),
+            ]),
+            tmc_2209_configs: [
+                TMC2209Config {
+                    step_pin: 13,
+                    dir_pin: 19,
 
-                diag_pin: 0,
-                en_pin: 0,
-            },
-            TMC2209Config {
-                which_uart: WhichUart::Uart0,
-                node_address: 1,
-                step_pin: 20,
-                dir_pin: 21,
+                    diag_pin: 0,
+                    en_pin: 0,
+                },
+                TMC2209Config {
+                    step_pin: 20,
+                    dir_pin: 21,
 
-                diag_pin: 0,
-                en_pin: 0,
-            },
-            TMC2209Config {
-                which_uart: WhichUart::Uart0,
-                node_address: 2,
-                step_pin: 17,
-                dir_pin: 27,
+                    diag_pin: 0,
+                    en_pin: 0,
+                },
+                TMC2209Config {
+                    step_pin: 17,
+                    dir_pin: 27,
 
-                diag_pin: 0,
-                en_pin: 0,
-            },
-            TMC2209Config {
-                which_uart: WhichUart::Uart2,
-                node_address: 0,
-                step_pin: 5,
-                dir_pin: 6,
+                    diag_pin: 0,
+                    en_pin: 0,
+                },
+                TMC2209Config {
+                    step_pin: 5,
+                    dir_pin: 6,
 
-                diag_pin: 0,
-                en_pin: 0,
-            },
-            TMC2209Config {
-                which_uart: WhichUart::Uart2,
-                node_address: 1,
-                step_pin: 16,
-                dir_pin: 26,
+                    diag_pin: 0,
+                    en_pin: 0,
+                },
+                TMC2209Config {
+                    step_pin: 16,
+                    dir_pin: 26,
 
-                diag_pin: 0,
-                en_pin: 0,
-            },
-            TMC2209Config {
-                which_uart: WhichUart::Uart2,
-                node_address: 2,
-                step_pin: 2,
-                dir_pin: 3,
+                    diag_pin: 0,
+                    en_pin: 0,
+                },
+                TMC2209Config {
+                    step_pin: 2,
+                    dir_pin: 3,
 
-                diag_pin: 0,
-                en_pin: 0,
-            },
-        ])
+                    diag_pin: 0,
+                    en_pin: 0,
+                },
+            ],
+        }
     }
 }
 
@@ -193,40 +195,20 @@ fn run_uart_init() {
     }
 }
 
-fn run_move_seq<'a>(tmc_2209_configs: TMC2209Configs, iter: impl Iterator<Item = &'a str>) {
-    const FREQ: f64 = 6.0 * STEPS_PER_REVOLUTION as f64;
-    // can't be const bc `div_f64` isn't const
-    let delay = Duration::from_secs(1).div_f64(2.0 * FREQ);
-
-    let iter = iter.map(parse_move);
+fn run_move_seq<'a>(robot_config: RobotConfig, iter: impl Iterator<Item = &'a str>) {
+    let freq = robot_config.revolutions_per_second * STEPS_PER_REVOLUTION as f64;
+    let delay = Duration::from_secs(1).div_f64(2.0 * freq);
 
     let mut steps: [OutputPin; 6] =
-        std::array::from_fn(|i| mk_output_pin(tmc_2209_configs.0[i].step_pin));
+        std::array::from_fn(|i| mk_output_pin(robot_config.tmc_2209_configs[i].step_pin));
     let mut dirs: [OutputPin; 6] =
-        std::array::from_fn(|i| mk_output_pin(tmc_2209_configs.0[i].dir_pin));
+        std::array::from_fn(|i| mk_output_pin(robot_config.tmc_2209_configs[i].dir_pin));
 
-    let mut uart0 = uart::mk_uart(WhichUart::Uart0);
-    let mut uart2 = uart::mk_uart(WhichUart::Uart2);
+    run_uart_init();
 
-    for tmc_2209_config in &tmc_2209_configs.0 {
-        let uart = match tmc_2209_config.which_uart {
-            WhichUart::Uart0 => &mut uart0,
-            WhichUart::Uart2 => &mut uart2,
-        };
-
-        let mut gconf =
-            GConf::from_bits_retain(uart::read(uart, tmc_2209_config.node_address, 0x0));
-        gconf |= GConf::MSTEP_REG_SELECT | GConf::PDN_DISABLE;
-        uart::write(uart, tmc_2209_config.node_address, 0x0, gconf.bits());
-
-        let mut chopconf = uart::read(uart, tmc_2209_config.node_address, 0x6C);
-        chopconf = chopconf & !(0b_1111 << 24) | (8 << 24);
-        uart::write(uart, tmc_2209_config.node_address, 0x6C, chopconf);
-    }
-
-    for (motor_index, qturns) in iter {
-        let dir = &mut dirs[motor_index];
-        let step = &mut steps[motor_index];
+    for (motor_index, qturns) in iter.map(|s| parse_move(&robot_config, s)) {
+        let dir: &mut OutputPin = &mut dirs[motor_index];
+        let step: &mut OutputPin = &mut steps[motor_index];
 
         dir.write(if qturns < 0 { Level::Low } else { Level::High });
         let step_count = qturns.unsigned_abs() * STEPS_PER_REVOLUTION / 4;
@@ -240,9 +222,9 @@ fn run_move_seq<'a>(tmc_2209_configs: TMC2209Configs, iter: impl Iterator<Item =
     }
 }
 
-fn run_motor_repl(config: TMC2209Configs, motor_index: usize, microsteps: u32) {
+fn run_motor_repl(config: RobotConfig, motor_index: usize, microsteps: u32) {
     // let dir_pin = mk_output_pin(config.0[motor_index].dir_pin);
-    let mut step_pin = mk_output_pin(config.0[motor_index].step_pin);
+    let mut step_pin = mk_output_pin(config.tmc_2209_configs[motor_index].step_pin);
 
     let spr = microsteps * STEPS_PER_REVOLUTION;
     eprintln!("1 rev = {spr} steps");
@@ -347,7 +329,7 @@ fn read_num_opt(prompt: impl Display) -> Option<u32> {
     }
 }
 
-fn parse_move(mut s: &str) -> (usize, i32) {
+fn parse_move(config: &RobotConfig, mut s: &str) -> (usize, i32) {
     let qturns = if let Some(rest) = s.strip_suffix("'") {
         s = rest;
         -1
@@ -358,15 +340,9 @@ fn parse_move(mut s: &str) -> (usize, i32) {
         1
     };
 
-    let face = match s {
-        "R" => 0,
-        "L" => 1,
-        "U" => 2,
-        "D" => 3,
-        "F" => 4,
-        "B" => 5,
-        _ => panic!(),
-    };
+    let face = *config.move_to_motor_index.get(s).unwrap_or_else(|| {
+        panic!("invalid move: {}", s);
+    });
 
     (face, qturns)
 }

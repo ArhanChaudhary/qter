@@ -9,6 +9,7 @@ use crate::WhichUart;
 // Raspberry Pi 4 Model B
 const BAUD_RATE: u32 = 460_800;
 const REGISTER_MSB: u8 = 1 << 7;
+const UART_DELAY: Duration = Duration::from_millis(1);
 
 // 0x0, n = 10, RW
 bitflags! {
@@ -75,7 +76,6 @@ pub fn mk_uart(which_uart: WhichUart) -> Uart {
 /// See page 19 of https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
 fn mk_read_packet(node_address: u8, register: u8) -> [u8; 4] {
     assert!(node_address < 4);
-    // this bit must be zero
     assert!(register & REGISTER_MSB == 0);
 
     let mut out = [0b_1010_0000u8.reverse_bits(), node_address, register, 0];
@@ -129,7 +129,7 @@ pub fn read(uart: &mut Uart, node_address: u8, register: u8) -> u32 {
     );
     // TODO: the stepper driver needs a small delay between uart operations, for now i just
     //       sleep for 1ms but eventually this should be integrated into the actual uart code
-    thread::sleep(Duration::from_millis(1));
+    thread::sleep(UART_DELAY);
     uart.write(&read_packet).unwrap();
     eprintln!(" sent read packet.");
 
@@ -210,7 +210,7 @@ pub fn write(uart: &mut Uart, node_address: u8, register: u8, val: u32) {
     );
     // TODO: the stepper driver needs a small delay between uart operations, for now i just
     //       sleep for 1ms but eventually this should be integrated into the actual uart code
-    thread::sleep(Duration::from_millis(1));
+    thread::sleep(UART_DELAY);
     uart.write(&packet).unwrap();
     eprintln!(" done.");
 }
