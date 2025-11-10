@@ -1,6 +1,8 @@
 use bitflags::bitflags;
 use rppal::uart::{Parity, Uart};
-use std::time::Duration;
+use std::{thread, time::Duration};
+
+use crate::WhichUart;
 
 // Can be anywhere from 9,000 to 500,000?
 // Keep in mind it also needs to be equal to one of the allowed values on the
@@ -34,8 +36,12 @@ bitflags! {
 // read IFCNT from 0x2, n = 8
 
 /// Create a new `Uart` from a device path.
-pub fn mk_uart(path: &str) -> Uart {
-    let uart = Uart::with_path(
+pub fn mk_uart(which_uart: WhichUart) -> Uart {
+    let path = match which_uart {
+        WhichUart::Uart0 => "/dev/ttyAMA0",
+        WhichUart::Uart2 => "/dev/ttyAMA1",
+    };
+    let mut uart = Uart::with_path(
         path,
         BAUD_RATE,
         // omit the parity bit
@@ -49,7 +55,8 @@ pub fn mk_uart(path: &str) -> Uart {
     // for each subsequent read, read and block until 4 bytes (size of read
     // packet) are available
     // TODO: we want reads to be non-blocking
-    // uart.set_read_mode(4, Duration::ZERO).unwrap();
+    uart.set_read_mode(4, Duration::ZERO).unwrap();
+    uart.set_write_mode(true).unwrap();
     uart
 }
 
@@ -57,22 +64,21 @@ pub fn mk_uart(path: &str) -> Uart {
 ///
 /// 1010----
 /// AA------
-/// DDDDDDDD
+/// RRRRRRR0
 /// CCCCCCCC
 ///
 /// - = unused (0)
 /// A = TMC2209 node address (0-3)
-/// D = data bytes
+/// R = register (0-127)
 /// C = CRC
 ///
 /// See page 19 of https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
-fn mk_read_packet(address: u8, register: u8) -> [u8; 4] {
-    // we only have three TMCs connected
-    assert!(address < 3);
+fn mk_read_packet(node_address: u8, register: u8) -> [u8; 4] {
+    assert!(node_address < 4);
     // this bit must be zero
     assert!(register & REGISTER_MSB == 0);
 
-    let mut out = [0b_1010_0000u8.reverse_bits(), address, register, 0];
+    let mut out = [0b_1010_0000u8.reverse_bits(), node_address, register, 0];
     out[3] = calc_crc(&out);
     out
 }
@@ -95,16 +101,14 @@ fn mk_read_packet(address: u8, register: u8) -> [u8; 4] {
 /// C = CRC
 ///
 /// See page 18 of https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
-fn mk_write_packet(address: u8, register: u8, val: u32) -> [u8; 8] {
-    // we only have three TMCs connected
-    assert!(address < 3);
-    // this bit must be one
+fn mk_write_packet(node_address: u8, register: u8, val: u32) -> [u8; 8] {
+    assert!(node_address < 4);
     assert!(register & REGISTER_MSB == 0);
 
     let val = val.to_be_bytes();
     let mut out = [
         0b_1010_0000u8.reverse_bits(),
-        address,
+        node_address,
         register | REGISTER_MSB,
         val[0],
         val[1],
@@ -117,33 +121,34 @@ fn mk_write_packet(address: u8, register: u8, val: u32) -> [u8; 8] {
 }
 
 /// Read a register through UART given a TMC2209 node address.
-pub fn read(uart: &mut Uart, address: u8, register: u8) -> u32 {
-    let read_packet = mk_read_packet(address, register);
-    // TODO: we need to make it non-blocking
-    uart.set_write_mode(true).unwrap();
+pub fn read(uart: &mut Uart, node_address: u8, register: u8) -> u32 {
+    let read_packet = mk_read_packet(node_address, register);
     eprint!(
         "TX [0b{:08b}, 0x{:02x}, 0x{:02x}, 0x{:02x}]...",
         read_packet[0], read_packet[1], read_packet[2], read_packet[3]
     );
+    // TODO: the stepper driver needs a small delay between uart operations, for now i just
+    //       sleep for 1ms but eventually this should be integrated into the actual uart code
+    thread::sleep(Duration::from_millis(1));
     uart.write(&read_packet).unwrap();
     eprintln!(" sent read packet.");
 
     loop {
-        let (address2, register2, val) = read_raw(uart);
-        if address2 == 0xFF
+        let (node_address2, register2, data) = read_raw(uart);
+        if node_address2 == 0xFF
             && register2 == register
-            && let Some(val) = val
+            && let Some(data) = data
         {
-            break val;
+            break data;
         }
     }
 }
 
 /// Read from UART and return the TMC node address, register address, and
 /// payload.
-/// 
+///
 /// The 64-bit UART read access reply packet is specified as follows:
-/// 
+///
 /// 1010----
 /// 11111111
 /// RRRRRRR0
@@ -152,14 +157,12 @@ pub fn read(uart: &mut Uart, address: u8, register: u8) -> u32 {
 /// DDDDDDDD
 /// DDDDDDDD
 /// CCCCCCCC
-/// 
+///
 /// - = unused (0)
 /// R = register (0-127)
 /// D = data bytes
 /// C = CRC
 fn read_raw(uart: &mut Uart) -> (u8, u8, Option<u32>) {
-    uart.set_read_mode(4, Duration::ZERO).unwrap();
-    
     eprint!(" reading.");
     let mut buf = [0; 4];
     uart.read(&mut buf).unwrap();
@@ -167,10 +170,10 @@ fn read_raw(uart: &mut Uart) -> (u8, u8, Option<u32>) {
         " RX: [0b{:08b}, 0x{:02x}, 0x{:02x}, 0x{:02x}]",
         buf[0], buf[1], buf[2], buf[3]
     );
-    
-    let address = buf[1];
+
+    let node_address = buf[1];
     let register = buf[2] & !REGISTER_MSB;
-    let has_data = buf[2] & REGISTER_MSB != 0 || address == 0xff;
+    let has_data = buf[2] & REGISTER_MSB != 0 || node_address == 0xff;
     let data = if has_data {
         let mut buf = {
             let mut new_buf = [0; 8];
@@ -195,17 +198,19 @@ fn read_raw(uart: &mut Uart) -> (u8, u8, Option<u32>) {
         assert_eq!(crc, expected_crc);
         None
     };
-    (address, register, data)
+    (node_address, register, data)
 }
 
 /// Write to a register through UART given a TMC2209 node address.
-pub fn write(uart: &mut Uart, address: u8, register: u8, val: u32) {
-    let packet = mk_write_packet(address, register, val);
-    uart.set_write_mode(true).unwrap();
+pub fn write(uart: &mut Uart, node_address: u8, register: u8, val: u32) {
+    let packet = mk_write_packet(node_address, register, val);
     eprint!(
         "TX [0b{:08b}, 0x{:02x}, 0x{:02x}, 0x{:02x}, 0x{:02x}, 0x{:02x}, 0x{:02x}, 0x{:02x}]...",
         packet[0], packet[1], packet[2], packet[3], packet[4], packet[5], packet[6], packet[7],
     );
+    // TODO: the stepper driver needs a small delay between uart operations, for now i just
+    //       sleep for 1ms but eventually this should be integrated into the actual uart code
+    thread::sleep(Duration::from_millis(1));
     uart.write(&packet).unwrap();
     eprintln!(" done.");
 }
