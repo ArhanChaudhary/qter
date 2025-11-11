@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 bitflags = "2.10.0"
+env_logger = "0.11.8"
+log = "0.4.28"
 rppal = "0.22.1"
 
 [lints]
