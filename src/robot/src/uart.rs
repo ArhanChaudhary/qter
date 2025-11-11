@@ -11,20 +11,20 @@ use std::{thread, time::Duration};
 /// `19_200`, `38_400`, `57_600`, `115_200`, `230_400`, `460_800`. Generally
 /// higher is better, so we set it to just below `460_800` for safety margin.
 ///
-/// See page 6 of https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf and
-/// https://docs.golemparts.com/rppal/0.14.1/src/rppal/uart.rs.html#527
+/// See page 6 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf> and
+/// <https://docs.golemparts.com/rppal/0.14.1/src/rppal/uart.rs.html#527>
 const UART_BAUD_RATE: u32 = 460_800;
 /// In a multi-node setup, UART has no parity.
 ///
-/// See page 21 of https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
+/// See page 21 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 const UART_PARITY: Parity = Parity::None;
 /// In a multi-node setup, UART uses 8 data bits.
 ///
-/// See page 21 of https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
+/// See page 21 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 const UART_DATA_BITS: u8 = 8;
 /// UART uses 1 stop bit.
 ///
-/// See page 18 of https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
+/// See page 18 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 const UART_STOP_BITS: u8 = 1;
 /// The TMC2209 datasheet specifies a small delay between UART operations, but
 /// does not elaborate. 1ms should be enough to cover all, so we use it for now.
@@ -35,16 +35,16 @@ const UART_DELAY: Duration = Duration::from_millis(1);
 /// send back the 4 byte read packet. Thus we only need to read 4 bytes at a
 /// time.
 ///
-/// See page 19 of https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
+/// See page 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 const UART_READ_BUFFER_SIZE_BYTES: u8 = 4;
 /// The UART sync byte used to identify the start of all UART transmissions.
 ///
-/// See page 18 & 19 of https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
+/// See page 18 & 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 const UART_SYNC_BYTE: u8 = 0b_1010_0000u8.reverse_bits();
 /// The bit mask of the read/write bit in the UART register address for all UART
 /// transmissions.
 ///
-/// See page 18 & 19 of https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
+/// See page 18 & 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 const REGISTER_MSB: u8 = 1 << 7;
 
 // 0x0, n = 10, RW
@@ -110,12 +110,12 @@ pub fn mk_uart(which_uart: WhichUart) -> Uart {
 /// RRRRRRR0
 /// CCCCCCCC
 ///
-/// - = unused (0)
+/// `-` = unused (0)
 /// A = TMC2209 node address (0-3)
 /// R = register address (0-127)
 /// C = CRC
 ///
-/// See page 19 of https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
+/// See page 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 fn mk_read_packet(node_address: u8, register_address: u8) -> [u8; 4] {
     assert!(node_address < 4);
     assert!(register_address & REGISTER_MSB == 0);
@@ -146,13 +146,13 @@ fn mk_read_packet(node_address: u8, register_address: u8) -> [u8; 4] {
 /// DDDDDDDD
 /// CCCCCCCC
 ///
-/// - = unused (0)
+/// `-` = unused (0)
 /// A = TMC2209 node address (0-3)
 /// R = register address (0-127)
 /// D = data bytes
 /// C = CRC
 ///
-/// See page 18 of https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
+/// See page 18 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 fn mk_write_packet(node_address: u8, register_address: u8, val: u32) -> [u8; 8] {
     assert!(node_address < 4);
     assert!(register_address & REGISTER_MSB == 0);
@@ -246,7 +246,7 @@ pub fn read(uart: &mut Uart, node_address: u8, register_address: u8) -> u32 {
 /// DDDDDDDD
 /// CCCCCCCC
 ///
-/// - = unused (0)
+/// `-` = unused (0)
 /// R = register address (0-127)
 /// D = data bytes
 /// C = CRC
@@ -344,16 +344,15 @@ pub fn write(uart: &mut Uart, node_address: u8, register_address: u8, val: u32) 
 }
 
 /// Copied and adapted from page 20 of
-/// https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf
+/// <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 fn calc_crc<const N: usize>(data: &[u8; N]) -> u8 {
     let mut crc = 0u8;
-    for i in 0..N - 1 {
-        let mut current_byte = data[i];
+    for mut current_byte in data.iter().take(N - 1).copied() {
         for _ in 0..8 {
             if (crc >> 7) ^ (current_byte & 0x01) > 0 {
                 crc = (crc << 1) ^ 0x07;
             } else {
-                crc = crc << 1;
+                crc <<= 1;
             }
             current_byte >>= 1;
         }

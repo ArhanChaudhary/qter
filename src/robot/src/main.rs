@@ -37,13 +37,27 @@ struct TMC2209Config {
     en_pin: u8,
 }
 
+enum Microsteps {
+    FullStep = 1,
+    Two = 2,
+    Four = 4,
+    Eight = 8,
+    Sixteen = 16,
+    ThirtyTwo = 32,
+    SixtyFour = 64,
+    OneTwentyEight = 128,
+    TwoFiftySix = 256,
+}
+
 /// Global robot configuration.
 struct RobotConfig {
     tmc_2209_configs: [TMC2209Config; 6],
     revolutions_per_second: f64,
+    // microsteps: Microsteps,
 }
 
 /// Which UART port to use (BCM numbering context).
+#[derive(Debug, Copy, Clone)]
 enum WhichUart {
     Uart0, // TX: 14, RX: 15 (BCM)
     Uart2, // TX: 0, RX: 1 (BCM)
@@ -137,11 +151,7 @@ impl FromStr for Face {
 }
 
 fn main() {
-    if log::log_enabled!(log::Level::Info) == false {
-        let _ = env_logger::try_init();
-    }
-
-    info!("app=startup: main() entered");
+    env_logger::init();
 
     let mut args = env::args();
     let subcommand = args.nth(1);
@@ -149,20 +159,18 @@ fn main() {
 
     let robot_config = RobotConfig::default();
 
+    run_uart_init();
+
     match subcommand.as_deref() {
-        Some("uart") => {
+        Some("uart-repl") => {
             info!("app=command: uart - starting UART REPL");
             run_uart_repl();
-        }
-        Some("uart-init") => {
-            info!("app=command: uart-init - initializing UARTs and driver registers");
-            run_uart_init();
         }
         Some("move-seq") => match args.next() {
             Some(seq) => {
                 info!(target: "app", "app=command: move-seq sequence=\"{seq}\"");
                 run_move_seq(
-                    robot_config,
+                    &robot_config,
                     seq.split(' ').map(str::trim).filter(|v| !v.is_empty()),
                 );
             }
@@ -173,15 +181,14 @@ fn main() {
         Some("motor") => {
             info!("app=command: motor - starting motor REPL");
             let motor_index = read_num("Enter the motor index: ") as usize;
-            let microsteps = read_num("Enter number of microsteps: ");
-            run_motor_repl(robot_config, motor_index, microsteps);
+            run_motor_repl(&robot_config, motor_index);
         }
         other => {
             error!(target: "app", "app=cli: unknown or missing subcommand: {other:?}");
         }
     }
 
-    info!("app=shutdown: main() exiting");
+    info!(target: "app", "app=cli: exiting");
 }
 
 fn run_uart_repl() {
@@ -194,22 +201,17 @@ fn run_uart_repl() {
         }
     };
 
-    let uart_id = match which_uart {
-        WhichUart::Uart0 => 0,
-        WhichUart::Uart2 => 2,
-    };
-    info!(target: "uart_repl", "opened UART{}", uart_id);
-
+    info!(target: "uart_repl", "opened {which_uart:?}");
     info!(target: "uart_repl", "register_info: GCONF(reg=0,n=10,RW), GSTAT(reg=1,n=3,R+WC), IFCNT(reg=2,n=8,R)");
 
     let mut uart = uart::mk_uart(which_uart);
 
     loop {
-        let node_address = read_num("Node address? (0-3) ") as u8;
-        let register_address = read_num("Register address? (0-127) ") as u8;
-        let value_opt = read_num_opt("Value? (leave blank to read) ");
+        let node_address = read_num("Node address? (0-3) ").try_into().unwrap();
+        let register_address = read_num("Register address? (0-127) ").try_into().unwrap();
+        let maybe_val = maybe_read_num("Value? (leave blank to read) ");
 
-        if let Some(val) = value_opt {
+        if let Some(val) = maybe_val {
             info!(
                 target: "uart_repl",
                 "action=write node={node_address} register_address={register_address} value=0x{val:08x}",
@@ -249,11 +251,7 @@ fn run_uart_repl() {
 fn run_uart_init() {
     info!(target: "uart_init", "starting UART initialization for all UARTs");
     for which_uart in [WhichUart::Uart0, WhichUart::Uart2] {
-        let uart_idx = match which_uart {
-            WhichUart::Uart0 => 0,
-            WhichUart::Uart2 => 2,
-        };
-        info!(target: "uart_init", "initializing UART{uart_idx}");
+        info!(target: "uart_init", "initializing {which_uart:?}");
         let mut uart = uart::mk_uart(which_uart);
 
         for node_address in 0..3 {
@@ -279,9 +277,9 @@ fn run_uart_init() {
     info!(target: "uart_init", "completed UART initialization");
 }
 
-fn run_move_seq<'a>(robot_config: RobotConfig, iter: impl Iterator<Item = &'a str>) {
+fn run_move_seq<'a>(robot_config: &RobotConfig, iter: impl Iterator<Item = &'a str>) {
     info!(target: "move_seq", "starting move sequence");
-    let freq = robot_config.revolutions_per_second * FULLSTEPS_PER_REVOLUTION as f64;
+    let freq = robot_config.revolutions_per_second * f64::from(FULLSTEPS_PER_REVOLUTION);
     let delay = Duration::from_secs(1).div_f64(2.0 * freq);
     debug!(
         target: "move_seq",
@@ -293,10 +291,7 @@ fn run_move_seq<'a>(robot_config: RobotConfig, iter: impl Iterator<Item = &'a st
     let mut dirs: [OutputPin; 6] =
         std::array::from_fn(|i| mk_output_pin(robot_config.tmc_2209_configs[i].dir_pin));
 
-    // Ensure drivers are initialized before attempting motion.
-    run_uart_init();
-
-    for (motor_index, qturns) in iter.map(|s| parse_move(&robot_config, s)) {
+    for (motor_index, qturns) in iter.map(|s| parse_move(robot_config, s)) {
         info!(
             target: "move_seq",
             "requested move motor_index={motor_index} quarter_turns={qturns}",
@@ -341,24 +336,25 @@ fn run_move_seq<'a>(robot_config: RobotConfig, iter: impl Iterator<Item = &'a st
     info!(target: "move_seq", "completed move sequence");
 }
 
-fn run_motor_repl(config: RobotConfig, motor_index: usize, microsteps: u32) {
+fn run_motor_repl(config: &RobotConfig, motor_index: usize) {
     let mut step_pin = mk_output_pin(config.tmc_2209_configs[motor_index].step_pin);
-    let steps_per_revolution = microsteps * FULLSTEPS_PER_REVOLUTION;
+    let steps_per_revolution = f64::from(FULLSTEPS_PER_REVOLUTION);
 
-    info!(
-        target: "motor_repl",
-        "motor_repl: motor_index={motor_index} microsteps={microsteps} steps_per_revolution={steps_per_revolution}",
+    eprintln!("1 rev = {steps_per_revolution} steps");
+    eprintln!("1 rev/s = {steps_per_revolution} Hz");
+    eprintln!(
+        "1 ns = {:.2} rev/s (inverse relationship)",
+        1_000_000_000.0 / steps_per_revolution
     );
-    info!(
-        target: "motor_repl",
-        "frequency input units accepted: rev/s, Hz, ns, us"
+    eprintln!(
+        "1 us = {:.2} rev/s (inverse relationship)",
+        1_000_000.0 / steps_per_revolution
     );
-
     loop {
         let mut line = String::new();
         let freq = loop {
             line.clear();
-            info!(target: "motor_repl", "prompt: enter value with units (e.g. 10Hz, 2rev/s)");
+            eprintln!("Enter frequency with units: ");
             stdin().read_line(&mut line).unwrap();
             line.make_ascii_lowercase();
 
@@ -371,25 +367,15 @@ fn run_motor_repl(config: RobotConfig, motor_index: usize, microsteps: u32) {
             } else if let Some(rest) = line.trim().strip_suffix("us") {
                 (rest, "us")
             } else {
-                warn!(
-                    target: "motor_repl",
-                    "input parse failed: no recognized unit in '{}'",
-                    line.trim()
-                );
                 continue;
             };
 
             let Ok(v) = rest.trim().parse::<f64>() else {
-                warn!(
-                    target: "motor_repl",
-                    "invalid numeric value in input: '{}'",
-                    rest.trim()
-                );
                 continue;
             };
 
             break match unit {
-                "rev/s" => v * steps_per_revolution as f64,
+                "rev/s" => v * steps_per_revolution,
                 "Hz" => v,
                 "ns" => 1_000_000_000.0 / v,
                 "us" => 1_000_000.0 / v,
@@ -414,7 +400,7 @@ fn run_motor_repl(config: RobotConfig, motor_index: usize, microsteps: u32) {
     }
 }
 
-fn run_square_wave(step: &mut OutputPin, freq: f64, mut dur: Duration, steps_per_revolution: u32) {
+fn run_square_wave(step: &mut OutputPin, freq: f64, mut dur: Duration, steps_per_revolution: f64) {
     let delay = Duration::from_secs(1).div_f64(2.0 * freq);
 
     info!(
@@ -424,7 +410,7 @@ fn run_square_wave(step: &mut OutputPin, freq: f64, mut dur: Duration, steps_per
     debug!(
         target: "square_wave",
         "derived revs_per_sec={:.6}",
-        freq / steps_per_revolution as f64
+        freq / steps_per_revolution
     );
 
     let mut ticker = Ticker::new();
@@ -450,59 +436,44 @@ fn mk_output_pin(gpio: u8) -> OutputPin {
 
 fn read_num(prompt: impl Display) -> u32 {
     loop {
-        if let Some(v) = read_num_opt(&prompt) {
-            debug!(target: "io", "parsed numeric input {v} for prompt '{prompt}'");
-            return v;
+        if let Some(val) = maybe_read_num(&prompt) {
+            return val;
         }
-        warn!(target: "io", "invalid input for prompt '{prompt}'; retrying");
+        eprintln!("Try again");
     }
 }
 
-fn read_num_opt(prompt: impl Display) -> Option<u32> {
+fn maybe_read_num(prompt: impl Display) -> Option<u32> {
     let mut line = String::new();
     loop {
         line.clear();
-        info!(target: "io", "prompting: {prompt}");
+        eprintln!("{prompt}");
         stdin().read_line(&mut line).unwrap();
         if line.trim().is_empty() {
-            debug!(target: "io", "received empty response for prompt '{prompt}'");
             break None;
         } else if let Ok(v) = line.trim().parse::<u32>() {
-            debug!(target: "io", "successfully parsed {v} from input");
             break Some(v);
         }
-        warn!(target: "io", "failed to parse integer from input: '{}'", line.trim());
+        eprintln!("Try again");
     }
 }
 
-fn parse_move(config: &RobotConfig, mut s: &str) -> (usize, i32) {
-    // returns (motor_index, quarter_turns) where quarter_turns is +/-1 or 2
-    let qturns = if let Some(rest) = s.strip_suffix('\'') {
-        s = rest;
+fn parse_move(config: &RobotConfig, mut move_: &str) -> (usize, i32) {
+    let qturns = if let Some(rest) = move_.strip_suffix('\'') {
+        move_ = rest;
         -1
-    } else if let Some(rest) = s.strip_suffix('2') {
-        s = rest;
+    } else if let Some(rest) = move_.strip_suffix('2') {
+        move_ = rest;
         2
     } else {
         1
     };
 
-    let face_parsed: Face = s.parse().unwrap_or_else(|_| {
-        error!(target: "parse_move", "invalid move token '{s}'");
-        panic!("invalid move: {s}");
-    });
+    let face_parsed: Face = move_.parse().expect("invalid move: {s}");
     let motor_index = config
         .tmc_2209_configs
         .iter()
         .position(|cfg| cfg.face as u8 == face_parsed as u8)
-        .unwrap_or_else(|| {
-            error!(target: "parse_move", "invalid move token '{s}'");
-            panic!("invalid move: {s}");
-        });
-
-    debug!(
-        target: "parse_move",
-        "token='{s}' => motor_index={motor_index} quarter_turns={qturns}",
-    );
+        .expect("invalid move: {s}");
     (motor_index, qturns)
 }
