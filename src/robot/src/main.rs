@@ -89,58 +89,6 @@ struct Ticker {
     now: Instant,
 }
 
-impl Default for RobotConfig {
-    fn default() -> Self {
-        RobotConfig {
-            revolutions_per_second: 0.5,
-            tmc_2209_configs: [
-                TMC2209Config {
-                    face: Face::R,
-                    step_pin: 13,
-                    dir_pin: 19,
-                    diag_pin: 0,
-                    en_pin: 0,
-                },
-                TMC2209Config {
-                    face: Face::L,
-                    step_pin: 20,
-                    dir_pin: 21,
-                    diag_pin: 0,
-                    en_pin: 0,
-                },
-                TMC2209Config {
-                    face: Face::U,
-                    step_pin: 17,
-                    dir_pin: 27,
-                    diag_pin: 0,
-                    en_pin: 0,
-                },
-                TMC2209Config {
-                    face: Face::D,
-                    step_pin: 5,
-                    dir_pin: 6,
-                    diag_pin: 0,
-                    en_pin: 0,
-                },
-                TMC2209Config {
-                    face: Face::F,
-                    step_pin: 16,
-                    dir_pin: 26,
-                    diag_pin: 0,
-                    en_pin: 0,
-                },
-                TMC2209Config {
-                    face: Face::B,
-                    step_pin: 2,
-                    dir_pin: 3,
-                    diag_pin: 0,
-                    en_pin: 0,
-                },
-            ],
-        }
-    }
-}
-
 impl Ticker {
     fn new() -> Self {
         Self {
@@ -159,13 +107,18 @@ impl Ticker {
 #[command(version, about, long_about = None)]
 struct Cli {
     /// The robot configuration file to use, in TOML format.
-    #[arg(short, long, value_name = "ROBOT_CONFIG")]
-    robot_config: Option<PathBuf>,
+    #[arg(
+        short,
+        long,
+        default_missing_value = "robot_conifg.toml",
+        value_name = "ROBOT_CONFIG"
+    )]
+    robot_config: PathBuf,
 
     /// Increase logging verbosity (can be repeated)
     #[arg(short, long, action = clap::ArgAction::Count)]
     log_level: u8,
-    
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -173,9 +126,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Run a UART REPL to read/write registers.
-    UartRepl {
-        which_uart: WhichUart,
-    },
+    UartRepl { which_uart: WhichUart },
     /// Execute a sequence of moves.
     MoveSeq {
         /// The move sequence to execute, e.g. "R U' F2".
@@ -199,7 +150,11 @@ fn main() {
         })
         .init();
 
-    let robot_config = RobotConfig::default();
+    let robot_config = toml::from_str::<RobotConfig>(
+        &std::fs::read_to_string(&cli.robot_config)
+            .expect("Failed to read robot configuration file"),
+    )
+    .expect("Failed to parse robot configuration file");
 
     run_uart_init();
 
@@ -208,14 +163,8 @@ fn main() {
             run_uart_repl(which_uart);
         }
         Commands::MoveSeq { sequence } => {
-            run_move_seq(
-                &robot_config,
-                sequence
-                    .split(' ')
-                    .map(str::trim)
-                    .filter(|v| !v.is_empty()),
-            );
-        },
+            run_move_seq(&robot_config, &sequence);
+        }
         Commands::Motor { motor_index } => {
             run_motor_repl(&robot_config, motor_index);
         }
@@ -282,7 +231,7 @@ fn run_uart_init() {
     }
 }
 
-fn run_move_seq<'a>(robot_config: &RobotConfig, iter: impl Iterator<Item = &'a str>) {
+fn run_move_seq(robot_config: &RobotConfig, sequence: &str) {
     let freq = robot_config.revolutions_per_second * f64::from(FULLSTEPS_PER_REVOLUTION);
     let delay = Duration::from_secs(1).div_f64(2.0 * freq);
     info!(
@@ -295,7 +244,12 @@ fn run_move_seq<'a>(robot_config: &RobotConfig, iter: impl Iterator<Item = &'a s
     let mut dir_pins: [OutputPin; 6] =
         std::array::from_fn(|i| mk_output_pin(robot_config.tmc_2209_configs[i].dir_pin));
 
-    for (motor_index, qturns) in iter.map(|s| parse_move(robot_config, s)) {
+    for (motor_index, qturns) in sequence
+        .split(' ')
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(|s| parse_move(robot_config, s))
+    {
         info!(
             target: "move_seq",
             "Requested moves: motor_index={motor_index} quarter_turns={qturns}",
