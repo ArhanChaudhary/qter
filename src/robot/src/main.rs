@@ -71,7 +71,7 @@ struct Ticker {
 impl Default for RobotConfig {
     fn default() -> Self {
         RobotConfig {
-            revolutions_per_second: 3.0,
+            revolutions_per_second: 0.5,
             tmc_2209_configs: [
                 TMC2209Config {
                     face: Face::R,
@@ -155,40 +155,31 @@ fn main() {
 
     let mut args = env::args();
     let subcommand = args.nth(1);
-    debug!(target: "app", "app=cli: received subcommand={subcommand:?}");
 
     let robot_config = RobotConfig::default();
 
     run_uart_init();
 
     match subcommand.as_deref() {
-        Some("uart-repl") => {
-            info!("app=command: uart - starting UART REPL");
-            run_uart_repl();
-        }
+        Some("uart-repl") => run_uart_repl(),
         Some("move-seq") => match args.next() {
             Some(seq) => {
-                info!(target: "app", "app=command: move-seq sequence=\"{seq}\"");
                 run_move_seq(
                     &robot_config,
                     seq.split(' ').map(str::trim).filter(|v| !v.is_empty()),
                 );
             }
             None => {
-                error!("app=command move-seq: missing sequence argument");
+                eprintln!("Missing move-seq argument");
             }
         },
         Some("motor") => {
-            info!("app=command: motor - starting motor REPL");
             let motor_index = read_num("Enter the motor index: ") as usize;
             run_motor_repl(&robot_config, motor_index);
         }
-        other => {
-            error!(target: "app", "app=cli: unknown or missing subcommand: {other:?}");
-        }
+        other => eprintln!("Unknown or missing subcommand: {other:?}"),
     }
-
-    info!(target: "app", "app=cli: exiting");
+    eprintln!("Exiting");
 }
 
 fn run_uart_repl() {
@@ -201,8 +192,7 @@ fn run_uart_repl() {
         }
     };
 
-    info!(target: "uart_repl", "opened {which_uart:?}");
-    info!(target: "uart_repl", "register_info: GCONF(reg=0,n=10,RW), GSTAT(reg=1,n=3,R+WC), IFCNT(reg=2,n=8,R)");
+    eprintln!("register_info: GCONF(reg=0,n=10,RW), GSTAT(reg=1,n=3,R+WC), IFCNT(reg=2,n=8,R)");
 
     let mut uart = uart::mk_uart(which_uart);
 
@@ -212,36 +202,22 @@ fn run_uart_repl() {
         let maybe_val = maybe_read_num("Value? (leave blank to read) ");
 
         if let Some(val) = maybe_val {
-            info!(
-                target: "uart_repl",
-                "action=write node={node_address} register_address={register_address} value=0x{val:08x}",
-            );
             uart::write(&mut uart, node_address, register_address, val);
-            info!(
-                target: "uart_repl",
-                "action=write_complete node={node_address} register_address={register_address}",
-            );
+            eprintln!("Successfully wrote to UART");
         } else {
-            info!(
-                target: "uart_repl",
-                "action=read node={node_address} register_address={register_address}",
-            );
             let val = uart::read(&mut uart, node_address, register_address);
 
             match register_address {
-                0 => info!(
-                    target: "uart_repl",
-                    "read_result node={node_address} register_address=0(GCONF) value={:?}",
+                0 => eprintln!(
+                    "Read: node_address={node_address} register_address=0(GCONF) val={:?}",
                     uart::GConf::from_bits_retain(val)
                 ),
-                1 => info!(
-                    target: "uart_repl",
-                    "read_result node={node_address} register_address=1(GSTAT) value={:?}",
+                1 => eprintln!(
+                    "Read: node_address={node_address} register_address=1(GSTAT) val={:?}",
                     uart::GStat::from_bits_retain(val)
                 ),
-                _ => info!(
-                    target: "uart_repl",
-                    "read_result node={node_address} register_address={register_address} raw=0x{val:08x}",
+                _ => eprintln!(
+                    "Read: node_address={node_address} register_address={register_address} raw=0x{val:08x}",
                 ),
             }
         }
@@ -249,91 +225,82 @@ fn run_uart_repl() {
 }
 
 fn run_uart_init() {
-    info!(target: "uart_init", "starting UART initialization for all UARTs");
     for which_uart in [WhichUart::Uart0, WhichUart::Uart2] {
-        info!(target: "uart_init", "initializing {which_uart:?}");
         let mut uart = uart::mk_uart(which_uart);
 
         for node_address in 0..3 {
-            info!(target: "uart_init", "node={node_address} reading initial GCONF");
+            info!(target: "uart_init", "node_address={node_address} reading initial GCONF");
             let initial_gconf = GConf::from_bits_retain(uart::read(&mut uart, node_address, 0x0));
             let new_gconf = (initial_gconf | GConf::MSTEP_REG_SELECT | GConf::PDN_DISABLE).bits();
             info!(
                 target: "uart_init",
-                "node={node_address} writing GCONF new_bits=0x{new_gconf:08x}",
+                "node_address={node_address} writing GCONF new_bits=0x{new_gconf:08x}",
             );
             uart::write(&mut uart, node_address, 0x0, new_gconf);
 
             info!(target: "uart_init", "node={node_address} reading initial CHOPCONF");
             let initial_chopconf = uart::read(&mut uart, node_address, 0x6C);
-            let updated_chopconf = initial_chopconf & !(15 << 24) | (8 << 24);
+            let new_chopconf = initial_chopconf & !(0b1111 << 24) | (0b1000 << 24);
             info!(
                 target: "uart_init",
-                "node={node_address} writing CHOPCONF new_value=0x{updated_chopconf:08x}",
+                "node_address={node_address} writing CHOPCONF new_value=0x{new_chopconf:08x}",
             );
-            uart::write(&mut uart, node_address, 0x6C, updated_chopconf);
+            uart::write(&mut uart, node_address, 0x6C, new_chopconf);
         }
     }
-    info!(target: "uart_init", "completed UART initialization");
 }
 
 fn run_move_seq<'a>(robot_config: &RobotConfig, iter: impl Iterator<Item = &'a str>) {
-    info!(target: "move_seq", "starting move sequence");
     let freq = robot_config.revolutions_per_second * f64::from(FULLSTEPS_PER_REVOLUTION);
     let delay = Duration::from_secs(1).div_f64(2.0 * freq);
-    debug!(
+    info!(
         target: "move_seq",
-        "computed base_freq={freq} rev/s delay_per_half_period={delay:?}",
+        "Configuration: freq={freq}rev/s delay={delay:?}",
     );
 
-    let mut steps: [OutputPin; 6] =
+    let mut step_pins: [OutputPin; 6] =
         std::array::from_fn(|i| mk_output_pin(robot_config.tmc_2209_configs[i].step_pin));
-    let mut dirs: [OutputPin; 6] =
+    let mut dir_pins: [OutputPin; 6] =
         std::array::from_fn(|i| mk_output_pin(robot_config.tmc_2209_configs[i].dir_pin));
 
     for (motor_index, qturns) in iter.map(|s| parse_move(robot_config, s)) {
         info!(
             target: "move_seq",
-            "requested move motor_index={motor_index} quarter_turns={qturns}",
+            "Requested moves: motor_index={motor_index} quarter_turns={qturns}",
         );
 
-        let dir: &mut OutputPin = &mut dirs[motor_index];
-        let step: &mut OutputPin = &mut steps[motor_index];
+        let dir_pin = &mut dir_pins[motor_index];
+        let step_pin = &mut step_pins[motor_index];
 
-        let level = if qturns < 0 { Level::Low } else { Level::High };
-        dir.write(level);
+        let dir_level = if qturns < 0 { Level::Low } else { Level::High };
+        dir_pin.write(dir_level);
         debug!(
             target: "move_seq",
-            "motor_index={motor_index} set dir level={level:?}",
+            "Set dir level: motor_index={motor_index} dir_level={dir_level}"
         );
 
         let step_count = qturns.unsigned_abs() * FULLSTEPS_PER_REVOLUTION / 4;
-        info!(
-            target: "move_seq",
-            "motor_index={motor_index} executing {step_count} steps",
-        );
-
         let mut ticker = Ticker::new();
         for i in 0..step_count {
             if (i % 10) == 0 {
                 debug!(
                     target: "move_seq",
-                    "motor_index={motor_index} progress step {i}/{step_count}",
+                    "Executing {step_count} steps: motor_index={motor_index} 0/{step_count}"
                 );
             }
-            step.set_high();
+            step_pin.set_high();
             ticker.wait(delay);
-            step.set_low();
+            step_pin.set_low();
             ticker.wait(delay);
         }
 
         info!(
             target: "move_seq",
-            "motor_index={motor_index} move complete total_steps={step_count}",
+            "Completed {step_count} steps: motor_index={motor_index}"
         );
     }
 
-    info!(target: "move_seq", "completed move sequence");
+    eprintln!("Successfully completed move sequence");
 }
 
 fn run_motor_repl(config: &RobotConfig, motor_index: usize) {
@@ -383,34 +350,20 @@ fn run_motor_repl(config: &RobotConfig, motor_index: usize) {
             };
         };
 
-        info!(
-            target: "motor_repl",
-            "starting square wave motor_index={motor_index} frequency_hz={freq:.3}",
-        );
         run_square_wave(
             &mut step_pin,
             freq,
             Duration::from_secs(4),
-            steps_per_revolution,
-        );
-        info!(
-            target: "motor_repl",
-            "finished square wave motor_index={motor_index} frequency_hz={freq:.3}",
         );
     }
 }
 
-fn run_square_wave(step: &mut OutputPin, freq: f64, mut dur: Duration, steps_per_revolution: f64) {
+fn run_square_wave(step: &mut OutputPin, freq: f64, mut dur: Duration) {
     let delay = Duration::from_secs(1).div_f64(2.0 * freq);
 
     info!(
         target: "square_wave",
-        "start: freq_hz={freq:.3} half_period={delay:?} duration={dur:?} steps_per_revolution={steps_per_revolution}",
-    );
-    debug!(
-        target: "square_wave",
-        "derived revs_per_sec={:.6}",
-        freq / steps_per_revolution
+        "Configuration: freq={freq}rev/s delay={delay:?}",
     );
 
     let mut ticker = Ticker::new();
@@ -430,7 +383,7 @@ fn mk_output_pin(gpio: u8) -> OutputPin {
     debug!(target: "gpio", "attempting to configure GPIO pin {gpio}");
     let mut pin = Gpio::new().unwrap().get(gpio).unwrap().into_output_low();
     pin.set_reset_on_drop(false);
-    info!(target: "gpio", "configured GPIO pin {gpio} as output (initial low)");
+    debug!(target: "gpio", "configured GPIO pin {gpio} as output (initial low)");
     pin
 }
 
