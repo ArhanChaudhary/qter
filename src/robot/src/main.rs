@@ -3,12 +3,14 @@
 mod uart;
 
 use crate::uart::GConf;
-use log::{debug, error, info, warn};
+use clap::{Parser, Subcommand, ValueEnum};
+use log::{debug, info, warn};
 use rppal::gpio::{Gpio, Level, OutputPin};
+use serde::{Deserialize, Serialize};
 use std::{
-    env,
     fmt::Display,
     io::stdin,
+    path::PathBuf,
     str::FromStr,
     thread,
     time::{Duration, Instant},
@@ -16,7 +18,7 @@ use std::{
 
 const FULLSTEPS_PER_REVOLUTION: u32 = 200;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Serialize, Deserialize)]
 enum Face {
     R,
     L,
@@ -26,7 +28,24 @@ enum Face {
     B,
 }
 
+impl FromStr for Face {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "R" => Ok(Face::R),
+            "L" => Ok(Face::L),
+            "U" => Ok(Face::U),
+            "D" => Ok(Face::D),
+            "F" => Ok(Face::F),
+            "B" => Ok(Face::B),
+            _ => Err(()),
+        }
+    }
+}
+
 /// Configuration for a single TMC2209-controlled motor.
+#[derive(Deserialize, Serialize)]
 struct TMC2209Config {
     face: Face,
     step_pin: u8,
@@ -50,14 +69,16 @@ enum Microsteps {
 }
 
 /// Global robot configuration.
+#[derive(Deserialize, Serialize)]
 struct RobotConfig {
     tmc_2209_configs: [TMC2209Config; 6],
     revolutions_per_second: f64,
     // microsteps: Microsteps,
+    // enable_pin: u8,
 }
 
 /// Which UART port to use (BCM numbering context).
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, ValueEnum)]
 enum WhichUart {
     Uart0, // TX: 14, RX: 15 (BCM)
     Uart2, // TX: 0, RX: 1 (BCM)
@@ -134,64 +155,75 @@ impl Ticker {
     }
 }
 
-impl FromStr for Face {
-    type Err = ();
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+struct Cli {
+    /// The robot configuration file to use, in TOML format.
+    #[arg(short, long, value_name = "ROBOT_CONFIG")]
+    robot_config: Option<PathBuf>,
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "R" => Ok(Face::R),
-            "L" => Ok(Face::L),
-            "U" => Ok(Face::U),
-            "D" => Ok(Face::D),
-            "F" => Ok(Face::F),
-            "B" => Ok(Face::B),
-            _ => Err(()),
-        }
-    }
+    /// Increase logging verbosity (can be repeated)
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    log_level: u8,
+    
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Run a UART REPL to read/write registers.
+    UartRepl {
+        which_uart: WhichUart,
+    },
+    /// Execute a sequence of moves.
+    MoveSeq {
+        /// The move sequence to execute, e.g. "R U' F2".
+        sequence: String,
+    },
+    /// Run a motor REPL to control a single motor.
+    Motor {
+        /// The motor index to control (0-5).
+        motor_index: usize,
+    },
 }
 
 fn main() {
-    env_logger::init();
+    let cli = Cli::parse();
 
-    let mut args = env::args();
-    let subcommand = args.nth(1);
+    env_logger::Builder::new()
+        .filter_level(match cli.log_level {
+            0 => log::LevelFilter::Warn,
+            1 => log::LevelFilter::Info,
+            _ => log::LevelFilter::Debug,
+        })
+        .init();
 
     let robot_config = RobotConfig::default();
 
     run_uart_init();
 
-    match subcommand.as_deref() {
-        Some("uart-repl") => run_uart_repl(),
-        Some("move-seq") => match args.next() {
-            Some(seq) => {
-                run_move_seq(
-                    &robot_config,
-                    seq.split(' ').map(str::trim).filter(|v| !v.is_empty()),
-                );
-            }
-            None => {
-                eprintln!("Missing move-seq argument");
-            }
+    match cli.command {
+        Commands::UartRepl { which_uart } => {
+            run_uart_repl(which_uart);
+        }
+        Commands::MoveSeq { sequence } => {
+            run_move_seq(
+                &robot_config,
+                sequence
+                    .split(' ')
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty()),
+            );
         },
-        Some("motor") => {
-            let motor_index = read_num("Enter the motor index: ") as usize;
+        Commands::Motor { motor_index } => {
             run_motor_repl(&robot_config, motor_index);
         }
-        other => eprintln!("Unknown or missing subcommand: {other:?}"),
     }
     eprintln!("Exiting");
 }
 
-fn run_uart_repl() {
-    let which_uart = match read_num("Which UART? (0 or 2) ") {
-        0 => WhichUart::Uart0,
-        2 => WhichUart::Uart2,
-        n => {
-            error!(target: "uart_repl", "invalid UART selection: {n} (expected 0 or 2)");
-            return;
-        }
-    };
-
+fn run_uart_repl(which_uart: WhichUart) {
     eprintln!("register_info: GCONF(reg=0,n=10,RW), GSTAT(reg=1,n=3,R+WC), IFCNT(reg=2,n=8,R)");
 
     let mut uart = uart::mk_uart(which_uart);
@@ -203,7 +235,7 @@ fn run_uart_repl() {
 
         if let Some(val) = maybe_val {
             uart::write(&mut uart, node_address, register_address, val);
-            eprintln!("Successfully wrote to UART");
+            eprintln!("Wrote to UART");
         } else {
             let val = uart::read(&mut uart, node_address, register_address);
 
@@ -229,21 +261,21 @@ fn run_uart_init() {
         let mut uart = uart::mk_uart(which_uart);
 
         for node_address in 0..3 {
-            info!(target: "uart_init", "node_address={node_address} reading initial GCONF");
+            info!(target: "uart_init", "Reading initial GCONF: node_address={node_address}");
             let initial_gconf = GConf::from_bits_retain(uart::read(&mut uart, node_address, 0x0));
             let new_gconf = (initial_gconf | GConf::MSTEP_REG_SELECT | GConf::PDN_DISABLE).bits();
             info!(
                 target: "uart_init",
-                "node_address={node_address} writing GCONF new_bits=0x{new_gconf:08x}",
+                "Writing GCONF: node_address={node_address} new_value=0x{new_gconf:08x}",
             );
             uart::write(&mut uart, node_address, 0x0, new_gconf);
 
-            info!(target: "uart_init", "node={node_address} reading initial CHOPCONF");
+            info!(target: "uart_init", "reading initial CHOPCONF: node_address={node_address}");
             let initial_chopconf = uart::read(&mut uart, node_address, 0x6C);
             let new_chopconf = initial_chopconf & !(0b1111 << 24) | (0b1000 << 24);
             info!(
                 target: "uart_init",
-                "node_address={node_address} writing CHOPCONF new_value=0x{new_chopconf:08x}",
+                "Writing CHOPCONF: node_address={node_address} new_value=0x{new_chopconf:08x}",
             );
             uart::write(&mut uart, node_address, 0x6C, new_chopconf);
         }
@@ -285,7 +317,7 @@ fn run_move_seq<'a>(robot_config: &RobotConfig, iter: impl Iterator<Item = &'a s
             if (i % 10) == 0 {
                 debug!(
                     target: "move_seq",
-                    "Executing {step_count} steps: motor_index={motor_index} 0/{step_count}"
+                    "Executing {step_count} steps: motor_index={motor_index} {i}/{step_count}"
                 );
             }
             step_pin.set_high();
@@ -296,11 +328,11 @@ fn run_move_seq<'a>(robot_config: &RobotConfig, iter: impl Iterator<Item = &'a s
 
         info!(
             target: "move_seq",
-            "Completed {step_count} steps: motor_index={motor_index}"
+            "Completed {step_count} steps: motor_index={motor_index} {step_count}/{step_count}"
         );
     }
 
-    eprintln!("Successfully completed move sequence");
+    eprintln!("Completed move sequence");
 }
 
 fn run_motor_repl(config: &RobotConfig, motor_index: usize) {
@@ -350,11 +382,7 @@ fn run_motor_repl(config: &RobotConfig, motor_index: usize) {
             };
         };
 
-        run_square_wave(
-            &mut step_pin,
-            freq,
-            Duration::from_secs(4),
-        );
+        run_square_wave(&mut step_pin, freq, Duration::from_secs(4));
     }
 }
 
@@ -376,7 +404,7 @@ fn run_square_wave(step: &mut OutputPin, freq: f64, mut dur: Duration) {
         dur = dur.saturating_sub(delay * 2);
     }
 
-    info!(target: "square_wave", "completed run freq_hz={freq:.3}");
+    info!(target: "square_wave", "Completed square wave");
 }
 
 fn mk_output_pin(gpio: u8) -> OutputPin {
