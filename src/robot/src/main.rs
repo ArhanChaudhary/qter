@@ -18,7 +18,7 @@ use std::{
 
 const FULLSTEPS_PER_REVOLUTION: u32 = 200;
 
-#[derive(Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 enum Face {
     R,
     L,
@@ -210,19 +210,19 @@ fn run_uart_init() {
         let mut uart = uart::mk_uart(which_uart);
 
         for node_address in 0..3 {
-            info!(target: "uart_init", "Reading initial GCONF: node_address={node_address}");
+            debug!(target: "uart_init", "Reading initial GCONF: node_address={node_address}");
             let initial_gconf = GConf::from_bits_retain(uart::read(&mut uart, node_address, 0x0));
             let new_gconf = (initial_gconf | GConf::MSTEP_REG_SELECT | GConf::PDN_DISABLE).bits();
-            info!(
+            debug!(
                 target: "uart_init",
                 "Writing GCONF: node_address={node_address} new_value=0x{new_gconf:08x}",
             );
             uart::write(&mut uart, node_address, 0x0, new_gconf);
 
-            info!(target: "uart_init", "reading initial CHOPCONF: node_address={node_address}");
+            debug!(target: "uart_init", "Reading initial CHOPCONF: node_address={node_address}");
             let initial_chopconf = uart::read(&mut uart, node_address, 0x6C);
             let new_chopconf = initial_chopconf & !(0b1111 << 24) | (0b1000 << 24);
-            info!(
+            debug!(
                 target: "uart_init",
                 "Writing CHOPCONF: node_address={node_address} new_value=0x{new_chopconf:08x}",
             );
@@ -252,7 +252,8 @@ fn run_move_seq(robot_config: &RobotConfig, sequence: &str) {
     {
         info!(
             target: "move_seq",
-            "Requested moves: motor_index={motor_index} quarter_turns={qturns}",
+            "Requested move {:?}: motor_index={motor_index} quarter_turns={qturns}",
+            robot_config.tmc_2209_configs[motor_index].face
         );
 
         let dir_pin = &mut dir_pins[motor_index];
@@ -282,7 +283,7 @@ fn run_move_seq(robot_config: &RobotConfig, sequence: &str) {
 
         info!(
             target: "move_seq",
-            "Completed {step_count} steps: motor_index={motor_index} {step_count}/{step_count}"
+            "Completed {step_count} steps"
         );
     }
 

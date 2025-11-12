@@ -39,7 +39,7 @@ const UART_READ_BUFFER_SIZE_BYTES: u8 = 8;
 /// See page 18 & 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 const UART_SYNC_BYTE: u8 = 0b_1010_0000u8.reverse_bits();
 /// The UART read access reply master address.
-/// 
+///
 /// See page 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 const UART_READ_REPLY_MASTER_ADDRESS: u8 = 0xFF;
 /// The bit mask of the read/write bit in the UART register address for all UART
@@ -96,7 +96,8 @@ pub fn mk_uart(which_uart: WhichUart) -> Uart {
     // TODO: we want reads and writes to be non-blocking.
     uart.set_read_mode(UART_READ_BUFFER_SIZE_BYTES, Duration::ZERO)
         .expect("Failed to set UART read mode");
-    uart.set_write_mode(true).expect("Failed to set UART write mode");
+    uart.set_write_mode(true)
+        .expect("Failed to set UART write mode");
 
     debug!(target: "uart", "Initialized {which_uart:?}");
 
@@ -118,7 +119,11 @@ pub fn mk_uart(which_uart: WhichUart) -> Uart {
 /// See page 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 fn mk_read_packet(node_address: u8, register_address: u8) -> [u8; 4] {
     assert!(node_address < 4, "Node address must be in 0-3");
-    assert_eq!(register_address & REGISTER_MSB, 0, "Register address MSB must be 0");
+    assert_eq!(
+        register_address & REGISTER_MSB,
+        0,
+        "Register address MSB must be 0"
+    );
 
     let mut read_packet = [UART_SYNC_BYTE, node_address, register_address, 0];
     read_packet[3] = calc_crc(&read_packet);
@@ -152,7 +157,11 @@ fn mk_read_packet(node_address: u8, register_address: u8) -> [u8; 4] {
 /// See page 18 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 fn mk_write_packet(node_address: u8, register_address: u8, val: u32) -> [u8; 8] {
     assert!(node_address < 4, "Node address must be in 0-3");
-    assert_eq!(register_address & REGISTER_MSB, 0, "Register address MSB must be 0");
+    assert_eq!(
+        register_address & REGISTER_MSB,
+        0,
+        "Register address MSB must be 0"
+    );
 
     let val_bytes = val.to_be_bytes();
     let mut write_packet = [
@@ -206,13 +215,24 @@ pub fn read(uart: &mut Uart, node_address: u8, register_address: u8) -> u32 {
     // C = CRC
     let reply_master_address = read_reply_packet[1];
     let reply_register_address = read_reply_packet[2];
+    assert_eq!(
+        reply_register_address & REGISTER_MSB,
+        0,
+        "UART read reply register address MSB must be 0"
+    );
     let data = u32::from_be_bytes(read_reply_packet[3..7].try_into().unwrap());
     let crc = read_reply_packet[7];
 
     let expected_crc = calc_crc(&read_reply_packet);
     assert_eq!(crc, expected_crc, "UART CRC mismatch");
-    assert_eq!(reply_master_address, UART_READ_REPLY_MASTER_ADDRESS, "UART read reply master address mismatch");
-    assert_eq!(reply_register_address, register_address, "UART read reply register address mismatch");
+    assert_eq!(
+        reply_master_address, UART_READ_REPLY_MASTER_ADDRESS,
+        "UART read reply master address mismatch"
+    );
+    assert_eq!(
+        reply_register_address, register_address,
+        "UART read reply register address mismatch"
+    );
     debug!(
         target: "uart",
         "Received reply packet"
@@ -249,13 +269,13 @@ fn send_packet<const N: usize>(uart: &mut Uart, packet: [u8; N]) {
     let written = uart.write(&packet).unwrap();
     assert_eq!(written, N, "UART write packet size mismatch");
     debug!(target: "transmission", "Sent packet");
-    
+
     let mut sendback_packet = [0; N];
     debug!(target: "transmission", "Receiving sendback packet");
     let written = uart.read(&mut sendback_packet).unwrap();
     assert_eq!(written, N, "UART sendback packet size mismatch");
     debug!(target: "transmission", "Received sendback packet");
-    
+
     assert_eq!(packet, sendback_packet, "UART sendback packet mismatch");
     debug!(target: "transmission", "Verified sendback packet");
 }
