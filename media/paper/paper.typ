@@ -18,7 +18,6 @@
 
 #set par(justify: true)
 #set heading(numbering: "1.1.1.a)")
-#set page(numbering: "1")
 
 #let cube(faces, offset: (0, 0), scale-amt: 1, distance: 5, back: false, name: "") = {
     import cetz.draw: *
