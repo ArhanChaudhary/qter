@@ -150,8 +150,7 @@ struct Cli {
     #[arg(
         long,
         short = 'c',
-        default_value = "robot_conifg.toml",
-        value_name = "ROBOT_CONFIG"
+        default_value = "robot_config.toml",
     )]
     robot_config: PathBuf,
 
@@ -217,11 +216,11 @@ fn main() {
         }
         Commands::UartInit => {}
     }
-    eprintln!("Exiting");
+    println!("Exiting");
 }
 
 fn run_uart_repl(which_uart: WhichUart) {
-    eprintln!("register_info: GCONF(reg=0,n=10,RW), GSTAT(reg=1,n=3,R+WC), IFCNT(reg=2,n=8,R)");
+    println!("register_info: GCONF(reg=0,n=10,RW), GSTAT(reg=1,n=3,R+WC), IFCNT(reg=2,n=8,R)");
 
     let mut uart = uart::mk_uart(which_uart);
 
@@ -234,21 +233,21 @@ fn run_uart_repl(which_uart: WhichUart) {
 
         if let Some(val) = maybe_val {
             uart::write(&mut uart, node_address, register_address, val);
-            eprintln!("Wrote to UART");
+            println!("Wrote to UART");
             continue;
         }
 
         let val = uart::read(&mut uart, node_address, register_address);
         match register_address {
-            0 => eprintln!(
+            0 => println!(
                 "Read: node_address={node_address} register_address=0(GCONF) val={:?}",
                 regs::GCONF::from_bits_retain(val)
             ),
-            1 => eprintln!(
+            1 => println!(
                 "Read: node_address={node_address} register_address=1(GSTAT) val={:?}",
                 regs::GSTAT::from_bits_retain(val)
             ),
-            _ => eprintln!(
+            _ => println!(
                 "Read: node_address={node_address} register_address={register_address} raw=0x{val:08x}",
             ),
         }
@@ -459,20 +458,20 @@ fn run_move_seq(robot_config: &RobotConfig, sequence: &str) {
         );
     }
 
-    eprintln!("Completed move sequence");
+    println!("Completed move sequence");
 }
 
 fn run_motor_repl(config: &RobotConfig, motor_index: usize) {
     let mut step_pin = mk_output_pin(config.tmc_2209_configs[motor_index].step_pin);
     let steps_per_revolution = f64::from(FULLSTEPS_PER_REVOLUTION);
 
-    eprintln!("1 rev = {steps_per_revolution} steps");
-    eprintln!("1 rev/s = {steps_per_revolution} Hz");
-    eprintln!(
+    println!("1 rev = {steps_per_revolution} steps");
+    println!("1 rev/s = {steps_per_revolution} Hz");
+    println!(
         "1 ns = {:.2} rev/s (inverse relationship)",
         1_000_000_000.0 / steps_per_revolution
     );
-    eprintln!(
+    println!(
         "1 us = {:.2} rev/s (inverse relationship)",
         1_000_000.0 / steps_per_revolution
     );
@@ -480,7 +479,7 @@ fn run_motor_repl(config: &RobotConfig, motor_index: usize) {
         let mut line = String::new();
         let freq = loop {
             line.clear();
-            eprintln!("Enter frequency with units: ");
+            println!("Enter frequency with units: ");
             stdin().read_line(&mut line).unwrap();
             line.make_ascii_lowercase();
 
@@ -527,8 +526,12 @@ fn run_motor_repl(config: &RobotConfig, motor_index: usize) {
             dur = dur.saturating_sub(delay * 2);
         }
 
-        eprintln!("Completed");
+        println!("Completed");
     }
+}
+
+fn estop(robot_config: &RobotConfig) {
+    
 }
 
 fn mk_output_pin(gpio: u8) -> OutputPin {
@@ -544,7 +547,7 @@ fn read_num(prompt: impl Display) -> u32 {
         if let Some(val) = maybe_read_num(&prompt) {
             return val;
         }
-        eprintln!("Try again");
+        println!("Try again");
     }
 }
 
@@ -552,14 +555,14 @@ fn maybe_read_num(prompt: impl Display) -> Option<u32> {
     let mut line = String::new();
     loop {
         line.clear();
-        eprintln!("{prompt}");
+        println!("{prompt}");
         stdin().read_line(&mut line).unwrap();
         if line.trim().is_empty() {
             break None;
         } else if let Ok(v) = line.trim().parse::<u32>() {
             break Some(v);
         }
-        eprintln!("Try again");
+        println!("Try again");
     }
 }
 
