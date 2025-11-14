@@ -48,15 +48,19 @@ const UART_READ_REPLY_MASTER_ADDRESS: u8 = 0xFF;
 /// See page 18 & 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 const REGISTER_MSB: u8 = 1 << 7;
 /// The GCONF register address on the TMC2209.
-/// 
+///
 /// See page 23 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 pub const GCONF_REGISTER_ADDRESS: u8 = 0x00;
+/// The IFCNT register address on the TMC2209.
+///
+/// See page 24 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
+pub const IFCNT_REGISTER_ADDRESS: u8 = 0x02;
 /// The NODECONF register address on the TMC2209.
-/// 
+///
 /// See page 24 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 pub const NODECONF_REGISTER_ADDRESS: u8 = 0x03;
 /// The CHOPCONF register address on the TMC2209.
-/// 
+///
 /// See page 33 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 pub const CHOPCONF_REGISTER_ADDRESS: u8 = 0x6C;
 
@@ -92,8 +96,6 @@ bitflags! {
     }
 }
 
-// read IFCNT from 0x2, n = 8
-
 bitflags! {
     #[derive(Debug, PartialEq, Clone, Copy)]
     /// The NODECONF register bitflags on the TMC2209. UART is only permutted
@@ -107,7 +109,7 @@ bitflags! {
         const SENDDELAY2 = 1 << 2;
         /// SENDDELAY bit 3.
         const SENDDELAY3 = 1 << 3;
-        
+
         // Only the first four bits are used.
         const _ = (1 << 4) - 1;
     }
@@ -128,7 +130,7 @@ bitflags! {
         const MRES2 = 1 << 26;
         /// Microstep resolution bit 3.
         const MRES3 = 1 << 27;
-        
+
         /// ALl 32 bits are used.
         const _ = !0;
     }
@@ -154,7 +156,7 @@ pub fn mk_uart(which_uart: WhichUart) -> Uart {
         UART_STOP_BITS,
     )
     .expect("Failed to initialize UART");
-    
+
     // For now we use blocking reads and writes.
     uart.set_read_mode(UART_READ_BUFFER_SIZE_BYTES, Duration::ZERO)
         .expect("Failed to set UART read mode");
@@ -250,14 +252,14 @@ fn mk_write_packet(node_address: u8, register_address: u8, val: u32) -> [u8; 8] 
 /// Read a register address via UART for a given node address. First waits for
 /// `UART_DELAY`.
 pub fn read(uart: &mut Uart, node_address: u8, register_address: u8) -> u32 {
-    debug!(target: "uart", "Reading register");
+    debug!(target: "uart", "Beginning reading register");
     let read_packet = mk_read_packet(node_address, register_address);
-    debug!(target: "uart", "Sleeping before send");
+    debug!(target: "uart", "Sleeping before sending read packet");
     thread::sleep(UART_DELAY);
     send_packet(uart, read_packet);
 
     let mut read_reply_packet = [0; 8];
-    debug!(target: "uart", "Sleeping before recv");
+    debug!(target: "uart", "Sleeping before receiving read reply packet");
     thread::sleep(UART_DELAY);
     recv_packet(uart, &mut read_reply_packet);
     // The 64-bit UART read access reply packet is specified as follows:
@@ -310,11 +312,29 @@ pub fn read(uart: &mut Uart, node_address: u8, register_address: u8) -> u32 {
 /// Write to a register address through UART given a TMC2209 node address. First
 /// waits for `UART_DELAY`.
 pub fn write(uart: &mut Uart, node_address: u8, register_address: u8, val: u32) {
-    debug!(target: "uart", "Writing to register");
+    debug!(target: "uart", "Beginning writing to register");
+
+    let old_ifcnt_val: u8 = read(uart, node_address, IFCNT_REGISTER_ADDRESS)
+        .try_into()
+        .unwrap();
+    debug!(target: "uart", "IFCNT: old_value={old_ifcnt_val}");
+
     let write_packet = mk_write_packet(node_address, register_address, val);
-    debug!(target: "uart", "Sleeping before send");
+    debug!(target: "uart", "Sleeping before sending write packet");
     thread::sleep(UART_DELAY);
     send_packet(uart, write_packet);
+
+    let new_ifcnt_val: u8 = read(uart, node_address, IFCNT_REGISTER_ADDRESS)
+        .try_into()
+        .unwrap();
+    debug!(target: "uart", "IFCNT: new_value={new_ifcnt_val}");
+
+    assert_eq!(
+        old_ifcnt_val.wrapping_add(1),
+        new_ifcnt_val,
+        "IFCNT did not increment after write"
+    );
+    debug!(target: "uart", "Wrote to register");
 }
 
 /// Receive a packet via UART into the provided buffer.

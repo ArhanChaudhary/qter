@@ -340,7 +340,7 @@ fn uart_init(robot_config: &RobotConfig) {
                 nodeconf.bits(),
             );
 
-            debug!(target: "uart_init", "Initialed: uart={uart:?} node_address={node_address}");
+            debug!(target: "uart_init", "Initialized: which_uart={which_uart:?} node_address={node_address}");
         }
     }
 }
