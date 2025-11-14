@@ -1,8 +1,8 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::too_many_lines)]
 
-mod uart;
 mod regs;
+mod uart;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use env_logger::TimestampPrecision;
@@ -28,10 +28,6 @@ struct TMC2209Config {
     face: Face,
     step_pin: u8,
     dir_pin: u8,
-    #[allow(unused)]
-    diag_pin: u8,
-    #[allow(unused)]
-    en_pin: u8,
 }
 
 #[derive(Clone, Copy, Deserialize, Serialize)]
@@ -269,9 +265,12 @@ fn uart_init(robot_config: &RobotConfig) {
             // Configure GCONF
             //
             debug!(target: "uart_init", "Reading initial GCONF: node_address={node_address}");
-            let initial_gconf =
-                regs::GCONF::from_bits(uart::read(&mut uart, node_address, regs::GCONF_REGISTER_ADDRESS))
-                    .expect("GCONF has unknown bits set");
+            let initial_gconf = regs::GCONF::from_bits(uart::read(
+                &mut uart,
+                node_address,
+                regs::GCONF_REGISTER_ADDRESS,
+            ))
+            .expect("GCONF has unknown bits set");
             debug!(target: "uart_init", "Read initial GCONF: node_address={node_address} initial_value={initial_gconf:?}");
             let new_gconf = initial_gconf
                 .union(regs::GCONF::MSTEP_REG_SELECT)

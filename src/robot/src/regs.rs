@@ -14,7 +14,7 @@ pub const IFCNT_REGISTER_ADDRESS: u8 = 0x02;
 pub const NODECONF_REGISTER_ADDRESS: u8 = 0x03;
 #[allow(clippy::doc_markdown)]
 /// The IHOLD_IRUN register address on the TMC2209.
-/// 
+///
 /// See page 28 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 pub const IHOLD_IRUN_REGISTER_ADDRESS: u8 = 0x10;
 /// The CHOPCONF register address on the TMC2209.
@@ -111,7 +111,7 @@ bitflags! {
         const FREEWHEEL0 = 1 << 20;
         /// Freewheel mode bit 1.
         const FREEWHEEL1 = 1 << 21;
-        
+
         /// ALl 32 bits are used.
         const _ = !0;
     }
@@ -120,7 +120,7 @@ bitflags! {
 bitflags! {
     /// The IHOLD_IRUN register bitflags on the TMC2209. UART is only permutted
     /// to write to this register, so all reads will return 0.
-    /// 
+    ///
     /// See page 35 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
     #[derive(Debug, PartialEq, Clone, Copy)]
     #[allow(non_camel_case_types)]
@@ -153,7 +153,7 @@ bitflags! {
         const IHOLDDELAY2 = 1 << 18;
         /// IHOLDDELAY bit 3.
         const IHOLDDELAY3 = 1 << 19;
-        
+
         /// Only the first 20 bits are used.
         const _ = 0b1111_0001_1111_0001_1111;
     }

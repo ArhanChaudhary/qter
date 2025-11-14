@@ -5,40 +5,28 @@ microsteps = "Fullstep"
 face = "R"
 step_pin = 13
 dir_pin = 19
-diag_pin = 0
-en_pin = 0
 
 [[tmc_2209_configs]]
 face = "L"
 step_pin = 20
 dir_pin = 21
-diag_pin = 0
-en_pin = 0
 
 [[tmc_2209_configs]]
 face = "U"
 step_pin = 17
 dir_pin = 27
-diag_pin = 0
-en_pin = 0
 
 [[tmc_2209_configs]]
 face = "D"
 step_pin = 5
 dir_pin = 6
-diag_pin = 0
-en_pin = 0
 
 [[tmc_2209_configs]]
 face = "F"
 step_pin = 16
 dir_pin = 26
-diag_pin = 0
-en_pin = 0
 
 [[tmc_2209_configs]]
 face = "B"
 step_pin = 2
 dir_pin = 3
-diag_pin = 0
-en_pin = 0
