@@ -1,12 +1,13 @@
 #![warn(clippy::pedantic)]
+#![allow(clippy::too_many_lines)]
 
 mod uart;
 
 use crate::uart::{
-    CHOPCONF, CHOPCONF_REGISTER_ADDRESS, GCONF, GCONF_REGISTER_ADDRESS, NODECONF,
-    NODECONF_REGISTER_ADDRESS,
+    CHOPCONF, CHOPCONF_REGISTER_ADDRESS, GCONF, GCONF_REGISTER_ADDRESS, IHOLD_IRUN, IHOLD_IRUN_REGISTER_ADDRESS, NODECONF, NODECONF_REGISTER_ADDRESS, PWMCONF, PWMCONF_REGISTER_ADDRESS
 };
 use clap::{Parser, Subcommand, ValueEnum};
+use env_logger::TimestampPrecision;
 use log::{LevelFilter, debug, info, warn};
 use rppal::gpio::{Gpio, Level, OutputPin};
 use serde::{Deserialize, Serialize};
@@ -197,6 +198,7 @@ fn main() {
             2 => LevelFilter::Debug,
             _ => LevelFilter::Trace,
         })
+        .format_timestamp(Some(TimestampPrecision::Millis))
         .init();
 
     let robot_config = toml::from_str::<RobotConfig>(
@@ -301,23 +303,23 @@ fn uart_init(robot_config: &RobotConfig) {
             .expect("CHOPCONF has unknown bits set");
             debug!(target: "uart_init", "Read initial CHOPCONF: node_address={node_address} initial_value={initial_chopconf:?}");
             let [mres0, mres1, mres2, mres3] = robot_config.microsteps.mres_bits();
-            let mut new_chopconf = initial_chopconf;
-            new_chopconf.set(CHOPCONF::MRES0, mres0);
-            new_chopconf.set(CHOPCONF::MRES1, mres1);
-            new_chopconf.set(CHOPCONF::MRES2, mres2);
-            new_chopconf.set(CHOPCONF::MRES3, mres3);
-            if new_chopconf == initial_chopconf {
+            let mut new_pwmconf = initial_chopconf;
+            new_pwmconf.set(CHOPCONF::MRES0, mres0);
+            new_pwmconf.set(CHOPCONF::MRES1, mres1);
+            new_pwmconf.set(CHOPCONF::MRES2, mres2);
+            new_pwmconf.set(CHOPCONF::MRES3, mres3);
+            if new_pwmconf == initial_chopconf {
                 debug!(target: "uart_init", "CHOPCONF already configured");
             } else {
                 debug!(
                     target: "uart_init",
-                    "Writing CHOPCONF: node_address={node_address} new_value={new_chopconf:?}",
+                    "Writing CHOPCONF: node_address={node_address} new_value={new_pwmconf:?}",
                 );
                 uart::write(
                     &mut uart,
                     node_address,
                     CHOPCONF_REGISTER_ADDRESS,
-                    new_chopconf.bits(),
+                    new_pwmconf.bits(),
                 );
             }
 
@@ -338,6 +340,59 @@ fn uart_init(robot_config: &RobotConfig) {
                 node_address,
                 NODECONF_REGISTER_ADDRESS,
                 nodeconf.bits(),
+            );
+
+            //
+            // Configure PWMCONF.
+            //
+            debug!(target: "uart_init", "Reading initial PWMCONF: node_address={node_address}");
+            let initial_pwmconf = PWMCONF::from_bits(uart::read(
+                &mut uart,
+                node_address,
+                PWMCONF_REGISTER_ADDRESS,
+            ))
+            .expect("PWMCONF has unknown bits set");
+            debug!(target: "uart_init", "Read initial PWMCONF: node_address={node_address} initial_value={initial_pwmconf:?}");
+            let new_pwmconf = initial_pwmconf
+                // Freewheel mode
+                .union(PWMCONF::FREEWHEEL0)
+                .difference(PWMCONF::FREEWHEEL1);
+            if new_pwmconf == initial_pwmconf {
+                debug!(target: "uart_init", "PWMCONF already configured");
+            } else {
+                debug!(
+                    target: "uart_init",
+                    "Writing PWMCONF: node_address={node_address} new_value={new_pwmconf:?}",
+                );
+                uart::write(
+                    &mut uart,
+                    node_address,
+                    PWMCONF_REGISTER_ADDRESS,
+                    new_pwmconf.bits(),
+                );
+            }
+            
+            //
+            // Configure IHOLD_IRUN. Note that IHOLD_IRUN is write-only.
+            //
+            let ihold_irun = IHOLD_IRUN::empty()
+                // Set IRUN to 31
+                .union(IHOLD_IRUN::IRUN0)
+                .union(IHOLD_IRUN::IRUN1)
+                .union(IHOLD_IRUN::IRUN2)
+                .union(IHOLD_IRUN::IRUN3)
+                .union(IHOLD_IRUN::IRUN4)
+                // Set IHOLDDELAY to 0
+                .union(IHOLD_IRUN::IHOLDDELAY0);
+            debug!(
+                target: "uart_init",
+                "Writing IHOLD_IRUN: node_address={node_address} value={ihold_irun:?}",
+            );
+            uart::write(
+                &mut uart,
+                node_address,
+                IHOLD_IRUN_REGISTER_ADDRESS,
+                ihold_irun.bits(),
             );
 
             debug!(target: "uart_init", "Initialized: which_uart={which_uart:?} node_address={node_address}");
@@ -386,7 +441,7 @@ fn run_move_seq(robot_config: &RobotConfig, sequence: &str) {
             qturns.unsigned_abs() * robot_config.microsteps.value() * FULLSTEPS_PER_QUARTER;
         let mut ticker = Ticker::new();
         for i in 0..step_count {
-            if (i % (10 * robot_config.microsteps.value())) == 0 {
+            if (i % (10 * qturns.unsigned_abs() * robot_config.microsteps.value())) == 0 {
                 debug!(
                     target: "move_seq",
                     "Executing {step_count} steps: motor_index={motor_index} {i}/{step_count}"
