@@ -47,24 +47,45 @@ const UART_READ_REPLY_MASTER_ADDRESS: u8 = 0xFF;
 ///
 /// See page 18 & 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 const REGISTER_MSB: u8 = 1 << 7;
+/// The GCONF register address on the TMC2209.
+/// 
+/// See page 23 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
+pub const GCONF_REGISTER_ADDRESS: u8 = 0x00;
+/// The NODECONF register address on the TMC2209.
+/// 
+/// See page 24 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
+pub const NODECONF_REGISTER_ADDRESS: u8 = 0x03;
+/// The CHOPCONF register address on the TMC2209.
+/// 
+/// See page 33 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
+pub const CHOPCONF_REGISTER_ADDRESS: u8 = 0x6C;
 
-// 0x0, n = 10, RW
 bitflags! {
-    #[derive(Debug)]
-    pub struct GConf: u32 {
+    /// The GCONF register bitflags on the TMC2209. UART is permitted to read
+    /// and write to this register.
+    ///
+    /// See page 23 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    pub struct GCONF: u32 {
+        /// Inverse the motor direction.
         const SHAFT = 1 << 3;
+        // INDEX pin outputs overtemperature prewarning flag (otpw)
         const INDEX_OTPW = 1 << 4;
+        // PDN_UART input function disabled; set to use UART
         const PDN_DISABLE = 1 << 6;
+        // Microstep resolution selected by MRES register
         const MSTEP_REG_SELECT = 1 << 7;
 
+        /// Only the first ten bits are used.
         const _ = (1 << 10) - 1;
     }
 }
 
+// I can't see us needing this in the near future...
 // 0x1, n = 3, R+WC
 bitflags! {
     #[derive(Debug)]
-    pub struct GStat: u32 {
+    pub struct GSTAT: u32 {
         const RESET = 1 << 0;
         const DRV_ERR = 1 << 1;
         const UV_CP = 1 << 2;
@@ -72,6 +93,46 @@ bitflags! {
 }
 
 // read IFCNT from 0x2, n = 8
+
+bitflags! {
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    /// The NODECONF register bitflags on the TMC2209. UART is only permutted
+    /// to write to this register, so all reads will return 0.
+    pub struct NODECONF: u32 {
+        /// SENDDELAY bit 0.
+        const SENDDELAY0 = 1;
+        /// SENDDELAY bit 1.
+        const SENDDELAY1 = 1 << 1;
+        /// SENDDELAY bit 2.
+        const SENDDELAY2 = 1 << 2;
+        /// SENDDELAY bit 3.
+        const SENDDELAY3 = 1 << 3;
+        
+        // Only the first four bits are used.
+        const _ = (1 << 4) - 1;
+    }
+}
+
+bitflags! {
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    /// The CHOPCONF register bitflags on the TMC2209. UART is permitted to read
+    /// and write to this register.
+    ///
+    /// See page 33 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
+    pub struct CHOPCONF: u32 {
+        /// Microstep resolution bit 0.
+        const MRES0 = 1 << 24;
+        /// Microstep resolution bit 1.
+        const MRES1 = 1 << 25;
+        /// Microstep resolution bit 2.
+        const MRES2 = 1 << 26;
+        /// Microstep resolution bit 3.
+        const MRES3 = 1 << 27;
+        
+        /// ALl 32 bits are used.
+        const _ = !0;
+    }
+}
 
 /// Create a new `Uart`.
 pub fn mk_uart(which_uart: WhichUart) -> Uart {
@@ -93,7 +154,8 @@ pub fn mk_uart(which_uart: WhichUart) -> Uart {
         UART_STOP_BITS,
     )
     .expect("Failed to initialize UART");
-    // TODO: we want reads and writes to be non-blocking.
+    
+    // For now we use blocking reads and writes.
     uart.set_read_mode(UART_READ_BUFFER_SIZE_BYTES, Duration::ZERO)
         .expect("Failed to set UART read mode");
     uart.set_write_mode(true)
@@ -118,7 +180,7 @@ pub fn mk_uart(which_uart: WhichUart) -> Uart {
 ///
 /// See page 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 fn mk_read_packet(node_address: u8, register_address: u8) -> [u8; 4] {
-    assert!(node_address < 4, "Node address must be in 0-3");
+    assert!(node_address < 4, "Node address must be in 0-4");
     assert_eq!(
         register_address & REGISTER_MSB,
         0,
@@ -149,14 +211,14 @@ fn mk_read_packet(node_address: u8, register_address: u8) -> [u8; 4] {
 /// CCCCCCCC
 ///
 /// `-` = unused (0)
-/// A = TMC2209 node address (0-3)
+/// A = TMC2209 node address (0-4)
 /// R = register address (0-127)
 /// D = data bytes
 /// C = CRC
 ///
 /// See page 18 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 fn mk_write_packet(node_address: u8, register_address: u8, val: u32) -> [u8; 8] {
-    assert!(node_address < 4, "Node address must be in 0-3");
+    assert!(node_address < 4, "Node address must be in 0-4");
     assert_eq!(
         register_address & REGISTER_MSB,
         0,

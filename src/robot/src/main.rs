@@ -2,9 +2,12 @@
 
 mod uart;
 
-use crate::uart::GConf;
+use crate::uart::{
+    CHOPCONF, CHOPCONF_REGISTER_ADDRESS, GCONF, GCONF_REGISTER_ADDRESS, NODECONF,
+    NODECONF_REGISTER_ADDRESS,
+};
 use clap::{Parser, Subcommand, ValueEnum};
-use log::{debug, info, warn};
+use log::{LevelFilter, debug, info, warn};
 use rppal::gpio::{Gpio, Level, OutputPin};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -17,6 +20,53 @@ use std::{
 };
 
 const FULLSTEPS_PER_REVOLUTION: u32 = 200;
+const NODES_PER_UART: u8 = 3;
+
+/// Configuration for a single TMC2209-controlled motor.
+#[derive(Deserialize, Serialize)]
+struct TMC2209Config {
+    face: Face,
+    step_pin: u8,
+    dir_pin: u8,
+    #[allow(unused)]
+    diag_pin: u8,
+    #[allow(unused)]
+    en_pin: u8,
+}
+
+#[derive(Clone, Copy, Deserialize, Serialize)]
+enum Microsteps {
+    Fullstep = 8,
+    Two = 7,
+    Four = 6,
+    Eight = 5,
+    Sixteen = 4,
+    ThirtyTwo = 3,
+    SixtyFour = 2,
+    OneTwentyEight = 1,
+    TwoFiftySix = 0,
+}
+
+/// Global robot configuration.
+#[derive(Deserialize, Serialize)]
+struct RobotConfig {
+    tmc_2209_configs: [TMC2209Config; 6],
+    revolutions_per_second: f64,
+    microsteps: Microsteps,
+    // enable_pin: u8,
+}
+
+/// Which UART port to use (BCM numbering context).
+#[derive(Debug, Copy, Clone, ValueEnum)]
+enum WhichUart {
+    Uart0, // TX: 14, RX: 15 (BCM)
+    Uart2, // TX: 0, RX: 1 (BCM)
+}
+
+/// Helper for accurate sleep intervals.
+struct Ticker {
+    now: Instant,
+}
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 enum Face {
@@ -26,6 +76,20 @@ enum Face {
     D,
     F,
     B,
+}
+
+impl Ticker {
+    fn new() -> Self {
+        Self {
+            now: Instant::now(),
+        }
+    }
+
+    fn wait(&mut self, delay: Duration) {
+        // Advance the expected next time and sleep until that instant.
+        self.now += delay;
+        thread::sleep(self.now.saturating_duration_since(Instant::now()));
+    }
 }
 
 impl FromStr for Face {
@@ -44,73 +108,14 @@ impl FromStr for Face {
     }
 }
 
-/// Configuration for a single TMC2209-controlled motor.
-#[derive(Deserialize, Serialize)]
-struct TMC2209Config {
-    face: Face,
-    step_pin: u8,
-    dir_pin: u8,
-    #[allow(unused)]
-    diag_pin: u8,
-    #[allow(unused)]
-    en_pin: u8,
-}
-
-enum Microsteps {
-    FullStep = 1,
-    Two = 2,
-    Four = 4,
-    Eight = 8,
-    Sixteen = 16,
-    ThirtyTwo = 32,
-    SixtyFour = 64,
-    OneTwentyEight = 128,
-    TwoFiftySix = 256,
-}
-
-/// Global robot configuration.
-#[derive(Deserialize, Serialize)]
-struct RobotConfig {
-    tmc_2209_configs: [TMC2209Config; 6],
-    revolutions_per_second: f64,
-    // microsteps: Microsteps,
-    // enable_pin: u8,
-}
-
-/// Which UART port to use (BCM numbering context).
-#[derive(Debug, Copy, Clone, ValueEnum)]
-enum WhichUart {
-    Uart0, // TX: 14, RX: 15 (BCM)
-    Uart2, // TX: 0, RX: 1 (BCM)
-}
-
-/// Helper for accurate sleep intervals.
-struct Ticker {
-    now: Instant,
-}
-
-impl Ticker {
-    fn new() -> Self {
-        Self {
-            now: Instant::now(),
-        }
-    }
-
-    fn wait(&mut self, delay: Duration) {
-        // Advance the expected next time and sleep until that instant.
-        self.now += delay;
-        thread::sleep(self.now.saturating_duration_since(Instant::now()));
-    }
-}
-
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
     /// The robot configuration file to use, in TOML format.
     #[arg(
-        short,
         long,
-        default_missing_value = "robot_conifg.toml",
+        short = 'c',
+        default_value = "robot_conifg.toml",
         value_name = "ROBOT_CONFIG"
     )]
     robot_config: PathBuf,
@@ -126,7 +131,10 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Run a UART REPL to read/write registers.
-    UartRepl { which_uart: WhichUart },
+    UartRepl {
+        /// Choose Uart0 or Uart2
+        which_uart: WhichUart,
+    },
     /// Execute a sequence of moves.
     MoveSeq {
         /// The move sequence to execute, e.g. "R U' F2".
@@ -144,9 +152,9 @@ fn main() {
 
     env_logger::Builder::new()
         .filter_level(match cli.log_level {
-            0 => log::LevelFilter::Warn,
-            1 => log::LevelFilter::Info,
-            _ => log::LevelFilter::Debug,
+            0 => LevelFilter::Warn,
+            1 => LevelFilter::Info,
+            _ => LevelFilter::Debug,
         })
         .init();
 
@@ -156,7 +164,7 @@ fn main() {
     )
     .expect("Failed to parse robot configuration file");
 
-    run_uart_init();
+    uart_init(&robot_config);
 
     match cli.command {
         Commands::UartRepl { which_uart } => {
@@ -178,7 +186,9 @@ fn run_uart_repl(which_uart: WhichUart) {
     let mut uart = uart::mk_uart(which_uart);
 
     loop {
-        let node_address = read_num("Node address? (0-3) ").try_into().unwrap();
+        let node_address = read_num(format!("Node address? (0-{NODES_PER_UART}) "))
+            .try_into()
+            .unwrap();
         let register_address = read_num("Register address? (0-127) ").try_into().unwrap();
         let maybe_val = maybe_read_num("Value? (leave blank to read) ");
 
@@ -191,11 +201,11 @@ fn run_uart_repl(which_uart: WhichUart) {
             match register_address {
                 0 => eprintln!(
                     "Read: node_address={node_address} register_address=0(GCONF) val={:?}",
-                    uart::GConf::from_bits_retain(val)
+                    uart::GCONF::from_bits_retain(val)
                 ),
                 1 => eprintln!(
                     "Read: node_address={node_address} register_address=1(GSTAT) val={:?}",
-                    uart::GStat::from_bits_retain(val)
+                    uart::GSTAT::from_bits_retain(val)
                 ),
                 _ => eprintln!(
                     "Read: node_address={node_address} register_address={register_address} raw=0x{val:08x}",
@@ -205,28 +215,91 @@ fn run_uart_repl(which_uart: WhichUart) {
     }
 }
 
-fn run_uart_init() {
+fn uart_init(robot_config: &RobotConfig) {
     for which_uart in [WhichUart::Uart0, WhichUart::Uart2] {
         let mut uart = uart::mk_uart(which_uart);
+        for node_address in 0..NODES_PER_UART {
+            debug!(target: "uart_init", "Initializing: uart={uart:?} node_address={node_address}");
 
-        for node_address in 0..3 {
+            //
+            // Configure GCONF
+            //
             debug!(target: "uart_init", "Reading initial GCONF: node_address={node_address}");
-            let initial_gconf = GConf::from_bits_retain(uart::read(&mut uart, node_address, 0x0));
-            let new_gconf = (initial_gconf | GConf::MSTEP_REG_SELECT | GConf::PDN_DISABLE).bits();
-            debug!(
-                target: "uart_init",
-                "Writing GCONF: node_address={node_address} new_value=0x{new_gconf:08x}",
-            );
-            uart::write(&mut uart, node_address, 0x0, new_gconf);
+            let initial_gconf =
+                GCONF::from_bits(uart::read(&mut uart, node_address, GCONF_REGISTER_ADDRESS))
+                    .expect("GCONF has unknown bits set");
+            debug!(target: "uart_init", "Read initial GCONF: node_address={node_address} initial_value={initial_gconf:?}");
+            let new_gconf = initial_gconf
+                .union(GCONF::MSTEP_REG_SELECT)
+                .union(GCONF::PDN_DISABLE)
+                .union(GCONF::INDEX_OTPW);
+            if initial_gconf == new_gconf {
+                debug!(target: "uart_init", "GCONF already configured");
+            } else {
+                debug!(
+                    target: "uart_init",
+                    "Writing GCONF: node_address={node_address} new_value={new_gconf:?}",
+                );
+                uart::write(
+                    &mut uart,
+                    node_address,
+                    GCONF_REGISTER_ADDRESS,
+                    new_gconf.bits(),
+                );
+            }
 
+            //
+            // Configure CHOPCONF
+            //
             debug!(target: "uart_init", "Reading initial CHOPCONF: node_address={node_address}");
-            let initial_chopconf = uart::read(&mut uart, node_address, 0x6C);
-            let new_chopconf = initial_chopconf & !(0b1111 << 24) | (0b1000 << 24);
+            let initial_chopconf = CHOPCONF::from_bits(uart::read(
+                &mut uart,
+                node_address,
+                CHOPCONF_REGISTER_ADDRESS,
+            ))
+            .expect("CHOPCONF has unknown bits set");
+            debug!(target: "uart_init", "Read initial CHOPCONF: node_address={node_address} initial_value={initial_chopconf:?}");
+            let mut new_chopconf = initial_chopconf;
+            let microsteps_bits = robot_config.microsteps as u8;
+            new_chopconf.set(CHOPCONF::MRES0, microsteps_bits & 1 != 0);
+            new_chopconf.set(CHOPCONF::MRES1, microsteps_bits & (1 << 1) != 0);
+            new_chopconf.set(CHOPCONF::MRES2, microsteps_bits & (1 << 2) != 0);
+            new_chopconf.set(CHOPCONF::MRES3, microsteps_bits & (1 << 3) != 0);
+            if new_chopconf == initial_chopconf {
+                debug!(target: "uart_init", "CHOPCONF already configured");
+            } else {
+                debug!(
+                    target: "uart_init",
+                    "Writing CHOPCONF: node_address={node_address} new_value={new_chopconf:?}",
+                );
+                uart::write(
+                    &mut uart,
+                    node_address,
+                    CHOPCONF_REGISTER_ADDRESS,
+                    new_chopconf.bits(),
+                );
+            }
+
+            //
+            // Configure NODECONF. Note that NODECONF is write-only.
+            //
+            let nodeconf = NODECONF::empty()
+                // Set SENDDELAY to 2. SENDDELAY must be at least 2 in a multi-node system.
+                //
+                // See page 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
+                .union(NODECONF::SENDDELAY1);
             debug!(
                 target: "uart_init",
-                "Writing CHOPCONF: node_address={node_address} new_value=0x{new_chopconf:08x}",
+                "Writing CHOPCONF: node_address={node_address} value={nodeconf:?}",
             );
-            uart::write(&mut uart, node_address, 0x6C, new_chopconf);
+            uart::write(
+                &mut uart,
+                node_address,
+                CHOPCONF_REGISTER_ADDRESS,
+                nodeconf.bits(),
+            );
+
+            debug!(target: "uart_init", "Initializing: uart={uart:?} node_address={node_address}");
         }
     }
 }
