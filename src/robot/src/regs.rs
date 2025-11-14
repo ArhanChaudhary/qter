@@ -21,6 +21,11 @@ pub const IHOLD_IRUN_REGISTER_ADDRESS: u8 = 0x10;
 ///
 /// See page 33 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 pub const CHOPCONF_REGISTER_ADDRESS: u8 = 0x6C;
+#[allow(clippy::doc_markdown)]
+/// The DRV_STATUS register address on the TMC2209.
+///
+/// See page 37 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
+pub const DRV_STATUS_REGISTER_ADDRESS: u8 = 0x6F;
 /// The PWMCONF register address on the TMC2209.
 ///
 /// See page 35 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
@@ -61,9 +66,9 @@ bitflags! {
 }
 
 bitflags! {
-    #[derive(Debug, PartialEq, Clone, Copy)]
     /// The NODECONF register bitflags on the TMC2209. UART is only permutted
     /// to write to this register, so all reads will return 0.
+    #[derive(Debug, PartialEq, Clone, Copy)]
     pub struct NODECONF: u32 {
         /// SENDDELAY bit 0.
         const SENDDELAY0 = 1;
@@ -80,11 +85,11 @@ bitflags! {
 }
 
 bitflags! {
-    #[derive(Debug, PartialEq, Clone, Copy)]
     /// The CHOPCONF register bitflags on the TMC2209. UART is permitted to read
     /// and write to this register.
     ///
     /// See page 33 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
+    #[derive(Debug, PartialEq, Clone, Copy)]
     pub struct CHOPCONF: u32 {
         /// Microstep resolution bit 0.
         const MRES0 = 1 << 24;
@@ -101,11 +106,11 @@ bitflags! {
 }
 
 bitflags! {
-    #[derive(Debug, PartialEq, Clone, Copy)]
     /// The PWMCONF register bitflags on the TMC2209. UART is permitted to read
     /// and write to this register.
     ///
     /// See page 35 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
+    #[derive(Debug, PartialEq, Clone, Copy)]
     pub struct PWMCONF: u32 {
         /// Freewheel mode bit 0.
         const FREEWHEEL0 = 1 << 20;
@@ -156,5 +161,50 @@ bitflags! {
 
         /// Only the first 20 bits are used.
         const _ = 0b1111_0001_1111_0001_1111;
+    }
+}
+
+bitflags! {
+    /// The DRV_STATUS register bitflags on the TMC2209. UART is only permutted
+    /// to read from this register.
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    #[allow(non_camel_case_types)]
+    pub struct DRV_STATUS: u32 {
+        /// Overtemperature pre-warning flag
+        const OTPW = 1 << 0;
+        /// Overtemperature flag.
+        const OT = 1 << 1;
+        /// Short-to-ground on phase A.
+        const S2GA = 1 << 2;
+        /// Short-to-ground on phase B.
+        const S2GB = 1 << 3;
+        /// Low-side short on phase A.
+        const S2VSA = 1 << 4;
+        /// Low-side short on phase B.
+        const S2VSB = 1 << 5;
+        /// Open-load detected on phase A.
+        const OLA = 1 << 6;
+        /// Open-load detected on phase B.
+        const OLB = 1 << 7;
+        /// 120°C temperature threshold exceeded.
+        const T120 = 1 << 8;
+        /// 143°C temperature threshold exceeded.
+        const T143 = 1 << 9;
+        /// 150°C temperature threshold exceeded.
+        const T150 = 1 << 10;
+        /// 157°C temperature threshold exceeded.
+        const T157 = 1 << 11;
+        /// Bit 0 of the actual motor current.
+        const CS_ACTUAL0 = 1 << 16;
+        /// Bit 1 of the actual motor current.
+        const CS_ACTUAL1 = 1 << 17;
+        /// Bit 2 of the actual motor current.
+        const CS_ACTUAL2 = 1 << 18;
+        /// Bit 3 of the actual motor current.
+        const CS_ACTUAL3 = 1 << 19;
+        /// Bit 4 of the actual motor current.
+        const CS_ACTUAL4 = 1 << 20;
+        // All 32 bits are used.
+        const _ = !0;
     }
 }
