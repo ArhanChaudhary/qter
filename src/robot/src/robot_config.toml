@@ -1,5 +1,5 @@
 revolutions_per_second = 0.5
-microsteps = "Two"
+microsteps = "Fullstep"
 
 [[tmc_2209_configs]]
 face = "R"

@@ -20,6 +20,7 @@ use std::{
 };
 
 const FULLSTEPS_PER_REVOLUTION: u32 = 200;
+const FULLSTEPS_PER_QUARTER: u32 = FULLSTEPS_PER_REVOLUTION / 4;
 const NODES_PER_UART: u8 = 3;
 
 /// Configuration for a single TMC2209-controlled motor.
@@ -108,6 +109,45 @@ impl FromStr for Face {
     }
 }
 
+impl Microsteps {
+    fn mres_bits(self) -> [bool; 4] {
+        // 0000 256
+        // 0001 128
+        // 0010 64
+        // 0011 32
+        // 0100 16
+        // 0101 8
+        // 0110 4
+        // 0111 2
+        // 1000 1
+        match self {
+            Microsteps::Fullstep => [false, false, false, true],
+            Microsteps::Two => [true, true, true, false],
+            Microsteps::Four => [false, true, true, false],
+            Microsteps::Eight => [true, false, true, false],
+            Microsteps::Sixteen => [false, false, true, false],
+            Microsteps::ThirtyTwo => [true, true, false, false],
+            Microsteps::SixtyFour => [false, true, false, false],
+            Microsteps::OneTwentyEight => [true, false, false, false],
+            Microsteps::TwoFiftySix => [false, false, false, false],
+        }
+    }
+
+    fn value(self) -> u32 {
+        match self {
+            Microsteps::Fullstep => 1,
+            Microsteps::Two => 2,
+            Microsteps::Four => 4,
+            Microsteps::Eight => 8,
+            Microsteps::Sixteen => 16,
+            Microsteps::ThirtyTwo => 32,
+            Microsteps::SixtyFour => 64,
+            Microsteps::OneTwentyEight => 128,
+            Microsteps::TwoFiftySix => 256,
+        }
+    }
+}
+
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
@@ -154,7 +194,8 @@ fn main() {
         .filter_level(match cli.log_level {
             0 => LevelFilter::Warn,
             1 => LevelFilter::Info,
-            _ => LevelFilter::Debug,
+            2 => LevelFilter::Debug,
+            _ => LevelFilter::Trace,
         })
         .init();
 
@@ -195,22 +236,22 @@ fn run_uart_repl(which_uart: WhichUart) {
         if let Some(val) = maybe_val {
             uart::write(&mut uart, node_address, register_address, val);
             eprintln!("Wrote to UART");
-        } else {
-            let val = uart::read(&mut uart, node_address, register_address);
+            continue;
+        }
 
-            match register_address {
-                0 => eprintln!(
-                    "Read: node_address={node_address} register_address=0(GCONF) val={:?}",
-                    uart::GCONF::from_bits_retain(val)
-                ),
-                1 => eprintln!(
-                    "Read: node_address={node_address} register_address=1(GSTAT) val={:?}",
-                    uart::GSTAT::from_bits_retain(val)
-                ),
-                _ => eprintln!(
-                    "Read: node_address={node_address} register_address={register_address} raw=0x{val:08x}",
-                ),
-            }
+        let val = uart::read(&mut uart, node_address, register_address);
+        match register_address {
+            0 => eprintln!(
+                "Read: node_address={node_address} register_address=0(GCONF) val={:?}",
+                uart::GCONF::from_bits_retain(val)
+            ),
+            1 => eprintln!(
+                "Read: node_address={node_address} register_address=1(GSTAT) val={:?}",
+                uart::GSTAT::from_bits_retain(val)
+            ),
+            _ => eprintln!(
+                "Read: node_address={node_address} register_address={register_address} raw=0x{val:08x}",
+            ),
         }
     }
 }
@@ -219,7 +260,7 @@ fn uart_init(robot_config: &RobotConfig) {
     for which_uart in [WhichUart::Uart0, WhichUart::Uart2] {
         let mut uart = uart::mk_uart(which_uart);
         for node_address in 0..NODES_PER_UART {
-            debug!(target: "uart_init", "Initializing: uart={uart:?} node_address={node_address}");
+            debug!(target: "uart_init", "Initializing: which_uart={which_uart:?} node_address={node_address}");
 
             //
             // Configure GCONF
@@ -259,12 +300,12 @@ fn uart_init(robot_config: &RobotConfig) {
             ))
             .expect("CHOPCONF has unknown bits set");
             debug!(target: "uart_init", "Read initial CHOPCONF: node_address={node_address} initial_value={initial_chopconf:?}");
+            let [mres0, mres1, mres2, mres3] = robot_config.microsteps.mres_bits();
             let mut new_chopconf = initial_chopconf;
-            let microsteps_bits = robot_config.microsteps as u8;
-            new_chopconf.set(CHOPCONF::MRES0, microsteps_bits & 1 != 0);
-            new_chopconf.set(CHOPCONF::MRES1, microsteps_bits & (1 << 1) != 0);
-            new_chopconf.set(CHOPCONF::MRES2, microsteps_bits & (1 << 2) != 0);
-            new_chopconf.set(CHOPCONF::MRES3, microsteps_bits & (1 << 3) != 0);
+            new_chopconf.set(CHOPCONF::MRES0, mres0);
+            new_chopconf.set(CHOPCONF::MRES1, mres1);
+            new_chopconf.set(CHOPCONF::MRES2, mres2);
+            new_chopconf.set(CHOPCONF::MRES3, mres3);
             if new_chopconf == initial_chopconf {
                 debug!(target: "uart_init", "CHOPCONF already configured");
             } else {
@@ -290,26 +331,28 @@ fn uart_init(robot_config: &RobotConfig) {
                 .union(NODECONF::SENDDELAY1);
             debug!(
                 target: "uart_init",
-                "Writing CHOPCONF: node_address={node_address} value={nodeconf:?}",
+                "Writing NODECONF: node_address={node_address} value={nodeconf:?}",
             );
             uart::write(
                 &mut uart,
                 node_address,
-                CHOPCONF_REGISTER_ADDRESS,
+                NODECONF_REGISTER_ADDRESS,
                 nodeconf.bits(),
             );
 
-            debug!(target: "uart_init", "Initializing: uart={uart:?} node_address={node_address}");
+            debug!(target: "uart_init", "Initialed: uart={uart:?} node_address={node_address}");
         }
     }
 }
 
 fn run_move_seq(robot_config: &RobotConfig, sequence: &str) {
-    let freq = robot_config.revolutions_per_second * f64::from(FULLSTEPS_PER_REVOLUTION);
+    let freq = robot_config.revolutions_per_second
+        * f64::from(robot_config.microsteps.value())
+        * f64::from(FULLSTEPS_PER_REVOLUTION);
     let delay = Duration::from_secs(1).div_f64(2.0 * freq);
     info!(
         target: "move_seq",
-        "Configuration: freq={freq}rev/s delay={delay:?}",
+        "Configuration: freq={freq} delay={delay:?}",
     );
 
     let mut step_pins: [OutputPin; 6] =
@@ -339,10 +382,11 @@ fn run_move_seq(robot_config: &RobotConfig, sequence: &str) {
             "Set dir level: motor_index={motor_index} dir_level={dir_level}"
         );
 
-        let step_count = qturns.unsigned_abs() * FULLSTEPS_PER_REVOLUTION / 4;
+        let step_count =
+            qturns.unsigned_abs() * robot_config.microsteps.value() * FULLSTEPS_PER_QUARTER;
         let mut ticker = Ticker::new();
         for i in 0..step_count {
-            if (i % 10) == 0 {
+            if (i % (10 * robot_config.microsteps.value())) == 0 {
                 debug!(
                     target: "move_seq",
                     "Executing {step_count} steps: motor_index={motor_index} {i}/{step_count}"
@@ -356,7 +400,7 @@ fn run_move_seq(robot_config: &RobotConfig, sequence: &str) {
 
         info!(
             target: "move_seq",
-            "Completed {step_count} steps"
+            "Completed move {:?}", robot_config.tmc_2209_configs[motor_index].face
         );
     }
 
@@ -408,31 +452,28 @@ fn run_motor_repl(config: &RobotConfig, motor_index: usize) {
                 "us" => 1_000_000.0 / v,
                 _ => unreachable!(),
             };
-        };
+        } * f64::from(config.microsteps.value());
 
-        run_square_wave(&mut step_pin, freq, Duration::from_secs(4));
+        let delay = Duration::from_secs(1).div_f64(2.0 * freq);
+
+        info!(
+            target: "motor_repl",
+            "Configuration: freq={freq} delay={delay:?}",
+        );
+
+        let mut ticker = Ticker::new();
+        let mut dur = Duration::from_secs(4);
+        while !dur.is_zero() {
+            step_pin.set_high();
+            ticker.wait(delay);
+            step_pin.set_low();
+            ticker.wait(delay);
+
+            dur = dur.saturating_sub(delay * 2);
+        }
+
+        eprintln!("Completed");
     }
-}
-
-fn run_square_wave(step: &mut OutputPin, freq: f64, mut dur: Duration) {
-    let delay = Duration::from_secs(1).div_f64(2.0 * freq);
-
-    info!(
-        target: "square_wave",
-        "Configuration: freq={freq}rev/s delay={delay:?}",
-    );
-
-    let mut ticker = Ticker::new();
-    while !dur.is_zero() {
-        step.set_high();
-        ticker.wait(delay);
-        step.set_low();
-        ticker.wait(delay);
-
-        dur = dur.saturating_sub(delay * 2);
-    }
-
-    info!(target: "square_wave", "Completed square wave");
 }
 
 fn mk_output_pin(gpio: u8) -> OutputPin {
