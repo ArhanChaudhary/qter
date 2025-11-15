@@ -32,15 +32,15 @@ struct TMC2209Config {
 
 #[derive(Clone, Copy, Deserialize, Serialize)]
 enum Microsteps {
-    Fullstep = 8,
-    Two = 7,
-    Four = 6,
-    Eight = 5,
-    Sixteen = 4,
-    ThirtyTwo = 3,
-    SixtyFour = 2,
-    OneTwentyEight = 1,
-    TwoFiftySix = 0,
+    Fullstep,
+    Two,
+    Four,
+    Eight,
+    Sixteen,
+    ThirtyTwo,
+    SixtyFour,
+    OneTwentyEight,
+    TwoFiftySix,
 }
 
 /// Global robot configuration.
@@ -147,11 +147,7 @@ impl Microsteps {
 #[command(version, about, long_about = None)]
 struct Cli {
     /// The robot configuration file to use, in TOML format.
-    #[arg(
-        long,
-        short = 'c',
-        default_value = "robot_config.toml",
-    )]
+    #[arg(long, short = 'c', default_value = "robot_config.toml")]
     robot_config: PathBuf,
 
     /// Increase logging verbosity (can be repeated)
@@ -381,7 +377,7 @@ fn uart_init(robot_config: &RobotConfig) {
                 .union(regs::IHOLD_IRUN::IRUN2)
                 .union(regs::IHOLD_IRUN::IRUN3)
                 .union(regs::IHOLD_IRUN::IRUN4)
-                // Set IHOLDDELAY to 0
+                // Set IHOLDDELAY to 1
                 .union(regs::IHOLD_IRUN::IHOLDDELAY0);
             debug!(
                 target: "uart_init",
@@ -530,9 +526,7 @@ fn run_motor_repl(config: &RobotConfig, motor_index: usize) {
     }
 }
 
-fn estop(robot_config: &RobotConfig) {
-    
-}
+fn estop(robot_config: &RobotConfig) {}
 
 fn mk_output_pin(gpio: u8) -> OutputPin {
     debug!(target: "gpio", "attempting to configure GPIO pin {gpio}");

@@ -11,7 +11,7 @@ use std::{thread, time::Duration};
 /// Generally higher is better, so we set it to `460_800` for safety margin.
 ///
 /// See page 6 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf> and
-/// <https://docs.golemparts.com/rppal/0.14.1/src/rppal/uart.rs.html#527>
+/// <https://docs.rs/rppal/0.14.1/src/rppal/uart.rs.html#527>
 const UART_BAUD_RATE: u32 = 460_800;
 /// In a multi-node setup, UART has no parity.
 ///
@@ -227,7 +227,7 @@ pub fn write(uart: &mut Uart, node_address: u8, register_address: u8, val: u32) 
 
     let old_ifcnt_val: u8 = read(uart, node_address, regs::IFCNT_REGISTER_ADDRESS)
         .try_into()
-        .unwrap();
+        .expect("IFCNT somehow does not fit into a u8. Should never happen");
     debug!(target: "uart", "IFCNT: old_value={old_ifcnt_val}");
 
     let write_packet = mk_write_packet(node_address, register_address, val);
@@ -237,7 +237,7 @@ pub fn write(uart: &mut Uart, node_address: u8, register_address: u8, val: u32) 
 
     let new_ifcnt_val: u8 = read(uart, node_address, regs::IFCNT_REGISTER_ADDRESS)
         .try_into()
-        .unwrap();
+        .expect("IFCNT somehow does not fit into a u8. Should never happen");
     debug!(target: "uart", "IFCNT: new_value={new_ifcnt_val}");
 
     assert_eq!(
@@ -276,16 +276,19 @@ fn send_packet<const N: usize>(uart: &mut Uart, packet: [u8; N]) {
 /// Copied and adapted from page 20 of
 /// <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
 fn calc_crc(packet: &[u8]) -> u8 {
-    let mut crc = 0;
-    for mut current_byte in packet.iter().take(packet.len() - 1).copied() {
-        for _ in 0..8 {
-            if (crc >> 7) ^ (current_byte & 0x01) > 0 {
-                crc = (crc << 1) ^ 0x07;
-            } else {
-                crc <<= 1;
+    packet
+        .iter()
+        .take(packet.len() - 1)
+        .copied()
+        .fold(0, |mut crc, mut current_byte| {
+            for _ in 0..8 {
+                if (crc >> 7) ^ (current_byte & 0x01) > 0 {
+                    crc = (crc << 1) ^ 0x07;
+                } else {
+                    crc <<= 1;
+                }
+                current_byte >>= 1;
             }
-            current_byte >>= 1;
-        }
-    }
-    crc
+            crc
+        })
 }
