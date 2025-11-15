@@ -28,6 +28,7 @@
             "rust-src"
             "rust-analyzer"
           ];
+          targets = [ "aarch64-unknown-linux-gnu" ];
         };
 
         libraries = with pkgs; [
