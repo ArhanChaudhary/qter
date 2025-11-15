@@ -6,3 +6,5 @@ profile.json.gz
 *.FCBak
 *.step
 *.STEP
+# rob-twophase tables
+*.tbl

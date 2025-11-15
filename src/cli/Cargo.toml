@@ -16,6 +16,8 @@ internment = { version = "0.8", features = [ "arc" ] }
 ariadne = "0.5.1"
 chumsky = "0.10.1"
 crossbeam-channel = "0.5.15"
+dirs = "6.0.0"
+log = "0.4.28"
 
 [lints]
 workspace = true
