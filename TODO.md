@@ -7,17 +7,29 @@
 
 - crashlog
 
+## CCF
+
+- right now it's not sufficient to assume either 1 or [# of orientations] if the factor to multiply by when a cycle orientations
+  - <https://discord.com/channels/772576325897945119/1326029986578038784/1422286972357050438>
+- think about combining classical DP with knapsack
+  - <https://discord.com/channels/772576325897945119/1326029986578038784/1422435176792985682>
+
 ## CCS
 
-- F B cycle type is NOT checked!!
-- figure out move ordering dependence
-- document solver.rs
-  - update part of paper while at it
-- check for logs in test cases; tracing
+- solver.rs
+  - given A B A B A B A C A B in order to realize that this sequence isn't valid wrt sequence symmetry you would have to look at the first move and "mp plus one" and keep incrementing both numbers as long as the moves are equal
+    - should generalize to A B C A B C A B C D A B C
+  - F B cycle type is NOT checked!!
+  - figure out move ordering dependence
+  - document
+  - check for logs in test cases; tracing
   - hardcode the first solution moves in the test cases to be sure
+- use *mut u8 instead of Box<[u8]> for generic puzzle  
 - dont pack bit vector for AuxMem
 - 😎replace pub(crate) with getters
 - try out a different exact hasher
+  - 3x3 https://github.com/Voltara/vcube/blob/9f5bc2cce18f29437879ace825f22917f6705378/src/cube.h#L240
+  - any puzzle https://github.com/cubing/twsearch/blob/main/src/cpp/index.cpp
 - spam debug_assert!()
 - solve for all cycle structures from CCF at once vs many runs of single cycle structure at a time
 - ⭐pruning table
@@ -27,6 +39,8 @@
     - seed only one value
     - <https://discord.com/channels/772576325897945119/1326029986578038784/1347580846647017482>
   - fix storage backend initialization meta
+  - approximate pruning table
+    - reread this <https://discord.com/channels/@me/1399108854784065677/1431035660839555187> 
   - tANS table compression
   - cycle type pruning table
     - with fewer state spaces, go back to an exact pruning table
@@ -41,8 +55,10 @@
   - ⭐standard symmetry
     - ⭐Doug's canon_into function simplified and explained in #programming
     - ⭐reread kociemba's website and h48.md
+    - densely pack symmcoords
+      - <https://discord.com/channels/1007840975726575667/1407079970039267514/1414811607892230249>
   - ⭐multithreading
-    - heuristically sort based on sqrt(3)/sqrt(2) and canonical seq (h48.md)
+    - For example, for a 48-symmetric state, the search begins with the symmetry marker 48-symmetric. Before taking the first move, we determine which possible moves are possible based on the symmetry state. For this state, the first possible transitions are either U or U2; all other states are reachable through symmetry. Suppose we take U as the first move, resulting in an 8-symmetric state. Then, if we continue with this 8-symmetric state, the possible move are (R, R2, R', D, D2, D'). This approach reduces the search tree size to approximately 1/48th of its original size, and eliminates the need for specialized handling of various cases.
     - microthreading
 - you NEED to account for parity constraints when calculating orbit size; address this in schreier sims
 - ⭐solved state for 4x4
@@ -53,6 +69,7 @@
 - Generate a pruning table starting from the scramble instead of the solved state and then began the search from the solved state
 
 ### Schreier Sims
+
 - ⭐Optimal stabilizer chain
   - Bookmark: https://dl.acm.org/doi/10.1145/281508.281611
 - Allow variations in the number of pieces solved by each link in the chain
@@ -60,6 +77,10 @@
 - Assess feasibility of generalizing Thisthethwaite-like methods to arbitrary puzzles
 - NISS
 - Trembling
+
+## Paper
+
+- talk about multiplication in the paper
 
 ## PuzzleGeometry
 
