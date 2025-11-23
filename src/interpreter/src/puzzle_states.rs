@@ -72,7 +72,7 @@ pub trait PuzzleState {
 }
 
 pub trait RobotLike {
-    /// Initialize the puzzle
+    /// Initialize the puzzle in the solved state
     fn initialize(perm_group: Arc<PermutationGroup>) -> Self;
 
     /// Perform an algorithm on the puzzle

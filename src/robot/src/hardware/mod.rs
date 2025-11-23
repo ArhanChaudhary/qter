@@ -1,7 +1,5 @@
 use std::{
-    str::FromStr,
-    thread,
-    time::{Duration, Instant},
+    path::Path, str::FromStr, thread, time::{Duration, Instant}
 };
 
 use clap::ValueEnum;
@@ -73,6 +71,19 @@ impl RobotConfig {
     pub fn microsteps(&self) -> Microsteps {
         self.microsteps
     }
+}
+
+/// Initialize the robot such that it is ready for use
+pub fn init(config: &Path) -> RobotConfig {
+    let robot_config = toml::from_str::<RobotConfig>(
+        &std::fs::read_to_string(config)
+            .expect("Failed to read robot configuration file"),
+    )
+    .expect("Failed to parse robot configuration file");
+
+    uart_init(&robot_config);
+    
+    robot_config
 }
 
 /// Which UART port to use (BCM numbering context).
@@ -172,7 +183,7 @@ impl Microsteps {
     }
 }
 
-pub fn run_move_seq(robot_config: &RobotConfig, alg: Algorithm) {
+pub fn run_move_seq(robot_config: &RobotConfig, alg: &Algorithm) {
     let freq = robot_config.revolutions_per_second()
         * f64::from(robot_config.microsteps().value())
         * f64::from(FULLSTEPS_PER_REVOLUTION);
