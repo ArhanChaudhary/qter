@@ -22,10 +22,9 @@ use qter_core::{
     ByPuzzleType, File, I, Int,
     table_encoding::{decode_table, encode_table},
 };
-use robot::{Cube3Robot};
+use ::robot::QterRobot;
 
 mod demo;
-mod robot;
 
 /// Compiles and interprets qter programs
 #[derive(Parser)]
@@ -140,7 +139,7 @@ fn main() -> color_eyre::Result<()> {
             };
 
             if robot {
-                let interpreter = Interpreter::<RobotState<Cube3Robot>>::new(Arc::new(program));
+                let interpreter = Interpreter::<RobotState<QterRobot>>::new(Arc::new(program));
                 interpret(interpreter, trace_level)?;
             } else {
                 let interpreter = Interpreter::<SimulatedPuzzle>::new(Arc::new(program));

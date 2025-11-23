@@ -13,8 +13,7 @@ use crossbeam_channel::{Receiver, Sender, unbounded};
 use internment::Intern;
 use interpreter::puzzle_states::{RobotLike, SimulatedPuzzle};
 use qter_core::{Facelets, I, Int, U, architectures::Permutation};
-
-use crate::robot::{Cube3Robot};
+use robot::QterRobot;
 
 use super::interpreter_loop;
 
@@ -117,7 +116,7 @@ impl Plugin for InterpreterPlugin {
             .add_systems(
                 Startup,
                 if self.robot {
-                    setup::<Cube3Robot>
+                    setup::<QterRobot>
                 } else {
                     setup::<SimulatedPuzzle>
                 },

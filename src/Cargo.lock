@@ -1874,6 +1874,7 @@ dependencies = [
  "owo-colors",
  "puzzle_geometry",
  "qter_core",
+ "robot",
 ]
 
 [[package]]
