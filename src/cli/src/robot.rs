@@ -5,18 +5,13 @@ use std::{
     io::{self, BufRead, BufReader, Read, Write},
     path::PathBuf,
     process::{ChildStdin, ChildStdout, Command, Stdio},
-    sync::{Arc, LazyLock, Mutex, OnceLock},
-    thread::available_parallelism,
+    sync::{Arc, LazyLock, OnceLock},
 };
 
 use internment::ArcIntern;
 use interpreter::puzzle_states::RobotLike;
 use itertools::Itertools;
-use owo_colors::OwoColorize;
-use qter_core::{
-    I, Int,
-    architectures::{Algorithm, Permutation, PermutationGroup},
-};
+use qter_core::architectures::{Algorithm, Permutation, PermutationGroup};
 
 const ROB_CORNLETS: [[usize; 3]; 8] = [
     [8, 9, 20],
@@ -72,152 +67,6 @@ const QTER_EDGELETS: [[usize; 2]; 12] = [
 
 static CORNER_MAPPING: OnceLock<HashMap<[char; 3], (usize, [usize; 3])>> = OnceLock::new();
 static EDGE_MAPPING: OnceLock<HashMap<[char; 2], (usize, [usize; 2])>> = OnceLock::new();
-
-static COLOR_MAPPING: LazyLock<HashMap<ArcIntern<str>, char>> = LazyLock::new(|| {
-    let mut v = HashMap::new();
-
-    v.insert(ArcIntern::from("White"), 'U');
-    v.insert(ArcIntern::from("Green"), 'F');
-    v.insert(ArcIntern::from("Yellow"), 'D');
-    v.insert(ArcIntern::from("Red"), 'R');
-    v.insert(ArcIntern::from("Blue"), 'B');
-    v.insert(ArcIntern::from("Orange"), 'L');
-
-    v
-});
-
-fn mk_rob_twophase_input(mut perm: Permutation, cube3: &PermutationGroup) -> String {
-    let color_mapping = &*COLOR_MAPPING;
-
-    // Convert from goes-to (active) to comes-from (passive) notation
-    perm.exponentiate(-Int::<I>::one());
-
-    let mut faces = Vec::new();
-
-    for (chunk, current) in perm
-        .mapping()
-        .chunks_exact(8)
-        .zip(['U', 'L', 'F', 'R', 'B', 'D'])
-    {
-        let mut str = String::new();
-
-        for item in &chunk[0..4] {
-            str.push(*color_mapping.get(&cube3.facelet_colors()[*item]).unwrap());
-        }
-
-        str.push(current);
-
-        for item in &chunk[4..8] {
-            str.push(*color_mapping.get(&cube3.facelet_colors()[*item]).unwrap());
-        }
-
-        faces.push(str);
-    }
-
-    // rob-twophase requires U R F D L B order
-    [
-        &faces[0], &faces[3], &faces[2], &faces[5], &faces[1], &faces[4],
-    ]
-    .into_iter()
-    .join("")
-}
-
-fn solve_rob_twophase(
-    perm: Permutation,
-    cube3: Arc<PermutationGroup>,
-) -> Result<Algorithm, std::io::Error> {
-    static ROB_TWOPHASE: Mutex<Option<(ChildStdin, BufReader<ChildStdout>)>> = Mutex::new(None);
-
-    let mut maybe_rob_twophase = ROB_TWOPHASE.lock().unwrap();
-
-    let (twophase_stdin, twophase_stdout) = if let Some(v) = &mut *maybe_rob_twophase {
-        v
-    } else {
-        // rob-twophase will dump tables in its current directory; lets have it dump them in some cache
-        let mut cache = dirs::cache_dir().unwrap();
-        cache.push("rob-twophase-tables");
-        fs::create_dir_all(&cache)?;
-
-        let child = Command::new("twophase")
-            .current_dir(cache)
-            .args(["-c", "-m", "30", "-t"])
-            .arg(match available_parallelism() {
-                Ok(v) => v.to_string(),
-                Err(e) => {
-                    eprintln!(
-                        "{} {e}",
-                        "Failed to get available parallelism; defaulting to 1:".yellow()
-                    );
-                    (1).to_string()
-                }
-            })
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()?;
-
-        let stdin = child.stdin.unwrap();
-        let stdout = BufReader::new(child.stdout.unwrap());
-
-        maybe_rob_twophase.insert((stdin, stdout))
-    };
-
-    /*
-    Rob Twophase TUI looks like
-
-    ```
-    This is rob-twophase v2.0; copyright Elias Frantar 2020.
-
-    Loading tables ...
-    Done. 0.518s
-
-    Enter >>solve FACECUBE<< to solve, >>scramble<< to scramble or >>bench<< to benchmark.
-
-    Ready!
-    solve LBDLULDDURDRRRFRURBFFRFBFRDLDBDDBDFBBULRLFFBUFLUUBUULL
-    30.177ms
-    R F2 R' U R U2 F2 U2 F' D' R D2 L2 D2 L' U2 F2 (17)
-    Ready!
-    ```
-    */
-
-    // Wait until rob-twophase tells us that its ready
-    loop {
-        let mut string = String::new();
-        twophase_stdout.read_line(&mut string)?;
-
-        if string == "Ready!\n" {
-            break;
-        }
-    }
-
-    writeln!(
-        twophase_stdin,
-        "solve {}",
-        mk_rob_twophase_input(perm, &cube3)
-    )?;
-
-    // Captures `30.177ms`
-    let mut string = String::new();
-    twophase_stdout.read_line(&mut string)?;
-
-    // Captures the alg
-    let mut result = String::new();
-    twophase_stdout.read_line(&mut result)?;
-
-    // Remove parentheses and newline
-    let alg = result.replace(['(', ')', '\n'], "");
-
-    // Split the string and remove the final move count
-    Ok(Algorithm::new_from_move_seq(
-        cube3,
-        alg.split(' ')
-            .filter(|v| v.chars().next().is_some_and(|v| !v.is_ascii_digit()))
-            .map(ArcIntern::from)
-            .collect(),
-    )
-    .unwrap())
-}
 
 pub struct Cube3Robot {
     permutation: OnceCell<Permutation>,
@@ -784,39 +633,9 @@ mod tests {
             <SimulatedPuzzle as RobotLike>::compose_into(&mut expected, &alg);
 
             assert_eq!(
-                mk_rob_twophase_input(alg.permutation().clone(), &perm_group),
-                rob_string
-            );
-
-            assert_eq!(
                 expected.puzzle_state().mapping(),
                 Cube3Robot::puzzle_state_with_rob_string(rob_string).mapping()
             );
-        }
-    }
-
-    #[test]
-    fn rob_twophase_solver() {
-        let perm_group = Arc::clone(&mk_puzzle_definition("3x3").unwrap().perm_group);
-
-        let identity = perm_group.identity();
-
-        for [seq, _] in TESTS {
-            let alg = Algorithm::new_from_move_seq(
-                Arc::clone(&perm_group),
-                seq.split_ascii_whitespace()
-                    .map(ArcIntern::from)
-                    .collect_vec(),
-            )
-            .unwrap();
-
-            let solution =
-                solve_rob_twophase(alg.permutation().clone(), Arc::clone(&perm_group)).unwrap();
-
-            let mut hopefully_identity = alg.permutation().clone();
-            hopefully_identity.compose_into(solution.permutation());
-
-            assert_eq!(hopefully_identity, identity);
         }
     }
 }

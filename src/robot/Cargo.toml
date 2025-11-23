@@ -13,6 +13,9 @@ serde = { version = "1.0.228", features = ["derive"] }
 toml = "0.9.8"
 interpreter = { path = "../interpreter" }
 qter_core = { path = "../qter_core" }
+internment = { version = "0.8", features = [ "arc" ] }
+dirs = "6.0.0"
+itertools = "0.13"
 
 [lints]
 workspace = true
