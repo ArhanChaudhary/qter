@@ -11,10 +11,10 @@ use bevy::{
 };
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use internment::Intern;
-use interpreter::puzzle_states::SimulatedPuzzle;
+use interpreter::puzzle_states::{RobotLike, SimulatedPuzzle};
 use qter_core::{Facelets, I, Int, U, architectures::Permutation};
 
-use crate::robot::{Cube3Robot, RobotLike};
+use crate::robot::{Cube3Robot};
 
 use super::interpreter_loop;
 

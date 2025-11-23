@@ -3,7 +3,7 @@ use std::{sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock}, thread, time::Dura
 use chumsky::Parser;
 use crossbeam_channel::{Receiver, Sender};
 use interpreter::{
-    ActionPerformed, ExecutionState, Interpreter, PausedState, puzzle_states::PuzzleState,
+    ActionPerformed, ExecutionState, Interpreter, PausedState, puzzle_states::{PuzzleState, RobotLike, RobotLikeDyn},
 };
 use qter_core::{
     Facelets, Int, U,
@@ -13,7 +13,6 @@ use qter_core::{
 
 use crate::{
     demo::PROGRAMS,
-    robot::{RobotLike, RobotLikeDyn},
 };
 
 use super::{InterpretationCommand, interpreter_plugin::InterpretationEvent};

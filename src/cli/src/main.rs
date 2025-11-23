@@ -15,14 +15,14 @@ use compiler::compile;
 use internment::ArcIntern;
 use interpreter::{
     ActionPerformed, ExecutionState, InputRet, Interpreter, PausedState,
-    puzzle_states::{PuzzleState, SimulatedPuzzle},
+    puzzle_states::{PuzzleState, SimulatedPuzzle, RobotState},
 };
 use itertools::Itertools;
 use qter_core::{
     ByPuzzleType, File, I, Int,
     table_encoding::{decode_table, encode_table},
 };
-use robot::{Cube3Robot, RobotState};
+use robot::{Cube3Robot};
 
 mod demo;
 mod robot;

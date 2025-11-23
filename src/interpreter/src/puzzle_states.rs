@@ -3,7 +3,7 @@ use std::sync::Arc;
 use qter_core::{
     I, Int, Program, PuzzleIdx, TheoreticalIdx, U,
     architectures::{Algorithm, Permutation, PermutationGroup},
-    discrete_math::decode,
+    discrete_math::{decode, lcm_iter},
 };
 
 /// An instance of a theoretical register. Analagous to the `Puzzle` structure.
@@ -71,6 +71,126 @@ pub trait PuzzleState {
     fn solve(&mut self);
 }
 
+pub trait RobotLike {
+    /// Initialize the puzzle
+    fn initialize(perm_group: Arc<PermutationGroup>) -> Self;
+
+    /// Perform an algorithm on the puzzle
+    fn compose_into(&mut self, alg: &Algorithm);
+
+    /// Return the puzzle state as a permutation
+    fn take_picture(&self) -> &Permutation;
+
+    /// Solve the puzzle
+    fn solve(&mut self);
+}
+
+pub trait RobotLikeDyn {
+    fn compose_into(&mut self, alg: &Algorithm);
+
+    fn take_picture(&self) -> &Permutation;
+
+    fn solve(&mut self);
+}
+
+impl<R: RobotLike> RobotLikeDyn for R {
+    fn compose_into(&mut self, alg: &Algorithm) {
+        <Self as RobotLike>::compose_into(self, alg);
+    }
+
+    fn take_picture(&self) -> &Permutation {
+        <Self as RobotLike>::take_picture(self)
+    }
+
+    fn solve(&mut self) {
+        <Self as RobotLike>::solve(self);
+    }
+}
+
+pub struct RobotState<R: RobotLike> {
+    robot: R,
+    perm_group: Arc<PermutationGroup>,
+}
+
+impl<R: RobotLike> PuzzleState for RobotState<R> {
+    fn compose_into(&mut self, alg: &Algorithm) {
+        self.robot.compose_into(alg);
+    }
+
+    fn initialize(perm_group: Arc<PermutationGroup>) -> Self {
+        RobotState {
+            perm_group: Arc::clone(&perm_group),
+            robot: R::initialize(perm_group),
+        }
+    }
+
+    fn facelets_solved(&self, facelets: &[usize]) -> bool {
+        let state = self.robot.take_picture();
+
+        for &facelet in facelets {
+            let maps_to = state.mapping()[facelet];
+            if self.perm_group.facelet_colors()[maps_to]
+                != self.perm_group.facelet_colors()[facelet]
+            {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    fn print(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<Int<U>> {
+        let before = self.robot.take_picture().to_owned();
+
+        let c = self.halt(facelets, generator)?;
+
+        let mut exponentiated = generator.to_owned();
+        exponentiated.exponentiate(c.into());
+
+        self.compose_into(&exponentiated);
+
+        if &before != self.robot.take_picture() {
+            eprintln!("Printing did not return the cube to the original state!");
+            return None;
+        }
+        Some(c)
+    }
+
+    fn halt(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<Int<U>> {
+        let mut generator = generator.to_owned();
+        generator.exponentiate(-Int::<U>::one());
+
+        let mut sum = Int::<U>::zero();
+
+        let chromatic_orders = generator.chromatic_orders_by_facelets();
+        let order = lcm_iter(facelets.iter().map(|&i| chromatic_orders[i]));
+
+        while !self.facelets_solved(facelets) {
+            sum += Int::<U>::one();
+
+            if sum >= order {
+                eprintln!(
+                    "Decoding failure! Performed as many cycles as the size of the register."
+                );
+                return None;
+            }
+
+            self.compose_into(&generator);
+        }
+
+        Some(sum)
+    }
+
+    fn repeat_until(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<()> {
+        // Halting has the same behavior as repeat_until
+        self.halt(facelets, generator).map(|_| ())
+    }
+
+    fn solve(&mut self) {
+        self.robot.solve();
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct SimulatedPuzzle {
     perm_group: Arc<PermutationGroup>,
@@ -122,8 +242,26 @@ impl PuzzleState for SimulatedPuzzle {
         generator.exponentiate(-Int::<U>::one());
         let v = decode(&self.state, facelets, &generator)?;
         generator.exponentiate(-v);
-        self.compose_into(&generator);
+        <Self as PuzzleState>::compose_into(self, &generator);
         Some(())
+    }
+}
+
+impl RobotLike for SimulatedPuzzle {
+    fn initialize(perm_group: Arc<PermutationGroup>) -> Self {
+        <Self as PuzzleState>::initialize(perm_group)
+    }
+
+    fn compose_into(&mut self, alg: &Algorithm) {
+        <Self as PuzzleState>::compose_into(self, alg);
+    }
+
+    fn take_picture(&self) -> &Permutation {
+        self.puzzle_state()
+    }
+
+    fn solve(&mut self) {
+        <Self as PuzzleState>::solve(self);
     }
 }
 

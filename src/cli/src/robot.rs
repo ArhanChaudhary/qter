@@ -4,21 +4,18 @@ use std::{
     fs::{self, File},
     io::{self, BufRead, BufReader, Read, Write},
     path::PathBuf,
-    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    process::{ChildStdin, ChildStdout, Command, Stdio},
     sync::{Arc, LazyLock, Mutex, OnceLock},
-    thread::{self, available_parallelism},
-    time::Duration,
+    thread::available_parallelism,
 };
 
 use internment::ArcIntern;
-use interpreter::puzzle_states::{PuzzleState, SimulatedPuzzle};
+use interpreter::puzzle_states::RobotLike;
 use itertools::Itertools;
-use log::trace;
 use owo_colors::OwoColorize;
 use qter_core::{
-    I, Int, U,
+    I, Int,
     architectures::{Algorithm, Permutation, PermutationGroup},
-    discrete_math::lcm_iter,
 };
 
 const ROB_CORNLETS: [[usize; 3]; 8] = [
@@ -231,38 +228,6 @@ pub struct Cube3Robot {
     expected_perm: Permutation,
 }
 
-pub trait RobotLike {
-    fn initialize(perm_group: Arc<PermutationGroup>) -> Self;
-
-    fn compose_into(&mut self, alg: &Algorithm);
-
-    fn take_picture(&self) -> &Permutation;
-
-    fn solve(&mut self);
-}
-
-pub trait RobotLikeDyn {
-    fn compose_into(&mut self, alg: &Algorithm);
-
-    fn take_picture(&self) -> &Permutation;
-
-    fn solve(&mut self);
-}
-
-impl<R: RobotLike> RobotLikeDyn for R {
-    fn compose_into(&mut self, alg: &Algorithm) {
-        <Self as RobotLike>::compose_into(self, alg);
-    }
-
-    fn take_picture(&self) -> &Permutation {
-        <Self as RobotLike>::take_picture(self)
-    }
-
-    fn solve(&mut self) {
-        <Self as RobotLike>::solve(self);
-    }
-}
-
 impl RobotLike for Cube3Robot {
     fn initialize(perm_group: Arc<PermutationGroup>) -> Self {
         init_mapping();
@@ -342,110 +307,6 @@ impl RobotLike for Cube3Robot {
             &["[ Enter ] Start the Solve", "Total Time: "],
             "[   C   ] Print Cube State",
         );
-    }
-}
-
-impl RobotLike for SimulatedPuzzle {
-    fn initialize(perm_group: Arc<PermutationGroup>) -> Self {
-        <Self as PuzzleState>::initialize(perm_group)
-    }
-
-    fn compose_into(&mut self, alg: &Algorithm) {
-        thread::sleep(Duration::from_millis(250));
-        <Self as PuzzleState>::compose_into(self, alg);
-    }
-
-    fn take_picture(&self) -> &Permutation {
-        thread::sleep(Duration::from_millis(250));
-        self.puzzle_state()
-    }
-
-    fn solve(&mut self) {
-        <Self as PuzzleState>::solve(self);
-    }
-}
-
-pub struct RobotState<R: RobotLike> {
-    robot: R,
-    perm_group: Arc<PermutationGroup>,
-}
-
-impl<R: RobotLike> PuzzleState for RobotState<R> {
-    fn compose_into(&mut self, alg: &Algorithm) {
-        self.robot.compose_into(alg);
-    }
-
-    fn initialize(perm_group: Arc<PermutationGroup>) -> Self {
-        RobotState {
-            perm_group: Arc::clone(&perm_group),
-            robot: R::initialize(perm_group),
-        }
-    }
-
-    fn facelets_solved(&self, facelets: &[usize]) -> bool {
-        let state = self.robot.take_picture();
-
-        for &facelet in facelets {
-            let maps_to = state.mapping()[facelet];
-            if self.perm_group.facelet_colors()[maps_to]
-                != self.perm_group.facelet_colors()[facelet]
-            {
-                return false;
-            }
-        }
-
-        true
-    }
-
-    fn print(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<Int<U>> {
-        let before = self.robot.take_picture().to_owned();
-
-        let c = self.halt(facelets, generator)?;
-
-        let mut exponentiated = generator.to_owned();
-        exponentiated.exponentiate(c.into());
-
-        self.compose_into(&exponentiated);
-
-        if &before != self.robot.take_picture() {
-            eprintln!("Printing did not return the cube to the original state!");
-            return None;
-        }
-        Some(c)
-    }
-
-    fn halt(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<Int<U>> {
-        let mut generator = generator.to_owned();
-        generator.exponentiate(-Int::<U>::one());
-
-        let mut sum = Int::<U>::zero();
-
-        let chromatic_orders = generator.chromatic_orders_by_facelets();
-        let order = lcm_iter(facelets.iter().map(|&i| chromatic_orders[i]));
-
-        while !self.facelets_solved(facelets) {
-            sum += Int::<U>::one();
-
-            if sum >= order {
-                eprintln!(
-                    "Decoding failure! Performed as many cycles as the size of the register."
-                );
-                return None;
-            }
-
-            self.compose_into(&generator);
-        }
-
-        Some(sum)
-    }
-
-    fn repeat_until(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<()> {
-        // Halting has the same behavior as repeat_until
-        self.halt(facelets, generator).map(|_| ())
-    }
-
-    fn solve(&mut self) {
-        self.robot.solve();
     }
 }
 

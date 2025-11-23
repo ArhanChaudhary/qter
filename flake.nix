@@ -51,6 +51,7 @@
               sccache
               rust-analyzer
               rust
+              pkg-config
               packages.rob-twophase
 
               (gap.overrideAttrs (o: {
