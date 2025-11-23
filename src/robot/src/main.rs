@@ -56,7 +56,7 @@ struct RobotConfig {
 #[derive(Debug, Copy, Clone, ValueEnum)]
 enum WhichUart {
     Uart0, // TX: 14, RX: 15 (BCM)
-    Uart2, // TX: 0, RX: 1 (BCM)
+    Uart4, // TX: 8, RX: 9 (BCM)
 }
 
 /// Helper for accurate sleep intervals.
@@ -251,7 +251,7 @@ fn run_uart_repl(which_uart: WhichUart) {
 }
 
 fn uart_init(robot_config: &RobotConfig) {
-    for which_uart in [WhichUart::Uart0, WhichUart::Uart2] {
+    for which_uart in [WhichUart::Uart0, WhichUart::Uart4] {
         let mut uart = uart::mk_uart(which_uart);
         for node_address in 0..NODES_PER_UART {
             debug!(target: "uart_init", "Initializing: which_uart={which_uart:?} node_address={node_address}");
