@@ -530,6 +530,32 @@ impl Algorithm {
         })
     }
 
+    /// Create an `Algorithm` instance from a space separated sequence of moves
+    ///
+    /// # Errors
+    ///
+    /// If the string cannot be parsed as an algorithm, this code will return `None`
+    pub fn parse_from_string(perm_group: Arc<PermutationGroup>, string: &str) -> Option<Algorithm> {
+        let mut permutation = perm_group.identity();
+
+        let mut move_seq = Vec::new();
+
+        for moove in string.split(' ').filter(|s| !s.is_empty()) {
+            let (interned, perm) = perm_group.generators().find(|v| v.0 == moove)?;
+
+            move_seq.push(interned);
+            permutation.compose_into(perm);
+        }
+
+        Some(Algorithm {
+            perm_group,
+            permutation,
+            move_seq,
+            chromatic_orders: OnceLock::new(),
+            repeat: Int::<U>::one(),
+        })
+    }
+
     /// Create a new algorithm that is the identity permutation (does nothing).
     #[must_use]
     pub fn identity(perm_group: Arc<PermutationGroup>) -> Algorithm {
@@ -1129,22 +1155,29 @@ pub fn puzzle_definition() -> impl Parser<'static, File, Arc<PuzzleDefinition>, 
         .memoized()
 }
 
+/// Parse a puzzle definition inline; useful for testcases and puzzle-specific code
+#[must_use]
+pub fn mk_puzzle_definition(def: &str) -> Option<Arc<PuzzleDefinition>> {
+    puzzle_definition()
+        .parse(File::from(def))
+        .into_output()
+}
+
 #[cfg(test)]
 mod tests {
 
     use std::sync::Arc;
 
-    use chumsky::Parser;
     use internment::ArcIntern;
     use itertools::Itertools;
 
-    use crate::{File, I, Int, U};
+    use crate::{I, Int, U, architectures::mk_puzzle_definition};
 
-    use super::{Architecture, puzzle_definition};
+    use super::Architecture;
 
     #[test]
     fn three_by_three() {
-        let cube_def = puzzle_definition().parse(File::from("3x3")).unwrap();
+        let cube_def = mk_puzzle_definition("3x3").unwrap();
 
         for (arch, expected) in &[
             (&["U", "D"][..], &[4, 4][..]),
@@ -1182,7 +1215,7 @@ mod tests {
 
     #[test]
     fn exponentiation() {
-        let cube_def = puzzle_definition().parse(File::from("3x3")).unwrap();
+        let cube_def = mk_puzzle_definition("3x3").unwrap();
 
         let mut perm = cube_def.perm_group.identity();
 

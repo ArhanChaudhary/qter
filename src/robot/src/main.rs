@@ -4,12 +4,10 @@
 use clap::{Parser, Subcommand};
 use env_logger::TimestampPrecision;
 use log::{LevelFilter, info, warn};
-use robot::hardware::{FULLSTEPS_PER_REVOLUTION, NODES_PER_UART, RobotConfig, Ticker, WhichUart, mk_output_pin, regs, run_move_seq, uart, uart_init};
+use qter_core::architectures::Algorithm;
+use robot::{CUBE3, hardware::{FULLSTEPS_PER_REVOLUTION, NODES_PER_UART, RobotConfig, Ticker, WhichUart, mk_output_pin, regs, run_move_seq, uart, uart_init}};
 use std::{
-    fmt::Display,
-    io::stdin,
-    path::PathBuf,
-    time::Duration,
+    fmt::Display, io::stdin, path::PathBuf, sync::Arc, time::Duration
 };
 
 #[derive(Parser)]
@@ -74,7 +72,7 @@ fn main() {
             run_uart_repl(which_uart);
         }
         Commands::MoveSeq { sequence } => {
-            run_move_seq(&robot_config, &sequence);
+            run_move_seq(&robot_config, Algorithm::parse_from_string(Arc::clone(&CUBE3), &sequence).expect("The algorithm is invalid"));
         }
         Commands::Motor { motor_index } => {
             run_motor_repl(&robot_config, motor_index);

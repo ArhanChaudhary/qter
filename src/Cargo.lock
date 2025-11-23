@@ -1863,7 +1863,6 @@ dependencies = [
  "ariadne",
  "bevy",
  "bevy_simple_text_input",
- "chumsky",
  "clap",
  "color-eyre",
  "compiler",
@@ -3066,7 +3065,6 @@ dependencies = [
 name = "interpreter"
 version = "0.1.0"
 dependencies = [
- "chumsky",
  "compiler",
  "internment",
  "qter_core",
@@ -4535,7 +4533,9 @@ dependencies = [
  "bitflags 2.10.0",
  "clap",
  "env_logger 0.11.8",
+ "interpreter",
  "log",
+ "qter_core",
  "rppal",
  "serde",
  "toml",

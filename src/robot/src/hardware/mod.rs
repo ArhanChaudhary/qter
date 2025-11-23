@@ -6,6 +6,7 @@ use std::{
 
 use clap::ValueEnum;
 use log::{debug, info};
+use qter_core::architectures::Algorithm;
 use rppal::gpio::{Gpio, Level, OutputPin};
 use serde::{Deserialize, Serialize};
 
@@ -171,7 +172,7 @@ impl Microsteps {
     }
 }
 
-pub fn run_move_seq(robot_config: &RobotConfig, sequence: &str) {
+pub fn run_move_seq(robot_config: &RobotConfig, alg: Algorithm) {
     let freq = robot_config.revolutions_per_second()
         * f64::from(robot_config.microsteps().value())
         * f64::from(FULLSTEPS_PER_REVOLUTION);
@@ -186,10 +187,8 @@ pub fn run_move_seq(robot_config: &RobotConfig, sequence: &str) {
     let mut dir_pins: [OutputPin; 6] =
         std::array::from_fn(|i| mk_output_pin(robot_config.tmc_2209_configs()[i].dir_pin()));
 
-    for (motor_index, qturns) in sequence
-        .split(' ')
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
+    for (motor_index, qturns) in alg
+        .move_seq_iter()
         .map(|s| parse_move(robot_config, s))
     {
         info!(

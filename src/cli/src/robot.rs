@@ -520,10 +520,9 @@ impl Cube3Robot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chumsky::Parser;
     use internment::ArcIntern;
     use interpreter::puzzle_states::SimulatedPuzzle;
-    use qter_core::architectures::puzzle_definition;
+    use qter_core::architectures::mk_puzzle_definition;
 
     static TESTS: [[&str; 2]; 60] = [
         ["", "UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB"],
@@ -768,12 +767,7 @@ mod tests {
     #[test]
     fn test_puzzle_state_with_rob_string() {
         init_mapping();
-        let perm_group = Arc::clone(
-            &puzzle_definition()
-                .parse(qter_core::File::from("3x3"))
-                .unwrap()
-                .perm_group,
-        );
+        let perm_group = Arc::clone(&mk_puzzle_definition("3x3").unwrap().perm_group);
 
         let solved = <SimulatedPuzzle as RobotLike>::initialize(Arc::clone(&perm_group));
 
@@ -803,12 +797,7 @@ mod tests {
 
     #[test]
     fn rob_twophase_solver() {
-        let perm_group = Arc::clone(
-            &puzzle_definition()
-                .parse(qter_core::File::from("3x3"))
-                .unwrap()
-                .perm_group,
-        );
+        let perm_group = Arc::clone(&mk_puzzle_definition("3x3").unwrap().perm_group);
 
         let identity = perm_group.identity();
 

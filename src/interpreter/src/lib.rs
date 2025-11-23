@@ -282,15 +282,14 @@ impl SeparatesByPuzzleType for InputRet {
 mod tests {
     use super::*;
     use crate::{Interpreter, PausedState, puzzle_states::SimulatedPuzzle};
-    use chumsky::Parser;
     use compiler::compile;
     use internment::ArcIntern;
-    use qter_core::{File, Int, U, architectures::puzzle_definition};
+    use qter_core::{File, Int, U, architectures::mk_puzzle_definition};
     use std::sync::Arc;
 
     #[test]
     fn facelets_solved() {
-        let perm_group = puzzle_definition().parse(File::from("3x3")).unwrap();
+        let perm_group = mk_puzzle_definition("3x3").unwrap();
 
         let mut cube: SimulatedPuzzle =
             SimulatedPuzzle::initialize(Arc::clone(&perm_group.perm_group));
@@ -310,7 +309,7 @@ mod tests {
 
     #[test]
     fn complicated_solved_decode_test() {
-        let perm_group = puzzle_definition().parse(File::from("3x3")).unwrap();
+        let perm_group = mk_puzzle_definition("3x3").unwrap();
 
         let arch = perm_group
             .get_preset(&[Int::from(210_u64), Int::from(24_u64)])

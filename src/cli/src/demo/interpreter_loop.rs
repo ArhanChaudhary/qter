@@ -1,19 +1,23 @@
-use std::{sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock}, thread, time::Duration};
+use std::{
+    sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock},
+    thread,
+    time::Duration,
+};
 
-use chumsky::Parser;
 use crossbeam_channel::{Receiver, Sender};
 use interpreter::{
-    ActionPerformed, ExecutionState, Interpreter, PausedState, puzzle_states::{PuzzleState, RobotLike, RobotLikeDyn},
+    ActionPerformed, ExecutionState, Interpreter, PausedState,
+    puzzle_states::{PuzzleState, RobotLike, RobotLikeDyn},
 };
 use qter_core::{
     Facelets, Int, U,
-    architectures::{Algorithm, PermutationGroup, PuzzleDefinition, puzzle_definition},
+    architectures::{
+        Algorithm, PermutationGroup, PuzzleDefinition, mk_puzzle_definition,
+    },
     discrete_math::lcm_iter,
 };
 
-use crate::{
-    demo::PROGRAMS,
-};
+use crate::demo::PROGRAMS;
 
 use super::{InterpretationCommand, interpreter_plugin::InterpretationEvent};
 
@@ -24,11 +28,8 @@ struct RobotHandle {
 
 static ROBOT_HANDLE: OnceLock<Mutex<RobotHandle>> = OnceLock::new();
 
-pub static CUBE3_DEF: LazyLock<Arc<PuzzleDefinition>> = LazyLock::new(|| {
-    puzzle_definition()
-        .parse(qter_core::File::from("3x3"))
-        .unwrap()
-});
+pub static CUBE3_DEF: LazyLock<Arc<PuzzleDefinition>> =
+    LazyLock::new(|| mk_puzzle_definition("3x3").unwrap());
 
 pub static CUBE3: LazyLock<Arc<PermutationGroup>> =
     LazyLock::new(|| Arc::clone(&CUBE3_DEF.perm_group));

@@ -179,12 +179,11 @@ pub fn decode(
 mod tests {
     use std::sync::Arc;
 
-    use chumsky::Parser;
     use internment::ArcIntern;
 
     use crate::{
-        File, Int, U,
-        architectures::{Algorithm, puzzle_definition},
+        Int, U,
+        architectures::{Algorithm, mk_puzzle_definition},
         discrete_math::{
             decode, extended_euclid, gcd, lcm,
             length_of_substring_that_this_string_is_n_repeated_copies_of,
@@ -265,7 +264,7 @@ mod tests {
 
     #[test]
     fn test_decode() {
-        let cube_def = puzzle_definition().parse(File::from("3x3")).unwrap();
+        let cube_def = mk_puzzle_definition("3x3").unwrap();
 
         let mut cube = cube_def.perm_group.identity();
 
