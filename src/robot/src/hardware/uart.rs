@@ -1,4 +1,4 @@
-use crate::{WhichUart, regs};
+use super::{WhichUart, regs};
 use log::{debug, trace};
 use rppal::uart::{Parity, Uart};
 use std::{thread, time::Duration};
