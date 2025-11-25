@@ -16,6 +16,7 @@ qter_core = { path = "../qter_core" }
 internment = { version = "0.8", features = [ "arc" ] }
 dirs = "6.0.0"
 itertools = "0.13"
+crossbeam = "0.8.4"
 
 [lints]
 workspace = true

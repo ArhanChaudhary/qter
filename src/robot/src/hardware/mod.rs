@@ -1,8 +1,9 @@
 use std::{
-    fmt::Display, ops::Add, path::Path, str::FromStr, thread, time::{Duration, Instant}
+    fmt::Display, ops::Add, path::Path, str::FromStr, sync::mpsc, thread, time::{Duration, Instant}
 };
 
 use clap::ValueEnum;
+use crossbeam::sync::{Parker, Unparker};
 use log::{debug, info};
 use qter_core::architectures::Algorithm;
 use rppal::gpio::{Gpio, Level, OutputPin};
@@ -51,8 +52,13 @@ pub enum Microsteps {
     TwoFiftySix,
 }
 
+enum MotorMessage {
+    QueueMove(Face, Dir),
+    PrevMovesDone(Unparker),
+}
+
 /// Global robot configuration.
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone, Copy)]
 pub struct RobotConfig {
     tmc_2209_configs: [TMC2209Config; 6],
     revolutions_per_second: f64,
@@ -74,17 +80,50 @@ impl RobotConfig {
     }
 }
 
-/// Initialize the robot such that it is ready for use
-pub fn init(config: &Path) -> RobotConfig {
-    let robot_config = toml::from_str::<RobotConfig>(
-        &std::fs::read_to_string(config)
-            .expect("Failed to read robot configuration file"),
-    )
-    .expect("Failed to parse robot configuration file");
+pub struct RobotHandle {
+    motor_thread_handle: mpsc::Sender<MotorMessage>,
+    config: RobotConfig,
+}
 
-    uart_init(&robot_config);
+impl RobotHandle {
+    /// Initialize the robot such that it is ready for use
+    pub fn init(config: &Path) -> RobotHandle {
+        let robot_config = toml::from_str::<RobotConfig>(
+            &std::fs::read_to_string(config)
+                .expect("Failed to read robot configuration file"),
+        )
+        .expect("Failed to parse robot configuration file");
+
+        uart_init(&robot_config);
+
+        let (tx, rx) = mpsc::channel();
+
+        thread::spawn(move || motor_thread(rx, robot_config));
     
-    robot_config
+        RobotHandle { motor_thread_handle: tx, config: robot_config }
+    }
+
+    pub fn config(&self) -> &RobotConfig {
+        &self.config
+    }
+
+    /// Queue a sequence of moves to be performed by the robot
+    pub fn queue_move_seq(&mut self, alg: &Algorithm) {
+        for moove in alg.move_seq_iter() {
+            let (face, dir) = parse_move(moove);
+
+            self.motor_thread_handle.send(MotorMessage::QueueMove(face, dir)).unwrap();
+        }
+    }
+
+    /// Wait for all moves in the queue to be performed
+    pub fn await_moves(&mut self) {
+        let parker = Parker::new();
+
+        self.motor_thread_handle.send(MotorMessage::PrevMovesDone(parker.unparker().clone())).unwrap();
+
+        parker.park();
+    }
 }
 
 /// Which UART port to use (BCM numbering context).
@@ -184,7 +223,11 @@ impl Microsteps {
     }
 }
 
-pub fn run_move_seq(robot_config: &RobotConfig, alg: &Algorithm) {
+fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
+    // TODO: Become real-time priority
+    // TODO: State machine for collapsing commutative moves
+    // TODO: Motor acceleration curves
+
     let freq = robot_config.revolutions_per_second()
         * f64::from(robot_config.microsteps().value())
         * f64::from(FULLSTEPS_PER_REVOLUTION);
@@ -199,10 +242,22 @@ pub fn run_move_seq(robot_config: &RobotConfig, alg: &Algorithm) {
     let mut dir_pins: [OutputPin; 6] =
         std::array::from_fn(|i| mk_output_pin(robot_config.tmc_2209_configs()[i].dir_pin()));
 
-    for (motor_index, dir) in alg
-        .move_seq_iter()
-        .map(|s| parse_move(robot_config, s))
+    for (face, dir) in rx
+        .iter()
+        .filter_map(|v| match v {
+            MotorMessage::QueueMove(face, dir) => Some((face, dir)),
+            MotorMessage::PrevMovesDone(unparker) => {
+                unparker.unpark();
+                None
+            },
+        })
     {
+        let motor_index = robot_config
+            .tmc_2209_configs()
+            .iter()
+            .position(|cfg| cfg.face() as u8 == face as u8)
+            .expect("invalid move: {s}");
+
         info!(
             target: "move_seq",
             "Requested move {:?}: motor_index={motor_index} direction={dir}",
@@ -446,7 +501,7 @@ impl Display for Dir {
     }
 }
 
-fn parse_move(config: &RobotConfig, mut move_: &str) -> (usize, Dir) {
+fn parse_move(mut move_: &str) -> (Face, Dir) {
     let dir = if let Some(rest) = move_.strip_suffix('\'') {
         move_ = rest;
         Dir::Prime
@@ -458,10 +513,5 @@ fn parse_move(config: &RobotConfig, mut move_: &str) -> (usize, Dir) {
     };
 
     let face_parsed: Face = move_.parse().expect("invalid move: {s}");
-    let motor_index = config
-        .tmc_2209_configs()
-        .iter()
-        .position(|cfg| cfg.face() as u8 == face_parsed as u8)
-        .expect("invalid move: {s}");
-    (motor_index, dir)
+    (face_parsed, dir)
 }

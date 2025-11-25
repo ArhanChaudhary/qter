@@ -5,10 +5,13 @@ use clap::{Parser, Subcommand};
 use env_logger::TimestampPrecision;
 use log::{LevelFilter, info, warn};
 use qter_core::architectures::Algorithm;
-use robot::{CUBE3, hardware::{FULLSTEPS_PER_REVOLUTION, NODES_PER_UART, RobotConfig, Ticker, WhichUart, init, mk_output_pin, regs, run_move_seq, uart}};
-use std::{
-    fmt::Display, io::stdin, path::PathBuf, sync::Arc, time::Duration
+use robot::{
+    CUBE3,
+    hardware::{
+        FULLSTEPS_PER_REVOLUTION, NODES_PER_UART, RobotConfig, RobotHandle, Ticker, WhichUart, mk_output_pin, regs, uart
+    },
 };
+use std::{fmt::Display, io::stdin, path::PathBuf, sync::Arc, time::Duration};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -59,17 +62,21 @@ fn main() {
         .format_timestamp(Some(TimestampPrecision::Millis))
         .init();
 
-    let robot_config = init(&cli.robot_config);
+    let mut robot_handle = RobotHandle::init(&cli.robot_config);
 
     match cli.command {
         Commands::UartRepl { which_uart } => {
             run_uart_repl(which_uart);
         }
         Commands::MoveSeq { sequence } => {
-            run_move_seq(&robot_config, &Algorithm::parse_from_string(Arc::clone(&CUBE3), &sequence).expect("The algorithm is invalid"));
+            robot_handle.queue_move_seq(
+                &Algorithm::parse_from_string(Arc::clone(&CUBE3), &sequence)
+                    .expect("The algorithm is invalid"),
+            );
+            robot_handle.await_moves();
         }
         Commands::Motor { motor_index } => {
-            run_motor_repl(&robot_config, motor_index);
+            run_motor_repl(robot_handle.config(), motor_index);
         }
         Commands::UartInit => {}
     }
