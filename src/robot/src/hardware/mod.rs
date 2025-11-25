@@ -1,5 +1,11 @@
 use std::{
-    fmt::Display, ops::Add, path::Path, str::FromStr, sync::mpsc, thread, time::{Duration, Instant}
+    fmt::Display,
+    ops::Add,
+    path::Path,
+    str::FromStr,
+    sync::mpsc,
+    thread,
+    time::{Duration, Instant},
 };
 
 use clap::ValueEnum;
@@ -8,10 +14,15 @@ use log::{debug, info};
 use qter_core::architectures::Algorithm;
 use rppal::gpio::{Gpio, Level, OutputPin};
 use serde::{Deserialize, Serialize};
+use thread_priority::{
+    Error, RealtimeThreadSchedulePolicy, ScheduleParams, ThreadPriority,
+    set_thread_priority_and_policy, thread_native_id,
+    unix::{ThreadSchedulePolicy, set_current_thread_priority},
+};
 
+mod motor_math;
 pub mod regs;
 pub mod uart;
-mod motor_math;
 
 pub const FULLSTEPS_PER_REVOLUTION: u32 = 200;
 pub const FULLSTEPS_PER_QUARTER: u32 = FULLSTEPS_PER_REVOLUTION / 4;
@@ -52,6 +63,16 @@ pub enum Microsteps {
     TwoFiftySix,
 }
 
+#[derive(Clone, Copy, Serialize, Deserialize, ValueEnum)]
+pub enum Priority {
+    /// Leave the priority as whatever the OS decides it to be
+    Default,
+    /// Set the priority to the maximum non-real-time priority
+    MaxNonRT,
+    /// Set the priority to the maximum real-time priority that is also lower than any kernel priority
+    RealTime,
+}
+
 enum MotorMessage {
     QueueMove(Face, Dir),
     PrevMovesDone(Unparker),
@@ -63,6 +84,7 @@ pub struct RobotConfig {
     tmc_2209_configs: [TMC2209Config; 6],
     revolutions_per_second: f64,
     microsteps: Microsteps,
+    priority: Priority,
     // enable_pin: u8,
 }
 
@@ -89,8 +111,7 @@ impl RobotHandle {
     /// Initialize the robot such that it is ready for use
     pub fn init(config: &Path) -> RobotHandle {
         let robot_config = toml::from_str::<RobotConfig>(
-            &std::fs::read_to_string(config)
-                .expect("Failed to read robot configuration file"),
+            &std::fs::read_to_string(config).expect("Failed to read robot configuration file"),
         )
         .expect("Failed to parse robot configuration file");
 
@@ -99,8 +120,11 @@ impl RobotHandle {
         let (tx, rx) = mpsc::channel();
 
         thread::spawn(move || motor_thread(rx, robot_config));
-    
-        RobotHandle { motor_thread_handle: tx, config: robot_config }
+
+        RobotHandle {
+            motor_thread_handle: tx,
+            config: robot_config,
+        }
     }
 
     pub fn config(&self) -> &RobotConfig {
@@ -112,7 +136,9 @@ impl RobotHandle {
         for moove in alg.move_seq_iter() {
             let (face, dir) = parse_move(moove);
 
-            self.motor_thread_handle.send(MotorMessage::QueueMove(face, dir)).unwrap();
+            self.motor_thread_handle
+                .send(MotorMessage::QueueMove(face, dir))
+                .unwrap();
         }
     }
 
@@ -120,7 +146,9 @@ impl RobotHandle {
     pub fn await_moves(&mut self) {
         let parker = Parker::new();
 
-        self.motor_thread_handle.send(MotorMessage::PrevMovesDone(parker.unparker().clone())).unwrap();
+        self.motor_thread_handle
+            .send(MotorMessage::PrevMovesDone(parker.unparker().clone()))
+            .unwrap();
 
         parker.park();
     }
@@ -224,9 +252,10 @@ impl Microsteps {
 }
 
 fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
-    // TODO: Become real-time priority
     // TODO: State machine for collapsing commutative moves
     // TODO: Motor acceleration curves
+
+    set_prio(robot_config.priority);
 
     let freq = robot_config.revolutions_per_second()
         * f64::from(robot_config.microsteps().value())
@@ -242,16 +271,13 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
     let mut dir_pins: [OutputPin; 6] =
         std::array::from_fn(|i| mk_output_pin(robot_config.tmc_2209_configs()[i].dir_pin()));
 
-    for (face, dir) in rx
-        .iter()
-        .filter_map(|v| match v {
-            MotorMessage::QueueMove(face, dir) => Some((face, dir)),
-            MotorMessage::PrevMovesDone(unparker) => {
-                unparker.unpark();
-                None
-            },
-        })
-    {
+    for (face, dir) in rx.iter().filter_map(|v| match v {
+        MotorMessage::QueueMove(face, dir) => Some((face, dir)),
+        MotorMessage::PrevMovesDone(unparker) => {
+            unparker.unpark();
+            None
+        }
+    }) {
         let motor_index = robot_config
             .tmc_2209_configs()
             .iter()
@@ -299,6 +325,30 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
     }
 
     println!("Completed move sequence");
+}
+
+pub fn set_prio(prio: Priority) {
+    let res = match prio {
+        // Do nothing
+        Priority::Default => return,
+        // Set niceness to the maximum (-20)
+        Priority::MaxNonRT => set_current_thread_priority(ThreadPriority::Max),
+        // Set a real-time priority. 80 is above interrupt handlers but below critical kernel functionalities
+        // https://shuhaowu.com/blog/2022/04-linux-rt-appdev-part4.html
+        Priority::RealTime => set_thread_priority_and_policy(
+            thread_native_id(),
+            ThreadPriority::from_posix(ScheduleParams { sched_priority: 80 }),
+            ThreadSchedulePolicy::Realtime(RealtimeThreadSchedulePolicy::Fifo),
+        ),
+    };
+
+    if let Err(e) = res {
+        if matches!(e, Error::OS(13)) || matches!(e, Error::OS(1)) {
+            panic!("{e} — You need to configure your system such that userspace applications have permission to raise their priorities (unless you're not on unix in which case idk what that error code means)");
+        } else {
+            panic!("{e}");
+        }
+    }
 }
 
 pub fn uart_init(robot_config: &RobotConfig) {
@@ -460,7 +510,7 @@ pub fn mk_output_pin(gpio: u8) -> OutputPin {
 enum Dir {
     Normal,
     Double,
-    Prime
+    Prime,
 }
 
 impl Dir {

@@ -17,6 +17,7 @@ internment = { version = "0.8", features = [ "arc" ] }
 dirs = "6.0.0"
 itertools = "0.13"
 crossbeam = "0.8.4"
+thread-priority = "3.0.0"
 
 [lints]
 workspace = true

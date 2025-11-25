@@ -8,10 +8,10 @@ use qter_core::architectures::Algorithm;
 use robot::{
     CUBE3,
     hardware::{
-        FULLSTEPS_PER_REVOLUTION, NODES_PER_UART, RobotConfig, RobotHandle, Ticker, WhichUart, mk_output_pin, regs, uart
+        FULLSTEPS_PER_REVOLUTION, NODES_PER_UART, Priority, RobotConfig, RobotHandle, Ticker, WhichUart, mk_output_pin, regs, set_prio, uart
     },
 };
-use std::{fmt::Display, io::stdin, path::PathBuf, sync::Arc, time::Duration};
+use std::{fmt::Display, io::stdin, path::PathBuf, sync::Arc, thread, time::{Duration, Instant}};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -47,6 +47,8 @@ enum Commands {
     },
     /// Initialize UART configuration.
     UartInit,
+    /// Test latencies at the different options for priority level
+    TestPrio { prio: Priority },
 }
 
 fn main() {
@@ -62,13 +64,14 @@ fn main() {
         .format_timestamp(Some(TimestampPrecision::Millis))
         .init();
 
-    let mut robot_handle = RobotHandle::init(&cli.robot_config);
 
     match cli.command {
         Commands::UartRepl { which_uart } => {
             run_uart_repl(which_uart);
         }
         Commands::MoveSeq { sequence } => {
+            let mut robot_handle = RobotHandle::init(&cli.robot_config);
+
             robot_handle.queue_move_seq(
                 &Algorithm::parse_from_string(Arc::clone(&CUBE3), &sequence)
                     .expect("The algorithm is invalid"),
@@ -76,9 +79,14 @@ fn main() {
             robot_handle.await_moves();
         }
         Commands::Motor { motor_index } => {
+            let robot_handle = RobotHandle::init(&cli.robot_config);
+
             run_motor_repl(robot_handle.config(), motor_index);
         }
         Commands::UartInit => {}
+        Commands::TestPrio { prio } => {
+            test_prio(prio);
+        },
     }
     println!("Exiting");
 }
@@ -208,5 +216,36 @@ fn maybe_read_num(prompt: impl Display) -> Option<u32> {
             break Some(v);
         }
         println!("Try again");
+    }
+}
+
+#[allow(clippy::cast_possible_wrap)]
+#[allow(clippy::cast_precision_loss)]
+fn test_prio(prio: Priority) {
+    const SAMPLES: usize = 2048;
+
+    set_prio(prio);
+    println!("PID: {}", std::process::id());
+
+    loop {
+        let mut latencies = Vec::<i128>::new();
+
+        for _ in 0..SAMPLES {
+            let before = Instant::now();
+            thread::sleep(Duration::from_millis(1));
+            let after = Instant::now();
+
+            let time = after - before;
+            let nanos = time.as_nanos() as i128;
+
+            let wrongness = nanos - 1_000_000;
+            latencies.push(wrongness);
+        }
+
+        let mean = latencies.iter().sum::<i128>() / SAMPLES as i128;
+        let stddev = ((latencies.iter().map(|v| (v - mean).pow(2)).sum::<i128>() / (SAMPLES as i128 - 1)) as f64).sqrt();
+
+        println!("μ ≈ (1000 + {})μs", mean / 1000);
+        println!("σ ≈ {}μs", stddev / 1000.);
     }
 }
