@@ -1,5 +1,5 @@
 use std::{
-    path::Path, str::FromStr, thread, time::{Duration, Instant}
+    fmt::Display, ops::Add, path::Path, str::FromStr, thread, time::{Duration, Instant}
 };
 
 use clap::ValueEnum;
@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod regs;
 pub mod uart;
+mod motor_math;
 
 pub const FULLSTEPS_PER_REVOLUTION: u32 = 200;
 pub const FULLSTEPS_PER_QUARTER: u32 = FULLSTEPS_PER_REVOLUTION / 4;
@@ -198,18 +199,20 @@ pub fn run_move_seq(robot_config: &RobotConfig, alg: &Algorithm) {
     let mut dir_pins: [OutputPin; 6] =
         std::array::from_fn(|i| mk_output_pin(robot_config.tmc_2209_configs()[i].dir_pin()));
 
-    for (motor_index, qturns) in alg
+    for (motor_index, dir) in alg
         .move_seq_iter()
         .map(|s| parse_move(robot_config, s))
     {
         info!(
             target: "move_seq",
-            "Requested move {:?}: motor_index={motor_index} quarter_turns={qturns}",
+            "Requested move {:?}: motor_index={motor_index} direction={dir}",
             robot_config.tmc_2209_configs()[motor_index].face()
         );
 
         let dir_pin = &mut dir_pins[motor_index];
         let step_pin = &mut step_pins[motor_index];
+
+        let qturns = dir.qturns();
 
         let dir_level = if qturns < 0 { Level::Low } else { Level::High };
         dir_pin.write(dir_level);
@@ -398,15 +401,60 @@ pub fn mk_output_pin(gpio: u8) -> OutputPin {
     pin
 }
 
-fn parse_move(config: &RobotConfig, mut move_: &str) -> (usize, i32) {
-    let qturns = if let Some(rest) = move_.strip_suffix('\'') {
+#[derive(Debug, Clone, Copy)]
+enum Dir {
+    Normal,
+    Double,
+    Prime
+}
+
+impl Dir {
+    fn qturns(self) -> i32 {
+        match self {
+            Dir::Normal => 1,
+            Dir::Double => 2,
+            Dir::Prime => -1,
+        }
+    }
+}
+
+impl Add<Dir> for Dir {
+    type Output = Option<Dir>;
+
+    fn add(self, rhs: Dir) -> Self::Output {
+        match (self, rhs) {
+            (Dir::Normal, Dir::Prime) => None,
+            (Dir::Prime, Dir::Normal) => None,
+            (Dir::Double, Dir::Double) => None,
+            (Dir::Double, Dir::Prime) => Some(Dir::Normal),
+            (Dir::Prime, Dir::Double) => Some(Dir::Normal),
+            (Dir::Normal, Dir::Normal) => Some(Dir::Double),
+            (Dir::Prime, Dir::Prime) => Some(Dir::Double),
+            (Dir::Normal, Dir::Double) => Some(Dir::Prime),
+            (Dir::Double, Dir::Normal) => Some(Dir::Prime),
+        }
+    }
+}
+
+impl Display for Dir {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Dir::Normal => f.write_str("Normal"),
+            Dir::Double => f.write_str("Double"),
+            Dir::Prime => f.write_str("Prime"),
+        }
+    }
+}
+
+fn parse_move(config: &RobotConfig, mut move_: &str) -> (usize, Dir) {
+    let dir = if let Some(rest) = move_.strip_suffix('\'') {
         move_ = rest;
-        -1
+        Dir::Prime
     } else if let Some(rest) = move_.strip_suffix('2') {
         move_ = rest;
-        2
+        Dir::Double
     } else {
-        1
+        Dir::Normal
     };
 
     let face_parsed: Face = move_.parse().expect("invalid move: {s}");
@@ -415,5 +463,5 @@ fn parse_move(config: &RobotConfig, mut move_: &str) -> (usize, i32) {
         .iter()
         .position(|cfg| cfg.face() as u8 == face_parsed as u8)
         .expect("invalid move: {s}");
-    (motor_index, qturns)
+    (motor_index, dir)
 }

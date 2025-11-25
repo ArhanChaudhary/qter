@@ -1835,6 +1835,7 @@ dependencies = [
  "ariadne",
  "bevy",
  "bevy_simple_text_input",
+ "chumsky",
  "clap",
  "color-eyre",
  "compiler",
