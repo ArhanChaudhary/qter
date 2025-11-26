@@ -1,5 +1,6 @@
 use std::{
     fmt::Display,
+    iter,
     ops::Add,
     path::Path,
     str::FromStr,
@@ -10,6 +11,7 @@ use std::{
 
 use clap::ValueEnum;
 use crossbeam::sync::{Parker, Unparker};
+use itertools::Either;
 use log::{debug, info};
 use qter_core::architectures::Algorithm;
 use rppal::gpio::{Gpio, Level, OutputPin};
@@ -74,7 +76,7 @@ pub enum Priority {
 }
 
 enum MotorMessage {
-    QueueMove(Face, Dir),
+    QueueMove((Face, Dir)),
     PrevMovesDone(Unparker),
 }
 
@@ -137,7 +139,7 @@ impl RobotHandle {
             let (face, dir) = parse_move(moove);
 
             self.motor_thread_handle
-                .send(MotorMessage::QueueMove(face, dir))
+                .send(MotorMessage::QueueMove((face, dir)))
                 .unwrap();
         }
     }
@@ -166,7 +168,7 @@ pub struct Ticker {
     now: Instant,
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Face {
     R,
     L,
@@ -174,6 +176,20 @@ pub enum Face {
     D,
     F,
     B,
+}
+
+impl Face {
+    fn is_opposite(self, rhs: Face) -> bool {
+        match (self, rhs) {
+            (Face::R, Face::L)
+            | (Face::L, Face::R)
+            | (Face::U, Face::D)
+            | (Face::D, Face::U)
+            | (Face::F, Face::B)
+            | (Face::B, Face::F) => true,
+            _ => false,
+        }
+    }
 }
 
 impl Ticker {
@@ -251,8 +267,90 @@ impl Microsteps {
     }
 }
 
+struct CommutativeMoveFsm {
+    // stores the entire preceding commutative subsequence, which can always be
+    // collapsed to up to two moves.
+    // invariant: if only one of them is `Some`, it must be `state[0]`, not `state[1]`.
+    state: [Option<(Face, Dir)>; 2],
+}
+
+enum MoveInstruction {
+    Single((Face, Dir)),
+    Double([(Face, Dir); 2]),
+}
+
+impl CommutativeMoveFsm {
+    fn new() -> Self {
+        Self {
+            state: [None, None],
+        }
+    }
+
+    /// Flushes any backlog of moves. After executing the resulting moves, The
+    /// actual state will be fully caught up with the moves fed into the FSM.
+    ///
+    /// Calling this method may mean that some commutative moves will not
+    /// actually end up collapsed.
+    fn flush(&mut self) -> Option<MoveInstruction> {
+        let res = match self.state {
+            [None, Some(_)] => unreachable!(),
+
+            [None, None] => None,
+            [Some(move1), None] => Some(MoveInstruction::Single(move1)),
+            [Some(move1), Some(move2)] => Some(MoveInstruction::Double([move1, move2])),
+        };
+        self.state = [None, None];
+        res
+    }
+
+    /// Feed a new move into the FSM. Returns some moves to execute; executing
+    /// the moves produced by this method will ultimately perform the same
+    /// permutation as executing the moves fed into the FSM.
+    fn next(&mut self, move_: (Face, Dir)) -> Option<MoveInstruction> {
+        // attempts to add this move to the slot in-place, if they are on the *same* face.
+        fn try_add(slot: &mut Option<(Face, Dir)>, move_: (Face, Dir)) -> bool {
+            let Some((face, dir)) = slot else {
+                return false;
+            };
+
+            if *face != move_.0 {
+                return false;
+            }
+
+            if let Some(new_dir) = *dir + move_.1 {
+                *dir = new_dir;
+            } else {
+                *slot = None;
+            }
+
+            true
+        }
+
+        // handle the case where the new move matches at least one of the moves we already have.
+        if try_add(&mut self.state[0], move_) || try_add(&mut self.state[1], move_) {
+            if self.state[0].is_none() && self.state[1].is_some() {
+                self.state.swap(0, 1);
+            }
+            return None;
+        }
+
+        // handle the case where we have only one move and the new move is commutative.
+        if let [Some((face, _)), slot2 @ None] = &mut self.state
+            && face.is_opposite(move_.0)
+        {
+            *slot2 = Some(move_);
+            return None;
+        }
+
+        // otherwise, this commutative move sequence is over, and we flush the state.
+        // (note: this handles the [None, None] case as well)
+        let res = self.flush();
+        self.state = [Some(move_), None];
+        res
+    }
+}
+
 fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
-    // TODO: State machine for collapsing commutative moves
     // TODO: Motor acceleration curves
 
     set_prio(robot_config.priority);
@@ -271,24 +369,51 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
     let mut dir_pins: [OutputPin; 6] =
         std::array::from_fn(|i| mk_output_pin(robot_config.tmc_2209_configs()[i].dir_pin()));
 
-    for (face, dir) in rx.iter().filter_map(|v| match v {
-        MotorMessage::QueueMove(face, dir) => Some((face, dir)),
-        MotorMessage::PrevMovesDone(unparker) => {
-            unparker.unpark();
-            None
+    enum MotorMessage2 {
+        QueueMoves(MoveInstruction),
+        PrevMovesDone(Unparker),
+    }
+
+    let mut fsm = CommutativeMoveFsm::new();
+    let iter = rx.iter().flat_map(|v| match v {
+        MotorMessage::QueueMove(move_) => {
+            let moves = fsm.next(move_).map(MotorMessage2::QueueMoves);
+            Either::Left(moves.into_iter())
         }
-    }) {
+        MotorMessage::PrevMovesDone(unparker) => {
+            let moves = fsm.flush().map(MotorMessage2::QueueMoves);
+            Either::Right(
+                moves
+                    .into_iter()
+                    .chain(iter::once(MotorMessage2::PrevMovesDone(unparker))),
+            )
+        }
+    });
+
+    for (face, dir) in iter
+        .filter_map(|v| match v {
+            MotorMessage2::QueueMoves(v) => Some(v),
+            MotorMessage2::PrevMovesDone(unparker) => {
+                unparker.unpark();
+                None
+            }
+        })
+        .flat_map(|moves| match moves {
+            // TODO: actually handle commutative move pairs
+            MoveInstruction::Single(v) => Either::Left([v].into_iter()),
+            MoveInstruction::Double([v1, v2]) => Either::Right([v1, v2].into_iter()),
+        })
+    {
         // loop {
         let motor_index = robot_config
             .tmc_2209_configs()
             .iter()
-            .position(|cfg| cfg.face() as u8 == face as u8)
-            .expect("invalid move: {s}");
+            .position(|cfg| cfg.face() == face)
+            .expect("invalid move");
 
         info!(
             target: "move_seq",
-            "Requested move {:?}: motor_index={motor_index} direction={dir}",
-            robot_config.tmc_2209_configs()[motor_index].face()
+            "Requested move {face:?}: motor_index={motor_index} direction={dir}",
         );
 
         let dir_pin = &mut dir_pins[motor_index];
