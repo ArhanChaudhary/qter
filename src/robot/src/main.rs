@@ -228,7 +228,7 @@ fn test_prio(prio: Priority) {
     println!("PID: {}", std::process::id());
 
     loop {
-        let mut latencies = Vec::<i128>::new();
+        let mut latencies = Vec::<i128>::with_capacity(SAMPLES);
 
         for _ in 0..SAMPLES {
             let before = Instant::now();
@@ -239,13 +239,14 @@ fn test_prio(prio: Priority) {
             let nanos = time.as_nanos() as i128;
 
             let wrongness = nanos - 1_000_000;
-            latencies.push(wrongness);
+            latencies.push(wrongness / 1000);
         }
 
-        let mean = latencies.iter().sum::<i128>() / SAMPLES as i128;
-        let stddev = ((latencies.iter().map(|v| (v - mean).pow(2)).sum::<i128>() / (SAMPLES as i128 - 1)) as f64).sqrt();
+        latencies.sort_unstable();
 
-        println!("μ ≈ (1000 + {})μs", mean / 1000);
-        println!("σ ≈ {}μs", stddev / 1000.);
+        println!("M ≈ {}μs", latencies[SAMPLES / 2]);
+        println!("IQR ≈ {}μs", (latencies[SAMPLES * 3 / 4] - latencies[SAMPLES / 4]));
+        println!("Top 5 = {:?}", &latencies[SAMPLES-5..SAMPLES]);
+        println!();
     }
 }
