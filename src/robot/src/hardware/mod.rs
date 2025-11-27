@@ -278,6 +278,7 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
             None
         }
     }) {
+        // loop {
         let motor_index = robot_config
             .tmc_2209_configs()
             .iter()
@@ -322,6 +323,7 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
             target: "move_seq",
             "Completed move {:?}", robot_config.tmc_2209_configs()[motor_index].face()
         );
+        // }
     }
 
     println!("Completed move sequence");
@@ -344,7 +346,9 @@ pub fn set_prio(prio: Priority) {
 
     if let Err(e) = res {
         if matches!(e, Error::OS(13)) || matches!(e, Error::OS(1)) {
-            panic!("{e} — You need to configure your system such that userspace applications have permission to raise their priorities (unless you're not on unix in which case idk what that error code means)");
+            panic!(
+                "{e} — You need to configure your system such that userspace applications have permission to raise their priorities (unless you're not on unix in which case idk what that error code means)"
+            );
         } else {
             panic!("{e}");
         }

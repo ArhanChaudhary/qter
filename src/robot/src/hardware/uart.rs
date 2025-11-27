@@ -49,13 +49,13 @@ const REGISTER_MSB: u8 = 1 << 7;
 
 /// Create a new `Uart`.
 pub fn mk_uart(which_uart: WhichUart) -> Uart {
-    // uart0 is /dev/ttyAMA0 and uart4 is /dev/ttyAMA1 on Raspberry Pi 4 Model B.
+    // uart0 is /dev/ttyAMA0 and uart4 is /dev/ttyAMA4 on Raspberry Pi 4 Model B.
     // The uarts are set to the next /dev/tty/AMA[X] in order.
     //
     // See https://forums.raspberrypi.com/viewtopic.php?t=244827#post_content1514245
     let path = match which_uart {
         WhichUart::Uart0 => "/dev/ttyAMA0",
-        WhichUart::Uart4 => "/dev/ttyAMA1",
+        WhichUart::Uart4 => "/dev/ttyAMA4",
     };
 
     debug!(target: "uart", "Initializing {which_uart:?}: path={path} baud_rate={UART_BAUD_RATE}");
