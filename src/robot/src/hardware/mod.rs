@@ -13,7 +13,7 @@ use crossbeam::sync::{Parker, Unparker};
 use itertools::Either;
 use log::{debug, info};
 use qter_core::architectures::Algorithm;
-use rppal::gpio::{Gpio, Level, OutputPin};
+use rppal::gpio::{Gpio, OutputPin};
 use thread_priority::{
     Error, RealtimeThreadSchedulePolicy, ScheduleParams, ThreadPriority,
     set_thread_priority_and_policy, thread_native_id,
@@ -22,6 +22,7 @@ use thread_priority::{
 
 use crate::hardware::{
     config::{Face, Priority, RobotConfig},
+    motor::Motor,
     uart::{
         UartBus, UartId,
         regs::{GConf, IholdIrun, NodeConf},
@@ -29,6 +30,7 @@ use crate::hardware::{
 };
 
 pub mod config;
+mod motor;
 pub mod uart;
 
 pub const FULLSTEPS_PER_REVOLUTION: u32 = 200;
@@ -228,19 +230,15 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
 
     set_prio(robot_config.priority);
 
-    let freq = robot_config.revolutions_per_second
+    let steps_per_sec = robot_config.revolutions_per_second
         * f64::from(robot_config.microstep_resolution.value())
         * f64::from(FULLSTEPS_PER_REVOLUTION);
-    let delay = Duration::from_secs(1).div_f64(2.0 * freq);
     info!(
         target: "move_seq",
-        "Configuration: freq={freq} delay={delay:?}",
+        "Configuration: steps_per_sec={steps_per_sec}",
     );
 
-    let mut step_pins: [OutputPin; 6] =
-        Face::ALL.map(|face| mk_output_pin(robot_config.motors[face].step_pin));
-    let mut dir_pins: [OutputPin; 6] =
-        Face::ALL.map(|face| mk_output_pin(robot_config.motors[face].dir_pin));
+    let mut motors: [Motor; 6] = Face::ALL.map(|face| Motor::new(&robot_config.motors[face]));
 
     enum MotorMessage2 {
         QueueMoves(MoveInstruction),
@@ -282,34 +280,13 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
             "Requested move {face:?}: direction={dir}",
         );
 
-        let dir_pin = &mut dir_pins[face as usize];
-        let step_pin = &mut step_pins[face as usize];
+        let motor = &mut motors[face as usize];
 
         let qturns = dir.qturns();
+        let steps = qturns
+            * (robot_config.microstep_resolution.value() * FULLSTEPS_PER_QUARTER).cast_signed();
 
-        let dir_level = if qturns < 0 { Level::Low } else { Level::High };
-        dir_pin.write(dir_level);
-        debug!(
-            target: "move_seq",
-            "Set dir level: dir_level={dir_level}"
-        );
-
-        let step_count = qturns.unsigned_abs()
-            * robot_config.microstep_resolution.value()
-            * FULLSTEPS_PER_QUARTER;
-        let mut ticker = Ticker::new();
-        for i in 0..step_count {
-            if (i % (10 * qturns.unsigned_abs() * robot_config.microstep_resolution.value())) == 0 {
-                debug!(
-                    target: "move_seq",
-                    "Executing {step_count} steps: {i}/{step_count}"
-                );
-            }
-            step_pin.set_high();
-            ticker.wait(delay);
-            step_pin.set_low();
-            ticker.wait(delay);
-        }
+        motor.turn(steps, steps_per_sec);
 
         info!(
             target: "move_seq",
