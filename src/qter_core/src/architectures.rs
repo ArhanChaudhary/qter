@@ -1158,9 +1158,7 @@ pub fn puzzle_definition() -> impl Parser<'static, File, Arc<PuzzleDefinition>, 
 /// Parse a puzzle definition inline; useful for testcases and puzzle-specific code
 #[must_use]
 pub fn mk_puzzle_definition(def: &str) -> Option<Arc<PuzzleDefinition>> {
-    puzzle_definition()
-        .parse(File::from(def))
-        .into_output()
+    puzzle_definition().parse(File::from(def)).into_output()
 }
 
 #[cfg(test)]

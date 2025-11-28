@@ -9,13 +9,21 @@ use qter_core::architectures::Algorithm;
 use robot::{
     CUBE3,
     hardware::{
-        FULLSTEPS_PER_REVOLUTION, NODES_PER_UART, Priority, RobotConfig, RobotHandle, Ticker, WhichUart, regs, set_prio,
+        FULLSTEPS_PER_REVOLUTION, NODES_PER_UART, Priority, RobotConfig, RobotHandle, Ticker,
+        WhichUart, regs, set_prio,
     },
 };
-use std::{fmt::Display, io::stdin, path::PathBuf, sync::Arc, thread, time::{Duration, Instant}};
+use std::{
+    fmt::Display,
+    io::stdin,
+    path::PathBuf,
+    sync::Arc,
+    thread,
+    time::{Duration, Instant},
+};
 
 #[cfg(pi)]
-use robot::hardware::{uart, mk_output_pin};
+use robot::hardware::{mk_output_pin, uart};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -68,7 +76,6 @@ fn main() {
         .format_timestamp(Some(TimestampPrecision::Millis))
         .init();
 
-
     match cli.command {
         Commands::UartRepl { which_uart } => {
             run_uart_repl(which_uart);
@@ -90,7 +97,7 @@ fn main() {
         Commands::UartInit => {}
         Commands::TestPrio { prio } => {
             test_prio(prio);
-        },
+        }
     }
     println!("Exiting");
 }
@@ -99,22 +106,22 @@ fn run_uart_repl(#[cfg_attr(not(pi), allow(unused_variables))] which_uart: Which
     #[cfg(pi)]
     {
         println!("register_info: GCONF(reg=0,n=10,RW), GSTAT(reg=1,n=3,R+WC), IFCNT(reg=2,n=8,R)");
-    
+
         let mut uart = uart::mk_uart(which_uart);
-    
+
         loop {
             let node_address = read_num(format!("Node address? (0-{NODES_PER_UART}) "))
                 .try_into()
                 .unwrap();
             let register_address = read_num("Register address? (0-127) ").try_into().unwrap();
             let maybe_val = maybe_read_num("Value? (leave blank to read) ");
-    
+
             if let Some(val) = maybe_val {
                 uart::write(&mut uart, node_address, register_address, val);
                 println!("Wrote to UART");
                 continue;
             }
-    
+
             let val = uart::read(&mut uart, node_address, register_address);
             match register_address {
                 0 => println!(
@@ -133,7 +140,10 @@ fn run_uart_repl(#[cfg_attr(not(pi), allow(unused_variables))] which_uart: Which
     }
 }
 
-fn run_motor_repl(config: &RobotConfig, #[cfg_attr(not(pi), allow(unused_variables))] motor_index: usize) {
+fn run_motor_repl(
+    config: &RobotConfig,
+    #[cfg_attr(not(pi), allow(unused_variables))] motor_index: usize,
+) {
     #[cfg(pi)]
     let mut step_pin = mk_output_pin(config.tmc_2209_configs()[motor_index].step_pin());
     let steps_per_revolution = f64::from(FULLSTEPS_PER_REVOLUTION);
@@ -255,8 +265,11 @@ fn test_prio(prio: Priority) {
         latencies.sort_unstable();
 
         println!("M ≈ {}μs", latencies[SAMPLES / 2]);
-        println!("IQR ≈ {}μs", (latencies[SAMPLES * 3 / 4] - latencies[SAMPLES / 4]));
-        println!("Top 5 = {:?}", &latencies[SAMPLES-5..SAMPLES]);
+        println!(
+            "IQR ≈ {}μs",
+            (latencies[SAMPLES * 3 / 4] - latencies[SAMPLES / 4])
+        );
+        println!("Top 5 = {:?}", &latencies[SAMPLES - 5..SAMPLES]);
         println!();
     }
 }

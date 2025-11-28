@@ -6,8 +6,8 @@
 use crate::orbit_puzzle::{OrbitPuzzleStateImplementor, SpecializedOrbitPuzzleState};
 use std::{hash::Hash, hint::unreachable_unchecked, num::NonZeroU8};
 
-pub mod portable;
 pub mod avx2;
+pub mod portable;
 pub mod simd8and16;
 
 #[derive(PartialEq, Clone, Hash)]

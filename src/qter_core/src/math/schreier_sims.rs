@@ -214,11 +214,7 @@ mod tests {
 
     #[test]
     fn three_by_three() {
-        let cube_def = Arc::clone(
-        &mk_puzzle_definition("3x3")
-            .unwrap()
-            .perm_group,
-        );
+        let cube_def = Arc::clone(&mk_puzzle_definition("3x3").unwrap().perm_group);
 
         let method = StabilizerChain::new(&cube_def);
 

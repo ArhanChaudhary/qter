@@ -5,6 +5,7 @@
 
 use std::{fs, io, path::PathBuf, sync::Arc};
 
+use ::robot::QterRobot;
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use clap::{ArgAction, Parser};
 use color_eyre::{
@@ -15,14 +16,13 @@ use compiler::compile;
 use internment::ArcIntern;
 use interpreter::{
     ActionPerformed, ExecutionState, InputRet, Interpreter, PausedState,
-    puzzle_states::{PuzzleState, SimulatedPuzzle, RobotState},
+    puzzle_states::{PuzzleState, RobotState, SimulatedPuzzle},
 };
 use itertools::Itertools;
 use qter_core::{
     ByPuzzleType, File, I, Int,
     table_encoding::{decode_table, encode_table},
 };
-use ::robot::QterRobot;
 
 mod demo;
 
