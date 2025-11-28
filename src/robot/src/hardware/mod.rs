@@ -149,6 +149,7 @@ struct CommutativeMoveFsm {
     state: [Option<(Face, Dir)>; 2],
 }
 
+#[derive(Debug, Clone, Copy)]
 enum MoveInstruction {
     Single((Face, Dir)),
     Double([(Face, Dir); 2]),
@@ -233,6 +234,8 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
     let steps_per_sec = robot_config.revolutions_per_second
         * f64::from(robot_config.microstep_resolution.value())
         * f64::from(FULLSTEPS_PER_REVOLUTION);
+    let qturns_to_steps_mult =
+        (robot_config.microstep_resolution.value() * FULLSTEPS_PER_QUARTER).cast_signed();
     info!(
         target: "move_seq",
         "Configuration: steps_per_sec={steps_per_sec}",
@@ -261,36 +264,41 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
         }
     });
 
-    for (face, dir) in iter
-        .filter_map(|v| match v {
-            MotorMessage2::QueueMoves(v) => Some(v),
-            MotorMessage2::PrevMovesDone(unparker) => {
-                unparker.unpark();
-                None
-            }
-        })
-        .flat_map(|moves| match moves {
-            // TODO: actually handle commutative move pairs
-            MoveInstruction::Single(v) => Either::Left([v].into_iter()),
-            MoveInstruction::Double([v1, v2]) => Either::Right([v1, v2].into_iter()),
-        })
-    {
+    for moves in iter.filter_map(|v| match v {
+        MotorMessage2::QueueMoves(v) => Some(v),
+        MotorMessage2::PrevMovesDone(unparker) => {
+            unparker.unpark();
+            None
+        }
+    }) {
         info!(
             target: "move_seq",
-            "Requested move {face:?}: direction={dir}",
+            "Requested moves: {moves:?}",
         );
 
-        let motor = &mut motors[face as usize];
+        match moves {
+            MoveInstruction::Single((face, dir)) => {
+                let motor = &mut motors[face as usize];
 
-        let qturns = dir.qturns();
-        let steps = qturns
-            * (robot_config.microstep_resolution.value() * FULLSTEPS_PER_QUARTER).cast_signed();
+                let steps = dir.qturns() * qturns_to_steps_mult;
 
-        motor.turn(steps, steps_per_sec);
+                motor.turn(steps, steps_per_sec);
+            }
+            MoveInstruction::Double([(face1, dir1), (face2, dir2)]) => {
+                let [motor1, motor2] = motors
+                    .get_disjoint_mut([face1 as usize, face2 as usize])
+                    .unwrap();
+
+                let steps1 = dir1.qturns() * qturns_to_steps_mult;
+                let steps2 = dir2.qturns() * qturns_to_steps_mult;
+
+                Motor::turn_many([motor1, motor2], [steps1, steps2], [steps_per_sec; 2]);
+            }
+        }
 
         info!(
             target: "move_seq",
-            "Completed move {face:?}"
+            "Completed moves: {moves:?}",
         );
     }
 

@@ -1,3 +1,5 @@
+#![feature(gen_blocks)]
+
 use std::{
     path::PathBuf,
     sync::{Arc, LazyLock},
