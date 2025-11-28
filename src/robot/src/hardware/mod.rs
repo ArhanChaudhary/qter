@@ -12,7 +12,6 @@ use clap::ValueEnum;
 use crossbeam::sync::{Parker, Unparker};
 use log::{debug, info};
 use qter_core::architectures::Algorithm;
-use rppal::gpio::{Gpio, Level, OutputPin};
 use serde::{Deserialize, Serialize};
 use thread_priority::{
     Error, RealtimeThreadSchedulePolicy, ScheduleParams, ThreadPriority,
@@ -22,7 +21,11 @@ use thread_priority::{
 
 mod motor_math;
 pub mod regs;
+
+#[cfg(pi)]
 pub mod uart;
+#[cfg(pi)]
+use rppal::gpio::{Gpio, Level, OutputPin};
 
 pub const FULLSTEPS_PER_REVOLUTION: u32 = 200;
 pub const FULLSTEPS_PER_QUARTER: u32 = FULLSTEPS_PER_REVOLUTION / 4;
@@ -213,6 +216,7 @@ impl FromStr for Face {
 }
 
 impl Microsteps {
+    #[cfg_attr(not(pi), allow(dead_code))]
     fn mres_bits(self) -> [bool; 4] {
         // 0000 256
         // 0001 128
@@ -266,8 +270,10 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
         "Configuration: freq={freq} delay={delay:?}",
     );
 
+    #[cfg(pi)]
     let mut step_pins: [OutputPin; 6] =
         std::array::from_fn(|i| mk_output_pin(robot_config.tmc_2209_configs()[i].step_pin()));
+    #[cfg(pi)]
     let mut dir_pins: [OutputPin; 6] =
         std::array::from_fn(|i| mk_output_pin(robot_config.tmc_2209_configs()[i].dir_pin()));
 
@@ -291,17 +297,22 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
             robot_config.tmc_2209_configs()[motor_index].face()
         );
 
+        #[cfg(pi)]
         let dir_pin = &mut dir_pins[motor_index];
+        #[cfg(pi)]
         let step_pin = &mut step_pins[motor_index];
 
         let qturns = dir.qturns();
 
-        let dir_level = if qturns < 0 { Level::Low } else { Level::High };
-        dir_pin.write(dir_level);
-        debug!(
-            target: "move_seq",
-            "Set dir level: motor_index={motor_index} dir_level={dir_level}"
-        );
+        #[cfg(pi)]
+        {
+            let dir_level = if qturns < 0 { Level::Low } else { Level::High };
+            dir_pin.write(dir_level);
+            debug!(
+                target: "move_seq",
+                "Set dir level: motor_index={motor_index} dir_level={dir_level}"
+            );
+        }
 
         let step_count =
             qturns.unsigned_abs() * robot_config.microsteps().value() * FULLSTEPS_PER_QUARTER;
@@ -313,8 +324,10 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
                     "Executing {step_count} steps: motor_index={motor_index} {i}/{step_count}"
                 );
             }
+            #[cfg(pi)]
             step_pin.set_high();
             ticker.wait(delay);
+            #[cfg(pi)]
             step_pin.set_low();
             ticker.wait(delay);
         }
@@ -355,7 +368,8 @@ pub fn set_prio(prio: Priority) {
     }
 }
 
-pub fn uart_init(robot_config: &RobotConfig) {
+pub fn uart_init(#[cfg_attr(not(pi), allow(unused_variables))] robot_config: &RobotConfig) {
+    #[cfg(pi)]
     for which_uart in [WhichUart::Uart0, WhichUart::Uart4] {
         let mut uart = uart::mk_uart(which_uart);
         for node_address in 0..NODES_PER_UART {
@@ -502,6 +516,7 @@ pub fn uart_init(robot_config: &RobotConfig) {
 
 pub fn estop(robot_config: &RobotConfig) {}
 
+#[cfg(pi)]
 pub fn mk_output_pin(gpio: u8) -> OutputPin {
     debug!(target: "gpio", "attempting to configure GPIO pin {gpio}");
     let mut pin = Gpio::new().unwrap().get(gpio).unwrap().into_output_low();
