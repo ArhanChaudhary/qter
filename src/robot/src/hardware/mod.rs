@@ -27,7 +27,6 @@ use crate::hardware::uart::{
     regs::{GConf, IholdIrun, NodeConf},
 };
 
-mod motor_math;
 pub mod uart;
 
 pub const FULLSTEPS_PER_REVOLUTION: u32 = 200;
