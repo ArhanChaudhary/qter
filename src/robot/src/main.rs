@@ -8,7 +8,8 @@ use qter_core::architectures::Algorithm;
 use robot::{
     CUBE3,
     hardware::{
-        FULLSTEPS_PER_REVOLUTION, Priority, RobotConfig, RobotHandle, Ticker, WhichUart,
+        FULLSTEPS_PER_REVOLUTION, RobotHandle, Ticker, WhichUart,
+        config::{Face, Priority, RobotConfig},
         mk_output_pin, set_prio,
         uart::{self, UartBus, regs},
     },
@@ -51,8 +52,8 @@ enum Commands {
     },
     /// Run a motor REPL to control a single motor.
     Motor {
-        /// The motor index to control (0-5).
-        motor_index: usize,
+        /// The face to control.
+        face: Face,
     },
     /// Initialize UART configuration.
     UartInit,
@@ -86,10 +87,10 @@ fn main() {
             );
             robot_handle.await_moves();
         }
-        Commands::Motor { motor_index } => {
+        Commands::Motor { face } => {
             let robot_handle = RobotHandle::init(&cli.robot_config);
 
-            run_motor_repl(robot_handle.config(), motor_index);
+            run_motor_repl(robot_handle.config(), face);
         }
         Commands::UartInit => {}
         Commands::TestPrio { prio } => {
@@ -145,8 +146,8 @@ fn run_uart_repl(which_uart: WhichUart) {
     }
 }
 
-fn run_motor_repl(config: &RobotConfig, motor_index: usize) {
-    let mut step_pin = mk_output_pin(config.tmc_2209_configs()[motor_index].step_pin());
+fn run_motor_repl(config: &RobotConfig, face: Face) {
+    let mut step_pin = mk_output_pin(config.motors[face].step_pin);
     let steps_per_revolution = f64::from(FULLSTEPS_PER_REVOLUTION);
 
     println!("1 rev = {steps_per_revolution} steps");
@@ -190,7 +191,7 @@ fn run_motor_repl(config: &RobotConfig, motor_index: usize) {
                 "us" => 1_000_000.0 / v,
                 _ => unreachable!(),
             };
-        } * f64::from(config.microsteps().value());
+        } * f64::from(config.microstep_resolution.value());
 
         let delay = Duration::from_secs(1).div_f64(2.0 * freq);
 

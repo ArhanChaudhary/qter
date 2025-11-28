@@ -7,12 +7,14 @@ use log::{debug, trace};
 use rppal::uart::Parity;
 
 use regs::{ChopConf, DrvStatus, GConf, GStat, IholdIrun, NodeConf, PwmConf};
+use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 
 const WRITE_BIT: u8 = 1 << 7;
 const SYNC_BYTE: u8 = 0b_1010_0000_u8.reverse_bits();
 const MASTER_ADDRESS: u8 = 0xff;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UartId {
     Uart0,
     Uart4,
@@ -27,13 +29,13 @@ impl UartId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum NodeAddress {
-    Zero,
-    One,
-    Two,
-    Three,
+    Zero = 0,
+    One = 1,
+    Two = 2,
+    Three = 3,
 }
 
 /// One UART bus, possibly with multiple motors.

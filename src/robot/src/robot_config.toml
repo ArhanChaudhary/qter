@@ -1,33 +1,39 @@
 revolutions_per_second = 0.5
-microsteps = "Fullstep"
+microstep_resolution = 1
 priority = "Default"
 
-[[tmc_2209_configs]]
-face = "R"
+[motors.R]
 step_pin = 11
 dir_pin = 7
+uart_bus = "Uart4"
+uart_address = 0
 
-[[tmc_2209_configs]]
-face = "L"
+[motors.L]
 step_pin = 1
 dir_pin = 5
+uart_bus = "Uart4"
+uart_address = 1
 
-[[tmc_2209_configs]]
-face = "U"
+[motors.U]
 step_pin = 12
 dir_pin = 23
+uart_bus = "Uart4"
+uart_address = 2
 
-[[tmc_2209_configs]]
-face = "D"
+[motors.D]
 step_pin = 6
 dir_pin = 17
+uart_bus = "Uart0"
+uart_address = 2
 
-[[tmc_2209_configs]]
-face = "F"
+[motors.F]
 step_pin = 19
 dir_pin = 13
+uart_bus = "Uart0"
+uart_address = 1
 
-[[tmc_2209_configs]]
-face = "B"
+[motors.B]
 step_pin = 21
 dir_pin = 26
+uart_bus = "Uart0"
+uart_address = 0
