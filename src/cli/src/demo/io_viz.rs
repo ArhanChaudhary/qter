@@ -79,22 +79,23 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
                 ..Default::default()
             },
             // BackgroundColor(Color::Srgba(RED)),
-            ChildOf(panel),
         ))
+        .set_parent(panel)
         .id();
 
-    commands.spawn((
-        Text("Choose a qter program:".to_string()),
-        TextLayout {
-            justify: JustifyText::Center,
-            ..Default::default()
-        },
-        TextFont {
-            font_size: window.size().x / 66.,
-            ..Default::default()
-        },
-        ChildOf(choose_a_program),
-    ));
+    commands
+        .spawn((
+            Text("Choose a qter program:".to_string()),
+            TextLayout {
+                justify: JustifyText::Center,
+                ..Default::default()
+            },
+            TextFont {
+                font_size: window.size().x / 66.,
+                ..Default::default()
+            },
+        ))
+        .set_parent(choose_a_program);
 
     let input_buttons = commands
         .spawn((
@@ -110,8 +111,8 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
                 ..Default::default()
             },
             // BackgroundColor(Color::srgba(1., 1., 0., 0.5)),
-            ChildOf(panel),
         ))
+        .set_parent(panel)
         .id();
 
     for input_button in [
@@ -130,11 +131,11 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
                     align_items: AlignItems::Center,
                     ..Default::default()
                 },
-                ChildOf(input_buttons),
                 BackgroundColor(Color::srgba(0.5, 0.5, 0.5, 0.5)),
                 Button,
                 input_button,
             ))
+            .set_parent(input_buttons)
             .with_child((
                 Text(text),
                 TextLayout {
@@ -164,8 +165,8 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
             BackgroundColor(Color::srgba(0.5, 0.5, 0.5, 0.5)),
             Button,
             ExecuteButton,
-            ChildOf(panel),
         ))
+        .set_parent(panel)
         .with_child((
             Text("Execute".to_string()),
             TextLayout {
@@ -195,8 +196,8 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
             BackgroundColor(Color::srgba(0.5, 0.5, 0.5, 0.5)),
             Button,
             StepButton,
-            ChildOf(panel),
         ))
+        .set_parent(panel)
         .with_child((
             Text("Step".to_string()),
             TextLayout {
@@ -216,8 +217,8 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
                 ..Default::default()
             },
             MessageBox,
-            ChildOf(panel),
         ))
+        .set_parent(panel)
         .with_child((
             Text::new(String::new()),
             TextFont {
@@ -236,11 +237,11 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
                 ..Default::default()
             },
             BorderColor(Color::WHITE),
-            ChildOf(panel),
         ))
+        .set_parent(panel)
         .id();
 
-    commands.spawn((TextInput, ChildOf(bottom_stuff)));
+    commands.spawn(TextInput).set_parent(bottom_stuff);
 }
 
 fn started_program(
@@ -283,10 +284,10 @@ fn on_submit(
         command_tx
             .send(InterpretationCommand::GiveInput(
                 if let Ok(v) = submission.value.parse() {
-                    messages_tx.write(Message(submission.value.clone()));
+                    messages_tx.send(Message(submission.value.clone()));
                     v
                 } else {
-                    messages_tx.write(Message("Value needs to be parsable as a string".to_owned()));
+                    messages_tx.send(Message("Value needs to be parsable as a string".to_owned()));
                     continue;
                 },
             ))
@@ -298,7 +299,7 @@ fn input_button(
     interaction_query: Query<(&Interaction, &InputButton), Changed<Interaction>>,
     command_tx: Res<CommandTx>,
 ) {
-    for (&interaction, input_button) in interaction_query {
+    for (&interaction, input_button) in &interaction_query {
         if interaction == Interaction::Pressed {
             command_tx
                 .send(InterpretationCommand::Execute(input_button.1))
@@ -311,7 +312,7 @@ fn step_button(
     interaction_query: Query<(&Interaction, &StepButton), Changed<Interaction>>,
     command_tx: Res<CommandTx>,
 ) {
-    for (&interaction, _) in interaction_query {
+    for (&interaction, _) in &interaction_query {
         if interaction == Interaction::Pressed {
             command_tx.send(InterpretationCommand::Step).unwrap();
         }
@@ -322,21 +323,21 @@ fn solve_button(
     interaction_query: Query<&Interaction, With<SolveButton>>,
     command_tx: Res<CommandTx>,
 ) {
-    if let Ok(&Interaction::Pressed) = interaction_query.single() {
+    if let Ok(Interaction::Pressed) = interaction_query.get_single() {
         command_tx.send(InterpretationCommand::Solve).unwrap();
     }
 }
 
 fn execute_button(
     command_tx: Res<CommandTx>,
-    interaction: Single<&Interaction, (Changed<Interaction>, With<ExecuteButton>)>,
+    ////interaction: Single<&Interaction, (Changed<Interaction>, With<ExecuteButton>)>,
     mut execute_button_state: ResMut<ExecuteButtonState>,
     mut text: Single<&mut Text, With<ExecuteButton>>,
 ) {
     // if let Ok(&Interaction::Pressed) = interaction_query.single() {
-    if *interaction != &Interaction::Pressed {
-        return;
-    }
+    ////if *interaction != &Interaction::Pressed {
+        ////return;
+        ////}
     // dbg!(&children.0);
     *execute_button_state = match *execute_button_state {
         ExecuteButtonState::None => {
@@ -368,8 +369,7 @@ fn execute_conditionally(
     }
 
     match *execute_button_state {
-        ExecuteButtonState::None => {}
-        ExecuteButtonState::WaitingForInput => {}
+        ExecuteButtonState::None | ExecuteButtonState::WaitingForInput => {}
         ExecuteButtonState::Clicked => {
             if inputs.is_empty() {
                 command_tx.send(InterpretationCommand::Step).unwrap();

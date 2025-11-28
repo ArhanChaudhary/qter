@@ -11,9 +11,7 @@ use interpreter::{
 };
 use qter_core::{
     Facelets, Int, U,
-    architectures::{
-        Algorithm, PermutationGroup, PuzzleDefinition, mk_puzzle_definition,
-    },
+    architectures::{Algorithm, PermutationGroup, PuzzleDefinition, mk_puzzle_definition},
     discrete_math::lcm_iter,
 };
 
