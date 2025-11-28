@@ -1,43 +1,45 @@
 use bitflags::bitflags;
 
-/// The GCONF register address on the TMC2209.
-///
-/// See page 23 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-pub const GCONF_REGISTER_ADDRESS: u8 = 0x00;
+macro_rules! bitfields {
+    ($( $vis:vis $field:ident: $ty:ty = $start:literal..=$end:literal; )*) => {
+        ::paste::paste! {$(
+            $vis const fn $field(self) -> $ty {
+                const START: u32 = $start;
+                const END: u32 = $end + 1;
+                const MASK: u32 = (!0 << START) & !(!0 << END);
+                const _: () = {
+                    assert!(<$ty>::BITS >= (END - START));
+                };
+
+                ((self.bits() & MASK) >> START) as $ty
+            }
+
+            $vis const fn [< with_ $field >](self, val: $ty) -> Self {
+                const START: u32 = $start;
+                const END: u32 = $end + 1;
+                const MASK: u32 = (!0 << START) & !(!0 << END);
+
+                let val = val as u32;
+                assert!(val & !(MASK >> START) == 0);
+
+                Self::from_bits_retain(self.bits() & !MASK | val << START)
+            }
+        )*}
+    };
+}
+
 /// The IFCNT register address on the TMC2209.
 ///
-/// See page 24 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-pub const IFCNT_REGISTER_ADDRESS: u8 = 0x02;
-/// The NODECONF register address on the TMC2209.
-///
-/// See page 24 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-pub const NODECONF_REGISTER_ADDRESS: u8 = 0x03;
-#[allow(clippy::doc_markdown)]
-/// The IHOLD_IRUN register address on the TMC2209.
-///
-/// See page 28 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-pub const IHOLD_IRUN_REGISTER_ADDRESS: u8 = 0x10;
-/// The CHOPCONF register address on the TMC2209.
-///
-/// See page 33 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-pub const CHOPCONF_REGISTER_ADDRESS: u8 = 0x6C;
-#[allow(clippy::doc_markdown)]
-/// The DRV_STATUS register address on the TMC2209.
-///
-/// See page 37 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-pub const DRV_STATUS_REGISTER_ADDRESS: u8 = 0x6F;
-/// The PWMCONF register address on the TMC2209.
-///
-/// See page 35 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-pub const PWMCONF_REGISTER_ADDRESS: u8 = 0x70;
+/// See datasheet pg. 24.
+pub const IFCNT_ADDRESS: u8 = 0x02;
 
 bitflags! {
     /// The GCONF register bitflags on the TMC2209. UART is permitted to read
     /// and write to this register.
     ///
-    /// See page 23 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-    #[derive(Debug, PartialEq, Clone, Copy)]
-    pub struct GCONF: u32 {
+    /// See datasheet pg. 23.
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+    pub struct GConf: u32 {
         /// Enable StealthChop (0) or SpreadCycle (1) mode.
         const EN_SPREADCYCLE = 1 << 2;
         /// Inverse the motor direction.
@@ -49,38 +51,53 @@ bitflags! {
         // Microstep resolution selected by MRES register
         const MSTEP_REG_SELECT = 1 << 7;
 
-        /// Only the first ten bits are used.
+        // Indicate which bits are used (but aren't in our flags yet)
         const _ = (1 << 10) - 1;
     }
+}
+
+impl GConf {
+    pub const ADDRESS: u8 = 0x00;
 }
 
 // I can't see us needing this in the near future...
 // 0x1, n = 3, R+WC
 bitflags! {
-    #[derive(Debug)]
-    pub struct GSTAT: u32 {
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+    pub struct GStat: u32 {
         const RESET = 1 << 0;
         const DRV_ERR = 1 << 1;
         const UV_CP = 1 << 2;
     }
 }
 
-bitflags! {
-    /// The NODECONF register bitflags on the TMC2209. UART is only permutted
-    /// to write to this register, so all reads will return 0.
-    #[derive(Debug, PartialEq, Clone, Copy)]
-    pub struct NODECONF: u32 {
-        /// SENDDELAY bit 0.
-        const SENDDELAY0 = 1;
-        /// SENDDELAY bit 1.
-        const SENDDELAY1 = 1 << 1;
-        /// SENDDELAY bit 2.
-        const SENDDELAY2 = 1 << 2;
-        /// SENDDELAY bit 3.
-        const SENDDELAY3 = 1 << 3;
+impl GStat {
+    pub const ADDRESS: u8 = 0x01;
+}
 
-        // Only the first four bits are used.
-        const _ = (1 << 4) - 1;
+bitflags! {
+    /// The NODECONF register bitflags on the TMC2209. UART is only permitted
+    /// to write to this register, so all reads will return 0.
+    ///
+    /// See datasheet pg. 24.
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+    pub struct NodeConf: u32 {
+        /// SENDDELAY bit 0.
+        const SENDDELAY0 = 1 << 8;
+        /// SENDDELAY bit 1.
+        const SENDDELAY1 = 1 << 9;
+        /// SENDDELAY bit 2.
+        const SENDDELAY2 = 1 << 10;
+        /// SENDDELAY bit 3.
+        const SENDDELAY3 = 1 << 11;
+    }
+}
+
+impl NodeConf {
+    pub const ADDRESS: u8 = 0x03;
+
+    bitfields! {
+        pub senddelay: u8 = 8..=11;
     }
 }
 
@@ -88,9 +105,9 @@ bitflags! {
     /// The CHOPCONF register bitflags on the TMC2209. UART is permitted to read
     /// and write to this register.
     ///
-    /// See page 33 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-    #[derive(Debug, PartialEq, Clone, Copy)]
-    pub struct CHOPCONF: u32 {
+    /// See datasheet pg. 33.
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+    pub struct ChopConf: u32 {
         /// Microstep resolution bit 0.
         const MRES0 = 1 << 24;
         /// Microstep resolution bit 1.
@@ -100,8 +117,16 @@ bitflags! {
         /// Microstep resolution bit 3.
         const MRES3 = 1 << 27;
 
-        /// ALl 32 bits are used.
-        const _ = !0;
+        // Indicate which bits are used (but aren't in our flags yet)
+        const _ = 0b_11111111_00000011_10000111_11111111;
+    }
+}
+
+impl ChopConf {
+    pub const ADDRESS: u8 = 0x6C;
+
+    bitfields! {
+        pub mres: u8 = 24..=27;
     }
 }
 
@@ -109,27 +134,34 @@ bitflags! {
     /// The PWMCONF register bitflags on the TMC2209. UART is permitted to read
     /// and write to this register.
     ///
-    /// See page 35 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-    #[derive(Debug, PartialEq, Clone, Copy)]
-    pub struct PWMCONF: u32 {
+    /// See datasheet pg. 35.
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+    pub struct PwmConf: u32 {
         /// Freewheel mode bit 0.
         const FREEWHEEL0 = 1 << 20;
         /// Freewheel mode bit 1.
         const FREEWHEEL1 = 1 << 21;
 
-        /// ALl 32 bits are used.
-        const _ = !0;
+        // Indicate which bits are used (but aren't in our flags yet)
+        const _ = 0b_11111111_00111111_11111111_11111111;
+    }
+}
+
+impl PwmConf {
+    pub const ADDRESS: u8 = 0x70;
+
+    bitfields! {
+        pub freewheel: u8 = 20..=21;
     }
 }
 
 bitflags! {
-    /// The IHOLD_IRUN register bitflags on the TMC2209. UART is only permutted
+    /// The IHOLD_IRUN register bitflags on the TMC2209. UART is only permitted
     /// to write to this register, so all reads will return 0.
     ///
-    /// See page 35 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-    #[derive(Debug, PartialEq, Clone, Copy)]
-    #[allow(non_camel_case_types)]
-    pub struct IHOLD_IRUN: u32 {
+    /// See datasheet pg. 35.
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+    pub struct IholdIrun: u32 {
         /// IHOLD bit 0.
         const IHOLD0 = 1;
         /// IHOLD bit 1.
@@ -158,18 +190,24 @@ bitflags! {
         const IHOLDDELAY2 = 1 << 18;
         /// IHOLDDELAY bit 3.
         const IHOLDDELAY3 = 1 << 19;
+    }
+}
 
-        /// Only the first 20 bits are used.
-        const _ = 0b1111_0001_1111_0001_1111;
+impl IholdIrun {
+    pub const ADDRESS: u8 = 0x10;
+
+    bitfields! {
+        pub ihold: u8 = 0..=4;
+        pub irun: u8 = 8..=12;
+        pub iholddelay: u8 = 16..=19;
     }
 }
 
 bitflags! {
-    /// The DRV_STATUS register bitflags on the TMC2209. UART is only permutted
+    /// The DRV_STATUS register bitflags on the TMC2209. UART is only permitted
     /// to read from this register.
     #[derive(Debug, PartialEq, Clone, Copy)]
-    #[allow(non_camel_case_types)]
-    pub struct DRV_STATUS: u32 {
+    pub struct DrvStatus: u32 {
         /// Overtemperature pre-warning flag
         const OTPW = 1 << 0;
         /// Overtemperature flag.
@@ -204,7 +242,16 @@ bitflags! {
         const CS_ACTUAL3 = 1 << 19;
         /// Bit 4 of the actual motor current.
         const CS_ACTUAL4 = 1 << 20;
-        // All 32 bits are used.
-        const _ = !0;
+
+        // Indicate which bits are used (but aren't in our flags yet)
+        const _ = 0b_11000000_00011111_00001111_11111111;
+    }
+}
+
+impl DrvStatus {
+    pub const ADDRESS: u8 = 0x6F;
+
+    bitfields! {
+        pub cs_actual: u8 = 16..=20;
     }
 }

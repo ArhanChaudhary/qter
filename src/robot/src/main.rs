@@ -8,8 +8,9 @@ use qter_core::architectures::Algorithm;
 use robot::{
     CUBE3,
     hardware::{
-        FULLSTEPS_PER_REVOLUTION, NODES_PER_UART, Priority, RobotConfig, RobotHandle, Ticker,
-        WhichUart, mk_output_pin, regs, set_prio, uart,
+        FULLSTEPS_PER_REVOLUTION, Priority, RobotConfig, RobotHandle, Ticker, WhichUart,
+        mk_output_pin, set_prio,
+        uart::{self, UartBus, regs},
     },
 };
 use std::{
@@ -101,30 +102,41 @@ fn main() {
 fn run_uart_repl(which_uart: WhichUart) {
     println!("register_info: GCONF(reg=0,n=10,RW), GSTAT(reg=1,n=3,R+WC), IFCNT(reg=2,n=8,R)");
 
-    let mut uart = uart::mk_uart(which_uart);
+    let mut uart = UartBus::new(match which_uart {
+        WhichUart::Uart0 => uart::UartId::Uart0,
+        WhichUart::Uart4 => uart::UartId::Uart4,
+    });
 
     loop {
-        let node_address = read_num(format!("Node address? (0-{NODES_PER_UART}) "))
+        let node_address = read_num(format!("Node address? (0-3) "))
             .try_into()
             .unwrap();
         let register_address = read_num("Register address? (0-127) ").try_into().unwrap();
         let maybe_val = maybe_read_num("Value? (leave blank to read) ");
 
+        let mut uart = uart.node(match node_address {
+            0 => uart::NodeAddress::Zero,
+            1 => uart::NodeAddress::One,
+            2 => uart::NodeAddress::Two,
+            3 => uart::NodeAddress::Three,
+            _ => unreachable!(),
+        });
+
         if let Some(val) = maybe_val {
-            uart::write(&mut uart, node_address, register_address, val);
+            uart.write(register_address, val);
             println!("Wrote to UART");
             continue;
         }
 
-        let val = uart::read(&mut uart, node_address, register_address);
+        let val = uart.read(register_address);
         match register_address {
-            0 => println!(
+            regs::GConf::ADDRESS => println!(
                 "Read: node_address={node_address} register_address=0(GCONF) val={:?}",
-                regs::GCONF::from_bits_retain(val)
+                regs::GConf::from_bits_retain(val)
             ),
-            1 => println!(
+            regs::GStat::ADDRESS => println!(
                 "Read: node_address={node_address} register_address=1(GSTAT) val={:?}",
-                regs::GSTAT::from_bits_retain(val)
+                regs::GStat::from_bits_retain(val)
             ),
             _ => println!(
                 "Read: node_address={node_address} register_address={register_address} raw=0x{val:08x}",

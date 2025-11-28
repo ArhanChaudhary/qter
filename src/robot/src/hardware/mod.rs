@@ -22,13 +22,16 @@ use thread_priority::{
     unix::{ThreadSchedulePolicy, set_current_thread_priority},
 };
 
+use crate::hardware::uart::{
+    UartBus,
+    regs::{GConf, IholdIrun, NodeConf},
+};
+
 mod motor_math;
-pub mod regs;
 pub mod uart;
 
 pub const FULLSTEPS_PER_REVOLUTION: u32 = 200;
 pub const FULLSTEPS_PER_QUARTER: u32 = FULLSTEPS_PER_REVOLUTION / 4;
-pub const NODES_PER_UART: u8 = 3;
 
 /// Configuration for a single TMC2209-controlled motor.
 #[derive(Deserialize, Serialize, Clone, Copy)]
@@ -54,15 +57,15 @@ impl TMC2209Config {
 
 #[derive(Clone, Copy, Deserialize, Serialize)]
 pub enum Microsteps {
-    Fullstep,
-    Two,
-    Four,
-    Eight,
-    Sixteen,
-    ThirtyTwo,
-    SixtyFour,
-    OneTwentyEight,
-    TwoFiftySix,
+    Fullstep = 8,
+    Two = 7,
+    Four = 6,
+    Eight = 5,
+    Sixteen = 4,
+    ThirtyTwo = 3,
+    SixtyFour = 2,
+    OneTwentyEight = 1,
+    TwoFiftySix = 0,
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize, ValueEnum)]
@@ -229,29 +232,6 @@ impl FromStr for Face {
 }
 
 impl Microsteps {
-    fn mres_bits(self) -> [bool; 4] {
-        // 0000 256
-        // 0001 128
-        // 0010 64
-        // 0011 32
-        // 0100 16
-        // 0101 8
-        // 0110 4
-        // 0111 2
-        // 1000 1
-        match self {
-            Microsteps::Fullstep => [false, false, false, true],
-            Microsteps::Two => [true, true, true, false],
-            Microsteps::Four => [false, true, true, false],
-            Microsteps::Eight => [true, false, true, false],
-            Microsteps::Sixteen => [false, false, true, false],
-            Microsteps::ThirtyTwo => [true, true, false, false],
-            Microsteps::SixtyFour => [false, true, false, false],
-            Microsteps::OneTwentyEight => [true, false, false, false],
-            Microsteps::TwoFiftySix => [false, false, false, false],
-        }
-    }
-
     pub fn value(self) -> u32 {
         match self {
             Microsteps::Fullstep => 1,
@@ -481,146 +461,113 @@ pub fn set_prio(prio: Priority) {
 }
 
 pub fn uart_init(robot_config: &RobotConfig) {
-    for which_uart in [WhichUart::Uart0, WhichUart::Uart4] {
-        let mut uart = uart::mk_uart(which_uart);
-        for node_address in 0..NODES_PER_UART {
-            debug!(target: "uart_init", "Initializing: which_uart={which_uart:?} node_address={node_address}");
+    for which_uart in [uart::UartId::Uart0, uart::UartId::Uart4] {
+        let mut uart_bus = UartBus::new(which_uart);
+
+        for node_address in [
+            uart::NodeAddress::Zero,
+            uart::NodeAddress::One,
+            uart::NodeAddress::Two,
+        ] {
+            let mut uart = uart_bus.node(node_address);
+
+            debug!(target: "uart_init", "Initializing: which_uart={which_uart:?} node_address={node_address:?}");
+
+            // Set SENDDELAY without performing a read. We can't perform any reads yet *because* we
+            // haven't set SENDDELAY. We set NODECONF again later regardless, because this could
+            // fail without us knowing.
+            // TODO: there has to be a better way to integrate this into the API of `uart`
+            debug!(target: "uart_init", "Setting SENDDELAY");
+            uart.write_raw(
+                NodeConf::ADDRESS,
+                NodeConf::empty().with_senddelay(2).bits(),
+            );
 
             //
             // Configure GCONF
             //
-            debug!(target: "uart_init", "Reading initial GCONF: node_address={node_address}");
-            let initial_gconf = regs::GCONF::from_bits(uart::read(
-                &mut uart,
-                node_address,
-                regs::GCONF_REGISTER_ADDRESS,
-            ))
-            .expect("GCONF has unknown bits set");
-            debug!(target: "uart_init", "Read initial GCONF: node_address={node_address} initial_value={initial_gconf:?}");
+            debug!(target: "uart_init", "Reading initial GCONF");
+            let initial_gconf = uart.gconf();
+            debug!(target: "uart_init", "Read initial GCONF: initial_value={initial_gconf:?}");
             let new_gconf = initial_gconf
-                .union(regs::GCONF::MSTEP_REG_SELECT)
-                .union(regs::GCONF::PDN_DISABLE)
-                .union(regs::GCONF::INDEX_OTPW);
+                .union(GConf::MSTEP_REG_SELECT)
+                .union(GConf::PDN_DISABLE)
+                .union(GConf::INDEX_OTPW);
             if initial_gconf == new_gconf {
                 debug!(target: "uart_init", "GCONF already configured");
             } else {
                 debug!(
                     target: "uart_init",
-                    "Writing GCONF: node_address={node_address} new_value={new_gconf:?}",
+                    "Writing GCONF: new_value={new_gconf:?}",
                 );
-                uart::write(
-                    &mut uart,
-                    node_address,
-                    regs::GCONF_REGISTER_ADDRESS,
-                    new_gconf.bits(),
-                );
+                uart.set_gconf(new_gconf);
             }
 
             //
             // Configure CHOPCONF
             //
-            debug!(target: "uart_init", "Reading initial CHOPCONF: node_address={node_address}");
-            let initial_chopconf = regs::CHOPCONF::from_bits(uart::read(
-                &mut uart,
-                node_address,
-                regs::CHOPCONF_REGISTER_ADDRESS,
-            ))
-            .expect("CHOPCONF has unknown bits set");
-            debug!(target: "uart_init", "Read initial CHOPCONF: node_address={node_address} initial_value={initial_chopconf:?}");
-            let [mres0, mres1, mres2, mres3] = robot_config.microsteps.mres_bits();
-            let mut new_pwmconf = initial_chopconf;
-            new_pwmconf.set(regs::CHOPCONF::MRES0, mres0);
-            new_pwmconf.set(regs::CHOPCONF::MRES1, mres1);
-            new_pwmconf.set(regs::CHOPCONF::MRES2, mres2);
-            new_pwmconf.set(regs::CHOPCONF::MRES3, mres3);
-            if new_pwmconf == initial_chopconf {
+            debug!(target: "uart_init", "Reading initial CHOPCONF");
+            let initial_chopconf = uart.chopconf();
+            debug!(target: "uart_init", "Read initial CHOPCONF: initial_value={initial_chopconf:?}");
+            let new_chopconf = initial_chopconf.with_mres(robot_config.microsteps as u8);
+            if new_chopconf == initial_chopconf {
                 debug!(target: "uart_init", "CHOPCONF already configured");
             } else {
                 debug!(
                     target: "uart_init",
-                    "Writing CHOPCONF: node_address={node_address} new_value={new_pwmconf:?}",
+                    "Writing CHOPCONF: new_value={new_chopconf:?}",
                 );
-                uart::write(
-                    &mut uart,
-                    node_address,
-                    regs::CHOPCONF_REGISTER_ADDRESS,
-                    new_pwmconf.bits(),
-                );
+                uart.set_chopconf(new_chopconf);
             }
 
             //
             // Configure NODECONF. Note that NODECONF is write-only.
             //
-            let nodeconf = regs::NODECONF::empty()
+            let nodeconf = NodeConf::empty()
                 // Set SENDDELAY to 2. SENDDELAY must be at least 2 in a multi-node system.
                 //
                 // See page 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-                .union(regs::NODECONF::SENDDELAY1);
+                .with_senddelay(2);
             debug!(
                 target: "uart_init",
-                "Writing NODECONF: node_address={node_address} value={nodeconf:?}",
+                "Writing NODECONF: value={nodeconf:?}",
             );
-            uart::write(
-                &mut uart,
-                node_address,
-                regs::NODECONF_REGISTER_ADDRESS,
-                nodeconf.bits(),
-            );
+            uart.set_nodeconf(nodeconf);
 
             //
             // Configure PWMCONF.
             //
-            debug!(target: "uart_init", "Reading initial PWMCONF: node_address={node_address}");
-            let initial_pwmconf = regs::PWMCONF::from_bits(uart::read(
-                &mut uart,
-                node_address,
-                regs::PWMCONF_REGISTER_ADDRESS,
-            ))
-            .expect("PWMCONF has unknown bits set");
-            debug!(target: "uart_init", "Read initial PWMCONF: node_address={node_address} initial_value={initial_pwmconf:?}");
+            debug!(target: "uart_init", "Reading initial PwmConf");
+            let initial_pwmconf = uart.pwmconf();
+            debug!(target: "uart_init", "Read initial PWMCONF: initial_value={initial_pwmconf:?}");
             let new_pwmconf = initial_pwmconf
                 // Freewheel mode
-                .union(regs::PWMCONF::FREEWHEEL0)
-                .difference(regs::PWMCONF::FREEWHEEL1);
+                .with_freewheel(1);
             if new_pwmconf == initial_pwmconf {
                 debug!(target: "uart_init", "PWMCONF already configured");
             } else {
                 debug!(
                     target: "uart_init",
-                    "Writing PWMCONF: node_address={node_address} new_value={new_pwmconf:?}",
+                    "Writing PWMCONF: new_value={new_pwmconf:?}",
                 );
-                uart::write(
-                    &mut uart,
-                    node_address,
-                    regs::PWMCONF_REGISTER_ADDRESS,
-                    new_pwmconf.bits(),
-                );
+                uart.set_pwmconf(new_pwmconf);
             }
 
             //
             // Configure IHOLD_IRUN. Note that IHOLD_IRUN is write-only.
             //
-            let ihold_irun = regs::IHOLD_IRUN::empty()
+            let ihold_irun = IholdIrun::empty()
                 // Set IRUN to 31
-                .union(regs::IHOLD_IRUN::IRUN0)
-                .union(regs::IHOLD_IRUN::IRUN1)
-                .union(regs::IHOLD_IRUN::IRUN2)
-                .union(regs::IHOLD_IRUN::IRUN3)
-                .union(regs::IHOLD_IRUN::IRUN4)
+                .with_irun(31)
                 // Set IHOLDDELAY to 1
-                .union(regs::IHOLD_IRUN::IHOLDDELAY0);
+                .with_iholddelay(1);
             debug!(
                 target: "uart_init",
-                "Writing IHOLD_IRUN: node_address={node_address} value={ihold_irun:?}",
+                "Writing IHOLD_IRUN: value={ihold_irun:?}",
             );
-            uart::write(
-                &mut uart,
-                node_address,
-                regs::IHOLD_IRUN_REGISTER_ADDRESS,
-                ihold_irun.bits(),
-            );
+            uart.set_iholdirun(ihold_irun);
 
-            debug!(target: "uart_init", "Initialized: which_uart={which_uart:?} node_address={node_address}");
+            debug!(target: "uart_init", "Initialized: which_uart={which_uart:?} node_address={node_address:?}");
         }
     }
 }

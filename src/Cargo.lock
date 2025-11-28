@@ -4309,6 +4309,7 @@ dependencies = [
  "interpreter",
  "itertools 0.13.0",
  "log",
+ "paste",
  "qter_core",
  "rppal",
  "serde",

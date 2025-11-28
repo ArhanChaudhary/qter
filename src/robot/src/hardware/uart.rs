@@ -1,295 +1,254 @@
-use super::{WhichUart, regs};
+mod crc;
+pub mod regs;
+
+use std::{ops::RangeTo, path::Path, time::Duration};
+
 use log::{debug, trace};
-use rppal::uart::{Parity, Uart};
-use std::{thread, time::Duration};
+use rppal::uart::Parity;
 
-/// Baud rates from 9600 to 500000 may be used. No baud rate configuration is
-/// required, as the TMC2209 automatically adapts to the masters’ baud rate.
-/// Keep in mind it also needs to be equal to one of the allowed values on the
-/// Raspberry Pi 4 Model B. As such the only allowed baud rates are `9_600`,
-/// `19_200`, `38_400`, `57_600`, `115_200`, `230_400`, `460_800` or `500_000`.
-/// Generally higher is better, so we set it to `460_800` for safety margin.
-///
-/// See page 6 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf> and
-/// <https://docs.rs/rppal/0.14.1/src/rppal/uart.rs.html#527>
-const UART_BAUD_RATE: u32 = 460_800;
-/// In a multi-node setup, UART has no parity.
-///
-/// See page 21 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-const UART_PARITY: Parity = Parity::None;
-/// In a multi-node setup, UART uses 8 data bits.
-///
-/// See page 21 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-const UART_DATA_BITS: u8 = 8;
-/// UART uses 1 stop bit.
-///
-/// See page 18 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-const UART_STOP_BITS: u8 = 1;
-/// The TMC2209 datasheet specifies a small delay between UART operations, but
-/// does not elaborate. 1ms should be enough to cover all, so we use it for now.
-const UART_DELAY: Duration = Duration::from_millis(1);
-/// For now our reads are blocking. We must provide a minimum UART read buffer
-/// size, which is 8 bytes or the size of the read access reply.
-///
-/// See page 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-const UART_READ_BUFFER_SIZE_BYTES: u8 = 8;
-/// The UART sync byte used to identify the start of all UART transmissions.
-///
-/// See page 18 & 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-const UART_SYNC_BYTE: u8 = 0b_1010_0000u8.reverse_bits();
-/// The UART read access reply master address.
-///
-/// See page 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-const UART_READ_REPLY_MASTER_ADDRESS: u8 = 0xFF;
-/// The bit mask of the read/write bit in the UART register address for all UART
-/// transmissions.
-///
-/// See page 18 & 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-const REGISTER_MSB: u8 = 1 << 7;
+use regs::{ChopConf, DrvStatus, GConf, GStat, IholdIrun, NodeConf, PwmConf};
 
-/// Create a new `Uart`.
-pub fn mk_uart(which_uart: WhichUart) -> Uart {
-    // uart0 is /dev/ttyAMA0 and uart4 is /dev/ttyAMA4 on Raspberry Pi 4 Model B.
-    // The uarts are set to the next /dev/tty/AMA[X] in order.
-    //
-    // See https://forums.raspberrypi.com/viewtopic.php?t=244827#post_content1514245
-    let path = match which_uart {
-        WhichUart::Uart0 => "/dev/ttyAMA0",
-        WhichUart::Uart4 => "/dev/ttyAMA4",
-    };
+const WRITE_BIT: u8 = 1 << 7;
+const SYNC_BYTE: u8 = 0b_1010_0000_u8.reverse_bits();
+const MASTER_ADDRESS: u8 = 0xff;
 
-    debug!(target: "uart", "Initializing {which_uart:?}: path={path} baud_rate={UART_BAUD_RATE}");
-
-    let mut uart = Uart::with_path(
-        path,
-        UART_BAUD_RATE,
-        UART_PARITY,
-        UART_DATA_BITS,
-        UART_STOP_BITS,
-    )
-    .expect("Failed to initialize UART");
-
-    // For now we use blocking reads and writes.
-    uart.set_read_mode(UART_READ_BUFFER_SIZE_BYTES, Duration::ZERO)
-        .expect("Failed to set UART read mode");
-    uart.set_write_mode(true)
-        .expect("Failed to set UART write mode");
-
-    debug!(target: "uart", "Initialized {which_uart:?}");
-
-    uart
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UartId {
+    Uart0,
+    Uart4,
 }
 
-/// The 32-bit UART read packet is specified as follows:
-///
-/// 1010----
-/// AA------
-/// RRRRRRR0
-/// CCCCCCCC
-///
-/// `-` = unused (0)
-/// A = TMC2209 node address (0-3)
-/// R = register address (0-127)
-/// C = CRC
-///
-/// See page 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-fn mk_read_packet(node_address: u8, register_address: u8) -> [u8; 4] {
-    assert!(node_address < 4, "Node address must be in 0-4");
-    assert_eq!(
-        register_address & REGISTER_MSB,
-        0,
-        "Register address MSB must be 0"
-    );
-
-    let mut read_packet = [UART_SYNC_BYTE, node_address, register_address, 0];
-    read_packet[3] = calc_crc(&read_packet);
-
-    debug!(
-        target: "uart",
-        "Created read packet: node_adress={node_address} register_address={register_address}"
-    );
-    trace!("crc=0x{:02x}", read_packet[3]);
-
-    read_packet
+impl UartId {
+    fn file_path(self) -> &'static Path {
+        match self {
+            UartId::Uart0 => Path::new("/dev/ttyAMA0"),
+            UartId::Uart4 => Path::new("/dev/ttyAMA4"),
+        }
+    }
 }
 
-/// The 64-bit UART write packet is specified as follows:
-///
-/// 1010----
-/// AA------
-/// RRRRRRR1
-/// DDDDDDDD
-/// DDDDDDDD
-/// DDDDDDDD
-/// DDDDDDDD
-/// CCCCCCCC
-///
-/// `-` = unused (0)
-/// A = TMC2209 node address (0-4)
-/// R = register address (0-127)
-/// D = data bytes
-/// C = CRC
-///
-/// See page 18 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-fn mk_write_packet(node_address: u8, register_address: u8, val: u32) -> [u8; 8] {
-    assert!(node_address < 4, "Node address must be in 0-4");
-    assert_eq!(
-        register_address & REGISTER_MSB,
-        0,
-        "Register address MSB must be 0"
-    );
-
-    let val_bytes = val.to_be_bytes();
-    let mut write_packet = [
-        UART_SYNC_BYTE,
-        node_address,
-        register_address | REGISTER_MSB,
-        val_bytes[0],
-        val_bytes[1],
-        val_bytes[2],
-        val_bytes[3],
-        0,
-    ];
-    write_packet[7] = calc_crc(&write_packet);
-
-    debug!(
-        target: "uart",
-        "Created write packet: node_address={node_address} register_address={register_address} val=0x{val:08x}",
-    );
-    trace!(target: "uart", "crc=0x{:02x}", write_packet[7]);
-
-    write_packet
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum NodeAddress {
+    Zero,
+    One,
+    Two,
+    Three,
 }
 
-/// Read a register address via UART for a given node address. First waits for
-/// `UART_DELAY`.
-pub fn read(uart: &mut Uart, node_address: u8, register_address: u8) -> u32 {
-    debug!(target: "uart", "Beginning reading register");
-    let read_packet = mk_read_packet(node_address, register_address);
-    debug!(target: "uart", "Sleeping before sending read packet");
-    thread::sleep(UART_DELAY);
-    send_packet(uart, read_packet);
-
-    let mut read_reply_packet = [0; 8];
-    debug!(target: "uart", "Sleeping before receiving read reply packet");
-    thread::sleep(UART_DELAY);
-    recv_packet(uart, &mut read_reply_packet);
-    // The 64-bit UART read access reply packet is specified as follows:
-    //
-    // 1010----
-    // 11111111
-    // RRRRRRR0
-    // DDDDDDDD
-    // DDDDDDDD
-    // DDDDDDDD
-    // DDDDDDDD
-    // CCCCCCCC
-    //
-    // `-` = unused (0)
-    // R = register address (0-127)
-    // D = data bytes
-    // C = CRC
-    let reply_master_address = read_reply_packet[1];
-    let reply_register_address = read_reply_packet[2];
-    assert_eq!(
-        reply_register_address & REGISTER_MSB,
-        0,
-        "UART read reply register address MSB must be 0"
-    );
-    let data = u32::from_be_bytes(read_reply_packet[3..7].try_into().unwrap());
-    let crc = read_reply_packet[7];
-
-    let expected_crc = calc_crc(&read_reply_packet);
-    assert_eq!(crc, expected_crc, "UART CRC mismatch");
-    assert_eq!(
-        reply_master_address, UART_READ_REPLY_MASTER_ADDRESS,
-        "UART read reply master address mismatch"
-    );
-    assert_eq!(
-        reply_register_address, register_address,
-        "UART read reply register address mismatch"
-    );
-    debug!(
-        target: "uart",
-        "Received reply packet"
-    );
-    trace!(
-        target: "uart",
-        "crc=0x{crc:02x}"
-    );
-
-    data
+/// One UART bus, possibly with multiple motors.
+#[derive(Debug)]
+pub struct UartBus {
+    inner: rppal::uart::Uart,
 }
 
-/// Write to a register address through UART given a TMC2209 node address. First
-/// waits for `UART_DELAY`.
-pub fn write(uart: &mut Uart, node_address: u8, register_address: u8, val: u32) {
-    debug!(target: "uart", "Beginning writing to register");
+impl UartBus {
+    /// The baud rate of the connection.
+    ///
+    /// The TMC2209 automatically detects the baud rate, but can only accept baud rates between
+    /// 9600 and 500,000 (datasheet pg. 6). Additionally, the hardware on the Pi can only produce certain baud
+    /// rates; see [`rppal::uart::Uart::set_baud_rate`]. We set the baud rate higher for
+    /// maximal speed, but with a small margin.
+    const BAUD_RATE: u32 = 460_800;
 
-    let old_ifcnt_val: u8 = read(uart, node_address, regs::IFCNT_REGISTER_ADDRESS)
-        .try_into()
-        .expect("IFCNT somehow does not fit into a u8. Should never happen");
-    debug!(target: "uart", "IFCNT: old_value={old_ifcnt_val}");
+    pub fn new(id: UartId) -> Self {
+        Self::with_path(id.file_path())
+    }
 
-    let write_packet = mk_write_packet(node_address, register_address, val);
-    debug!(target: "uart", "Sleeping before sending write packet");
-    thread::sleep(UART_DELAY);
-    send_packet(uart, write_packet);
+    pub fn with_path(path: &Path) -> Self {
+        trace!(target: "uart", "Initializing uart: path={path:?}");
 
-    let new_ifcnt_val: u8 = read(uart, node_address, regs::IFCNT_REGISTER_ADDRESS)
-        .try_into()
-        .expect("IFCNT somehow does not fit into a u8. Should never happen");
-    debug!(target: "uart", "IFCNT: new_value={new_ifcnt_val}");
+        // For the parity & data bits settings, see datasheet pg. 21.
+        // For the stop bits setting, see datasheet pg. 18.
+        let mut uart = rppal::uart::Uart::with_path(path, Self::BAUD_RATE, Parity::None, 8, 1)
+            // No error handling yet.
+            .unwrap();
 
-    assert_eq!(
-        old_ifcnt_val.wrapping_add(1),
-        new_ifcnt_val,
-        "IFCNT did not increment after write"
-    );
-    debug!(target: "uart", "Wrote to register");
+        // See logic in `Self::recv` for why the read buffer size is 4.
+        // Additionally, all read and writes are blocking as we don't have any non-blocking
+        // logic implemented yet.
+        uart.set_read_mode(4, Duration::ZERO).unwrap();
+        uart.set_write_mode(true).unwrap();
+
+        trace!(target: "uart", "Initialized uart");
+
+        Self { inner: uart }
+    }
+
+    /// See datasheet pg. 19 for the packet format.
+    fn send_read(&mut self, address: NodeAddress, register: u8) {
+        assert!(
+            register & WRITE_BIT == 0,
+            "Register address must have MSB set to 0, was {register}"
+        );
+
+        let packet = crc::with_crc([SYNC_BYTE, address as u8, register, 0]);
+
+        self.inner.write(&packet).unwrap();
+
+        trace!(
+            target: "uart",
+            "Sent read packet: address={} register={register}, {packet:?}", address as u8
+        );
+    }
+
+    /// See datasheet pg. 18 for the packet format.
+    fn send_write(&mut self, address: NodeAddress, register: u8, val: u32) {
+        assert!(
+            register & WRITE_BIT == 0,
+            "Register address must have MSB set to 0, was {register}"
+        );
+
+        let val_bytes = val.to_be_bytes();
+        let packet = crc::with_crc([
+            SYNC_BYTE,
+            address as u8,
+            register | WRITE_BIT,
+            val_bytes[0],
+            val_bytes[1],
+            val_bytes[2],
+            val_bytes[3],
+            0,
+        ]);
+
+        self.inner.write(&packet).unwrap();
+
+        trace!(
+            target: "uart",
+            "Sent write packet: address={} register={register} val=0x{val:08x}, {packet:?}", address as u8
+        );
+    }
+
+    fn recv(&mut self) -> (u8, u8, Option<u32>) {
+        let mut buf = [0; 8];
+        let ([buf1, buf2], []) = buf.as_chunks_mut::<4>() else {
+            unreachable!()
+        };
+
+        self.inner.read(buf1).unwrap();
+
+        let _sync_byte = buf1[0];
+        assert_eq!(_sync_byte, SYNC_BYTE); // TODO: we should do something better here, right?
+        let address = buf1[1];
+        let register = buf1[2];
+
+        let has_data = register & WRITE_BIT > 0 || address == MASTER_ADDRESS;
+        let (val, packet) = if has_data {
+            self.inner.read(buf2).unwrap();
+
+            let val = u32::from_be_bytes(buf[3..7].try_into().unwrap());
+            (Some(val), &buf[..])
+        } else {
+            (None, &buf1[..])
+        };
+
+        if let Some(val) = val {
+            trace!(
+                "Recieved packet: address={address} register={register} val=0x{val:08x}, {packet:?}"
+            );
+        } else {
+            trace!("Recieved packet: address={address} register={register}, {packet:?}");
+        }
+
+        let _real_crc = *packet.last().unwrap();
+        let _expected_crc = crc::calc_crc(packet);
+        assert_eq!(_real_crc, _expected_crc); // TODO: we should do something better here, right?
+
+        (address, register, val)
+    }
 }
 
-/// Receive a packet via UART into the provided buffer.
-fn recv_packet(uart: &mut Uart, packet: &mut [u8]) {
-    debug!(target: "transmission", "Receiving packet");
-    let written = uart.read(packet).unwrap();
-    assert_eq!(written, packet.len(), "UART read packet size mismatch");
-    debug!(target: "transmission", "Received packet");
+pub struct UartNode<'a> {
+    bus: &'a mut UartBus,
+    address: NodeAddress,
 }
 
-/// Send a packet via UART and verify the sendback.
-fn send_packet<const N: usize>(uart: &mut Uart, packet: [u8; N]) {
-    debug!(target: "transmission", "Sending packet");
-    let written = uart.write(&packet).unwrap();
-    assert_eq!(written, N, "UART write packet size mismatch");
-    debug!(target: "transmission", "Sent packet");
-
-    let mut sendback_packet = [0; N];
-    debug!(target: "transmission", "Receiving sendback packet");
-    let written = uart.read(&mut sendback_packet).unwrap();
-    assert_eq!(written, N, "UART sendback packet size mismatch");
-    debug!(target: "transmission", "Received sendback packet");
-
-    assert_eq!(packet, sendback_packet, "UART sendback packet mismatch");
-    debug!(target: "transmission", "Verified sendback packet");
+impl UartBus {
+    pub fn node(&mut self, address: NodeAddress) -> UartNode<'_> {
+        UartNode { bus: self, address }
+    }
 }
 
-/// Copied and adapted from page 20 of
-/// <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-fn calc_crc(packet: &[u8]) -> u8 {
-    packet
-        .iter()
-        .take(packet.len() - 1)
-        .copied()
-        .fold(0, |mut crc, mut current_byte| {
-            for _ in 0..8 {
-                if (crc >> 7) ^ (current_byte & 0x01) > 0 {
-                    crc = (crc << 1) ^ 0x07;
-                } else {
-                    crc <<= 1;
-                }
-                current_byte >>= 1;
+impl UartNode<'_> {
+    pub const ADDRESS_RANGE: RangeTo<u8> = ..4;
+
+    fn send_read(&mut self, register: u8) {
+        self.bus.send_read(self.address, register);
+    }
+
+    fn send_write(&mut self, register: u8, value: u32) {
+        self.bus.send_write(self.address, register, value);
+    }
+
+    pub fn read(&mut self, register: u8) -> u32 {
+        debug!(
+            "Reading from register {register} (address={})",
+            self.address as u8
+        );
+
+        self.send_read(register);
+
+        loop {
+            if let (MASTER_ADDRESS, register2, Some(value)) = self.bus.recv()
+                && register2 == register
+            {
+                return value;
             }
-            crc
-        })
+        }
+    }
+
+    /// Write to a register without doing any IFCNT-bookkeeping (or any other
+    /// reads).
+    pub fn write_raw(&mut self, register: u8, value: u32) {
+        self.send_write(register, value);
+    }
+
+    pub fn write(&mut self, register: u8, value: u32) {
+        debug!(
+            "Writing value 0x{value:08x} ({value}) to register {register} (address={})",
+            self.address as u8
+        );
+
+        let ifcnt = self.ifcnt();
+
+        loop {
+            self.send_write(register, value);
+
+            if self.ifcnt() == ifcnt.wrapping_add(1) {
+                break;
+            }
+        }
+    }
+
+    pub fn ifcnt(&mut self) -> u8 {
+        self.read(regs::IFCNT_ADDRESS) as u8
+    }
+}
+
+macro_rules! regs {
+    ($($X:ty: $(get $x:ident)? $(set $set_x:ident)? $(clear $clear_x:ident)?;)*) => {$(
+        $(pub fn $x(&mut self) -> $X {
+            <$X>::from_bits_retain(self.read(<$X>::ADDRESS))
+        })?
+
+        $(pub fn $set_x(&mut self, value: $X) {
+            self.write(<$X>::ADDRESS, value.bits())
+        })?
+
+        $(pub fn $clear_x(&mut self, value: $X) {
+            self.write(<$X>::ADDRESS, value.bits())
+        })?
+    )*};
+}
+
+impl UartNode<'_> {
+    regs!(
+        GConf: get gconf set set_gconf;
+        GStat: get gstat clear clear_gstat;
+        NodeConf: set set_nodeconf;
+        ChopConf: get chopconf set set_chopconf;
+        PwmConf: get pwmconf set set_pwmconf;
+        IholdIrun: set set_iholdirun;
+        DrvStatus: get drvstatus;
+    );
 }
