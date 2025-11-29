@@ -350,16 +350,15 @@ impl<R: PeepholeRewriter> Rewriter for Peephole<R> {
 Transforms
 ```
 spot1:
-    solved-goto <positions> spot2
+    solved-goto <positions> wherever
     <algorithm>
     goto spot1
-spot2:
 ```
 into
 ```
 spot1:
     repeat until <positions> solved <algorithm>
-spot2:
+    goto wherever
 ```
 */
 struct RepeatUntil1;
@@ -397,14 +396,6 @@ impl PeepholeRewriter for RepeatUntil1 {
             return None;
         }
 
-        let OptimizingCodeComponent::Label(real_spot2) = &**window.get(4)? else {
-            return None;
-        };
-
-        if spot2.name != real_spot2.name || spot2.block_id != real_spot2.maybe_block_id.unwrap() {
-            return None;
-        }
-
         let repeat_until = OptimizingCodeComponent::Instruction(
             Box::new(OptimizingPrimitive::RepeatUntil {
                 puzzle: *puzzle,
@@ -415,6 +406,8 @@ impl PeepholeRewriter for RepeatUntil1 {
             spot2.block_id,
         );
 
+        let goto = OptimizingCodeComponent::Instruction(Box::new(OptimizingPrimitive::Goto { label: spot2.to_owned() }), spot2.block_id);
+
         let mut values = Vec::new();
         values.push(window.pop_front().unwrap());
 
@@ -424,7 +417,8 @@ impl PeepholeRewriter for RepeatUntil1 {
             .reduce(|a, v| a.merge(&v))
             .unwrap();
 
-        values.push(span.with(repeat_until));
+        values.push(span.clone().with(repeat_until));
+        values.push(span.with(goto));
 
         Some(values)
     }
@@ -436,9 +430,8 @@ Transforms
 spot1:
     <algorithm>
 <optional label>:
-    solved-goto <positions> spot3
+    solved-goto <positions> wherever
     goto spot1
-spot3:
 ```
 into
 ```
@@ -446,7 +439,7 @@ spot1:
     <algorithm>
 <optional label>:
     repeat until <positions> solved <algorithm>
-spot3:
+    goto wherever
 ```
 */
 struct RepeatUntil2;
@@ -491,14 +484,6 @@ impl PeepholeRewriter for RepeatUntil2 {
             return None;
         }
 
-        let OptimizingCodeComponent::Label(real_spot3) = &**window.get(4 + optional_label)? else {
-            return None;
-        };
-
-        if spot3.name != real_spot3.name || spot3.block_id != real_spot3.maybe_block_id.unwrap() {
-            return None;
-        }
-
         let repeat_until = OptimizingCodeComponent::Instruction(
             Box::new(OptimizingPrimitive::RepeatUntil {
                 puzzle: *puzzle,
@@ -508,6 +493,8 @@ impl PeepholeRewriter for RepeatUntil2 {
             }),
             spot3.block_id,
         );
+
+        let goto = OptimizingCodeComponent::Instruction(Box::new(OptimizingPrimitive::Goto { label: spot3.clone() }), spot3.block_id);
 
         let mut out = Vec::new();
 
@@ -519,7 +506,8 @@ impl PeepholeRewriter for RepeatUntil2 {
             .reduce(|a, v| a.merge(&v))
             .unwrap();
 
-        out.push(span.with(repeat_until));
+        out.push(span.clone().with(repeat_until));
+        out.push(span.with(goto));
 
         Some(out)
     }
@@ -531,10 +519,9 @@ Transforms
 spot1:
     <algorithm>
 <optional label>:
-    solved-goto <positions> spot2
+    solved-goto <positions> wherever
     <optional algorithm>
     goto spot1
-spot2:
 ```
 into
 ```
@@ -542,7 +529,7 @@ spot1:
     <algorithm>
 <optional label>:
     repeat until <positions> solved <optional algorithm> <algorithm>
-spot2:
+    goto wherever
 ```
 */
 struct RepeatUntil3;
@@ -610,16 +597,6 @@ impl PeepholeRewriter for RepeatUntil3 {
             return None;
         }
 
-        let OptimizingCodeComponent::Label(real_spot2) =
-            &**window.get(4 + optional_label + is_alg)?
-        else {
-            return None;
-        };
-
-        if spot2.name != real_spot2.name || spot2.block_id != real_spot2.maybe_block_id.unwrap() {
-            return None;
-        }
-
         let mut amts = amts.to_owned();
 
         if let Some((_, _, effect)) = maybe_algorithm {
@@ -633,8 +610,10 @@ impl PeepholeRewriter for RepeatUntil3 {
                 amts,
                 register: register.to_owned(),
             }),
-            spot2.block_id,
+            maybe_spot1.block_id,
         );
+
+        let goto = OptimizingCodeComponent::Instruction(Box::new(OptimizingPrimitive::Goto { label: spot2.clone() }), maybe_spot1.block_id);
 
         let mut out = Vec::new();
 
@@ -646,7 +625,8 @@ impl PeepholeRewriter for RepeatUntil3 {
             .reduce(|a, v| a.merge(&v))
             .unwrap();
 
-        out.push(span.with(repeat_until));
+        out.push(span.clone().with(repeat_until));
+        out.push(span.with(goto));
 
         Some(out)
     }
