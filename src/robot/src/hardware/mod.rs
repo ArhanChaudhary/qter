@@ -227,21 +227,9 @@ impl CommutativeMoveFsm {
 }
 
 fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
-    // TODO: Motor acceleration curves
-
     set_prio(robot_config.priority);
 
-    let steps_per_sec = robot_config.revolutions_per_second
-        * f64::from(robot_config.microstep_resolution.value())
-        * f64::from(FULLSTEPS_PER_REVOLUTION);
-    let qturns_to_steps_mult =
-        (robot_config.microstep_resolution.value() * FULLSTEPS_PER_QUARTER).cast_signed();
-    info!(
-        target: "move_seq",
-        "Configuration: steps_per_sec={steps_per_sec}",
-    );
-
-    let mut motors: [Motor; 6] = Face::ALL.map(|face| Motor::new(&robot_config.motors[face]));
+    let mut motors: [Motor; 6] = Face::ALL.map(|face| Motor::new(&robot_config, face));
 
     enum MotorMessage2 {
         QueueMoves(MoveInstruction),
@@ -280,19 +268,19 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
             MoveInstruction::Single((face, dir)) => {
                 let motor = &mut motors[face as usize];
 
-                let steps = dir.qturns() * qturns_to_steps_mult;
+                let steps = dir.qturns() * FULLSTEPS_PER_QUARTER.cast_signed();
 
-                motor.turn(steps, steps_per_sec);
+                motor.turn(steps);
             }
             MoveInstruction::Double([(face1, dir1), (face2, dir2)]) => {
                 let [motor1, motor2] = motors
                     .get_disjoint_mut([face1 as usize, face2 as usize])
                     .unwrap();
 
-                let steps1 = dir1.qturns() * qturns_to_steps_mult;
-                let steps2 = dir2.qturns() * qturns_to_steps_mult;
+                let steps1 = dir1.qturns() * FULLSTEPS_PER_QUARTER.cast_signed();
+                let steps2 = dir2.qturns() * FULLSTEPS_PER_QUARTER.cast_signed();
 
-                Motor::turn_many([motor1, motor2], [steps1, steps2], [steps_per_sec; 2]);
+                Motor::turn_many([motor1, motor2], [steps1, steps2]);
             }
         }
 

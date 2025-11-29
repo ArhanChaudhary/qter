@@ -7,7 +7,7 @@ use std::{
 use log::debug;
 use rppal::gpio::{Gpio, Level, OutputPin};
 
-use crate::hardware::config::MotorConfig;
+use crate::hardware::config::{Face, Microsteps, RobotConfig};
 
 /// Runs `N` blocks with delays concurrently.
 ///
@@ -44,13 +44,45 @@ fn run_many<const N: usize>(mut iters: [impl Iterator<Item = Duration>; N]) {
     }
 }
 
+// computes position -> time
+fn trapezoid_profile_inv(y: u32, s: u32, v_max: f64, a_max: f64) -> f64 {
+    let yf = y as f64;
+    let sf = s as f64;
+    let thresh = v_max * v_max / a_max;
+    if sf > thresh {
+        let t1 = v_max / a_max;
+        let t2 = sf / v_max;
+
+        if yf <= 0.5 * thresh {
+            (yf * 2.0 / a_max).sqrt()
+        } else if sf - 0.5 * thresh <= yf {
+            (t1 + t2) - ((sf - yf) * 2.0 / a_max).sqrt()
+        } else {
+            (yf + 0.5 * thresh) / v_max
+        }
+    } else {
+        let t1 = (sf / a_max).sqrt();
+
+        if yf <= sf / 2.0 {
+            (yf * 2.0 / a_max).sqrt()
+        } else {
+            2.0 * t1 - ((sf - yf) * 2.0 / a_max).sqrt()
+        }
+    }
+}
+
 pub struct Motor {
     step: OutputPin,
     dir: OutputPin,
+    microsteps: Microsteps,
+    v_max: f64,
+    a_max: f64,
 }
 
 impl Motor {
-    pub fn new(config: &MotorConfig) -> Self {
+    pub const FULLSTEPS_PER_REVOLUTION: u32 = 200;
+
+    pub fn new(config: &RobotConfig, face: Face) -> Self {
         fn mk_output_pin(gpio: u8) -> OutputPin {
             debug!(target: "gpio", "attempting to configure GPIO pin {gpio}");
             let mut pin = Gpio::new().unwrap().get(gpio).unwrap().into_output_low();
@@ -59,36 +91,41 @@ impl Motor {
             pin
         }
 
+        let microsteps = config.microstep_resolution;
+        let mult = (Self::FULLSTEPS_PER_REVOLUTION * microsteps.value()) as f64;
+        let motor_config = &config.motors[face];
         Self {
-            step: mk_output_pin(config.step_pin),
-            dir: mk_output_pin(config.dir_pin),
+            step: mk_output_pin(motor_config.step_pin),
+            dir: mk_output_pin(motor_config.dir_pin),
+            microsteps,
+            v_max: config.revolutions_per_second * mult,
+            a_max: config.max_acceleration * mult,
         }
     }
 
-    pub fn turn(&mut self, steps: i32, steps_per_sec: f64) {
-        Self::turn_many([self], [steps], [steps_per_sec]);
+    pub fn turn(&mut self, steps: i32) {
+        Self::turn_many([self], [steps]);
     }
 
-    pub fn turn_many<const N: usize>(
-        selves: [&mut Motor; N],
-        steps: [i32; N],
-        steps_per_sec: [f64; N],
-    ) {
+    pub fn turn_many<const N: usize>(selves: [&mut Motor; N], steps: [i32; N]) {
         fn array_zip<T, U, const N: usize>(a: [T; N], b: [U; N]) -> [(T, U); N] {
             let a = a.map(MaybeUninit::new);
             let b = b.map(MaybeUninit::new);
             core::array::from_fn(|i| unsafe { (a[i].assume_init_read(), b[i].assume_init_read()) })
         }
 
-        let state = array_zip(selves, array_zip(steps, steps_per_sec));
+        let state = array_zip(selves, steps);
 
-        run_many(state.map(|(this, (steps, steps_per_sec))| gen move {
+        run_many(state.map(|(this, steps): (&mut Motor, i32)| gen move {
             this.dir
                 .write(if steps < 0 { Level::Low } else { Level::High });
+            let steps = steps.unsigned_abs() * this.microsteps.value();
 
-            let delay = Duration::from_secs(1).div_f64(2.0 * steps_per_sec);
+            for i in 0..steps {
+                let t1 = trapezoid_profile_inv(i, steps, this.v_max, this.a_max);
+                let t2 = trapezoid_profile_inv(i + 1, steps, this.v_max, this.a_max);
+                let delay = Duration::from_secs_f64(t2 - t1) / 2;
 
-            for _ in 0..steps {
                 this.step.set_high();
                 yield delay;
                 this.step.set_low();

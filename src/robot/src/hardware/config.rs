@@ -11,6 +11,7 @@ use super::uart::{NodeAddress, UartId};
 pub struct RobotConfig {
     pub motors: Motors,
     pub revolutions_per_second: f64,
+    pub max_acceleration: f64,
     pub microstep_resolution: Microsteps,
     pub priority: Priority,
 }
