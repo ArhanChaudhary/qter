@@ -39,10 +39,8 @@ fn robot_handle() -> MutexGuard<'static, RobotHandle> {
 struct TrackedRobotState;
 
 impl TrackedRobotState {
+    /// This WILL NOT TAKE THE INVERSE OF `generator` which is necessary for `print` but not for `repeat until`
     fn halt_quiet(&mut self, facelets: &[usize], generator: &Algorithm) -> Option<Int<U>> {
-        let mut generator = generator.to_owned();
-        generator.exponentiate(-Int::<U>::one());
-
         let mut sum = Int::<U>::zero();
 
         let chromatic_orders = generator.chromatic_orders_by_facelets();
@@ -58,7 +56,7 @@ impl TrackedRobotState {
                 return None;
             }
 
-            self.compose_into(&generator);
+            self.compose_into(generator);
         }
 
         Some(sum)
@@ -113,9 +111,12 @@ impl PuzzleState for TrackedRobotState {
             state
         };
 
-        let c = self.halt_quiet(facelets, generator)?;
+        let mut generator = generator.to_owned();
+        generator.exponentiate(-Int::<U>::one());
 
-        let mut exponentiated = generator.to_owned();
+        let c = self.halt_quiet(facelets, &generator)?;
+
+        let mut exponentiated = generator.clone();
         exponentiated.exponentiate(c.into());
 
         self.compose_into(&exponentiated);

@@ -27,10 +27,10 @@ pub struct MotorConfig {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 pub enum Face {
     R,
-    U,
-    F,
     L,
+    U,
     D,
+    F,
     B,
 }
 

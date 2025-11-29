@@ -18,9 +18,10 @@ use crate::{
     table_encoding,
 };
 
-pub(crate) const OPTIMIZED_TABLES: [&[u8]; 2] = [
+pub(crate) const OPTIMIZED_TABLES: [&[u8]; 3] = [
     include_bytes!("../puzzles/210-24.bin"),
     include_bytes!("../puzzles/30-30-30.bin"),
+    include_bytes!("../puzzles/30-18-10-9.bin"),
 ];
 
 /// The definition of a puzzle parsed from the custom format
@@ -930,6 +931,11 @@ impl Architecture {
                 None => Vec::new(),
             };
 
+            if table.len() < 32 {
+                println!("{:#?}", self.optimized_table);
+                println!("{table:#?}");
+            }
+
             let registers_decoding_info = self
                 .registers()
                 .iter()
@@ -975,6 +981,10 @@ impl Architecture {
 
             for item in table {
                 add_permutation(item);
+            }
+
+            if data.len() < 32 {
+                println!("{data:#?}");
             }
 
             DecodingTable {
@@ -1127,7 +1137,7 @@ pub fn puzzle_definition() -> impl Parser<'static, File, Arc<PuzzleDefinition>, 
                         "R' U' L' F2 L F U F R L U'",
                         "B2 U2 L F' R B L2 D2 B R' F L",
                     ],
-                    None,
+                    Some(2),
                 ),
             ]
             .map(|(algs, maybe_index): (&[&str], Option<usize>)| {
