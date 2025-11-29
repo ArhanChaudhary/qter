@@ -17,9 +17,12 @@ ariadne = "0.5.1"
 chumsky = "0.10.1"
 crossbeam-channel = "0.5.15"
 log = "0.4.28"
-bevy = { version = "0.15.3", features = [ "wayland" ] }
-bevy_simple_text_input = "0.10.2"
+bevy_simple_text_input = "0.11.1"
 robot = { path = "../robot" }
+
+[dependencies.bevy]
+version = "0.16.1"
+features = [ "wayland" ]
 
 [lints]
 workspace = true

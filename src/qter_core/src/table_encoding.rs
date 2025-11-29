@@ -479,14 +479,14 @@ impl CodingFSM<u16> for DistributionFSM {
         }
 
         for (sym, spot) in out.iter_mut().enumerate().take(generator_count) {
-            if let Some(prev) = self.prev {
-                if self.data.stats.disallowed_pairs.contains(&if prev < sym {
+            if let Some(prev) = self.prev
+                && self.data.stats.disallowed_pairs.contains(&if prev < sym {
                     (prev, sym)
                 } else {
                     (sym, prev)
-                }) {
-                    continue;
-                }
+                })
+            {
+                continue;
             }
 
             *spot = 1;

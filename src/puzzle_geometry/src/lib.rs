@@ -189,10 +189,12 @@ pub struct FaceSubspaceInfo {
 }
 
 impl FaceSubspaceInfo {
+    #[must_use]
     pub fn make_3d(&self, vec: &Vector<2>) -> Vector<3> {
-        (&self.make_3d * &vec) + self.offset.clone()
+        (&self.make_3d * vec) + self.offset.clone()
     }
 
+    #[must_use]
     pub fn make_2d(&self, vec: Vector<3>) -> Vector<2> {
         &self.make_2d * &(vec - self.offset.clone())
     }

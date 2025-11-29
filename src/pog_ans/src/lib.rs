@@ -238,10 +238,10 @@ pub fn ans_encode_inplace<S: State, FSM: ReversibleFSM<S>>(
         Some((last, symbols)) => {
             let mut i = S::zero();
             loop {
-                if let Some(code) = coding_function(i, *last, &last_ranges, &final_state) {
-                    if code > S::RANGE_SIZE - S::one() {
-                        break (code, symbols);
-                    }
+                if let Some(code) = coding_function(i, *last, &last_ranges, &final_state)
+                    && code > S::RANGE_SIZE - S::one()
+                {
+                    break (code, symbols);
                 }
                 i += S::one();
 
@@ -288,10 +288,10 @@ pub fn ans_decode<S: State, FSM: CodingFSM<S>>(
     max_symbols: Option<usize>,
     mut fsm: FSM,
 ) -> Option<Vec<usize>> {
-    if let Some(max) = max_symbols {
-        if max == 0 {
-            return Some(vec![]);
-        }
+    if let Some(max) = max_symbols
+        && max == 0
+    {
+        return Some(vec![]);
     }
 
     let symbol_count = fsm.symbol_count();
@@ -325,10 +325,10 @@ pub fn ans_decode<S: State, FSM: CodingFSM<S>>(
 
         output.push(symbol);
 
-        if let Some(max) = max_symbols {
-            if output.len() == max {
-                break;
-            }
+        if let Some(max) = max_symbols
+            && output.len() == max
+        {
+            break;
         }
 
         state = ranges[symbol] * (state >> S::RANGE_BITS as usize) + (state & mask) - cdf_val;

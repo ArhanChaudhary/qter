@@ -201,7 +201,7 @@ pub(crate) fn do_cut<S: CutSurface + ?Sized>(
 
         recolor_border_edges(&mut edges);
 
-        faces.push(take_face_out(&mut edges, surface, face, &subspace_info)?);
+        faces.push(take_face_out(&mut edges, surface, face, subspace_info)?);
     }
 
     faces.retain(|v| v.0.is_valid().is_ok());

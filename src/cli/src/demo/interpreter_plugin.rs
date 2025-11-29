@@ -4,7 +4,7 @@ use bevy::{
     app::{Plugin, PreUpdate, Startup},
     ecs::{
         event::{Event, EventWriter},
-        prelude::Resource,
+        resource::Resource,
         system::{Commands, Res},
     },
     prelude::Deref,
@@ -144,41 +144,41 @@ fn read_events(
         match event {
             InterpretationEvent::Message(msg) => {
                 println!("{msg}");
-                messages.send(Message(msg));
+                messages.write(Message(msg));
             }
             InterpretationEvent::Input(int) => {
-                inputs.send(Input(int));
+                inputs.write(Input(int));
             }
             InterpretationEvent::GaveInput => {
-                gave_inputs.send(GaveInput);
+                gave_inputs.write(GaveInput);
             }
             InterpretationEvent::BeginHalt { facelets } => {
-                begin_halts.send(BeginHalt { facelets });
+                begin_halts.write(BeginHalt { facelets });
             }
             InterpretationEvent::HaltCountUp(int) => {
-                halt_count_ups.send(HaltCountUp(int));
+                halt_count_ups.write(HaltCountUp(int));
             }
             InterpretationEvent::CubeState(permutation) => {
-                cube_states.send(CubeState(permutation));
+                cube_states.write(CubeState(permutation));
             }
             InterpretationEvent::SolvedGoto { facelets } => {
-                solved_gotos.send(SolvedGoto { facelets });
+                solved_gotos.write(SolvedGoto { facelets });
             }
             InterpretationEvent::ExecutingInstruction {
                 which_one: next_one,
             } => {
-                executed_instructions.send(ExecutingInstruction {
+                executed_instructions.write(ExecutingInstruction {
                     which_one: next_one,
                 });
             }
             InterpretationEvent::DoneExecuting => {
-                done_executings.send(DoneExecuting);
+                done_executings.write(DoneExecuting);
             }
             InterpretationEvent::BeganProgram(intern) => {
-                began_programs.send(BeganProgram(intern));
+                began_programs.write(BeganProgram(intern));
             }
             InterpretationEvent::FinishedProgram => {
-                finished_programs.send(FinishedProgram);
+                finished_programs.write(FinishedProgram);
             }
         }
     }

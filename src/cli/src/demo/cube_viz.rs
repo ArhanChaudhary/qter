@@ -199,22 +199,21 @@ fn setup(
         ))
         .id();
 
-    commands
-        .spawn((
-            Node {
-                flex_grow: 1.,
-                display: Display::Grid,
-                align_content: AlignContent::Start,
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Start,
-                justify_items: JustifyItems::Start,
-                column_gap: Val::Px(16.),
-                ..Default::default()
-            },
-            // BackgroundColor(Color::srgba_u8(255, 128, 128, 128)),
-            RegistersList,
-        ))
-        .set_parent(panel);
+    commands.spawn((
+        Node {
+            flex_grow: 1.,
+            display: Display::Grid,
+            align_content: AlignContent::Start,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Start,
+            justify_items: JustifyItems::Start,
+            column_gap: Val::Px(16.),
+            ..Default::default()
+        },
+        // BackgroundColor(Color::srgba_u8(255, 128, 128, 128)),
+        RegistersList,
+        ChildOf(panel),
+    ));
 
     let puzzles = commands
         .spawn((
@@ -232,8 +231,8 @@ fn setup(
                 ..Node::default()
             },
             // BackgroundColor(Color::srgba_u8(128, 255, 128, 128)),
+            ChildOf(panel),
         ))
-        .set_parent(panel)
         .id();
 
     commands
@@ -246,8 +245,8 @@ fn setup(
                 ..Default::default()
             },
             // BackgroundColor(Color::srgba_u8(128, 255, 128, 128)),
+            ChildOf(puzzles),
         ))
-        .set_parent(puzzles)
         .with_child((
             Text::new(""),
             TextColor(Color::srgb_u8(0, 0, 0)),
@@ -264,21 +263,20 @@ fn setup(
             is_cycle_viz,
         };
 
-        commands
-            .spawn((
-                Node {
-                    display: Display::Grid,
-                    aspect_ratio: Some((weird_dist * 3.) / (scale * 6.)),
-                    margin: UiRect::all(Val::ZERO),
-                    padding: UiRect::all(Val::ZERO),
-                    grid_row: GridPlacement::start_span(if is_cycle_viz { 1 } else { 2 }, 1),
-                    grid_column: GridPlacement::start_span(if is_right { 2 } else { 1 }, 1),
-                    ..Node::default()
-                },
-                // BackgroundColor(Color::srgba_u8(128, 255, 255, 128)),
-                which_puzzle,
-            ))
-            .set_parent(puzzles);
+        commands.spawn((
+            Node {
+                display: Display::Grid,
+                aspect_ratio: Some((weird_dist * 3.) / (scale * 6.)),
+                margin: UiRect::all(Val::ZERO),
+                padding: UiRect::all(Val::ZERO),
+                grid_row: GridPlacement::start_span(if is_cycle_viz { 1 } else { 2 }, 1),
+                grid_column: GridPlacement::start_span(if is_right { 2 } else { 1 }, 1),
+                ..Node::default()
+            },
+            // BackgroundColor(Color::srgba_u8(128, 255, 255, 128)),
+            which_puzzle,
+            ChildOf(puzzles),
+        ));
         // builder.spawn((
         //     Node {
         //         ..Default::default()
@@ -343,67 +341,62 @@ fn setup(
                     .clone();
 
                 if i == 8 {
-                    commands
-                        .spawn((
-                            Mesh2d(sticker.clone()),
-                            MeshMaterial2d(color),
-                            Transform::from_matrix(transform),
-                        ))
-                        .set_parent(puzzle_meshes);
+                    commands.spawn((
+                        Mesh2d(sticker.clone()),
+                        MeshMaterial2d(color),
+                        Transform::from_matrix(transform),
+                        ChildOf(puzzle_meshes),
+                    ));
                 } else {
                     let facelet_idx = indices[(j + idx_to_add) * 8 + i];
 
                     if is_cycle_viz {
-                        commands
-                            .spawn((
-                                Text2d::new(""),
-                                TextColor(Color::BLACK),
-                                TextFont {
-                                    font_size: scale * 2. / 3.,
-                                    ..Default::default()
-                                },
-                                Transform::from_matrix(transform)
-                                    .with_rotation(Quat::IDENTITY)
-                                    .with_scale(Vec3::new(1., 1., 1.)),
-                                FaceletIdx(facelet_idx),
-                                StickerLabel,
-                            ))
-                            .set_parent(puzzle_meshes);
+                        commands.spawn((
+                            Text2d::new(""),
+                            TextColor(Color::BLACK),
+                            TextFont {
+                                font_size: scale * 2. / 3.,
+                                ..Default::default()
+                            },
+                            Transform::from_matrix(transform)
+                                .with_rotation(Quat::IDENTITY)
+                                .with_scale(Vec3::new(1., 1., 1.)),
+                            FaceletIdx(facelet_idx),
+                            StickerLabel,
+                            ChildOf(puzzle_meshes),
+                        ));
 
-                        commands
-                            .spawn((
-                                Mesh2d(sticker.clone()),
-                                MeshMaterial2d(color),
-                                Transform::from_matrix(transform),
-                                FaceletIdx(facelet_idx),
-                                CycleViz,
-                                Sticker,
-                            ))
-                            .set_parent(puzzle_meshes);
+                        commands.spawn((
+                            Mesh2d(sticker.clone()),
+                            MeshMaterial2d(color),
+                            Transform::from_matrix(transform),
+                            FaceletIdx(facelet_idx),
+                            CycleViz,
+                            Sticker,
+                            ChildOf(puzzle_meshes),
+                        ));
                     } else {
-                        commands
-                            .spawn((
-                                Mesh2d(border.clone()),
-                                MeshMaterial2d(transparent.clone()),
-                                Transform::from_matrix(
-                                    Mat4::from_translation(Vec3::new(0., 0., -1.)) * transform,
-                                ),
-                                FaceletIdx(facelet_idx),
-                                StateViz,
-                                Border,
-                            ))
-                            .set_parent(puzzle_meshes);
+                        commands.spawn((
+                            Mesh2d(border.clone()),
+                            MeshMaterial2d(transparent.clone()),
+                            Transform::from_matrix(
+                                Mat4::from_translation(Vec3::new(0., 0., -1.)) * transform,
+                            ),
+                            FaceletIdx(facelet_idx),
+                            StateViz,
+                            Border,
+                            ChildOf(puzzle_meshes),
+                        ));
 
-                        commands
-                            .spawn((
-                                Mesh2d(sticker.clone()),
-                                MeshMaterial2d(color),
-                                Transform::from_matrix(transform),
-                                FaceletIdx(facelet_idx),
-                                StateViz,
-                                Sticker,
-                            ))
-                            .set_parent(puzzle_meshes);
+                        commands.spawn((
+                            Mesh2d(sticker.clone()),
+                            MeshMaterial2d(color),
+                            Transform::from_matrix(transform),
+                            FaceletIdx(facelet_idx),
+                            StateViz,
+                            Sticker,
+                            ChildOf(puzzle_meshes),
+                        ));
 
                         // commands.spawn((
                         //     Text2d::new(facelet_idx.to_string()),
@@ -415,7 +408,7 @@ fn setup(
                         //     Transform::from_matrix(transform)
                         //         .with_rotation(Quat::IDENTITY)
                         //         .with_scale(Vec3::new(1., 1., 1.)),
-                        //     Parent(puzzle_meshes),
+                        //     ChildOf(puzzle_meshes),
                         // ));
                     }
                 }
@@ -436,7 +429,7 @@ fn track_puzzles(
     window: Single<&Window>,
 ) {
     puzzles.par_iter_mut().for_each(|mut puzzle| {
-        for spot in &puzzle_ui_spots {
+        for spot in puzzle_ui_spots {
             if spot.1 != puzzle.1 {
                 continue;
             }
@@ -494,9 +487,9 @@ fn started_program(
         unreachable!();
     };
 
-    for entity in &registers_viz {
-        if let Some(mut entity) = commands.get_entity(entity) {
-            entity.despawn_descendants();
+    for entity in registers_viz {
+        if let Ok(mut entity) = commands.get_entity(entity) {
+            entity.despawn_related::<Children>();
             entity.despawn();
         }
     }
@@ -519,8 +512,8 @@ fn started_program(
                     ..Default::default()
                 },
                 RegistersViz,
+                ChildOf(regs_list),
             ))
-            .set_parent(regs_list)
             .with_child((
                 Text::new(NAMES[i]),
                 TextColor::WHITE,
@@ -538,8 +531,8 @@ fn started_program(
                     ..Default::default()
                 },
                 RegistersViz,
+                ChildOf(regs_list),
             ))
-            .set_parent(regs_list)
             .with_child((
                 Text::new(format!("= 0/{}  ", reg.order())),
                 TextColor::WHITE,
@@ -565,30 +558,31 @@ fn started_program(
                     },
                     RegistersViz,
                     BackgroundColor(cycle_color(i, j)),
+                    ChildOf(regs_list),
                 ))
-                .set_parent(regs_list)
                 .id();
 
             let text_container = commands
-                .spawn((Node {
-                    justify_self: JustifySelf::Center,
-                    ..Default::default()
-                },))
-                .set_parent(cycle_box)
-                .id();
-
-            commands
                 .spawn((
-                    Text::new(format!("0/{}", cycle.chromatic_order())),
-                    TextColor::WHITE,
-                    TextFont {
-                        font_size: window.size().x / 60.,
+                    Node {
+                        justify_self: JustifySelf::Center,
                         ..Default::default()
                     },
-                    TextLayout::new_with_justify(JustifyText::Center),
-                    CycleValueText(i, j),
+                    ChildOf(cycle_box),
                 ))
-                .set_parent(text_container);
+                .id();
+
+            commands.spawn((
+                Text::new(format!("0/{}", cycle.chromatic_order())),
+                TextColor::WHITE,
+                TextFont {
+                    font_size: window.size().x / 60.,
+                    ..Default::default()
+                },
+                TextLayout::new_with_justify(JustifyText::Center),
+                CycleValueText(i, j),
+                ChildOf(text_container),
+            ));
         }
     }
 

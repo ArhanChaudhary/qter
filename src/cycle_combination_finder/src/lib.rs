@@ -293,7 +293,9 @@ fn possible_order_test(
             let mut new_cycle: u16;
             let new_available: u16;
             // if this orbit orients using the same prime as the power, add a cycle
-            if orbit_orient > 1 && registers[s.register].prime_powers[s.power] % orbit_orient == 0 {
+            if orbit_orient > 1
+                && registers[s.register].prime_powers[s.power].is_multiple_of(orbit_orient)
+            {
                 let flippers = s.assignments[s.register][o].len() as u16
                     + shared_pieces[orbit_orient as usize].min(1);
                 new_cycle = registers[s.register].min_piece_counts[s.power];
@@ -351,7 +353,7 @@ fn possible_order_test(
             }*/
 
             // assume that every even cycle needs a parity to go with it. TODO could be more efficient to share parity.
-            let parity: u16 = if new_cycle % 2 == 0 && new_cycle > 0 && !parity_covered {
+            let parity: u16 = if new_cycle.is_multiple_of(2) && new_cycle > 0 && !parity_covered {
                 2
             } else {
                 0
@@ -583,17 +585,17 @@ fn add_order_to_registers(
             for shared_pieces in shared_piece_options {
                 if let Some(mut assignments) = possible_order_test(
                     &registers_with_new,
-                    &cycle_cubie_counts,
+                    cycle_cubie_counts,
                     puzzle,
                     available_pieces,
-                    &shared_pieces,
+                    shared_pieces,
                 ) {
                     cycle_combos.push(assignments_to_combo(
                         &mut assignments,
                         &registers_with_new,
-                        &cycle_cubie_counts,
+                        cycle_cubie_counts,
                         puzzle,
-                        &shared_pieces,
+                        shared_pieces,
                     ));
                     return;
                 }
@@ -654,7 +656,7 @@ fn optimal_combinations(puzzle: &[KSolveSet], num_registers: u16) {
         vec![],
         &possible_orders,
         &cycle_cubie_counts,
-        &puzzle,
+        puzzle,
         cycle_cubie_counts.iter().sum(),
         &mut cycle_combos,
         &shared_piece_options,

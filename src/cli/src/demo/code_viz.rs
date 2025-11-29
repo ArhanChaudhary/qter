@@ -41,33 +41,31 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
         ))
         .id();
 
-    commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                width: Val::Percent(100.),
-                top: Val::Px(0.),
-                height: Val::Px(0.),
-                padding: UiRect::right(Val::Px(8.)),
-                //// box_sizing: BoxSizing::ContentBox,
-                overflow: Overflow::visible(),
-                ..Default::default()
-            },
-            BackgroundColor(Color::srgba_u8(255, 0, 255, 128)),
-            Highlight,
-        ))
-        .set_parent(panel);
+    commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            width: Val::Percent(100.),
+            top: Val::Px(0.),
+            height: Val::Px(0.),
+            padding: UiRect::right(Val::Px(8.)),
+            box_sizing: BoxSizing::ContentBox,
+            overflow: Overflow::visible(),
+            ..Default::default()
+        },
+        BackgroundColor(Color::srgba_u8(255, 0, 255, 128)),
+        Highlight,
+        ChildOf(panel),
+    ));
 
-    commands
-        .spawn((
-            Text(String::new()),
-            TextFont {
-                font_size: window.size().x / 66.,
-                ..Default::default()
-            },
-            Code,
-        ))
-        .set_parent(panel);
+    commands.spawn((
+        Text(String::new()),
+        TextFont {
+            font_size: window.size().x / 66.,
+            ..Default::default()
+        },
+        Code,
+        ChildOf(panel),
+    ));
 }
 
 fn started_program(
