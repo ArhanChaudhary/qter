@@ -372,12 +372,12 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
         },
     );
 
-    for (name, program) in &programs {
-          println!("{name}, {}", program.program.instructions.len());
-          if &**name == "fib" {
-              println!("{:#?}", program.program.instructions);
-          }
-    }
+    // for (name, program) in &programs {
+    //       println!("{name}, {}", program.program.instructions.len());
+    //       if &**name == "fib" {
+    //           println!("{:#?}", program.program.instructions);
+    //       }
+    // }
 
     programs
 });

@@ -931,11 +931,6 @@ impl Architecture {
                 None => Vec::new(),
             };
 
-            if table.len() < 32 {
-                println!("{:#?}", self.optimized_table);
-                println!("{table:#?}");
-            }
-
             let registers_decoding_info = self
                 .registers()
                 .iter()
@@ -981,10 +976,6 @@ impl Architecture {
 
             for item in table {
                 add_permutation(item);
-            }
-
-            if data.len() < 32 {
-                println!("{data:#?}");
             }
 
             DecodingTable {
