@@ -59,14 +59,17 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
                 )
                 .unwrap(),
             ),
-            architecture: Arc::new(Architecture::new(Arc::clone(&CUBE3), &[vec!["U"]]).unwrap()),
+            architecture: Arc::new(Architecture::new(Arc::clone(&CUBE3), &[vec!["U"], vec!["D'"]]).unwrap()),
             solved_goto_pieces: vec![
                 vec![7, 18, 24], // UFR
+                vec![23, 29, 42], // DFR
             ],
             code: r#"
 0 | input "First number:" U max-input 3
-1 | input "Second number:" U max-input 3
-2 | halt until UF solved U'
+1 | input "Second number:" D' max-input 3
+2 | repeat until DFR solved
+		U D
+3 | halt "(A + B) % 4 =" until UFR solved U'
                 "#
             .to_owned(),
         },
