@@ -167,7 +167,7 @@ fn on_submit(
                     messages_tx.write(Message(submission.value.clone()));
                     v
                 } else {
-                    messages_tx.write(Message("Value needs to be parsable as a string".to_owned()));
+                    messages_tx.write(Message("Input needs to be a number".to_owned()));
                     continue;
                 },
             ))
