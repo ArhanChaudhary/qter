@@ -49,9 +49,9 @@ impl UartBus {
     ///
     /// The TMC2209 automatically detects the baud rate, but can only accept baud rates between
     /// 9600 and 500,000 (datasheet pg. 6). Additionally, the hardware on the Pi can only produce certain baud
-    /// rates; see [`rppal::uart::Uart::set_baud_rate`]. We set the baud rate higher for
-    /// maximal speed, but with a small margin.
-    const BAUD_RATE: u32 = 460_800;
+    /// rates; see [`rppal::uart::Uart::set_baud_rate`]. We set the baud rate 
+    /// at this level to avoid needing to wait between uart operations.
+    const BAUD_RATE: u32 = 230_400;
 
     pub fn new(id: UartId) -> Self {
         Self::with_path(id.file_path())
