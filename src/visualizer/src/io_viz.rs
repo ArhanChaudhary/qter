@@ -4,7 +4,7 @@ use bevy_simple_text_input::{TextInput, TextInputSubmitEvent, TextInputValue};
 use internment::Intern;
 use itertools::Itertools;
 
-use crate::visualizer::interpreter_plugin::{
+use crate::interpreter_plugin::{
     BeganProgram, CommandTx, FinishedProgram, GaveInput, Input, InterpretationCommand, Message,
 };
 
@@ -13,13 +13,10 @@ use super::interpreter_plugin::DoneExecuting;
 pub struct IOViz;
 
 #[derive(Component)]
-pub struct StepButton;
+struct ExecuteIndicator;
 
 #[derive(Component)]
-pub struct SolveButton;
-
-#[derive(Component)]
-pub struct ExecuteButton;
+struct ExecuteIndicatorBg;
 
 #[derive(Component)]
 struct MessageDisplay;
@@ -39,10 +36,7 @@ impl Plugin for IOViz {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup)
             .insert_resource(ExecuteButtonState::None)
-            .add_systems(
-                Update,
-                (step_button, solve_button, execute_button, keyboard_control).chain(),
-            )
+            .add_systems(Update, keyboard_control)
             .add_systems(Update, (started_program, got_message).chain())
             .add_systems(Update, on_submit)
             .add_systems(Update, (finished_program, execute_conditionally).chain());
@@ -70,7 +64,6 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
     commands
         .spawn((
             Node {
-                margin: UiRect::top(Val::Vh(4.)),
                 // flex_grow: 1.0,
                 border: UiRect::all(Val::Px(4.)),
                 height: Val::Vh(7.),
@@ -80,13 +73,12 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
                 ..Default::default()
             },
             BorderColor(Color::BLACK),
-            BackgroundColor(Color::srgba(0.5, 0.5, 0.5, 0.5)),
-            Button,
-            ExecuteButton,
+            BackgroundColor(Color::srgba(0., 0.6, 0., 0.5)),
+            ExecuteIndicatorBg,
             ChildOf(panel),
         ))
         .with_child((
-            Text("Execute".to_string()),
+            Text("Stepping".to_string()),
             TextLayout {
                 justify: JustifyText::Center,
                 ..Default::default()
@@ -95,37 +87,7 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
                 font_size: window.size().x / 66.,
                 ..Default::default()
             },
-            ExecuteButton,
-        ));
-
-    commands
-        .spawn((
-            Node {
-                margin: UiRect::top(Val::Vh(4.)),
-                // flex_grow: 1.0,
-                border: UiRect::all(Val::Px(4.)),
-                height: Val::Vh(7.),
-                display: Display::Flex,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                ..Default::default()
-            },
-            BorderColor(Color::BLACK),
-            BackgroundColor(Color::srgba(0.5, 0.5, 0.5, 0.5)),
-            Button,
-            StepButton,
-            ChildOf(panel),
-        ))
-        .with_child((
-            Text("Step".to_string()),
-            TextLayout {
-                justify: JustifyText::Center,
-                ..Default::default()
-            },
-            TextFont {
-                font_size: window.size().x / 66.,
-                ..Default::default()
-            },
+            ExecuteIndicator,
         ));
 
     commands
@@ -217,6 +179,9 @@ fn keyboard_control(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     command_tx: Res<CommandTx>,
     mut input: Single<&mut TextInputValue>,
+    mut execute_button_state: ResMut<ExecuteButtonState>,
+    mut text: Single<&mut Text, With<ExecuteIndicator>>,
+    mut bg: Single<&mut BackgroundColor, With<ExecuteIndicatorBg>>,
 ) {
     if keyboard_input.just_pressed(KeyCode::KeyS) {
         command_tx
@@ -242,52 +207,27 @@ fn keyboard_control(
             .unwrap();
     }
 
+    if keyboard_input.just_pressed(KeyCode::KeyE) {
+        *execute_button_state = match *execute_button_state {
+            ExecuteButtonState::None => {
+                command_tx.send(InterpretationCommand::Step).unwrap();
+                ***text = "Executing".to_string();
+                bg.0 = Color::srgba(0.8, 0., 0., 0.5);
+                ExecuteButtonState::Clicked
+            }
+            ExecuteButtonState::Clicked | ExecuteButtonState::WaitingForInput => {
+                ***text = "Stepping".to_string();
+                bg.0 = Color::srgba(0., 0.6, 0., 0.5);
+                ExecuteButtonState::None
+            }
+            };
+    }
+
+    if keyboard_input.just_pressed(KeyCode::ArrowRight) {
+        command_tx.send(InterpretationCommand::Step).unwrap();
+    }
+
     input.0.retain(|c| c.is_ascii_digit());
-}
-
-fn step_button(
-    interaction_query: Query<(&Interaction, &StepButton), Changed<Interaction>>,
-    command_tx: Res<CommandTx>,
-) {
-    for (&interaction, _) in interaction_query {
-        if interaction == Interaction::Pressed {
-            command_tx.send(InterpretationCommand::Step).unwrap();
-        }
-    }
-}
-
-fn solve_button(
-    interaction_query: Query<&Interaction, With<SolveButton>>,
-    command_tx: Res<CommandTx>,
-) {
-    if let Ok(&Interaction::Pressed) = interaction_query.single() {
-        command_tx.send(InterpretationCommand::Solve).unwrap();
-    }
-}
-
-fn execute_button(
-    command_tx: Res<CommandTx>,
-    interaction: Single<&Interaction, (Changed<Interaction>, With<ExecuteButton>)>,
-    mut execute_button_state: ResMut<ExecuteButtonState>,
-    mut text: Single<&mut Text, With<ExecuteButton>>,
-) {
-    // if let Ok(&Interaction::Pressed) = interaction_query.single() {
-    if *interaction != &Interaction::Pressed {
-        return;
-    }
-    // dbg!(&children.0);
-    *execute_button_state = match *execute_button_state {
-        ExecuteButtonState::None => {
-            command_tx.send(InterpretationCommand::Step).unwrap();
-            ***text = "Pause".to_string();
-            ExecuteButtonState::Clicked
-        }
-        ExecuteButtonState::Clicked => {
-            ***text = "Execute".to_string();
-            ExecuteButtonState::None
-        }
-        ExecuteButtonState::WaitingForInput => ExecuteButtonState::WaitingForInput,
-    };
 }
 
 fn execute_conditionally(
@@ -306,8 +246,7 @@ fn execute_conditionally(
     }
 
     match *execute_button_state {
-        ExecuteButtonState::None => {}
-        ExecuteButtonState::WaitingForInput => {}
+        ExecuteButtonState::None | ExecuteButtonState::WaitingForInput => {}
         ExecuteButtonState::Clicked => {
             if inputs.is_empty() {
                 command_tx.send(InterpretationCommand::Step).unwrap();
@@ -321,10 +260,12 @@ fn execute_conditionally(
 fn finished_program(
     mut execute_button_state: ResMut<ExecuteButtonState>,
     mut finished_programs: EventReader<FinishedProgram>,
-    mut text: Single<&mut Text, With<ExecuteButton>>,
+    mut text: Single<&mut Text, With<ExecuteIndicator>>,
+    mut bg: Single<&mut BackgroundColor, With<ExecuteIndicatorBg>>,
 ) {
     if finished_programs.read().last().is_some() {
         *execute_button_state = ExecuteButtonState::None;
-        "Execute".clone_into(&mut text);
+        "Stepping".clone_into(&mut text);
+        bg.0 = Color::srgba(0., 0.6, 0., 0.5);
     }
 }

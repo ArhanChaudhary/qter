@@ -17,7 +17,7 @@ use qter_core::{
     architectures::{Architecture, Permutation},
 };
 
-use crate::visualizer::{code_viz::CodeViz, io_viz::IOViz};
+use crate::{code_viz::CodeViz, io_viz::IOViz};
 
 mod code_viz;
 mod cube_viz;
