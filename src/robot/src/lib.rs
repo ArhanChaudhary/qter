@@ -39,6 +39,7 @@ impl RobotLike for QterRobot {
     }
 
     fn take_picture(&self) -> &Permutation {
+        self.handle.await_moves();
         &self.state
     }
 

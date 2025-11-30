@@ -85,7 +85,7 @@ impl RobotHandle {
     }
 
     /// Wait for all moves in the queue to be performed
-    pub fn await_moves(&mut self) {
+    pub fn await_moves(&self) {
         let parker = Parker::new();
 
         self.motor_thread_handle
