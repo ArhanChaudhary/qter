@@ -4,7 +4,7 @@ use bevy_simple_text_input::{TextInput, TextInputSubmitEvent, TextInputValue};
 use internment::Intern;
 use itertools::Itertools;
 
-use crate::demo::interpreter_plugin::{
+use crate::visualizer::interpreter_plugin::{
     BeganProgram, CommandTx, FinishedProgram, GaveInput, Input, InterpretationCommand, Message,
 };
 
@@ -213,8 +213,11 @@ fn on_submit(
     }
 }
 
-
-fn keyboard_control(keyboard_input: Res<ButtonInput<KeyCode>>, command_tx: Res<CommandTx>, mut input: Single<&mut TextInputValue>) {
+fn keyboard_control(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    command_tx: Res<CommandTx>,
+    mut input: Single<&mut TextInputValue>,
+) {
     if keyboard_input.just_pressed(KeyCode::KeyS) {
         command_tx
             .send(InterpretationCommand::Execute(Intern::from("simple")))

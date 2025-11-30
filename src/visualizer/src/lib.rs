@@ -17,7 +17,7 @@ use qter_core::{
     architectures::{Architecture, Permutation},
 };
 
-use crate::demo::{code_viz::CodeViz, io_viz::IOViz};
+use crate::visualizer::{code_viz::CodeViz, io_viz::IOViz};
 
 mod code_viz;
 mod cube_viz;
@@ -54,7 +54,7 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
         ProgramInfo {
             program: Arc::new(
                 compile(
-                    &File::from(include_str!("../../../compiler/tests/simple/simple.qat")),
+                    &File::from(include_str!("../../compiler/tests/simple/simple.qat")),
                     load_file,
                 )
                 .unwrap(),
@@ -81,7 +81,7 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
             program: Arc::new(
                 compile(
                     &File::from(include_str!(
-                        "../../../compiler/tests/average/average_transform.qat"
+                        "../../compiler/tests/average/average_transform.qat"
                     )),
                     load_file,
                 )
@@ -125,7 +125,7 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
             program: Arc::new(
                 compile(
                     &File::from(include_str!(
-                        "../../../compiler/tests/fib/fib_transform.qat"
+                        "../../compiler/tests/fib/fib_transform.qat"
                     )),
                     load_file,
                 )
@@ -190,7 +190,7 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
             program: Arc::new(
                 compile(
                     &File::from(include_str!(
-                        "../../../compiler/tests/multiply/multiply_transform.qat"
+                        "../../compiler/tests/multiply/multiply_transform.qat"
                     )),
                     load_file,
                 )
@@ -388,7 +388,7 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
 #[derive(Resource)]
 struct CurrentState(Permutation);
 
-pub fn demo(robot: bool) {
+pub fn visualizer(robot: bool) {
     let mut app = App::new();
     app.add_plugins(DefaultPlugins)
         .add_plugins(InterpreterPlugin { robot })

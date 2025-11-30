@@ -24,8 +24,6 @@ use qter_core::{
     table_encoding::{decode_table, encode_table},
 };
 
-mod demo;
-
 /// Compiles and interprets qter programs
 #[derive(Parser)]
 #[command(version, about)]
@@ -185,7 +183,7 @@ fn main() -> color_eyre::Result<()> {
             }
         }
         Commands::Demo { robot } => {
-            demo::demo(robot);
+            visualizer::visualizer(robot);
         }
     }
 

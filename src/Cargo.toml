@@ -11,6 +11,7 @@ members = [
   "pog_ans",
   "cycle_combination_finder",
   "robot",
+  "visualizer",
 ]
 
 [workspace.lints.clippy]

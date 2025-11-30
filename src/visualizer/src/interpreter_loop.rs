@@ -1,9 +1,5 @@
-use std::{
-    sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock},
-    thread,
-    time::Duration,
-};
-
+use super::{InterpretationCommand, interpreter_plugin::InterpretationEvent};
+use crate::PROGRAMS;
 use crossbeam_channel::{Receiver, Sender};
 use interpreter::{
     ActionPerformed, ExecutionState, Interpreter, PausedState,
@@ -14,10 +10,11 @@ use qter_core::{
     architectures::{Algorithm, PermutationGroup, PuzzleDefinition, mk_puzzle_definition},
     discrete_math::lcm_iter,
 };
-
-use crate::demo::PROGRAMS;
-
-use super::{InterpretationCommand, interpreter_plugin::InterpretationEvent};
+use std::{
+    sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock},
+    thread,
+    time::Duration,
+};
 
 struct RobotHandle {
     robot: &'static mut (dyn RobotLikeDyn + Send + 'static),

@@ -406,7 +406,12 @@ impl PeepholeRewriter for RepeatUntil1 {
             spot2.block_id,
         );
 
-        let goto = OptimizingCodeComponent::Instruction(Box::new(OptimizingPrimitive::Goto { label: spot2.to_owned() }), spot2.block_id);
+        let goto = OptimizingCodeComponent::Instruction(
+            Box::new(OptimizingPrimitive::Goto {
+                label: spot2.to_owned(),
+            }),
+            spot2.block_id,
+        );
 
         let mut values = Vec::new();
         values.push(window.pop_front().unwrap());
@@ -494,7 +499,12 @@ impl PeepholeRewriter for RepeatUntil2 {
             spot3.block_id,
         );
 
-        let goto = OptimizingCodeComponent::Instruction(Box::new(OptimizingPrimitive::Goto { label: spot3.clone() }), spot3.block_id);
+        let goto = OptimizingCodeComponent::Instruction(
+            Box::new(OptimizingPrimitive::Goto {
+                label: spot3.clone(),
+            }),
+            spot3.block_id,
+        );
 
         let mut out = Vec::new();
 
@@ -613,7 +623,12 @@ impl PeepholeRewriter for RepeatUntil3 {
             maybe_spot1.block_id,
         );
 
-        let goto = OptimizingCodeComponent::Instruction(Box::new(OptimizingPrimitive::Goto { label: spot2.clone() }), maybe_spot1.block_id);
+        let goto = OptimizingCodeComponent::Instruction(
+            Box::new(OptimizingPrimitive::Goto {
+                label: spot2.clone(),
+            }),
+            maybe_spot1.block_id,
+        );
 
         let mut out = Vec::new();
 
