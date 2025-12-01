@@ -352,7 +352,9 @@ pub fn uart_init(robot_config: &RobotConfig) {
         let new_gconf = initial_gconf
             .union(GConf::MSTEP_REG_SELECT)
             .union(GConf::PDN_DISABLE)
-            .union(GConf::INDEX_OTPW);
+            .union(GConf::INDEX_OTPW)
+            // qter robot turns the opposite direction
+            .union(GConf::SHAFT);
         if initial_gconf == new_gconf {
             debug!(target: "uart_init", "GCONF already configured");
         } else {
