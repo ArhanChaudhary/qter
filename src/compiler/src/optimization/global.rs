@@ -10,8 +10,8 @@ use super::OptimizingCodeComponent;
 
 /// Returns a bool to indicate whether the output is the same as the input
 pub fn do_global_optimization(
-    instructions: impl Iterator<Item = WithSpan<OptimizingCodeComponent>> + Send + 'static,
-) -> (Vec<WithSpan<OptimizingCodeComponent>>, bool) {
+    instructions: impl Iterator<Item = WithSpan<OptimizingCodeComponent>> + 'static,
+) -> impl Iterator<Item = WithSpan<OptimizingCodeComponent>> {
     let mut label_locations = HashMap::new();
     let mut program_counter = 0;
 
@@ -44,28 +44,20 @@ pub fn do_global_optimization(
         *is_seen = true;
     }
 
-    let mut convergence = true;
+    instructions
+        .into_iter()
+        .filter(move |component| {
+            let OptimizingCodeComponent::Label(label) = &**component else {
+                return true;
+            };
 
-    (
-        instructions
-            .into_iter()
-            .filter(|component| {
-                let OptimizingCodeComponent::Label(label) = &**component else {
-                    return true;
-                };
+            let jumped_to = *label_locations
+                .get(&LabelReference {
+                    name: ArcIntern::clone(&label.name),
+                    block_id: label.maybe_block_id.unwrap(),
+                })
+                .unwrap();
 
-                let jumped_to = *label_locations
-                    .get(&LabelReference {
-                        name: ArcIntern::clone(&label.name),
-                        block_id: label.maybe_block_id.unwrap(),
-                    })
-                    .unwrap();
-
-                convergence &= jumped_to;
-
-                jumped_to
-            })
-            .collect_vec(),
-        convergence,
-    )
+            jumped_to
+        })
 }

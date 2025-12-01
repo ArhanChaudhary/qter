@@ -10,6 +10,9 @@ use crate::interpreter_plugin::{
 
 use super::interpreter_plugin::DoneExecuting;
 
+const STEPPING: &'static str = "Manual stepping";
+const EXECUTE: &'static str = "Automatic stepping";
+
 pub struct IOViz;
 
 #[derive(Component)]

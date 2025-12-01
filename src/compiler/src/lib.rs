@@ -41,7 +41,7 @@ pub fn compile(
     strip_expanded(expanded)
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct Label {
     name: ArcIntern<str>,
     public: bool,
@@ -63,7 +63,7 @@ struct Block {
     maybe_id: Option<BlockID>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct RegisterReference {
     reg_name: WithSpan<ArcIntern<str>>,
     modulus: Option<Int<U>>,

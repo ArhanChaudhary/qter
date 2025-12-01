@@ -10,6 +10,7 @@ sum_loop:
     solved-goto B found_sum
     add A 1
     add B 89
+    solved-goto A overflow
     goto sum_loop
 found_sum:
     add A 1
@@ -22,3 +23,22 @@ divide_by_2:
     goto divide_by_2
 stop:
     halt "The average is" B
+
+overflow:
+    solved-goto B found_sum_overflow
+    add A 1
+    add B 89
+    goto overflow
+found_sum_overflow:
+    add A 1
+divide_by_2_overflow:
+    add A 89
+    solved-goto A stop_overflow
+    add A 89
+    solved-goto A stop_overflow
+    add B 1
+    goto divide_by_2_overflow
+stop_overflow:
+    add B 45
+    halt "The average is" B
+    

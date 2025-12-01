@@ -1,96 +1,21 @@
 use std::{
-    collections::{HashSet, VecDeque},
-    iter::from_fn,
-    marker::PhantomData,
-    sync::Arc,
+    collections::{HashSet, VecDeque}, marker::PhantomData, sync::Arc
 };
 
 use itertools::Itertools;
 use qter_core::{
     ByPuzzleType, Int, PuzzleIdx, TheoreticalIdx, U, WithSpan, architectures::Architecture,
 };
-use smol::{
-    Executor,
-    channel::{Receiver, bounded},
-    future,
-};
 
 use crate::{
-    BlockID, optimization::OptimizingPrimitive, primitive_match, strip_expanded::GlobalRegs,
+    BlockID, optimization::{OptimizingPrimitive, combinators::Rewriter}, primitive_match, strip_expanded::GlobalRegs,
 };
 
 use super::OptimizingCodeComponent;
 
-trait Rewriter {
-    fn rewrite(
-        &mut self,
-        component: WithSpan<OptimizingCodeComponent>,
-        global_regs: &GlobalRegs,
-    ) -> Vec<WithSpan<OptimizingCodeComponent>>;
-
-    fn eof(self, global_regs: &GlobalRegs) -> Vec<WithSpan<OptimizingCodeComponent>>;
-}
-
-fn add_stage<R: Rewriter + Default + Send>(
-    executor: &Executor,
-    rx: Receiver<WithSpan<OptimizingCodeComponent>>,
-    global_regs: Arc<GlobalRegs>,
-) -> Receiver<WithSpan<OptimizingCodeComponent>> {
-    let (tx, new_rx) = bounded(32);
-
-    executor
-        .spawn(async move {
-            let mut rewriter = R::default();
-
-            while let Ok(instruction) = rx.recv().await {
-                let new = rewriter.rewrite(instruction, &global_regs);
-
-                for new_instr in new {
-                    tx.send(new_instr).await.unwrap();
-                }
-            }
-
-            let new = rewriter.eof(&global_regs);
-
-            for new_instr in new {
-                tx.send(new_instr).await.unwrap();
-            }
-        })
-        .detach();
-
-    new_rx
-}
-
-pub fn do_local_optimization(
-    instructions: impl Iterator<Item = WithSpan<OptimizingCodeComponent>> + Send + 'static,
-    global_regs: Arc<GlobalRegs>,
-) -> impl Iterator<Item = WithSpan<OptimizingCodeComponent>> {
-    let executor = Executor::new();
-
-    let (tx, rx) = bounded(32);
-
-    executor
-        .spawn(async move {
-            for instruction in instructions {
-                tx.send(instruction).await.unwrap();
-            }
-        })
-        .detach();
-
-    let rx = add_stage::<RemoveDeadCode>(&executor, rx, Arc::clone(&global_regs));
-    let rx = add_stage::<Peephole<RemoveUselessJumps>>(&executor, rx, Arc::clone(&global_regs));
-    let rx = add_stage::<CoalesceAdds>(&executor, rx, Arc::clone(&global_regs));
-    let rx = add_stage::<Peephole<RepeatUntil1>>(&executor, rx, Arc::clone(&global_regs));
-    let rx = add_stage::<Peephole<RepeatUntil2>>(&executor, rx, Arc::clone(&global_regs));
-    let rx = add_stage::<Peephole<RepeatUntil3>>(&executor, rx, Arc::clone(&global_regs));
-    let rx = add_stage::<TransformSolve>(&executor, rx, global_regs);
-
-    from_fn(move || future::block_on(executor.run(rx.recv())).ok())
-}
-
 /// Any non-label instructions that come immedately after an unconditional goto or halt are unreachable and can be removed
 #[derive(Default)]
-struct RemoveDeadCode {
+pub struct RemoveDeadCode {
     diverging: Option<WithSpan<OptimizingCodeComponent>>,
 }
 
@@ -130,7 +55,7 @@ impl Rewriter for RemoveDeadCode {
 }
 
 #[derive(Default)]
-struct RemoveUselessJumps;
+pub struct RemoveUselessJumps;
 
 impl PeepholeRewriter for RemoveUselessJumps {
     const MAX_WINDOW_SIZE: usize = 2;
@@ -150,6 +75,10 @@ impl PeepholeRewriter for RemoveUselessJumps {
             } | OptimizingPrimitive::Goto { label: jumps_to }) = &**window.front()?
         );
 
+        println!("OWO");
+        println!("{jumps_to:#?}");
+        println!("{label:#?}");
+
         if jumps_to.name == label.name && jumps_to.block_id == label.maybe_block_id.unwrap() {
             window.pop_front().unwrap();
         }
@@ -159,7 +88,7 @@ impl PeepholeRewriter for RemoveUselessJumps {
 }
 
 #[derive(Default)]
-struct CoalesceAdds {
+pub struct CoalesceAdds {
     block_id: Option<BlockID>,
     theoreticals: Vec<WithSpan<(TheoreticalIdx, WithSpan<Int<U>>)>>,
     puzzles: Vec<
@@ -279,7 +208,7 @@ impl Rewriter for CoalesceAdds {
     }
 }
 
-struct Peephole<R: PeepholeRewriter> {
+pub struct Peephole<R: PeepholeRewriter> {
     window: VecDeque<WithSpan<OptimizingCodeComponent>>,
     phantom_: PhantomData<R>,
 }
@@ -361,7 +290,7 @@ spot1:
     goto wherever
 ```
 */
-struct RepeatUntil1;
+pub struct RepeatUntil1;
 
 impl PeepholeRewriter for RepeatUntil1 {
     const MAX_WINDOW_SIZE: usize = 5;
@@ -447,7 +376,7 @@ spot1:
     goto wherever
 ```
 */
-struct RepeatUntil2;
+pub struct RepeatUntil2;
 
 impl PeepholeRewriter for RepeatUntil2 {
     const MAX_WINDOW_SIZE: usize = 6;
@@ -542,7 +471,7 @@ spot1:
     goto wherever
 ```
 */
-struct RepeatUntil3;
+pub struct RepeatUntil3;
 
 impl PeepholeRewriter for RepeatUntil3 {
     const MAX_WINDOW_SIZE: usize = 7;
@@ -648,7 +577,7 @@ impl PeepholeRewriter for RepeatUntil3 {
 }
 
 #[derive(Default)]
-struct TransformSolve {
+pub struct TransformSolve {
     instrs: VecDeque<(WithSpan<OptimizingCodeComponent>, Option<usize>)>,
     puzzle_idx: Option<PuzzleIdx>,
     guaranteed_zeroed: HashSet<usize>,

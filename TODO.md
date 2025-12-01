@@ -98,23 +98,31 @@
 
 ## QAT
 
+- ⭐Replace repeat-untils that can never terminate with a `halt` instruction
 - ⭐Precompute tables for builtin architectures
 - ⭐QAT Macros
   - ⭐Actual expansion
   - ⭐Lua stuff
-- 😎Architecture switching
 - ⭐Memory tapes
   - ⭐Implement in QAT
 - Dynamically shuffle sub-cycles with syntax X ← A\*B\*C\*D, Y ← E\*F\*G\*H
 - Function macro
 - ⭐Directory of testing programs instead of hardcoding into Rust
   - ⭐Inline testing in the QAT format
+- 😎Architecture switching
 - 😎Instruction to copy solving moves to other puzzle
 - 😎Architecture that avoids sharing a piece by always having two additions simultaneously which avoids parity
-- 😎Asher's repeated move post process optimization: R U R repeated = R then U R2 repeated then R'
 - 😎force conditional blocks that end with "halt" to codegen at the end of the instruction memory, optimizing a goto
 - 😎Test with https://github.com/dtolnay/trybuild
 - 😎Write a tree-sitter grammer for QAT
+- 😎Optimizations
+  - Asher's repeated move post process optimization: R U R repeated = R then U R2 repeated then R'
+  - Dead code removal with real control flow analysis
+  - Coalesce solved-gotos to the same label
+  - Coalesce adjacent labels
+  - Strength reduction of `solved-goto` after a `repeat until` or `solve` that guarantees whether or not it succeeds
+  - If there's a goto immediately after a label, move the label to where the goto goes to
+  - Be able to actually shuffle code around to minimize branching
 
 ## Interpreter/CLI
 
