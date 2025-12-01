@@ -1,100 +1,28 @@
 use std::{
-    collections::{HashSet, VecDeque},
-    iter::from_fn,
-    marker::PhantomData,
-    sync::Arc,
+    collections::{HashSet, VecDeque}, sync::Arc
 };
 
 use itertools::Itertools;
 use qter_core::{
     ByPuzzleType, Int, PuzzleIdx, TheoreticalIdx, U, WithSpan, architectures::Architecture,
 };
-use smol::{
-    Executor,
-    channel::{Receiver, bounded},
-    future,
-};
 
 use crate::{
-    BlockID, optimization::OptimizingPrimitive, primitive_match, strip_expanded::GlobalRegs,
+    BlockID, optimization::{OptimizingPrimitive, combinators::{PeepholeRewriter, Rewriter}, extend_from_start}, primitive_match, strip_expanded::GlobalRegs,
 };
 
 use super::OptimizingCodeComponent;
 
-trait Rewriter {
-    fn rewrite(
-        &mut self,
-        component: WithSpan<OptimizingCodeComponent>,
-        global_regs: &GlobalRegs,
-    ) -> Vec<WithSpan<OptimizingCodeComponent>>;
-
-    fn eof(self, global_regs: &GlobalRegs) -> Vec<WithSpan<OptimizingCodeComponent>>;
-}
-
-fn add_stage<R: Rewriter + Default + Send>(
-    executor: &Executor,
-    rx: Receiver<WithSpan<OptimizingCodeComponent>>,
-    global_regs: Arc<GlobalRegs>,
-) -> Receiver<WithSpan<OptimizingCodeComponent>> {
-    let (tx, new_rx) = bounded(32);
-
-    executor
-        .spawn(async move {
-            let mut rewriter = R::default();
-
-            while let Ok(instruction) = rx.recv().await {
-                let new = rewriter.rewrite(instruction, &global_regs);
-
-                for new_instr in new {
-                    tx.send(new_instr).await.unwrap();
-                }
-            }
-
-            let new = rewriter.eof(&global_regs);
-
-            for new_instr in new {
-                tx.send(new_instr).await.unwrap();
-            }
-        })
-        .detach();
-
-    new_rx
-}
-
-pub fn do_local_optimization(
-    instructions: impl Iterator<Item = WithSpan<OptimizingCodeComponent>> + Send + 'static,
-    global_regs: Arc<GlobalRegs>,
-) -> impl Iterator<Item = WithSpan<OptimizingCodeComponent>> {
-    let executor = Executor::new();
-
-    let (tx, rx) = bounded(32);
-
-    executor
-        .spawn(async move {
-            for instruction in instructions {
-                tx.send(instruction).await.unwrap();
-            }
-        })
-        .detach();
-
-    let rx = add_stage::<RemoveDeadCode>(&executor, rx, Arc::clone(&global_regs));
-    let rx = add_stage::<Peephole<RemoveUselessJumps>>(&executor, rx, Arc::clone(&global_regs));
-    let rx = add_stage::<CoalesceAdds>(&executor, rx, Arc::clone(&global_regs));
-    let rx = add_stage::<Peephole<RepeatUntil1>>(&executor, rx, Arc::clone(&global_regs));
-    let rx = add_stage::<Peephole<RepeatUntil2>>(&executor, rx, Arc::clone(&global_regs));
-    let rx = add_stage::<Peephole<RepeatUntil3>>(&executor, rx, Arc::clone(&global_regs));
-    let rx = add_stage::<TransformSolve>(&executor, rx, global_regs);
-
-    from_fn(move || future::block_on(executor.run(rx.recv())).ok())
-}
-
 /// Any non-label instructions that come immedately after an unconditional goto or halt are unreachable and can be removed
 #[derive(Default)]
-struct RemoveDeadCode {
+pub struct RemoveDeadCode {
     diverging: Option<WithSpan<OptimizingCodeComponent>>,
 }
 
 impl Rewriter for RemoveDeadCode {
+    type Component = WithSpan<OptimizingCodeComponent>;
+    type GlobalData = GlobalRegs;
+    
     fn rewrite(
         &mut self,
         component: WithSpan<OptimizingCodeComponent>,
@@ -112,7 +40,7 @@ impl Rewriter for RemoveDeadCode {
                 Vec::new()
             }
             None => {
-                primitive_match!((OptimizingPrimitive::Goto { .. } | OptimizingPrimitive::Halt { .. }) = &*component; else { return vec![component]; });
+                primitive_match!((OptimizingPrimitive::Goto { .. } | OptimizingPrimitive::Halt { .. }) = Some(&component); else { return vec![component]; });
 
                 self.diverging = Some(component);
 
@@ -130,36 +58,41 @@ impl Rewriter for RemoveDeadCode {
 }
 
 #[derive(Default)]
-struct RemoveUselessJumps;
+pub struct RemoveUselessJumps;
 
 impl PeepholeRewriter for RemoveUselessJumps {
+    type Component = WithSpan<OptimizingCodeComponent>;
+    type GlobalData = GlobalRegs;
+
     const MAX_WINDOW_SIZE: usize = 2;
 
     fn try_match(
         window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
         _: &GlobalRegs,
-    ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
-        let OptimizingCodeComponent::Label(label) = &**window.get(1)? else {
-            return None;
+    ) {
+        let Some(OptimizingCodeComponent::Label(label)) = window.get(1).map(|v| &**v) else {
+            return;
         };
 
         primitive_match!(
             (OptimizingPrimitive::SolvedGoto {
                 label: jumps_to,
                 ..
-            } | OptimizingPrimitive::Goto { label: jumps_to }) = &**window.front()?
+            } | OptimizingPrimitive::Goto { label: jumps_to }) = window.front()
         );
+
+        println!("OWO");
+        println!("{jumps_to:#?}");
+        println!("{label:#?}");
 
         if jumps_to.name == label.name && jumps_to.block_id == label.maybe_block_id.unwrap() {
             window.pop_front().unwrap();
         }
-
-        None
     }
 }
 
 #[derive(Default)]
-struct CoalesceAdds {
+pub struct CoalesceAdds {
     block_id: Option<BlockID>,
     theoreticals: Vec<WithSpan<(TheoreticalIdx, WithSpan<Int<U>>)>>,
     puzzles: Vec<
@@ -212,6 +145,9 @@ impl CoalesceAdds {
 }
 
 impl Rewriter for CoalesceAdds {
+    type Component = WithSpan<OptimizingCodeComponent>;
+    type GlobalData = GlobalRegs;
+
     fn rewrite(
         &mut self,
         component: WithSpan<OptimizingCodeComponent>,
@@ -279,73 +215,6 @@ impl Rewriter for CoalesceAdds {
     }
 }
 
-struct Peephole<R: PeepholeRewriter> {
-    window: VecDeque<WithSpan<OptimizingCodeComponent>>,
-    phantom_: PhantomData<R>,
-}
-
-impl<R: PeepholeRewriter> Peephole<R> {
-    fn do_try_match(&mut self, global_regs: &GlobalRegs) -> Vec<WithSpan<OptimizingCodeComponent>> {
-        match R::try_match(&mut self.window, global_regs) {
-            Some(mut v) => {
-                let again = self.do_try_match(global_regs);
-                v.extend(again);
-                v
-            }
-            None => {
-                if self.window.len() >= R::MAX_WINDOW_SIZE {
-                    vec![self.window.pop_front().unwrap()]
-                } else {
-                    Vec::new()
-                }
-            }
-        }
-    }
-}
-
-impl<R: PeepholeRewriter> Default for Peephole<R> {
-    fn default() -> Self {
-        Peephole {
-            window: VecDeque::new(),
-            phantom_: PhantomData,
-        }
-    }
-}
-
-trait PeepholeRewriter {
-    const MAX_WINDOW_SIZE: usize;
-
-    fn try_match(
-        window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
-        global_regs: &GlobalRegs,
-    ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>>;
-}
-
-impl<R: PeepholeRewriter> Rewriter for Peephole<R> {
-    fn rewrite(
-        &mut self,
-        component: WithSpan<OptimizingCodeComponent>,
-        global_regs: &GlobalRegs,
-    ) -> Vec<WithSpan<OptimizingCodeComponent>> {
-        self.window.push_back(component);
-
-        self.do_try_match(global_regs)
-    }
-
-    fn eof(mut self, global_regs: &GlobalRegs) -> Vec<WithSpan<OptimizingCodeComponent>> {
-        let mut out = Vec::new();
-
-        loop {
-            out.extend(self.do_try_match(global_regs));
-
-            match self.window.pop_front() {
-                Some(first) => out.push(first),
-                _ => return out,
-            }
-        }
-    }
-}
-
 /*
 Transforms
 ```
@@ -361,39 +230,42 @@ spot1:
     goto wherever
 ```
 */
-struct RepeatUntil1;
+pub struct RepeatUntil1;
 
 impl PeepholeRewriter for RepeatUntil1 {
+    type Component = WithSpan<OptimizingCodeComponent>;
+    type GlobalData = GlobalRegs;
+
     const MAX_WINDOW_SIZE: usize = 5;
 
     fn try_match(
         window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
         global_regs: &GlobalRegs,
-    ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
-        let OptimizingCodeComponent::Label(spot1) = &**window.front()? else {
-            return None;
+    ) {
+        let Some(OptimizingCodeComponent::Label(spot1)) = window.front().map(|v| &**v) else {
+            return;
         };
 
         primitive_match!(
             OptimizingPrimitive::SolvedGoto {
                 label: spot2,
                 register,
-            } = &**window.get(1)?
+            } = window.get(1)
         );
 
-        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &**window.get(2)?);
+        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = window.get(2));
 
         if match global_regs.get_reg(register) {
             qter_core::ByPuzzleType::Theoretical(_) => true,
             qter_core::ByPuzzleType::Puzzle((idx, _)) => idx != *puzzle,
         } {
-            return None;
+            return;
         }
 
-        primitive_match!(OptimizingPrimitive::Goto { label } = &**window.get(3)?);
+        primitive_match!(OptimizingPrimitive::Goto { label } = window.get(3));
 
         if label.name != spot1.name || label.block_id != spot1.maybe_block_id.unwrap() {
-            return None;
+            return;
         }
 
         let repeat_until = OptimizingCodeComponent::Instruction(
@@ -425,7 +297,7 @@ impl PeepholeRewriter for RepeatUntil1 {
         values.push(span.clone().with(repeat_until));
         values.push(span.with(goto));
 
-        Some(values)
+        extend_from_start(window, values);
     }
 }
 
@@ -447,20 +319,23 @@ spot1:
     goto wherever
 ```
 */
-struct RepeatUntil2;
+pub struct RepeatUntil2;
 
 impl PeepholeRewriter for RepeatUntil2 {
+    type Component = WithSpan<OptimizingCodeComponent>;
+    type GlobalData = GlobalRegs;
+
     const MAX_WINDOW_SIZE: usize = 6;
 
     fn try_match(
         window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
         global_regs: &GlobalRegs,
-    ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
-        let OptimizingCodeComponent::Label(spot1) = &**window.front()? else {
-            return None;
+    ) {
+        let Some(OptimizingCodeComponent::Label(spot1)) = window.front().map(|v| &**v) else {
+            return;
         };
 
-        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &**window.get(1)?);
+        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = window.get(1));
 
         let optional_label = usize::from(matches!(
             window.get(2).map(|v| &**v),
@@ -471,22 +346,22 @@ impl PeepholeRewriter for RepeatUntil2 {
             OptimizingPrimitive::SolvedGoto {
                 label: spot3,
                 register,
-            } = &**window.get(2 + optional_label)?
+            } = window.get(2 + optional_label)
         );
 
         if match global_regs.get_reg(register) {
             qter_core::ByPuzzleType::Theoretical(_) => true,
             qter_core::ByPuzzleType::Puzzle((idx, _)) => idx != *puzzle,
         } {
-            return None;
+            return;
         }
 
         primitive_match!(
-            OptimizingPrimitive::Goto { label: maybe_spot1 } = &**window.get(3 + optional_label)?
+            OptimizingPrimitive::Goto { label: maybe_spot1 } = window.get(3 + optional_label)
         );
 
         if spot1.name != maybe_spot1.name || spot1.maybe_block_id.unwrap() != maybe_spot1.block_id {
-            return None;
+            return;
         }
 
         let repeat_until = OptimizingCodeComponent::Instruction(
@@ -519,7 +394,7 @@ impl PeepholeRewriter for RepeatUntil2 {
         out.push(span.clone().with(repeat_until));
         out.push(span.with(goto));
 
-        Some(out)
+        extend_from_start(window, out);
     }
 }
 
@@ -542,20 +417,23 @@ spot1:
     goto wherever
 ```
 */
-struct RepeatUntil3;
+pub struct RepeatUntil3;
 
 impl PeepholeRewriter for RepeatUntil3 {
+    type Component = WithSpan<OptimizingCodeComponent>;
+    type GlobalData = GlobalRegs;
+
     const MAX_WINDOW_SIZE: usize = 7;
 
     fn try_match(
         window: &mut VecDeque<WithSpan<OptimizingCodeComponent>>,
         global_regs: &GlobalRegs,
-    ) -> Option<Vec<WithSpan<OptimizingCodeComponent>>> {
-        let OptimizingCodeComponent::Label(spot1) = &**window.front()? else {
-            return None;
+    ) {
+        let Some(OptimizingCodeComponent::Label(spot1)) = window.front().map(|v| &**v) else {
+            return;
         };
 
-        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = &**window.get(1)?);
+        primitive_match!(OptimizingPrimitive::AddPuzzle { puzzle, arch, amts } = window.get(1));
 
         let optional_label = usize::from(matches!(
             window.get(2).map(|v| &**v),
@@ -566,18 +444,18 @@ impl PeepholeRewriter for RepeatUntil3 {
             OptimizingPrimitive::SolvedGoto {
                 label: spot2,
                 register,
-            } = &**window.get(2 + optional_label)?
+            } = window.get(2 + optional_label)
         );
 
         if match global_regs.get_reg(register) {
             qter_core::ByPuzzleType::Theoretical(_) => true,
             qter_core::ByPuzzleType::Puzzle((idx, _)) => idx != *puzzle,
         } {
-            return None;
+            return;
         }
 
-        let maybe_algorithm = match &**window.get(3 + optional_label)? {
-            OptimizingCodeComponent::Instruction(optimizing_primitive, _) => {
+        let maybe_algorithm = match window.get(3 + optional_label).map(|v| &**v) {
+            Some(OptimizingCodeComponent::Instruction(optimizing_primitive, _)) => {
                 match &**optimizing_primitive {
                     OptimizingPrimitive::AddPuzzle {
                         puzzle: new_puzzle,
@@ -585,7 +463,7 @@ impl PeepholeRewriter for RepeatUntil3 {
                         amts,
                     } => {
                         if puzzle != new_puzzle {
-                            return None;
+                            return;
                         }
 
                         Some((new_puzzle, arch, amts))
@@ -593,18 +471,19 @@ impl PeepholeRewriter for RepeatUntil3 {
                     _ => None,
                 }
             }
-            OptimizingCodeComponent::Label(_) => None,
+            Some(OptimizingCodeComponent::Label(_)) => None,
+            None => return,
         };
 
         let is_alg = usize::from(maybe_algorithm.is_some());
 
         primitive_match!(
             OptimizingPrimitive::Goto { label: maybe_spot1 } =
-                &**window.get(3 + optional_label + is_alg)?
+                window.get(3 + optional_label + is_alg)
         );
 
         if maybe_spot1.name != spot1.name || maybe_spot1.block_id != spot1.maybe_block_id.unwrap() {
-            return None;
+            return ;
         }
 
         let mut amts = amts.to_owned();
@@ -643,12 +522,12 @@ impl PeepholeRewriter for RepeatUntil3 {
         out.push(span.clone().with(repeat_until));
         out.push(span.with(goto));
 
-        Some(out)
+        extend_from_start(window, out);
     }
 }
 
 #[derive(Default)]
-struct TransformSolve {
+pub struct TransformSolve {
     instrs: VecDeque<(WithSpan<OptimizingCodeComponent>, Option<usize>)>,
     puzzle_idx: Option<PuzzleIdx>,
     guaranteed_zeroed: HashSet<usize>,
@@ -671,6 +550,9 @@ impl TransformSolve {
 }
 
 impl Rewriter for TransformSolve {
+    type Component = WithSpan<OptimizingCodeComponent>;
+    type GlobalData = GlobalRegs;
+
     fn rewrite(
         &mut self,
         component: WithSpan<OptimizingCodeComponent>,

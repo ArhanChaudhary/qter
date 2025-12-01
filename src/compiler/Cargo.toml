@@ -10,7 +10,6 @@ itertools = "0.14"
 mlua = { version = "0.10.2", features = ["lua54", "vendored", "send"] }
 chumsky = "0.10.1"
 ariadne = "0.5.1"
-smol = "2.0"
 
 [lints]
 workspace = true

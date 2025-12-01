@@ -70,6 +70,27 @@ where
     }
 }
 
+impl<'a, T: SeparatesByPuzzleType> PartialEq for ByPuzzleType<'a, T>
+where
+    T::Theoretical<'a>: PartialEq,
+    T::Puzzle<'a>: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Theoretical(l0), Self::Theoretical(r0)) => l0 == r0,
+            (Self::Puzzle(l0), Self::Puzzle(r0)) => l0 == r0,
+            _ => false,
+        }
+    }
+}
+
+impl<'a, T: SeparatesByPuzzleType> Eq for ByPuzzleType<'a, T>
+where
+    T::Theoretical<'a>: Eq,
+    T::Puzzle<'a>: Eq,
+{
+}
+
 impl<A: SeparatesByPuzzleType, B: SeparatesByPuzzleType> SeparatesByPuzzleType for (A, B) {
     type Theoretical<'s> = (A::Theoretical<'s>, B::Theoretical<'s>);
 

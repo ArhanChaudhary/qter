@@ -93,28 +93,48 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
             ],
             code: r#"
 0  | input "First number"
-           R' F' L U' L U L F U' R
-           max-input 90
+          R' F' L U' L U L F U' R
+          max-input 90
 1  | input "Second number"
-           U F R' D' R2 F R' U' D
-           max-input 90
-2  | repeat until DFR FR solved
-         B2 R L2 D L' F' D2 F' L2
-         B' U' R D' L' B2 R F
-3  | R' F' L U' L U L F U' R
-4  | R' U F' L' U' L' U L' F R
-5  | solved-goto ULF UL 10
-6  | R' U F' L' U' L' U L' F R
-7  | solved-goto ULF UL 10
-8  | U F R' D' R2 F R' U' D
-9  | goto 4
-10 | halt "The average is"
+          U F R' D' R2 F R' U' D
+          max-input 90
+2  | solved-goto DFR FR 8
+3  | B2 R L2 D L' F' D2 F' L2
+     B' U' R D' L' B2 R F
+4  | solved-goto ULF UL 14
+5  | goto 2
+6  | R' F' L U' L U L F U' R
+7  | R' U F' L' U' L' U L' F R
+8  | solved-goto ULF UL 13
+9  | R' U F' L' U' L' U L' F R
+10 | solved-goto ULF UL 13
+11 | U F R' D' R2 F R' U' D
+12 | goto 4
+13 | halt until DFR FR solved
+          "The average is"
           D' U R F' R2 D R F' U'
-          counting-until DFR FR
+
+14 | solved-goto DFR FR 17
+15 | B2 R L2 D L' F' D2 F' L2
+    B' U' R D' L' B2 R F
+16 | goto 14
+17 | R' F' L U' L U L F U' R
+18 | R' U F' L' U' L' U L' F R
+19 | solved-goto ULF UL 24
+20 | R' U F' L' U' L' U L' F R
+21 | solved-goto ULF UL 24
+22 | U F R' D' R2 F R' U' D
+23 | goto 18
+24 | halt until DFR FR solved
+          "The average is"
+          D' U R F' R2 D R F' U'
 "#
             .to_owned(),
         },
     );
+
+    println!("{:#?}", programs.get(&Intern::from("avg")).unwrap().program.instructions);
+    println!("{:#?}", programs.get(&Intern::from("avg")).unwrap().program.instructions.len());
 
     programs.insert(
         Intern::from("fib"),

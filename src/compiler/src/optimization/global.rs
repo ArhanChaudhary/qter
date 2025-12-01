@@ -4,68 +4,69 @@ use internment::ArcIntern;
 use itertools::Itertools;
 use qter_core::WithSpan;
 
-use crate::{LabelReference, optimization::OptimizingPrimitive, primitive_match};
+use crate::{
+    LabelReference,
+    optimization::{OptimizingPrimitive, combinators::GlobalRewriter},
+    primitive_match,
+    strip_expanded::GlobalRegs,
+};
 
 use super::OptimizingCodeComponent;
 
-/// Returns a bool to indicate whether the output is the same as the input
-pub fn do_global_optimization(
-    instructions: impl Iterator<Item = WithSpan<OptimizingCodeComponent>> + Send + 'static,
-) -> (Vec<WithSpan<OptimizingCodeComponent>>, bool) {
-    let mut label_locations = HashMap::new();
-    let mut program_counter = 0;
+pub struct DeadLabelRemover;
 
-    let instructions = instructions
-        .inspect(|component| {
-            if let OptimizingCodeComponent::Label(label) = &**component {
-                label_locations.insert(
-                    LabelReference {
-                        name: ArcIntern::clone(&label.name),
-                        block_id: label.maybe_block_id.unwrap(),
-                    },
-                    false,
-                );
-            }
+impl GlobalRewriter for DeadLabelRemover {
+    type Component = WithSpan<OptimizingCodeComponent>;
+    type GlobalData = GlobalRegs;
 
-            program_counter += 1;
-        })
-        .collect_vec();
+    fn rewrite(instructions: Vec<Self::Component>, _: &Self::GlobalData) -> Vec<Self::Component> {
+        let mut label_locations = HashMap::new();
+        let mut program_counter = 0;
 
-    for instruction in &instructions {
-        primitive_match!((OptimizingPrimitive::Goto { label } | OptimizingPrimitive::SolvedGoto { label, .. }) = &**instruction; else { continue; });
+        let instructions = instructions
+            .into_iter()
+            .inspect(|component| {
+                if let OptimizingCodeComponent::Label(label) = &**component {
+                    label_locations.insert(
+                        LabelReference {
+                            name: ArcIntern::clone(&label.name),
+                            block_id: label.maybe_block_id.unwrap(),
+                        },
+                        false,
+                    );
+                }
 
-        let Some(is_seen) = label_locations.get_mut(&LabelReference {
-            name: ArcIntern::clone(&label.name),
-            block_id: label.block_id,
-        }) else {
-            continue;
-        };
+                program_counter += 1;
+            })
+            .collect_vec();
 
-        *is_seen = true;
-    }
+        for instruction in &instructions {
+            primitive_match!((OptimizingPrimitive::Goto { label } | OptimizingPrimitive::SolvedGoto { label, .. }) = Some(instruction); else { continue; });
 
-    let mut convergence = true;
+            let Some(is_seen) = label_locations.get_mut(&LabelReference {
+                name: ArcIntern::clone(&label.name),
+                block_id: label.block_id,
+            }) else {
+                continue;
+            };
 
-    (
+            *is_seen = true;
+        }
+
         instructions
             .into_iter()
-            .filter(|component| {
+            .filter(move |component| {
                 let OptimizingCodeComponent::Label(label) = &**component else {
                     return true;
                 };
 
-                let jumped_to = *label_locations
+                *label_locations
                     .get(&LabelReference {
                         name: ArcIntern::clone(&label.name),
                         block_id: label.maybe_block_id.unwrap(),
                     })
-                    .unwrap();
-
-                convergence &= jumped_to;
-
-                jumped_to
+                    .unwrap()
             })
-            .collect_vec(),
-        convergence,
-    )
+            .collect()
+    }
 }
