@@ -18,10 +18,11 @@ use crate::{
     table_encoding,
 };
 
-pub(crate) const OPTIMIZED_TABLES: [&[u8]; 3] = [
+pub(crate) const OPTIMIZED_TABLES: [&[u8]; 4] = [
     include_bytes!("../puzzles/210-24.bin"),
     include_bytes!("../puzzles/30-30-30.bin"),
     include_bytes!("../puzzles/30-18-10-9.bin"),
+    include_bytes!("../puzzles/90-90.bin"),
 ];
 
 /// The definition of a puzzle parsed from the custom format
@@ -1111,7 +1112,7 @@ pub fn puzzle_definition() -> impl Parser<'static, File, Arc<PuzzleDefinition>, 
             let presets: [Arc<Architecture>; 6] = [
                 (&["R U2 D' B D'"] as &[&str], None),
                 (&["U", "D"], None),
-                (&["R' F' L U' L U L F U' R", "U F R' D' R2 F R' U' D"], None),
+                (&["R' F' L U' L U L F U' R", "U F R' D' R2 F R' U' D"], Some(3)),
                 (&["U R U' D2 B", "B U2 B' L' U2 B U L' B L B2 L"], Some(0)),
                 (
                     &[

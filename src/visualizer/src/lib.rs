@@ -107,7 +107,7 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
 6  | R' U F' L' U' L' U L' F R
 7  | solved-goto ULF UL 10
 8  | U F R' D' R2 F R' U' D
-9  | goto 7
+9  | goto 4
 10 | halt "The average is"
           D' U R F' R2 D R F' U'
           counting-until DFR FR
