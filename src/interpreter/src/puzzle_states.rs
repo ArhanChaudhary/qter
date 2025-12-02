@@ -2,6 +2,7 @@ use std::{
     io::{self, BufRead, BufReader, Write}, net::TcpStream, sync::Arc
 };
 
+use log::trace;
 use qter_core::{
     I, Int, Program, PuzzleIdx, TheoreticalIdx, U,
     architectures::{Algorithm, Permutation, PermutationGroup, mk_puzzle_definition},
@@ -400,7 +401,9 @@ impl<C: Connection> RobotLike for RemoteRobot<C> {
     type InitializationArgs = C;
 
     fn initialize(perm_group: Arc<PermutationGroup>, mut conn: C) -> Self {
-        writeln!(conn.writer(), "{}", perm_group.definition().slice()).unwrap();
+        let writer = conn.writer();
+        writeln!(writer, "{}", perm_group.definition().slice()).unwrap();
+        writer.flush().unwrap();
 
         RemoteRobot {
             conn,
@@ -411,8 +414,9 @@ impl<C: Connection> RobotLike for RemoteRobot<C> {
 
     fn compose_into(&mut self, alg: &Algorithm) {
         self.current_state = None;
+        let writer = self.conn.writer();
         writeln!(
-            self.conn.writer(),
+            writer,
             "{}",
             alg.move_seq_iter()
                 .map(|v| &**v)
@@ -420,11 +424,15 @@ impl<C: Connection> RobotLike for RemoteRobot<C> {
                 .join(" ")
         )
         .unwrap();
+        writer.flush().unwrap();
     }
 
     fn take_picture(&mut self) -> &Permutation {
         self.current_state.get_or_insert_with(|| {
-            writeln!(self.conn.writer(), "!PICTURE").unwrap();
+            let writer = self.conn.writer();
+            writeln!(writer, "!PICTURE").unwrap();
+            writer.flush().unwrap();
+
             let mut mapping_str = String::new();
             self.conn.reader().read_line(&mut mapping_str).unwrap();
             let mapping = mapping_str
@@ -438,7 +446,10 @@ impl<C: Connection> RobotLike for RemoteRobot<C> {
 
     fn solve(&mut self) {
         self.current_state = Some(self.group.identity());
-        writeln!(self.conn.writer(), "!SOLVE").unwrap();
+
+        let writer = self.conn.writer();
+        writeln!(writer, "!SOLVE").unwrap();
+        writer.flush().unwrap();
     }
 }
 
@@ -471,14 +482,17 @@ pub fn run_robot_server<C: Connection, R: RobotLike>(
             return Ok(())
         }
 
+        trace!("{command}");
+
         let command = command.trim();
 
         if command == "!SOLVE" {
             robot.solve();
         } else if command == "!PICTURE" {
             let state = robot.take_picture();
+            let writer = conn.writer();
             writeln!(
-                conn.writer(),
+                writer,
                 "{}",
                 state
                     .mapping()
@@ -487,6 +501,7 @@ pub fn run_robot_server<C: Connection, R: RobotLike>(
                     .collect::<Vec<_>>()
                     .join(" ")
             )?;
+            writer.flush()?;
         } else {
             let alg =
                 Algorithm::parse_from_string(Arc::clone(&group), command).ok_or_else(|| {
@@ -535,30 +550,31 @@ mod tests {
 
     #[test]
     fn robot_server() {
-        struct TestRobot(Arc<PermutationGroup>, Permutation);
-
-        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        struct TestRobot(usize, Arc<PermutationGroup>, Permutation);
 
         impl RobotLike for TestRobot {
             type InitializationArgs = ();
 
             fn initialize(perm_group: Arc<PermutationGroup>, (): Self::InitializationArgs) -> Self {
                 assert_eq!(perm_group.definition().slice(), "3x3");
-                TestRobot(perm_group, Permutation::from_cycles(vec![vec![0, 1]]))
+                TestRobot(0, perm_group, Permutation::from_cycles(vec![vec![0, 1]]))
             }
 
             fn compose_into(&mut self, alg: &Algorithm) {
-                assert_eq!(COUNTER.fetch_add(1, Ordering::Relaxed), 0);
-                assert_eq!(alg, &Algorithm::parse_from_string(Arc::clone(&self.0), "U D U2 D2 U' D'").unwrap());
+                assert_eq!(self.0, 0);
+                self.0 += 1;
+                assert_eq!(alg, &Algorithm::parse_from_string(Arc::clone(&self.1), "U D U2 D2 U' D'").unwrap());
             }
 
             fn take_picture(&mut self) -> &Permutation {
-                assert_eq!(COUNTER.fetch_add(1, Ordering::Relaxed), 1);
-                &self.1
+                assert_eq!(self.0, 1);
+                self.0 += 1;
+                &self.2
             }
 
             fn solve(&mut self) {
-                assert_eq!(COUNTER.fetch_add(1, Ordering::Relaxed), 2);
+                assert_eq!(self.0, 2);
+                self.0 += 1;
             }
         }
         
@@ -569,10 +585,12 @@ mod tests {
         drop(tx);
 
         let rx_robot = BufReader::new(rx_robot);
-        
-        run_robot_server::<_, TestRobot>((rx_robot, tx_robot), ()).unwrap();
 
-        assert_eq!(COUNTER.load(Ordering::Relaxed), 3);
+        let mut robot = TestRobot::initialize(Arc::clone(&mk_puzzle_definition("3x3").unwrap().perm_group), ());
+        
+        run_robot_server::<_, TestRobot>((rx_robot, tx_robot), &mut robot).unwrap();
+
+        assert_eq!(robot.0, 3);
 
         let mut out = String::new();
         rx.read_to_string(&mut out).unwrap();
