@@ -154,9 +154,24 @@ impl<P: PuzzleState> Interpreter<P> {
     ///
     /// If an initial state isn't specified, it defaults to zero.
     #[must_use]
-    pub fn new(program: Arc<Program>) -> Self {
+    pub fn new(program: Arc<Program>, args: P::InitializationArgs) -> Self where P::InitializationArgs: Clone {
         let state = InterpreterState {
-            puzzle_states: PuzzleStates::new(&program),
+            puzzle_states: PuzzleStates::new(&program, args),
+            program_counter: 0,
+            messages: VecDeque::new(),
+            execution_state: ExecutionState::Running,
+        };
+
+        Interpreter { state, program }
+    }
+
+    /// Create a new interpreter from a program and initial states for registers, while assuming that the program only contains one puzzle.
+    ///
+    /// If an initial state isn't specified, it defaults to zero.
+    #[must_use]
+    pub fn new_only_one_puzzle(program: Arc<Program>, args: P::InitializationArgs) -> Self {
+        let state = InterpreterState {
+            puzzle_states: PuzzleStates::new_only_one_puzzle(&program, args),
             program_counter: 0,
             messages: VecDeque::new(),
             execution_state: ExecutionState::Running,
@@ -292,7 +307,7 @@ mod tests {
         let perm_group = mk_puzzle_definition("3x3").unwrap();
 
         let mut cube: SimulatedPuzzle =
-            SimulatedPuzzle::initialize(Arc::clone(&perm_group.perm_group));
+            SimulatedPuzzle::initialize(Arc::clone(&perm_group.perm_group), ());
 
         // Remember that the decoder will subtract the smallest facelet found in the definition to make it zero based
         assert!(cube.facelets_solved(&[0, 8, 16, 24]));
@@ -322,7 +337,7 @@ mod tests {
         let b_permutation = Algorithm::new_from_effect(&arch, vec![(1, Int::one())]);
 
         let mut cube: SimulatedPuzzle =
-            SimulatedPuzzle::initialize(Arc::clone(&perm_group.perm_group));
+            SimulatedPuzzle::initialize(Arc::clone(&perm_group.perm_group), ());
 
         for i in 1..=23 {
             cube.state.compose_into(b_permutation.permutation());
@@ -391,7 +406,7 @@ mod tests {
             Err(e) => panic!("{e:?}"),
         };
 
-        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
+        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program), ());
 
         assert!(match interpreter.step_until_halt() {
             PausedState::Input {
@@ -466,7 +481,7 @@ mod tests {
             Err(e) => panic!("{e:?}"),
         };
 
-        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
+        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program), ());
 
         let halted_state = interpreter.step_until_halt();
         assert!(
@@ -580,7 +595,7 @@ mod tests {
             Err(e) => panic!("{e:?}"),
         };
 
-        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
+        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program), ());
 
         assert!(match interpreter.step_until_halt() {
             PausedState::Input {
@@ -662,7 +677,7 @@ mod tests {
 
         assert_eq!(program.instructions.len(), 4 + 6 + 1);
 
-        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
+        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program), ());
 
         let expected_output = ["A 2", "B 2", "C 2", "D 2", "E 2", "F 2", "Done"];
 
@@ -763,7 +778,7 @@ mod tests {
         // println!("{:#?}", program);
         assert_eq!(program.instructions.len(), 1 + 2 + 2 + 1 + 2 + 1);
 
-        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
+        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program), ());
 
         let expected_output = ["A= 64"];
 
@@ -836,7 +851,7 @@ mod tests {
         // println!("{:#?}", program);
         assert_eq!(program.instructions.len(), 3 + 4 + 4 + 1);
 
-        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
+        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program), ());
 
         let expected_output = ["A= 89"];
 
@@ -896,7 +911,7 @@ mod tests {
 
         assert_eq!(program.instructions.len(), 2);
 
-        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
+        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program), ());
 
         let expected_output = ["A= 1"];
 
@@ -966,7 +981,7 @@ mod tests {
         // println!("{program:#?}");
         assert_eq!(program.instructions.len(), 1 + 1 + 3);
 
-        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program));
+        let mut interpreter: Interpreter<SimulatedPuzzle> = Interpreter::new(Arc::new(program), ());
 
         let expected_output = ["A= 0", "B= 0", "C= 0"];
 

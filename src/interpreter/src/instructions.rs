@@ -55,7 +55,7 @@ impl PuzzleInstructionImpl for SolvedGoto {
         instr: &'a Self::Puzzle<'static>,
         state: &mut InterpreterState<P>,
     ) -> ActionPerformed<'a> {
-        let puzzle = &state.puzzle_states.puzzle_state(instr.1);
+        let puzzle = state.puzzle_states.puzzle_state_mut(instr.1);
 
         if puzzle.facelets_solved(&instr.2.0) {
             state.program_counter = instr.0.instruction_idx;

@@ -61,7 +61,9 @@ impl TrackedRobotState {
 }
 
 impl PuzzleState for TrackedRobotState {
-    fn initialize(_: Arc<PermutationGroup>) -> Self {
+    type InitializationArgs = ();
+    
+    fn initialize(_: Arc<PermutationGroup>, (): ()) -> Self {
         robot_handle().robot.solve();
 
         TrackedRobotState
@@ -71,9 +73,9 @@ impl PuzzleState for TrackedRobotState {
         robot_handle().robot.compose_into(alg);
     }
 
-    fn facelets_solved(&self, facelets: &[usize]) -> bool {
-        let handle = robot_handle();
-        let state = handle.robot.take_picture();
+    fn facelets_solved(&mut self, facelets: &[usize]) -> bool {
+        let mut handle = robot_handle();
+        let state = handle.robot.take_picture().clone();
 
         handle
             .event_tx
@@ -96,7 +98,7 @@ impl PuzzleState for TrackedRobotState {
         generator: &Algorithm,
     ) -> Option<qter_core::Int<qter_core::U>> {
         let before = {
-            let handle = robot_handle();
+            let mut handle = robot_handle();
 
             let state = handle.robot.take_picture().to_owned();
 
@@ -118,7 +120,7 @@ impl PuzzleState for TrackedRobotState {
 
         self.compose_into(&exponentiated);
 
-        let handle = robot_handle();
+        let mut handle = robot_handle();
 
         if &before != handle.robot.take_picture() {
             eprintln!("Printing did not return the cube to the original state!");
@@ -192,10 +194,11 @@ impl PuzzleState for TrackedRobotState {
 pub fn interpreter_loop<R: RobotLike + Send + 'static>(
     event_tx: Sender<InterpretationEvent>,
     command_rx: Receiver<InterpretationCommand>,
+    args: R::InitializationArgs
 ) {
     if ROBOT_HANDLE
         .set(Mutex::new(RobotHandle {
-            robot: Box::leak(Box::from(R::initialize(Arc::clone(&CUBE3)))),
+            robot: Box::leak(Box::from(R::initialize(Arc::clone(&CUBE3), args))),
             event_tx,
         }))
         .is_err()
@@ -212,9 +215,9 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
 
         match command {
             C::Execute(name) => {
-                maybe_interpreter = Some(Interpreter::<TrackedRobotState>::new(Arc::clone(
+                maybe_interpreter = Some(Interpreter::<TrackedRobotState>::new_only_one_puzzle(Arc::clone(
                     &PROGRAMS.get(&name).unwrap().program,
-                )));
+                ), ()));
 
                 robot_handle()
                     .event_tx

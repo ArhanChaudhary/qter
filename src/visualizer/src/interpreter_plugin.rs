@@ -1,4 +1,4 @@
-use std::thread;
+use std::{path::PathBuf, thread};
 
 use bevy::{
     app::{Plugin, PreUpdate, Startup},
@@ -13,7 +13,7 @@ use crossbeam_channel::{Receiver, Sender, unbounded};
 use internment::Intern;
 use interpreter::puzzle_states::{RobotLike, SimulatedPuzzle};
 use qter_core::{Facelets, I, Int, U, architectures::Permutation};
-use robot::QterRobot;
+use robot::{QterRobot, hardware::RobotHandle};
 
 use super::interpreter_loop;
 
@@ -90,11 +90,14 @@ pub enum InterpretationCommand {
 #[derive(Resource, Deref)]
 pub struct CommandTx(Sender<InterpretationCommand>);
 
-fn setup<R: RobotLike + Send + 'static>(mut commands: Commands) {
+fn setup<R: RobotLike + Send + 'static>(mut commands: Commands, args: R::InitializationArgs)
+where
+    R::InitializationArgs: Send,
+{
     let (event_tx, event_rx) = unbounded::<InterpretationEvent>();
     let (command_tx, command_rx) = unbounded::<InterpretationCommand>();
 
-    thread::spawn(move || interpreter_loop::interpreter_loop::<R>(event_tx, command_rx));
+    thread::spawn(move || interpreter_loop::interpreter_loop::<R>(event_tx, command_rx, args));
 
     commands.insert_resource(EventRx(event_rx));
     commands.insert_resource(CommandTx(command_tx));
@@ -116,9 +119,13 @@ impl Plugin for InterpreterPlugin {
             .add_systems(
                 Startup,
                 if self.robot {
-                    setup::<QterRobot>
+                    |commands: Commands| {
+                        // TODO: Better way of getting the config. Maybe use `include_str!`?
+                        let handle = RobotHandle::init(&PathBuf::from("robot_config.toml"));
+                        setup::<QterRobot>(commands, handle)
+                    }
                 } else {
-                    setup::<SimulatedPuzzle>
+                    |commands: Commands| setup::<SimulatedPuzzle>(commands, ())
                 },
             )
             .add_systems(PreUpdate, read_events);

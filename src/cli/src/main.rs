@@ -5,7 +5,6 @@
 
 use std::{fs, io, path::PathBuf, sync::Arc};
 
-use ::robot::QterRobot;
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use clap::{ArgAction, Parser};
 use color_eyre::{
@@ -16,7 +15,7 @@ use compiler::compile;
 use internment::ArcIntern;
 use interpreter::{
     ActionPerformed, ExecutionState, InputRet, Interpreter, PausedState,
-    puzzle_states::{PuzzleState, RobotState, SimulatedPuzzle},
+    puzzle_states::{PuzzleState, SimulatedPuzzle},
 };
 use itertools::Itertools;
 use qter_core::{
@@ -40,8 +39,6 @@ enum Commands {
         /// The level of execution trace to send to stderr. Can be set zero to three times.
         #[arg(short, action = ArgAction::Count)]
         trace_level: u8,
-        #[arg(long)]
-        robot: bool,
     },
     /// Step through a QAT or a Q program
     Debug {
@@ -82,7 +79,6 @@ fn main() -> color_eyre::Result<()> {
         Commands::Interpret {
             file,
             trace_level,
-            robot,
         } => {
             let program = match file.extension().and_then(|v| v.to_str()) {
                 Some("q") => todo!(),
@@ -136,13 +132,8 @@ fn main() -> color_eyre::Result<()> {
                 }
             };
 
-            if robot {
-                let interpreter = Interpreter::<RobotState<QterRobot>>::new(Arc::new(program));
+            let interpreter = Interpreter::<SimulatedPuzzle>::new(Arc::new(program), ());
                 interpret(interpreter, trace_level)?;
-            } else {
-                let interpreter = Interpreter::<SimulatedPuzzle>::new(Arc::new(program));
-                interpret(interpreter, trace_level)?;
-            }
         }
         Commands::Debug { file: _ } => todo!(),
         Commands::Test { file: _ } => todo!(),

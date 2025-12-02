@@ -1,9 +1,6 @@
 #![feature(gen_blocks)]
 
-use std::{
-    path::PathBuf,
-    sync::{Arc, LazyLock},
-};
+use std::sync::{Arc, LazyLock};
 
 use interpreter::puzzle_states::RobotLike;
 use qter_core::architectures::{Algorithm, Permutation, PermutationGroup, mk_puzzle_definition};
@@ -22,10 +19,11 @@ pub struct QterRobot {
 }
 
 impl RobotLike for QterRobot {
-    fn initialize(_: Arc<PermutationGroup>) -> Self {
-        // TODO: Better way of getting the config. Maybe use `include_str!`?
-        let handle = RobotHandle::init(&PathBuf::from("robot_config.toml"));
+    type InitializationArgs = RobotHandle;
 
+    fn initialize(group: Arc<PermutationGroup>, handle: RobotHandle) -> Self {
+        assert_eq!(group.definition().slice(), "3x3");
+        
         QterRobot {
             handle,
             state: CUBE3.identity(),
@@ -38,7 +36,7 @@ impl RobotLike for QterRobot {
         self.handle.queue_move_seq(alg);
     }
 
-    fn take_picture(&self) -> &Permutation {
+    fn take_picture(&mut self) -> &Permutation {
         self.handle.await_moves();
         &self.state
     }

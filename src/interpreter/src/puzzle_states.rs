@@ -1,8 +1,11 @@
-use std::sync::Arc;
+use std::{
+    io::{self, BufRead, Write},
+    sync::Arc,
+};
 
 use qter_core::{
     I, Int, Program, PuzzleIdx, TheoreticalIdx, U,
-    architectures::{Algorithm, Permutation, PermutationGroup},
+    architectures::{Algorithm, Permutation, PermutationGroup, mk_puzzle_definition},
     discrete_math::{decode, lcm_iter},
 };
 
@@ -41,14 +44,16 @@ impl TheoreticalState {
 }
 
 pub trait PuzzleState {
+    type InitializationArgs;
+
     /// Initialize the `Puzzle` in the solved state
-    fn initialize(perm_group: Arc<PermutationGroup>) -> Self;
+    fn initialize(perm_group: Arc<PermutationGroup>, args: Self::InitializationArgs) -> Self;
 
     /// Perform an algorithm on the puzzle state
     fn compose_into(&mut self, alg: &Algorithm);
 
     /// Check whether the given facelets are solved
-    fn facelets_solved(&self, facelets: &[usize]) -> bool;
+    fn facelets_solved(&mut self, facelets: &[usize]) -> bool;
 
     /// Decode the permutation using the register generator and the given facelets.
     ///
@@ -72,14 +77,16 @@ pub trait PuzzleState {
 }
 
 pub trait RobotLike {
+    type InitializationArgs;
+
     /// Initialize the puzzle in the solved state
-    fn initialize(perm_group: Arc<PermutationGroup>) -> Self;
+    fn initialize(perm_group: Arc<PermutationGroup>, args: Self::InitializationArgs) -> Self;
 
     /// Perform an algorithm on the puzzle
     fn compose_into(&mut self, alg: &Algorithm);
 
     /// Return the puzzle state as a permutation
-    fn take_picture(&self) -> &Permutation;
+    fn take_picture(&mut self) -> &Permutation;
 
     /// Solve the puzzle
     fn solve(&mut self);
@@ -88,7 +95,7 @@ pub trait RobotLike {
 pub trait RobotLikeDyn {
     fn compose_into(&mut self, alg: &Algorithm);
 
-    fn take_picture(&self) -> &Permutation;
+    fn take_picture(&mut self) -> &Permutation;
 
     fn solve(&mut self);
 }
@@ -98,7 +105,7 @@ impl<R: RobotLike> RobotLikeDyn for R {
         <Self as RobotLike>::compose_into(self, alg);
     }
 
-    fn take_picture(&self) -> &Permutation {
+    fn take_picture(&mut self) -> &Permutation {
         <Self as RobotLike>::take_picture(self)
     }
 
@@ -113,18 +120,20 @@ pub struct RobotState<R: RobotLike> {
 }
 
 impl<R: RobotLike> PuzzleState for RobotState<R> {
+    type InitializationArgs = R::InitializationArgs;
+
     fn compose_into(&mut self, alg: &Algorithm) {
         self.robot.compose_into(alg);
     }
 
-    fn initialize(perm_group: Arc<PermutationGroup>) -> Self {
+    fn initialize(perm_group: Arc<PermutationGroup>, args: Self::InitializationArgs) -> Self {
         RobotState {
             perm_group: Arc::clone(&perm_group),
-            robot: R::initialize(perm_group),
+            robot: R::initialize(perm_group, args),
         }
     }
 
-    fn facelets_solved(&self, facelets: &[usize]) -> bool {
+    fn facelets_solved(&mut self, facelets: &[usize]) -> bool {
         let state = self.robot.take_picture();
 
         for &facelet in facelets {
@@ -205,7 +214,9 @@ impl SimulatedPuzzle {
 }
 
 impl PuzzleState for SimulatedPuzzle {
-    fn initialize(perm_group: Arc<PermutationGroup>) -> Self {
+    type InitializationArgs = ();
+
+    fn initialize(perm_group: Arc<PermutationGroup>, (): ()) -> Self {
         SimulatedPuzzle {
             state: perm_group.identity(),
             perm_group,
@@ -216,7 +227,7 @@ impl PuzzleState for SimulatedPuzzle {
         self.state.compose_into(alg.permutation());
     }
 
-    fn facelets_solved(&self, facelets: &[usize]) -> bool {
+    fn facelets_solved(&mut self, facelets: &[usize]) -> bool {
         for &facelet in facelets {
             let maps_to = self.state.mapping()[facelet];
             if self.perm_group.facelet_colors()[maps_to]
@@ -248,15 +259,17 @@ impl PuzzleState for SimulatedPuzzle {
 }
 
 impl RobotLike for SimulatedPuzzle {
-    fn initialize(perm_group: Arc<PermutationGroup>) -> Self {
-        <Self as PuzzleState>::initialize(perm_group)
+    type InitializationArgs = ();
+
+    fn initialize(perm_group: Arc<PermutationGroup>, (): ()) -> Self {
+        <Self as PuzzleState>::initialize(perm_group, ())
     }
 
     fn compose_into(&mut self, alg: &Algorithm) {
         <Self as PuzzleState>::compose_into(self, alg);
     }
 
-    fn take_picture(&self) -> &Permutation {
+    fn take_picture(&mut self) -> &Permutation {
         self.puzzle_state()
     }
 
@@ -271,9 +284,12 @@ pub struct PuzzleStates<P: PuzzleState> {
     puzzle_states: Vec<P>,
 }
 
-impl<P: PuzzleState> PuzzleStates<P> {
+impl<P: PuzzleState> PuzzleStates<P>
+where
+    P::InitializationArgs: Clone,
+{
     #[must_use]
-    pub fn new(program: &Program) -> Self {
+    pub fn new(program: &Program, args: P::InitializationArgs) -> Self {
         let theoretical_states = program
             .theoretical
             .iter()
@@ -286,8 +302,35 @@ impl<P: PuzzleState> PuzzleStates<P> {
         let puzzle_states = program
             .puzzles
             .iter()
-            .map(|perm_group| P::initialize(Arc::clone(perm_group)))
+            .map(|perm_group| P::initialize(Arc::clone(perm_group), args.clone()))
             .collect();
+
+        PuzzleStates {
+            theoretical_states,
+            puzzle_states,
+        }
+    }
+}
+
+impl<P: PuzzleState> PuzzleStates<P> {
+    #[must_use]
+    pub fn new_only_one_puzzle(program: &Program, args: P::InitializationArgs) -> Self {
+        let theoretical_states = program
+            .theoretical
+            .iter()
+            .map(|order| TheoreticalState {
+                value: Int::zero(),
+                order: **order,
+            })
+            .collect();
+
+        let puzzle_states = if program.puzzles.is_empty() {
+            Vec::new()
+        } else if program.puzzles.len() == 1 {
+            vec![P::initialize(Arc::clone(&program.puzzles[0]), args)]
+        } else {
+            panic!("Expected at most one puzzle in the program");
+        };
 
         PuzzleStates {
             theoretical_states,
@@ -311,5 +354,219 @@ impl<P: PuzzleState> PuzzleStates<P> {
 
     pub fn puzzle_state_mut(&mut self, idx: PuzzleIdx) -> &mut P {
         &mut self.puzzle_states[idx.0]
+    }
+}
+
+pub trait Connection {
+    type Reader: BufRead;
+    type Writer: Write;
+
+    fn reader(&mut self) -> &mut Self::Reader;
+    fn writer(&mut self) -> &mut Self::Writer;
+}
+
+impl<R: BufRead, W: Write> Connection for (R, W) {
+    type Reader = R;
+    type Writer = W;
+
+    fn reader(&mut self) -> &mut Self::Reader {
+        &mut self.0
+    }
+
+    fn writer(&mut self) -> &mut Self::Writer {
+        &mut self.1
+    }
+}
+
+pub struct RemoteRobot<C: Connection> {
+    conn: C,
+    group: Arc<PermutationGroup>,
+    current_state: Option<Permutation>,
+}
+
+impl<C: Connection> RobotLike for RemoteRobot<C> {
+    type InitializationArgs = C;
+
+    fn initialize(perm_group: Arc<PermutationGroup>, mut conn: C) -> Self {
+        writeln!(conn.writer(), "{}", perm_group.definition().slice()).unwrap();
+
+        RemoteRobot {
+            conn,
+            group: perm_group,
+            current_state: None,
+        }
+    }
+
+    fn compose_into(&mut self, alg: &Algorithm) {
+        self.current_state = None;
+        writeln!(
+            self.conn.writer(),
+            "{}",
+            alg.move_seq_iter()
+                .map(|v| &**v)
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
+        .unwrap();
+    }
+
+    fn take_picture(&mut self) -> &Permutation {
+        self.current_state.get_or_insert_with(|| {
+            writeln!(self.conn.writer(), "!PICTURE").unwrap();
+            let mut mapping_str = String::new();
+            self.conn.reader().read_line(&mut mapping_str).unwrap();
+            let mapping = mapping_str
+                .split(' ')
+                .map(|v| v.parse::<usize>().unwrap())
+                .collect::<Vec<_>>();
+
+            Permutation::from_mapping(mapping)
+        })
+    }
+
+    fn solve(&mut self) {
+        self.current_state = Some(self.group.identity());
+        writeln!(self.conn.writer(), "!SOLVE").unwrap();
+    }
+}
+
+pub fn run_robot_server<C: Connection, R: RobotLike>(
+    mut conn: C,
+    args: R::InitializationArgs,
+) -> Result<(), io::Error> {
+    let mut puzzle_def = String::new();
+    conn.reader().read_line(&mut puzzle_def)?;
+
+    if puzzle_def.is_empty() {
+        return Ok(());
+    }
+    
+    let group = Arc::clone(
+        &mk_puzzle_definition(puzzle_def.trim())
+            .ok_or_else(|| {
+                io::Error::other(format!(
+                    "Could not parse `{puzzle_def}` as a puzzle definition"
+                ))
+            })?
+            .perm_group,
+    );
+
+    let mut robot = R::initialize(Arc::clone(&group), args);
+
+    loop {
+        let mut command = String::new();
+        conn.reader().read_line(&mut command)?;
+
+        if command.is_empty() {
+            return Ok(())
+        }
+
+        let command = command.trim();
+
+        if command == "!SOLVE" {
+            robot.solve();
+        } else if command == "!PICTURE" {
+            let state = robot.take_picture();
+            writeln!(
+                conn.writer(),
+                "{}",
+                state
+                    .mapping()
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            )?;
+        } else {
+            let alg =
+                Algorithm::parse_from_string(Arc::clone(&group), command).ok_or_else(|| {
+                    io::Error::other(format!("Could not parse {command} as an algorithm"))
+                })?;
+
+            robot.compose_into(&alg);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{io::{self, BufReader, Read, Write}, sync::{Arc, atomic::{AtomicUsize, Ordering}}};
+
+    use qter_core::architectures::{Algorithm, Permutation, PermutationGroup, mk_puzzle_definition};
+
+    use crate::puzzle_states::{RemoteRobot, RobotLike, run_robot_server};
+
+    #[test]
+    fn remote_robot() {
+        let cube3 = Arc::clone(&mk_puzzle_definition("3x3").unwrap().perm_group);
+
+        let (mut rx, tx_robot) = io::pipe().unwrap();
+        let (rx_robot, mut tx) = io::pipe().unwrap();
+
+        write!(tx, "1 0").unwrap();
+        drop(tx);
+
+        let rx_robot = BufReader::new(rx_robot);
+
+        {
+            let mut remote_robot = RemoteRobot::initialize(Arc::clone(&cube3), (rx_robot, tx_robot));
+
+            remote_robot.compose_into(&Algorithm::parse_from_string(Arc::clone(&cube3), "U D U2 D2 U' D'").unwrap());
+            assert_eq!(remote_robot.take_picture(), &Permutation::from_cycles(vec![vec![0, 1]]));
+            assert_eq!(remote_robot.take_picture(), &Permutation::from_cycles(vec![vec![0, 1]]));
+            remote_robot.solve();
+            assert_eq!(remote_robot.take_picture(), &cube3.identity());
+        }
+
+        let mut data = String::new();
+        rx.read_to_string(&mut data).unwrap();        
+        assert_eq!(data, "3x3\nU D U2 D2 U' D'\n!PICTURE\n!SOLVE\n");
+    }
+
+    #[test]
+    fn robot_server() {
+        struct TestRobot(Arc<PermutationGroup>, Permutation);
+
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+        impl RobotLike for TestRobot {
+            type InitializationArgs = ();
+
+            fn initialize(perm_group: Arc<PermutationGroup>, (): Self::InitializationArgs) -> Self {
+                assert_eq!(perm_group.definition().slice(), "3x3");
+                TestRobot(perm_group, Permutation::from_cycles(vec![vec![0, 1]]))
+            }
+
+            fn compose_into(&mut self, alg: &Algorithm) {
+                assert_eq!(COUNTER.fetch_add(1, Ordering::Relaxed), 0);
+                assert_eq!(alg, &Algorithm::parse_from_string(Arc::clone(&self.0), "U D U2 D2 U' D'").unwrap());
+            }
+
+            fn take_picture(&mut self) -> &Permutation {
+                assert_eq!(COUNTER.fetch_add(1, Ordering::Relaxed), 1);
+                &self.1
+            }
+
+            fn solve(&mut self) {
+                assert_eq!(COUNTER.fetch_add(1, Ordering::Relaxed), 2);
+            }
+        }
+        
+        let (mut rx, tx_robot) = io::pipe().unwrap();
+        let (rx_robot, mut tx) = io::pipe().unwrap();
+
+        write!(tx, "3x3\nU D U2 D2 U' D'\n!PICTURE\n!SOLVE\n").unwrap();
+        drop(tx);
+
+        let rx_robot = BufReader::new(rx_robot);
+        
+        run_robot_server::<_, TestRobot>((rx_robot, tx_robot), ()).unwrap();
+
+        assert_eq!(COUNTER.load(Ordering::Relaxed), 3);
+
+        let mut out = String::new();
+        rx.read_to_string(&mut out).unwrap();
+
+        assert_eq!(out, "1 0\n");
     }
 }
