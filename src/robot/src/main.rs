@@ -8,14 +8,12 @@ use qter_core::architectures::Algorithm;
 use robot::{
     CUBE3,
     hardware::{
-        FULLSTEPS_PER_REVOLUTION, RobotHandle, Ticker, WhichUart,
+        FULLSTEPS_PER_REVOLUTION, RobotHandle, Ticker,
         config::{Face, Priority, RobotConfig},
         mk_output_pin, set_prio,
-        uart::{self, UartBus, regs},
     },
 };
 use std::{
-    fmt::Display,
     io::stdin,
     path::PathBuf,
     sync::Arc,
@@ -40,11 +38,6 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Run a UART REPL to read/write registers.
-    UartRepl {
-        /// Choose Uart0 or Uart2
-        which_uart: WhichUart,
-    },
     /// Execute a sequence of moves.
     MoveSeq {
         /// The move sequence to execute, e.g. "R U' F2".
@@ -55,8 +48,6 @@ enum Commands {
         /// The face to control.
         face: Face,
     },
-    /// Initialize UART configuration.
-    UartInit,
     /// Test latencies at the different options for priority level
     TestPrio { prio: Priority },
 }
@@ -75,9 +66,6 @@ fn main() {
         .init();
 
     match cli.command {
-        Commands::UartRepl { which_uart } => {
-            run_uart_repl(which_uart);
-        }
         Commands::MoveSeq { sequence } => {
             let mut robot_handle = RobotHandle::init(&cli.robot_config);
 
@@ -92,58 +80,11 @@ fn main() {
 
             run_motor_repl(robot_handle.config(), face);
         }
-        Commands::UartInit => {}
         Commands::TestPrio { prio } => {
             test_prio(prio);
         }
     }
     println!("Exiting");
-}
-
-fn run_uart_repl(which_uart: WhichUart) {
-    println!("register_info: GCONF(reg=0,n=10,RW), GSTAT(reg=1,n=3,R+WC), IFCNT(reg=2,n=8,R)");
-
-    let mut uart = UartBus::new(match which_uart {
-        WhichUart::Uart0 => uart::UartId::Uart0,
-        WhichUart::Uart4 => uart::UartId::Uart4,
-    });
-
-    loop {
-        let node_address = read_num(format!("Node address? (0-3) "))
-            .try_into()
-            .unwrap();
-        let register_address = read_num("Register address? (0-127) ").try_into().unwrap();
-        let maybe_val = maybe_read_num("Value? (leave blank to read) ");
-
-        let mut uart = uart.node(match node_address {
-            0 => uart::NodeAddress::Zero,
-            1 => uart::NodeAddress::One,
-            2 => uart::NodeAddress::Two,
-            3 => uart::NodeAddress::Three,
-            _ => unreachable!(),
-        });
-
-        if let Some(val) = maybe_val {
-            uart.write(register_address, val);
-            println!("Wrote to UART");
-            continue;
-        }
-
-        let val = uart.read(register_address);
-        match register_address {
-            regs::GConf::ADDRESS => println!(
-                "Read: node_address={node_address} register_address=0(GCONF) val={:?}",
-                regs::GConf::from_bits_retain(val)
-            ),
-            regs::GStat::ADDRESS => println!(
-                "Read: node_address={node_address} register_address=1(GSTAT) val={:?}",
-                regs::GStat::from_bits_retain(val)
-            ),
-            _ => println!(
-                "Read: node_address={node_address} register_address={register_address} raw=0x{val:08x}",
-            ),
-        }
-    }
 }
 
 fn run_motor_repl(config: &RobotConfig, face: Face) {
@@ -212,30 +153,6 @@ fn run_motor_repl(config: &RobotConfig, face: Face) {
         }
 
         println!("Completed");
-    }
-}
-
-fn read_num(prompt: impl Display) -> u32 {
-    loop {
-        if let Some(val) = maybe_read_num(&prompt) {
-            return val;
-        }
-        println!("Try again");
-    }
-}
-
-fn maybe_read_num(prompt: impl Display) -> Option<u32> {
-    let mut line = String::new();
-    loop {
-        line.clear();
-        println!("{prompt}");
-        stdin().read_line(&mut line).unwrap();
-        if line.trim().is_empty() {
-            break None;
-        } else if let Ok(v) = line.trim().parse::<u32>() {
-            break Some(v);
-        }
-        println!("Try again");
     }
 }
 
