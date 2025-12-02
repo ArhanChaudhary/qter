@@ -384,20 +384,6 @@ pub fn uart_init(robot_config: &RobotConfig) {
         }
 
         //
-        // Configure NODECONF. Note that NODECONF is write-only.
-        //
-        let nodeconf = NodeConf::empty()
-            // Set SENDDELAY to 2. SENDDELAY must be at least 2 in a multi-node system.
-            //
-            // See page 19 of <https://www.analog.com/media/en/technical-documentation/data-sheets/tmc2209_datasheet_rev1.09.pdf>
-            .with_senddelay(2);
-        debug!(
-            target: "uart_init",
-            "Writing NODECONF: value={nodeconf:?}",
-        );
-        uart.set_nodeconf(nodeconf);
-
-        //
         // Configure PWMCONF.
         //
         debug!(target: "uart_init", "Reading initial PwmConf");
