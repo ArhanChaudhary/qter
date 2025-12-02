@@ -3,22 +3,18 @@
 
 use clap::{Parser, Subcommand};
 use env_logger::TimestampPrecision;
+use interpreter::puzzle_states::{RobotLike, run_robot_server};
 use log::{LevelFilter, info, warn};
-use qter_core::architectures::Algorithm;
+use qter_core::architectures::{Algorithm, mk_puzzle_definition};
 use robot::{
-    CUBE3,
-    hardware::{
+    CUBE3, QterRobot, hardware::{
         FULLSTEPS_PER_REVOLUTION, RobotHandle, Ticker,
         config::{Face, Priority, RobotConfig},
         mk_output_pin, set_prio,
-    },
+    }
 };
 use std::{
-    io::stdin,
-    path::PathBuf,
-    sync::Arc,
-    thread,
-    time::{Duration, Instant},
+    convert::Infallible, io::{self, BufReader, stdin}, net::TcpListener, path::PathBuf, sync::Arc, thread, time::{Duration, Instant}
 };
 
 #[derive(Parser)]
@@ -50,6 +46,8 @@ enum Commands {
     },
     /// Test latencies at the different options for priority level
     TestPrio { prio: Priority },
+    /// Host a server to allow the robot to be remote-controlled
+    Server { port: u16 },
 }
 
 fn main() {
@@ -83,6 +81,9 @@ fn main() {
         Commands::TestPrio { prio } => {
             test_prio(prio);
         }
+        Commands::Server { port } => {
+            server(port).unwrap();
+        },
     }
     println!("Exiting");
 }
@@ -188,5 +189,19 @@ fn test_prio(prio: Priority) {
         );
         println!("Top 5 = {:?}", &latencies[SAMPLES - 5..SAMPLES]);
         println!();
+    }
+}
+
+fn server(port: u16) -> Result<Infallible, io::Error> {
+    let listener = TcpListener::bind(format!("0.0.0.0:{port}"))?;
+
+    // TODO: Better way of getting the config. Maybe use `include_str!`?
+    let handle = RobotHandle::init(&PathBuf::from("robot_config.toml"));
+    let mut robot = QterRobot::initialize(Arc::clone(&mk_puzzle_definition("3x3").unwrap().perm_group), handle);
+    
+    loop {
+        let (socket, _) = listener.accept()?;
+
+        run_robot_server::<_, QterRobot>(BufReader::new(socket), &mut robot)?;
     }
 }

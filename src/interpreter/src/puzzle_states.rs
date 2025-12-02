@@ -1,6 +1,5 @@
 use std::{
-    io::{self, BufRead, Write},
-    sync::Arc,
+    io::{self, BufRead, BufReader, Write}, net::TcpStream, sync::Arc
 };
 
 use qter_core::{
@@ -378,6 +377,19 @@ impl<R: BufRead, W: Write> Connection for (R, W) {
     }
 }
 
+impl Connection for BufReader<TcpStream> {
+    type Reader = Self;
+    type Writer = TcpStream;
+
+    fn reader(&mut self) -> &mut Self::Reader {
+        self
+    }
+
+    fn writer(&mut self) -> &mut Self::Writer {
+        self.get_mut()
+    }
+}
+
 pub struct RemoteRobot<C: Connection> {
     conn: C,
     group: Arc<PermutationGroup>,
@@ -432,7 +444,7 @@ impl<C: Connection> RobotLike for RemoteRobot<C> {
 
 pub fn run_robot_server<C: Connection, R: RobotLike>(
     mut conn: C,
-    args: R::InitializationArgs,
+    robot: &mut R,
 ) -> Result<(), io::Error> {
     let mut puzzle_def = String::new();
     conn.reader().read_line(&mut puzzle_def)?;
@@ -450,8 +462,6 @@ pub fn run_robot_server<C: Connection, R: RobotLike>(
             })?
             .perm_group,
     );
-
-    let mut robot = R::initialize(Arc::clone(&group), args);
 
     loop {
         let mut command = String::new();

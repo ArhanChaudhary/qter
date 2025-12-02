@@ -3,7 +3,7 @@
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::needless_pass_by_value)]
 
-use std::{fs, io, path::PathBuf, sync::Arc};
+use std::{fs, io, net::SocketAddr, path::PathBuf, sync::Arc};
 
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use clap::{ArgAction, Parser};
@@ -53,7 +53,7 @@ enum Commands {
     /// Execute the opensauce demo
     Demo {
         #[arg(long)]
-        robot: bool,
+        remote: Option<SocketAddr>,
     },
     #[cfg(debug_assertions)]
     /// Compress an algorithm table into the special format (This subcommand will not be visible in release mode)
@@ -76,10 +76,7 @@ fn main() -> color_eyre::Result<()> {
 
     match args {
         Commands::Compile { file: _ } => todo!(),
-        Commands::Interpret {
-            file,
-            trace_level,
-        } => {
+        Commands::Interpret { file, trace_level } => {
             let program = match file.extension().and_then(|v| v.to_str()) {
                 Some("q") => todo!(),
                 Some("qat") => {
@@ -133,7 +130,7 @@ fn main() -> color_eyre::Result<()> {
             };
 
             let interpreter = Interpreter::<SimulatedPuzzle>::new(Arc::new(program), ());
-                interpret(interpreter, trace_level)?;
+            interpret(interpreter, trace_level)?;
         }
         Commands::Debug { file: _ } => todo!(),
         Commands::Test { file: _ } => todo!(),
@@ -173,8 +170,8 @@ fn main() -> color_eyre::Result<()> {
                 println!("{}", moves.iter().join(" "));
             }
         }
-        Commands::Demo { robot } => {
-            visualizer::visualizer(robot);
+        Commands::Demo { remote } => {
+            visualizer::visualizer(remote);
         }
     }
 

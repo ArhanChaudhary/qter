@@ -5250,7 +5250,6 @@ dependencies = [
  "interpreter",
  "itertools 0.13.0",
  "qter_core",
- "robot",
 ]
 
 [[package]]

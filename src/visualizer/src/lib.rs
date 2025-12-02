@@ -1,8 +1,5 @@
 use std::{
-    collections::HashMap,
-    fs,
-    path::PathBuf,
-    sync::{Arc, LazyLock},
+    collections::HashMap, fs, net::SocketAddr, path::PathBuf, sync::{Arc, LazyLock}
 };
 
 use bevy::prelude::*;
@@ -388,10 +385,10 @@ static PROGRAMS: LazyLock<HashMap<Intern<str>, ProgramInfo>> = LazyLock::new(|| 
 #[derive(Resource)]
 struct CurrentState(Permutation);
 
-pub fn visualizer(robot: bool) {
+pub fn visualizer(remote: Option<SocketAddr>) {
     let mut app = App::new();
     app.add_plugins(DefaultPlugins)
-        .add_plugins(InterpreterPlugin { robot })
+        .add_plugins(InterpreterPlugin { remote })
         .add_plugins(CubeViz)
         .add_plugins(CodeViz)
         .add_plugins(IOViz)

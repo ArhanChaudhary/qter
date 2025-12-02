@@ -1,4 +1,4 @@
-use std::{path::PathBuf, thread};
+use std::{io::BufReader, net::{SocketAddr, TcpStream}, thread};
 
 use bevy::{
     app::{Plugin, PreUpdate, Startup},
@@ -11,14 +11,13 @@ use bevy::{
 };
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use internment::Intern;
-use interpreter::puzzle_states::{RobotLike, SimulatedPuzzle};
+use interpreter::puzzle_states::{RemoteRobot, RobotLike, SimulatedPuzzle};
 use qter_core::{Facelets, I, Int, U, architectures::Permutation};
-use robot::{QterRobot, hardware::RobotHandle};
 
 use super::interpreter_loop;
 
 pub struct InterpreterPlugin {
-    pub robot: bool,
+    pub remote: Option<SocketAddr>,
 }
 
 #[derive(Event)]
@@ -116,19 +115,16 @@ impl Plugin for InterpreterPlugin {
             .add_event::<DoneExecuting>()
             .add_event::<BeganProgram>()
             .add_event::<FinishedProgram>()
-            .add_systems(
-                Startup,
-                if self.robot {
-                    |commands: Commands| {
-                        // TODO: Better way of getting the config. Maybe use `include_str!`?
-                        let handle = RobotHandle::init(&PathBuf::from("robot_config.toml"));
-                        setup::<QterRobot>(commands, handle)
-                    }
-                } else {
-                    |commands: Commands| setup::<SimulatedPuzzle>(commands, ())
-                },
-            )
             .add_systems(PreUpdate, read_events);
+
+        if let Some(addr) = self.remote {
+            app.add_systems(Startup, move |commands: Commands| {
+                let socket = TcpStream::connect(addr).unwrap();
+                setup::<RemoteRobot<_>>(commands, BufReader::new(socket))
+            });
+        } else {
+            app.add_systems(Startup, |commands: Commands| setup::<SimulatedPuzzle>(commands, ()));
+        }
     }
 }
 
