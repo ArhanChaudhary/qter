@@ -436,6 +436,7 @@ impl<C: Connection> RobotLike for RemoteRobot<C> {
             let mut mapping_str = String::new();
             self.conn.reader().read_line(&mut mapping_str).unwrap();
             let mapping = mapping_str
+                .trim()
                 .split(' ')
                 .map(|v| v.parse::<usize>().unwrap())
                 .collect::<Vec<_>>();
@@ -528,7 +529,7 @@ mod tests {
         let (mut rx, tx_robot) = io::pipe().unwrap();
         let (rx_robot, mut tx) = io::pipe().unwrap();
 
-        write!(tx, "1 0").unwrap();
+        writeln!(tx, "1 0").unwrap();
         drop(tx);
 
         let rx_robot = BufReader::new(rx_robot);
