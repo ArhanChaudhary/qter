@@ -15,7 +15,6 @@ puzzle_geometry = { path = "../puzzle_geometry" }
 visualizer = { path = "../visualizer" }
 ariadne = "0.5.1"
 log = "0.4.28"
-robot = { path = "../robot" }
 internment = { version = "0.8", features = [ "arc" ] }
 
 [lints]
