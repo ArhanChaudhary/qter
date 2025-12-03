@@ -1,14 +1,8 @@
 use std::{
-    fmt::Display,
-    iter,
-    ops::Add,
-    sync::mpsc,
-    thread,
-    time::{Duration, Instant},
+    fmt::Display, iter::from_fn, ops::Add, sync::mpsc::{self, RecvTimeoutError}, thread, time::{Duration, Instant}
 };
 use clap::ValueEnum;
 use crossbeam::sync::{Parker, Unparker};
-use itertools::Either;
 use log::{debug, info};
 use qter_core::architectures::Algorithm;
 use thread_priority::{
@@ -243,34 +237,48 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
 
     let mut motors: [Motor; 6] = Face::ALL.map(|face| Motor::new(&robot_config, face));
 
-    enum MotorMessage2 {
-        QueueMoves(MoveInstruction),
-        PrevMovesDone(Unparker),
-    }
-
     let mut fsm = CommutativeMoveFsm::new();
-    let iter = rx.iter().flat_map(|v| match v {
-        MotorMessage::QueueMove(move_) => {
-            let moves = fsm.next(move_).map(MotorMessage2::QueueMoves);
-            Either::Left(moves.into_iter())
+
+    // Unparkers from after the previously executed move
+    let mut unparkers = Vec::<Unparker>::new();
+
+    let iter = from_fn(move || {
+        const SHORT_TIMEOUT: Duration = Duration::from_millis(50);
+        const NO_TIMEOUT: Duration = Duration::MAX;
+
+        for unparker in unparkers.drain(..) {
+            unparker.unpark();
         }
-        MotorMessage::PrevMovesDone(unparker) => {
-            let moves = fsm.flush().map(MotorMessage2::QueueMoves);
-            Either::Right(
-                moves
-                    .into_iter()
-                    .chain(iter::once(MotorMessage2::PrevMovesDone(unparker))),
-            )
+
+        let mut timeout = SHORT_TIMEOUT;
+
+        loop {
+            match rx.recv_timeout(timeout) {
+                Ok(MotorMessage::QueueMove(move_)) => {
+                    // If we get a move, we're ok with waiting at most `SHORT_TIMEOUT` amount of time for one that might commute
+                    timeout = SHORT_TIMEOUT;
+                    if let Some(instr) = fsm.next(move_) {
+                        return Some(instr);
+                    }
+                },
+                Ok(MotorMessage::PrevMovesDone(unparker)) => {
+                    unparkers.push(unparker);
+                },
+                Err(RecvTimeoutError::Timeout) => {
+                    // If we time out, then just send whatever's in the FSM
+                    if let Some(instr) = fsm.flush() {
+                        return Some(instr);
+                    }
+                    // If there's nothing in the FSM, then just wait however long for the next move
+                    timeout = NO_TIMEOUT;
+                },
+                // Empty channel
+                Err(RecvTimeoutError::Disconnected) => return None,
+            }
         }
     });
 
-    for moves in iter.filter_map(|v| match v {
-        MotorMessage2::QueueMoves(v) => Some(v),
-        MotorMessage2::PrevMovesDone(unparker) => {
-            unparker.unpark();
-            None
-        }
-    }) {
+    for moves in iter {
         info!(
             target: "move_seq",
             "Requested moves: {moves:?}",
