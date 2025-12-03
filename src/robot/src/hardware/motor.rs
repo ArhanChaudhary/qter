@@ -1,13 +1,10 @@
+use crate::hardware::config::{Face, Microsteps, RobotConfig};
+use log::debug;
+use rppal::gpio::{Gpio, Level, OutputPin};
 use std::{
-    mem::MaybeUninit,
     thread,
     time::{Duration, Instant},
 };
-
-use log::debug;
-use rppal::gpio::{Gpio, Level, OutputPin};
-
-use crate::hardware::config::{Face, Microsteps, RobotConfig};
 
 /// Runs `N` blocks with delays concurrently.
 ///
@@ -109,9 +106,9 @@ impl Motor {
 
     pub fn turn_many<const N: usize>(selves: [&mut Motor; N], steps: [i32; N]) {
         fn array_zip<T, U, const N: usize>(a: [T; N], b: [U; N]) -> [(T, U); N] {
-            let a = a.map(MaybeUninit::new);
-            let b = b.map(MaybeUninit::new);
-            core::array::from_fn(|i| unsafe { (a[i].assume_init_read(), b[i].assume_init_read()) })
+            let mut iter_a = IntoIterator::into_iter(a);
+            let mut iter_b = IntoIterator::into_iter(b);
+            std::array::from_fn(|_| (iter_a.next().unwrap(), iter_b.next().unwrap()))
         }
 
         let state = array_zip(selves, steps);

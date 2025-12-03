@@ -2,18 +2,15 @@ use std::{
     fmt::Display,
     iter,
     ops::Add,
-    path::Path,
     sync::mpsc,
     thread,
     time::{Duration, Instant},
 };
-
 use clap::ValueEnum;
 use crossbeam::sync::{Parker, Unparker};
 use itertools::Either;
 use log::{debug, info};
 use qter_core::architectures::Algorithm;
-use rppal::gpio::{Gpio, OutputPin};
 use thread_priority::{
     Error, RealtimeThreadSchedulePolicy, ScheduleParams, ThreadPriority,
     set_thread_priority_and_policy, thread_native_id,
@@ -48,12 +45,7 @@ pub struct RobotHandle {
 
 impl RobotHandle {
     /// Initialize the robot such that it is ready for use
-    pub fn init(config: &Path) -> RobotHandle {
-        let robot_config = toml::from_str::<RobotConfig>(
-            &std::fs::read_to_string(config).expect("Failed to read robot configuration file"),
-        )
-        .expect("Failed to parse robot configuration file");
-
+    pub fn init(robot_config: RobotConfig) -> RobotHandle {
         uart_init(&robot_config);
 
         let (tx, rx) = mpsc::channel();
@@ -73,10 +65,30 @@ impl RobotHandle {
         &self.config
     }
 
+    pub fn loop_face_turn(&mut self, face: Face) {
+        loop {
+            self.motor_thread_handle
+                .send(MotorMessage::QueueMove((face, Dir::Normal)))
+                .unwrap();
+            self.await_moves();
+        }
+    }
+
     /// Queue a sequence of moves to be performed by the robot
     pub fn queue_move_seq(&mut self, alg: &Algorithm) {
-        for moove in alg.move_seq_iter() {
-            let (face, dir) = parse_move(moove);
+        for move_ in alg.move_seq_iter() {
+            let mut move_ = &**move_;
+            let dir = if let Some(rest) = move_.strip_suffix('\'') {
+                move_ = rest;
+                Dir::Prime
+            } else if let Some(rest) = move_.strip_suffix('2') {
+                move_ = rest;
+                Dir::Double
+            } else {
+                Dir::Normal
+            };
+        
+            let face: Face = move_.parse().expect("invalid move: {move_}");
 
             self.motor_thread_handle
                 .send(MotorMessage::QueueMove((face, dir)))
@@ -110,15 +122,15 @@ pub struct Ticker {
 
 impl Face {
     fn is_opposite(self, rhs: Face) -> bool {
-        match (self, rhs) {
+        matches!(
+            (self, rhs),
             (Face::R, Face::L)
-            | (Face::L, Face::R)
-            | (Face::U, Face::D)
-            | (Face::D, Face::U)
-            | (Face::F, Face::B)
-            | (Face::B, Face::F) => true,
-            _ => false,
-        }
+                | (Face::L, Face::R)
+                | (Face::U, Face::D)
+                | (Face::D, Face::U)
+                | (Face::F, Face::B)
+                | (Face::B, Face::F)
+        )
     }
 }
 
@@ -422,14 +434,6 @@ pub fn uart_init(robot_config: &RobotConfig) {
 
 pub fn estop(robot_config: &RobotConfig) {}
 
-pub fn mk_output_pin(gpio: u8) -> OutputPin {
-    debug!(target: "gpio", "attempting to configure GPIO pin {gpio}");
-    let mut pin = Gpio::new().unwrap().get(gpio).unwrap().into_output_low();
-    pin.set_reset_on_drop(false);
-    debug!(target: "gpio", "configured GPIO pin {gpio} as output (initial low)");
-    pin
-}
-
 #[derive(Debug, Clone, Copy)]
 enum Dir {
     Normal,
@@ -473,19 +477,4 @@ impl Display for Dir {
             Dir::Prime => f.write_str("Prime"),
         }
     }
-}
-
-fn parse_move(mut move_: &str) -> (Face, Dir) {
-    let dir = if let Some(rest) = move_.strip_suffix('\'') {
-        move_ = rest;
-        Dir::Prime
-    } else if let Some(rest) = move_.strip_suffix('2') {
-        move_ = rest;
-        Dir::Double
-    } else {
-        Dir::Normal
-    };
-
-    let face_parsed: Face = move_.parse().expect("invalid move: {s}");
-    (face_parsed, dir)
 }
