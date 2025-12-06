@@ -10,6 +10,9 @@ use crate::interpreter_plugin::{
 
 use super::interpreter_plugin::DoneExecuting;
 
+const STEPPING: &str = "Manual Stepping";
+const AUTOMATIC: &str = "Automatic Stepping";
+
 pub struct IOViz;
 
 #[derive(Component)]
@@ -78,7 +81,7 @@ fn setup(mut commands: Commands, window: Single<&Window>) {
             ChildOf(panel),
         ))
         .with_child((
-            Text("Stepping".to_string()),
+            Text(STEPPING.to_string()),
             TextLayout {
                 justify: JustifyText::Center,
                 ..Default::default()
@@ -211,12 +214,12 @@ fn keyboard_control(
         *execute_button_state = match *execute_button_state {
             ExecuteButtonState::None => {
                 command_tx.send(InterpretationCommand::Step).unwrap();
-                ***text = "Executing".to_string();
+                ***text = AUTOMATIC.to_string();
                 bg.0 = Color::srgba(0.8, 0., 0., 0.5);
                 ExecuteButtonState::Clicked
             }
             ExecuteButtonState::Clicked | ExecuteButtonState::WaitingForInput => {
-                ***text = "Stepping".to_string();
+                ***text = STEPPING.to_string();
                 bg.0 = Color::srgba(0., 0.6, 0., 0.5);
                 ExecuteButtonState::None
             }
@@ -265,7 +268,7 @@ fn finished_program(
 ) {
     if finished_programs.read().last().is_some() {
         *execute_button_state = ExecuteButtonState::None;
-        "Stepping".clone_into(&mut text);
+        STEPPING.clone_into(&mut text);
         bg.0 = Color::srgba(0., 0.6, 0., 0.5);
     }
 }
