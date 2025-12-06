@@ -8,7 +8,7 @@ use qter_core::architectures::{Algorithm, Permutation, PermutationGroup, mk_puzz
 use crate::{hardware::RobotHandle, rob_twophase::solve_rob_twophase};
 
 pub mod hardware;
-mod rob_twophase;
+pub mod rob_twophase;
 
 pub static CUBE3: LazyLock<Arc<PermutationGroup>> =
     LazyLock::new(|| Arc::clone(&mk_puzzle_definition("3x3").unwrap().perm_group));

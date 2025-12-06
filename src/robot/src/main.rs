@@ -13,6 +13,7 @@ use robot::{
         config::{Face, Priority, RobotConfig},
         set_prio,
     },
+    rob_twophase::solve_rob_twophase_string,
 };
 use std::{
     io::BufReader,
@@ -51,9 +52,16 @@ enum Commands {
         face: Face,
     },
     /// Test latencies at the different options for priority level
-    TestPrio { prio: Priority },
+    TestPrio {
+        prio: Priority,
+    },
     /// Host a server to allow the robot to be remote-controlled
-    Server { port: u16 },
+    Server {
+        port: u16,
+    },
+    Solve {
+        rob_twophase_string: String,
+    },
 }
 
 fn main() {
@@ -131,6 +139,15 @@ fn main() {
 
                 run_robot_server::<_, QterRobot>(BufReader::new(socket), &mut robot).unwrap();
             }
+        }
+        Commands::Solve {
+            rob_twophase_string,
+        } => {
+            let alg = solve_rob_twophase_string(&rob_twophase_string).unwrap();
+
+            let mut robot_handle = RobotHandle::init(robot_config);
+            robot_handle.queue_move_seq(&alg);
+            robot_handle.await_moves();
         }
     }
     println!("Exiting");

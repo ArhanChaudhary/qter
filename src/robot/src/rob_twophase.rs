@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs,
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Error, Write},
     process::{ChildStdin, ChildStdout, Command, Stdio},
     sync::{Arc, LazyLock, Mutex},
     thread::available_parallelism,
@@ -68,6 +68,10 @@ fn mk_rob_twophase_input(mut perm: Permutation) -> String {
 }
 
 pub fn solve_rob_twophase(perm: Permutation) -> Result<Algorithm, std::io::Error> {
+    solve_rob_twophase_string(&mk_rob_twophase_input(perm))
+}
+
+pub fn solve_rob_twophase_string(rob_twophase_string: &str) -> Result<Algorithm, std::io::Error> {
     static ROB_TWOPHASE: Mutex<Option<(ChildStdin, BufReader<ChildStdout>)>> = Mutex::new(None);
 
     let mut maybe_rob_twophase = ROB_TWOPHASE.lock().unwrap();
@@ -120,6 +124,9 @@ pub fn solve_rob_twophase(perm: Permutation) -> Result<Algorithm, std::io::Error
     30.177ms
     R F2 R' U R U2 F2 U2 F' D' R D2 L2 D2 L' U2 F2 (17)
     Ready!
+    solve ABCDEF
+    Face-error 2.
+    Ready!
     ```
     */
 
@@ -133,11 +140,15 @@ pub fn solve_rob_twophase(perm: Permutation) -> Result<Algorithm, std::io::Error
         }
     }
 
-    writeln!(twophase_stdin, "solve {}", mk_rob_twophase_input(perm))?;
+    writeln!(twophase_stdin, "solve {}", rob_twophase_string)?;
 
-    // Captures `30.177ms`
+    // Captures either `30.177ms` or `Error.`
     let mut string = String::new();
     twophase_stdout.read_line(&mut string)?;
+
+    if string.starts_with("Face-error") {
+        return Err(Error::other("Invalid rob_twophase input string"));
+    }
 
     // Captures the alg
     let mut result = String::new();
@@ -165,7 +176,7 @@ mod tests {
 
     use crate::{
         CUBE3,
-        rob_twophase::{mk_rob_twophase_input, solve_rob_twophase},
+        rob_twophase::{mk_rob_twophase_input, solve_rob_twophase, solve_rob_twophase_string},
     };
 
     static TESTS: [[&str; 2]; 60] = [
@@ -431,5 +442,10 @@ mod tests {
 
             assert_eq!(hopefully_identity, identity);
         }
+    }
+
+    #[test]
+    fn rob_twophase_error_handling() {
+        assert!(solve_rob_twophase_string("UFRBL").is_err());
     }
 }
