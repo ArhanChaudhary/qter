@@ -33,6 +33,11 @@ macro_rules! bitfields {
 /// See datasheet pg. 24.
 pub const IFCNT_ADDRESS: u8 = 0x02;
 
+/// The TPOWERDOWN register address on the TMC2209.
+///
+/// See datasheet pg. 28.
+pub const TPOWERDOWN_ADDRESS: u8 = 0x11;
+
 bitflags! {
     /// The GCONF register bitflags on the TMC2209. UART is permitted to read
     /// and write to this register.

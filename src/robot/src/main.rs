@@ -51,6 +51,8 @@ enum Commands {
         /// The face to control.
         face: Face,
     },
+    /// Stop holding position across all motors.
+    Float,
     /// Test latencies at the different options for priority level
     TestPrio {
         prio: Priority,
@@ -95,6 +97,9 @@ fn main() {
         Commands::Motor { face } => {
             let mut robot_handle = RobotHandle::init(robot_config);
             robot_handle.loop_face_turn(face);
+        }
+        Commands::Float => {
+            robot::hardware::float(&robot_config);
         }
         Commands::TestPrio { prio } => {
             const SAMPLES: usize = 2048;

@@ -49,7 +49,7 @@ impl UartBus {
     ///
     /// The TMC2209 automatically detects the baud rate, but can only accept baud rates between
     /// 9600 and 500,000 (datasheet pg. 6). Additionally, the hardware on the Pi can only produce certain baud
-    /// rates; see [`rppal::uart::Uart::set_baud_rate`]. We set the baud rate 
+    /// rates; see [`rppal::uart::Uart::set_baud_rate`]. We set the baud rate
     /// at this level to avoid needing to wait between uart operations.
     const BAUD_RATE: u32 = 230_400;
 
@@ -224,6 +224,14 @@ impl UartNode<'_> {
 
     pub fn ifcnt(&mut self) -> u8 {
         self.read(regs::IFCNT_ADDRESS) as u8
+    }
+
+    pub fn tpowerdown(&mut self) -> u8 {
+        self.read(regs::TPOWERDOWN_ADDRESS) as u8
+    }
+
+    pub fn set_tpowerdown(&mut self, value: u8) {
+        self.write(regs::TPOWERDOWN_ADDRESS, value as u32)
     }
 }
 

@@ -1,10 +1,15 @@
-use std::{
-    fmt::Display, iter::from_fn, ops::Add, sync::mpsc::{self, RecvTimeoutError}, thread, time::{Duration, Instant}
-};
 use clap::ValueEnum;
 use crossbeam::sync::{Parker, Unparker};
 use log::{debug, info};
 use qter_core::architectures::Algorithm;
+use std::{
+    fmt::Display,
+    iter::from_fn,
+    ops::Add,
+    sync::mpsc::{self, RecvTimeoutError},
+    thread,
+    time::{Duration, Instant},
+};
 use thread_priority::{
     Error, RealtimeThreadSchedulePolicy, ScheduleParams, ThreadPriority,
     set_thread_priority_and_policy, thread_native_id,
@@ -81,7 +86,7 @@ impl RobotHandle {
             } else {
                 Dir::Normal
             };
-        
+
             let face: Face = move_.parse().expect("invalid move: {move_}");
 
             self.motor_thread_handle
@@ -125,6 +130,20 @@ impl Face {
                 | (Face::F, Face::B)
                 | (Face::B, Face::F)
         )
+    }
+}
+
+impl RobotConfig {
+    fn compensation(&self, face: Face, dir: Dir) -> i32 {
+        let sign = dir.qturns().signum();
+        let motor_config = &self.motors[face];
+        let for_motor = match sign {
+            1 => motor_config.pos_compensation,
+            -1 => motor_config.neg_compensation,
+            _ => unreachable!(),
+        };
+        let unsigned = for_motor.unwrap_or(self.compensation);
+        unsigned.cast_signed() * sign
     }
 }
 
@@ -260,10 +279,10 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
                     if let Some(instr) = fsm.next(move_) {
                         return Some(instr);
                     }
-                },
+                }
                 Ok(MotorMessage::PrevMovesDone(unparker)) => {
                     unparkers.push(unparker);
-                },
+                }
                 Err(RecvTimeoutError::Timeout) => {
                     // If we time out, then just send whatever's in the FSM
                     if let Some(instr) = fsm.flush() {
@@ -271,7 +290,7 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
                     }
                     // If there's nothing in the FSM, then just wait however long for the next move
                     timeout = NO_TIMEOUT;
-                },
+                }
                 // Empty channel
                 Err(RecvTimeoutError::Disconnected) => return None,
             }
@@ -289,8 +308,10 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
                 let motor = &mut motors[face as usize];
 
                 let steps = dir.qturns() * FULLSTEPS_PER_QUARTER.cast_signed();
+                let comp = robot_config.compensation(face, dir);
 
-                motor.turn(steps);
+                motor.turn(steps + comp);
+                motor.turn(-comp);
             }
             MoveInstruction::Double([(face1, dir1), (face2, dir2)]) => {
                 let [motor1, motor2] = motors
@@ -299,8 +320,11 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
 
                 let steps1 = dir1.qturns() * FULLSTEPS_PER_QUARTER.cast_signed();
                 let steps2 = dir2.qturns() * FULLSTEPS_PER_QUARTER.cast_signed();
+                let comp1 = robot_config.compensation(face1, dir1);
+                let comp2 = robot_config.compensation(face2, dir2);
 
-                Motor::turn_many([motor1, motor2], [steps1, steps2]);
+                Motor::turn_many([motor1, motor2], [steps1 + comp1, steps2 + comp2]);
+                Motor::turn_many([motor1, motor2], [-comp1, -comp2]);
             }
         }
 
@@ -308,6 +332,13 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
             target: "move_seq",
             "Completed moves: {moves:?}",
         );
+
+        let wait = Duration::from_secs_f64(robot_config.wait_between_moves);
+        info!(
+            target: "move_seq",
+            "Waiting for {wait:?}",
+        );
+        thread::sleep(wait);
     }
 
     println!("Completed move sequence");
@@ -411,7 +442,7 @@ pub fn uart_init(robot_config: &RobotConfig) {
         debug!(target: "uart_init", "Read initial PWMCONF: initial_value={initial_pwmconf:?}");
         let new_pwmconf = initial_pwmconf
             // Freewheel mode
-            .with_freewheel(1);
+            .with_freewheel(if robot_config.float { 1 } else { 0 });
         if new_pwmconf == initial_pwmconf {
             debug!(target: "uart_init", "PWMCONF already configured");
         } else {
@@ -426,6 +457,7 @@ pub fn uart_init(robot_config: &RobotConfig) {
         // Configure IHOLD_IRUN. Note that IHOLD_IRUN is write-only.
         //
         let ihold_irun = IholdIrun::empty()
+            .with_ihold(if robot_config.float { 0 } else { 31 })
             // Set IRUN to 31
             .with_irun(31)
             // Set IHOLDDELAY to 1
@@ -436,7 +468,38 @@ pub fn uart_init(robot_config: &RobotConfig) {
         );
         uart.set_iholdirun(ihold_irun);
 
+        let tpowerdown = 2;
+        debug!(
+            target: "uart_init",
+            "Writing TPOWERODNW: value={tpowerdown:?}",
+        );
+        uart.set_tpowerdown(tpowerdown);
+
         debug!(target: "uart_init", "Initialized{face:?}: uart_bus={:?} node_address={:?}", config.uart_bus, config.uart_address);
+    }
+}
+
+pub fn float(robot_config: &RobotConfig) {
+    let mut uart0 = UartBus::new(UartId::Uart0);
+    let mut uart4 = UartBus::new(UartId::Uart4);
+
+    for face in Face::ALL {
+        let config = &robot_config.motors[face];
+        let mut uart = match config.uart_bus {
+            UartId::Uart0 => &mut uart0,
+            UartId::Uart4 => &mut uart4,
+        }
+        .node(config.uart_address);
+
+        let pwmconf = uart.pwmconf();
+        uart.set_pwmconf(pwmconf.with_freewheel(1));
+
+        uart.set_iholdirun(
+            IholdIrun::empty()
+                .with_ihold(0)
+                .with_irun(0)
+                .with_iholddelay(0),
+        );
     }
 }
 
