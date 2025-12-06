@@ -319,7 +319,10 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
             }
             C::GiveInput(int) => {
                 let Some(interpreter) = &mut maybe_interpreter else {
-                    eprintln!("Cannot give input when there is no interpreter set");
+                    robot_handle()
+                        .event_tx
+                        .send(InterpretationEvent::Message("There is no program loaded. Try loading a program and stepping until you reach an input instruction.".to_owned()))
+                        .unwrap();
                     continue;
                 };
 
@@ -340,7 +343,10 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
                             .unwrap();
                     }
                 } else {
-                    eprintln!("Cannot give input when there is no input instruction");
+                    robot_handle()
+                        .event_tx
+                        .send(InterpretationEvent::Message("Cannot give input when an input instruction is not being executed. Try stepping until you reach an input instruction.".to_owned()))
+                        .unwrap();
                 }
             }
             C::Solve => {
