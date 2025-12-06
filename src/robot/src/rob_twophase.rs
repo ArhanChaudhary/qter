@@ -9,7 +9,7 @@ use std::{
 
 use internment::ArcIntern;
 use itertools::Itertools;
-use log::warn;
+use log::{trace, warn};
 use qter_core::{
     I, Int,
     architectures::{Algorithm, Permutation},
@@ -107,7 +107,7 @@ pub fn solve_rob_twophase_string(rob_twophase_string: &str) -> Result<Algorithm,
 
         maybe_rob_twophase.insert((stdin, stdout))
     };
-
+   
     /*
     Rob Twophase TUI looks like
 
@@ -134,6 +134,7 @@ pub fn solve_rob_twophase_string(rob_twophase_string: &str) -> Result<Algorithm,
     loop {
         let mut string = String::new();
         twophase_stdout.read_line(&mut string)?;
+        trace!("{string}");
 
         if string == "Ready!\n" {
             break;
@@ -141,10 +142,12 @@ pub fn solve_rob_twophase_string(rob_twophase_string: &str) -> Result<Algorithm,
     }
 
     writeln!(twophase_stdin, "solve {}", rob_twophase_string)?;
+    trace!("solve {rob_twophase_string}");
 
     // Captures either `30.177ms` or `Error.`
     let mut string = String::new();
     twophase_stdout.read_line(&mut string)?;
+    trace!("{string}");
 
     if string.starts_with("Face-error") {
         return Err(Error::other("Invalid rob_twophase input string"));
@@ -153,6 +156,7 @@ pub fn solve_rob_twophase_string(rob_twophase_string: &str) -> Result<Algorithm,
     // Captures the alg
     let mut result = String::new();
     twophase_stdout.read_line(&mut result)?;
+    trace!("{result}");
 
     // Remove parentheses and newline
     let alg = result.replace(['(', ')', '\n'], "");
