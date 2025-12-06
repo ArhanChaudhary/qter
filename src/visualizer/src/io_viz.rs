@@ -42,6 +42,7 @@ impl Plugin for IOViz {
             .add_systems(Update, keyboard_control)
             .add_systems(Update, (started_program, got_message).chain())
             .add_systems(Update, on_submit)
+            .add_systems(Update, step_on_input)
             .add_systems(Update, (finished_program, execute_conditionally).chain());
     }
 }
@@ -190,11 +191,19 @@ fn keyboard_control(
         command_tx
             .send(InterpretationCommand::Execute(Intern::from("simple")))
             .unwrap();
+
+        command_tx
+            .send(InterpretationCommand::Step)
+            .unwrap();
     }
 
     if keyboard_input.just_pressed(KeyCode::KeyA) {
         command_tx
             .send(InterpretationCommand::Execute(Intern::from("avg")))
+            .unwrap();
+
+        command_tx
+            .send(InterpretationCommand::Step)
             .unwrap();
     }
 
@@ -202,11 +211,19 @@ fn keyboard_control(
         command_tx
             .send(InterpretationCommand::Execute(Intern::from("fib")))
             .unwrap();
+
+        command_tx
+            .send(InterpretationCommand::Step)
+            .unwrap();
     }
 
     if keyboard_input.just_pressed(KeyCode::KeyM) {
         command_tx
             .send(InterpretationCommand::Execute(Intern::from("multiply")))
+            .unwrap();
+
+        command_tx
+            .send(InterpretationCommand::Step)
             .unwrap();
     }
 
@@ -231,6 +248,15 @@ fn keyboard_control(
     }
 
     input.0.retain(|c| c.is_ascii_digit());
+}
+
+fn step_on_input(
+    command_tx: Res<CommandTx>,
+    mut gave_inputs: EventReader<GaveInput>,
+) {
+    for _ in gave_inputs.read() {
+        command_tx.send(InterpretationCommand::Step).unwrap();
+    }
 }
 
 fn execute_conditionally(

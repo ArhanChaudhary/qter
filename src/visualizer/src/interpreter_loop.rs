@@ -1,6 +1,6 @@
 use super::{InterpretationCommand, interpreter_plugin::InterpretationEvent};
 use crate::PROGRAMS;
-use crossbeam_channel::{Receiver, Sender};
+use crossbeam_channel::{Receiver, RecvError, Sender, TryRecvError};
 use interpreter::{
     ActionPerformed, ExecutionState, Interpreter, PausedState,
     puzzle_states::{PuzzleState, RobotLike, RobotLikeDyn},
@@ -11,9 +11,7 @@ use qter_core::{
     discrete_math::lcm_iter,
 };
 use std::{
-    sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock},
-    thread,
-    time::Duration,
+    collections::VecDeque, sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock}, thread, time::Duration
 };
 
 struct RobotHandle {
@@ -191,6 +189,37 @@ impl PuzzleState for TrackedRobotState {
     }
 }
 
+struct CommandRx {
+    command_rx: Receiver<InterpretationCommand>,
+    earlier_commands: VecDeque<InterpretationCommand>,
+}
+
+impl CommandRx {
+    fn next(&mut self) -> Result<InterpretationCommand, RecvError> {
+        match self.earlier_commands.pop_front() {
+            Some(cmd) => Ok(cmd),
+            None => self.command_rx.recv(),
+        }
+    }
+
+    fn try_next(&mut self) -> Result<InterpretationCommand, TryRecvError> {
+        match self.earlier_commands.pop_front() {
+            Some(cmd) => Ok(cmd),
+            None => self.command_rx.try_recv(),
+        }
+    }
+
+    fn try_peek(&mut self) -> Option<&InterpretationCommand> {
+        match self.try_next() {
+            Ok(v) => {
+                self.earlier_commands.push_back(v);
+                self.earlier_commands.back()
+            },
+            Err(_) => None,
+        }
+    }
+}
+
 pub fn interpreter_loop<R: RobotLike + Send + 'static>(
     event_tx: Sender<InterpretationEvent>,
     command_rx: Receiver<InterpretationCommand>,
@@ -208,7 +237,9 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
 
     let mut maybe_interpreter = None;
 
-    for command in command_rx {
+    let mut command_rx = CommandRx { command_rx, earlier_commands: VecDeque::new() };
+
+    while let Ok(command) = command_rx.next() {
         use InterpretationCommand as C;
 
         let mut halted = false;
@@ -306,6 +337,10 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
                         .event_tx
                         .send(InterpretationEvent::Message(interpreter_message))
                         .unwrap();
+                }
+
+                while let Some(InterpretationCommand::Step) = command_rx.try_peek() {
+                    command_rx.try_next().unwrap();
                 }
 
                 robot_handle()
