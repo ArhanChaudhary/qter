@@ -204,6 +204,10 @@ impl CommutativeMoveFsm {
         res
     }
 
+    fn is_empty(&self) -> bool {
+        self.state[0].is_none() && self.state[1].is_none()
+    }
+
     /// Feed a new move into the FSM. Returns some moves to execute; executing
     /// the moves produced by this method will ultimately perform the same
     /// permutation as executing the moves fed into the FSM.
@@ -281,7 +285,11 @@ fn motor_thread(rx: mpsc::Receiver<MotorMessage>, robot_config: RobotConfig) {
                     }
                 }
                 Ok(MotorMessage::PrevMovesDone(unparker)) => {
-                    unparkers.push(unparker);
+                    if fsm.is_empty() {
+                        unparker.unpark();
+                    } else {
+                        unparkers.push(unparker);
+                    }
                 }
                 Err(RecvTimeoutError::Timeout) => {
                     // If we time out, then just send whatever's in the FSM
