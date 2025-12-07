@@ -11,7 +11,10 @@ use qter_core::{
     discrete_math::lcm_iter,
 };
 use std::{
-    collections::VecDeque, sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock}, thread, time::Duration
+    collections::VecDeque,
+    sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock},
+    thread,
+    time::Duration,
 };
 
 struct RobotHandle {
@@ -60,7 +63,7 @@ impl TrackedRobotState {
 
 impl PuzzleState for TrackedRobotState {
     type InitializationArgs = ();
-    
+
     fn initialize(_: Arc<PermutationGroup>, (): ()) -> Self {
         robot_handle().robot.solve();
 
@@ -214,7 +217,7 @@ impl CommandRx {
             Ok(v) => {
                 self.earlier_commands.push_back(v);
                 self.earlier_commands.back()
-            },
+            }
             Err(_) => None,
         }
     }
@@ -223,7 +226,7 @@ impl CommandRx {
 pub fn interpreter_loop<R: RobotLike + Send + 'static>(
     event_tx: Sender<InterpretationEvent>,
     command_rx: Receiver<InterpretationCommand>,
-    args: R::InitializationArgs
+    args: R::InitializationArgs,
 ) {
     if ROBOT_HANDLE
         .set(Mutex::new(RobotHandle {
@@ -237,7 +240,10 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
 
     let mut maybe_interpreter = None;
 
-    let mut command_rx = CommandRx { command_rx, earlier_commands: VecDeque::new() };
+    let mut command_rx = CommandRx {
+        command_rx,
+        earlier_commands: VecDeque::new(),
+    };
 
     while let Ok(command) = command_rx.next() {
         use InterpretationCommand as C;
@@ -246,9 +252,10 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
 
         match command {
             C::Execute(name) => {
-                maybe_interpreter = Some(Interpreter::<TrackedRobotState>::new_only_one_puzzle(Arc::clone(
-                    &PROGRAMS.get(&name).unwrap().program,
-                ), ()));
+                maybe_interpreter = Some(Interpreter::<TrackedRobotState>::new_only_one_puzzle(
+                    Arc::clone(&PROGRAMS.get(&name).unwrap().program),
+                    (),
+                ));
 
                 robot_handle()
                     .event_tx
@@ -372,10 +379,12 @@ pub fn interpreter_loop<R: RobotLike + Send + 'static>(
                             .send(InterpretationEvent::Message(msg))
                             .unwrap();
                     } else {
-                        robot_handle()
-                            .event_tx
-                            .send(InterpretationEvent::GaveInput)
+                        let mut handle = robot_handle();
+
+                        let state = handle.robot.take_picture().clone();
+                        handle.event_tx.send(InterpretationEvent::CubeState(state))
                             .unwrap();
+                        handle.event_tx.send(InterpretationEvent::GaveInput).unwrap();
                     }
                 } else {
                     robot_handle()
