@@ -101,6 +101,8 @@ This repository hosts a suite of various twisty puzzle utilities to compile *QAT
 - `movecount_coefficient_calculator`: [Rewrite](https://www.speedsolving.com/threads/movecount-coefficient-calculator-online-tool-to-evaluate-the-speed-of-3x3-algorithms.79025/) of [trangium](https://github.com/trangium)'s online tool to score twisty puzzle move sequences by how easy they are to physically perform
 - `compiler`: Compile *QAT* code to the *Q* file format
 - `interpreter`: Simulate a twisty puzzle to execute *QAT* or *Q*
+- `robot`: Stepper motor control software for the Qter robot
+- `visualizer`: Qter program execution visualizer tool
 
 Refer to [our paper](https://qter.dev/paper.pdf) for a comprehensive technical breakdown of the mathematics and programming behind Qter.
 
