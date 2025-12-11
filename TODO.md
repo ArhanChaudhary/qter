@@ -115,6 +115,7 @@
 - 😎force conditional blocks that end with "halt" to codegen at the end of the instruction memory, optimizing a goto
 - 😎Test with https://github.com/dtolnay/trybuild
 - 😎Write a tree-sitter grammer for QAT
+- repeat instruction for examinx
 
 ## Interpreter/CLI
 
