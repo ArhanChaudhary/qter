@@ -7,7 +7,7 @@ use super::{
 use crate::{puzzle::AuxMem, start, success, working};
 use itertools::Itertools;
 use log::{Level, debug, info, log_enabled};
-use std::{borrow::Cow, time::Instant, vec::IntoIter};
+use std::{borrow::Cow, cmp::Ordering, time::Instant, vec::IntoIter};
 use thiserror::Error;
 
 pub struct CycleStructureSolver<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> {
@@ -24,6 +24,7 @@ struct CycleStructureSolverMutable<'id, P: PuzzleState<'id>, H: PuzzleStateHisto
     solutions: Vec<Vec<usize>>,
     root_canonical_fsm_reversed_state: usize,
     nodes_visited: u64,
+    tmp: u64,
 }
 
 #[derive(Error, Debug)]
@@ -206,25 +207,50 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
         };
         permitted_cost -= 1;
         // TODO: document this when I am less sleepy
-        // skip the "move_index == move_index_prune_pt" case
-        // after rotating the end to the front, the move right after (currently
-        // the first move) might be lex less than entry_index + 1 (the current
-        // move right after)
         // only works on leaf nodes
-        if permitted_cost == 0
-            // check in bounds
-            && entry_index < mutable.puzzle_state_history.stack_pointer()
-            // SAFETY: we checked in bounds
-            && unsafe { mutable.puzzle_state_history.move_index_unchecked(1) }
-                // SAFETY: we checked in bounds
-                < unsafe {
-                    mutable
-                        .puzzle_state_history
-                        .move_index_unchecked(entry_index + 1)
+        if permitted_cost == 0 {
+            if entry_index == 1 {
+                // fast path
+                move_index_prune_lt += 1;
+            } else {
+                let mut i = 0;
+                while i + entry_index < mutable.puzzle_state_history.stack_pointer() {
+                    match unsafe {
+                        mutable
+                            .puzzle_state_history
+                            .move_index_unchecked(i + 1)
+                            .cmp(
+                                &mutable
+                                    .puzzle_state_history
+                                    .move_index_unchecked(i + entry_index + 1),
+                            )
+                    } {
+                        Ordering::Less => {
+                            move_index_prune_lt += 1;
+                            break;
+                        }
+                        Ordering::Equal => {
+                            i += entry_index;
+                        }
+                        Ordering::Greater => {
+                            break;
+                        }
+                    }
                 }
-        {
-            move_index_prune_lt += 1;
+            }
         }
+        // if permitted_cost == 0
+        //     && entry_index < mutable.puzzle_state_history.stack_pointer()
+        //     && unsafe { mutable.puzzle_state_history.move_index_unchecked(1) }
+        //         < unsafe {
+        //             mutable
+        //                 .puzzle_state_history
+        //                 .move_index_unchecked(entry_index + 1)
+        // }
+        // {
+        //     mutable.tmp += 1;
+        //     move_index_prune_lt += 1;
+        // }
         for (move_index, move_) in self
             .puzzle_def
             .moves
@@ -403,6 +429,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
             solutions: vec![],
             root_canonical_fsm_reversed_state: 0,
             nodes_visited: 0,
+            tmp: 0,
         };
         // SAFETY: `H::initialize` when puzzle_state_history is created
         // guarantees that the first entry is bound
@@ -447,6 +474,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
                 return Err(CycleStructureSolverError::MaxSolutionLengthExceeded);
             }
             mutable.nodes_visited = 0;
+            mutable.tmp = 0;
             mutable
                 .puzzle_state_history
                 .resize_if_needed(usize::from(depth));
@@ -464,9 +492,10 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
                     depth,
                 );
                 debug!(
-                    working!("Traversed {} nodes in {:.3}s"),
+                    working!("Traversed {} nodes in {:.3}s (tmp: {})"),
                     mutable.nodes_visited,
-                    depth_start.elapsed().as_secs_f64()
+                    depth_start.elapsed().as_secs_f64(),
+                    mutable.tmp,
                 );
                 if mutable.found_solution() {
                     break;
@@ -486,24 +515,13 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
                     return Err(CycleStructureSolverError::MaxSolutionLengthExceeded);
                 }
                 mutable.nodes_visited = 0;
+                mutable.tmp = 0;
                 mutable
                     .puzzle_state_history
                     .resize_if_needed(usize::from(depth));
             }
         }
 
-        // if log_enabled!(Level::Debug) {
-        //     for (i, solution) in mutable.solutions.iter().enumerate() {
-        //         debug!(
-        //             "{:<2} {}",
-        //             i + 1,
-        //             solution
-        //                 .iter()
-        //                 .map(|&m| self.puzzle_def.moves[m].name())
-        //                 .format(" ")
-        //         );
-        //     }
-        // }
         info!(
             success!("Found {} raw solutions at depth {} in {:.3}s"),
             mutable.solutions.len(),

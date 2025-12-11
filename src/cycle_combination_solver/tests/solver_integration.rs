@@ -315,7 +315,6 @@ fn test_8c8e_optimal_cycle() {
     );
 
     let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
-
     assert_eq!(solutions.solution_length(), 5);
     while solutions.next().is_some() {}
     assert_eq!(solutions.expanded_count(), 960);
@@ -360,6 +359,27 @@ fn test_consecutive_commutative_moves() {
         );
     }
     assert_eq!(solutions.expanded_count(), 96);
+}
+
+#[test_log::test]
+fn test_sequence_symmetry_edge_case() {
+    make_guard!(guard);
+    let cube3_def = PuzzleDef::<Cube3>::new(&KPUZZLE_3X3, guard).unwrap();
+    let sorted_cycle_structure = SortedCycleStructure::new(
+        &[vec![(2, false), (2, false), (3, false)], vec![(9, false)]],
+        cube3_def.sorted_orbit_defs_ref(),
+    )
+    .unwrap();
+    let solver: CycleStructureSolver<Cube3, _> = CycleStructureSolver::new(
+        cube3_def,
+        ZeroTable::try_generate_all(sorted_cycle_structure, ()).unwrap(),
+        SearchStrategy::AllSolutions,
+    );
+
+    let mut solutions = solver.solve::<[Cube3; 21]>().unwrap();
+    assert_eq!(solutions.solution_length(), 7);
+    while solutions.next().is_some() {}
+    assert_eq!(solutions.expanded_count(), 6048);
 }
 
 #[allow(dead_code)]
