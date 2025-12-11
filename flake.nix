@@ -95,11 +95,13 @@
             make
           '';
           installPhase = ''
-             mkdir -p $out/bin
-             cp twophase $out/bin
+            mkdir -p $out/bin
+            cp twophase $out/bin
           '';
         };
-        
+
+        robot-deps = [ packages.rob-twophase ];
+
         legacyPackages = packages;
       }
     );
