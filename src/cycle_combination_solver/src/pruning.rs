@@ -137,6 +137,7 @@ pub struct OrbitPruningTablesGenerateMeta<'id, 'a, P: PuzzleState<'id>> {
 
 pub struct UncompressedStorageBackend<const EXACT: bool> {
     data: Box<[OrbitPruneHeuristic]>,
+    // TODO NonZeroUSize as the len to avoid rem 0
     depth_traversed: u8,
 }
 
@@ -763,14 +764,19 @@ impl<'id, P: PuzzleState<'id>, S: StorageBackend<true>> OrbitPruningTable<'id, P
             u32::from(piece_count) - 1,
         );
         let entry_count = FACT_UNTIL_19[piece_count as usize] * orientation_count;
+        let fail = Err((
+            OrbitPruningTableGenerationError::NotBigEnough,
+            generate_meta,
+        ));
         let initialization_meta =
-            S::initialization_meta_from_entry_count(entry_count.try_into().unwrap());
+            S::initialization_meta_from_entry_count(if let Ok(v) = entry_count.try_into() {
+                v
+            } else {
+                return fail;
+            });
         let used_size_bytes = initialization_meta.used_size_bytes();
         if used_size_bytes > max_size_bytes {
-            return Err((
-                OrbitPruningTableGenerationError::NotBigEnough,
-                generate_meta,
-            ));
+            return fail;
         }
         let mut table = ExactOrbitPruningTable {
             storage_backend: S::initialize_from_meta(initialization_meta),

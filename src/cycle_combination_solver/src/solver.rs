@@ -75,6 +75,8 @@ pub struct SolutionsIntoIter<'id, 'a, P: PuzzleState<'id>> {
     currently_expanding_solution: Option<Vec<usize>>,
     /// The state of the canonical sequence expansion
     canonical_sequence_expansion: Option<CanonicalSequenceExpansion>,
+    /// A disjoint mapping of multiple canonical sequence expansions. These are
+    /// indicies of a permutation.
     canonical_sequence_expansion_transformation: Vec<usize>,
     /// The state of the sequence symmetry expansion
     sequence_symmetry_expansion: Option<SequenceSymmetryExpansion>,
@@ -89,6 +91,7 @@ struct SequenceSymmetryExpansion {
 #[derive(Debug)]
 struct CanonicalSequenceExpansion {
     expansion_intervals: Vec<(usize, usize)>,
+    expand_ends: bool,
 }
 
 impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'id, P, T> {
@@ -245,11 +248,11 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
                         // hardcode it for optimization
                         .reverse_next_state(CanonicalFSMState::default(), move_class_index)
                 };
-            // We take advantage of the fact that the shortest sequence can
-            // never start and end with the moves in the same move class.
-            // Otherwise the end could be rotated to the start and combined
-            // together, thus contradicting that assumption
-            // TODO: document the canonical FSM stuff here
+                // We take advantage of the fact that the shortest sequence can
+                // never start and end with the moves in the same move class.
+                // Otherwise the end could be rotated to the start and combined
+                // together, thus contradicting that assumption
+                // TODO: document the canonical FSM stuff here
             } else if permitted_cost == 0
                 && unsafe {
                     self.canonical_fsm
@@ -380,7 +383,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
         )
     }
 
-    /// Run qter's cycle combination solver.
+    /// Run Qter's cycle combination solver.
     ///
     /// # Errors
     ///
@@ -489,6 +492,18 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
             }
         }
 
+        // if log_enabled!(Level::Debug) {
+        //     for (i, solution) in mutable.solutions.iter().enumerate() {
+        //         debug!(
+        //             "{:<2} {}",
+        //             i + 1,
+        //             solution
+        //                 .iter()
+        //                 .map(|&m| self.puzzle_def.moves[m].name())
+        //                 .format(" ")
+        //         );
+        //     }
+        // }
         info!(
             success!("Found {} raw solutions at depth {} in {:.3}s"),
             mutable.solutions.len(),
@@ -519,7 +534,7 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
 
     // Note that we cannot use a method that mutates self and also returns
     // an Option<&[&Move<'id, P>]>. This would create a mutable borrow that
-    // would last while this slice is in use (which is likely in the entire)
+    // would last while this slice is in use (which is likely in the entire
     // scope) preventing immutable methods from being called on self.
     // See: https://doc.rust-lang.org/nomicon/lifetime-mismatch.html
     fn next(&mut self) -> Option<()> {
@@ -528,15 +543,21 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
         // - Canonical sequences
         // - Sequence symmetry
 
+        // We only load a new solution when we have exhausted all expansions
+        // of the current solution
         if self.currently_expanding_solution.is_none() {
             self.currently_expanding_solution = self.solutions.next();
         }
+        // If there are no more solutions, we are done
         let currently_expanding_solution = self.currently_expanding_solution.as_deref()?;
 
+        // Initialize the canonical sequence expansion if it hasn't been
         if self.canonical_sequence_expansion.is_none() {
             let mut maybe_acc: Option<Cow<P>> = None;
             let mut expansion_length = 1;
+            // Vector of (expansion_position, expansion_length)
             let mut expansion_intervals = vec![];
+            // Identify all intervals of moves that commute with each other
             for (expansion_position, &move_index) in currently_expanding_solution.iter().enumerate()
             {
                 let commutes = if let Some(acc) = &maybe_acc {
@@ -568,20 +589,24 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
                     ));
                 }
             }
+            // Handle the last expansion interval
             if expansion_length != 1 {
                 expansion_intervals.push((
                     currently_expanding_solution.len() - expansion_length,
                     expansion_length,
                 ));
             }
+            // If there is nothing to expand, we skip setting up the expansion
             if !expansion_intervals.is_empty() {
                 self.canonical_sequence_expansion = Some(CanonicalSequenceExpansion {
                     expansion_intervals,
+                    expand_ends: false,
                 });
             }
         }
 
-        let reverse_canonical_sequence = |i: usize| {
+        // Helper to apply the canonical sequence expansion transformation
+        let canonical_sequence_expansion_transformation = |i: usize| {
             if self.canonical_sequence_expansion.is_none() {
                 i
             } else {
@@ -589,19 +614,39 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
             }
         };
 
+        // Initialize the sequence symmetry expansion if it hasn't already been
+        // done. We use get_or_insert_with unlike the first time because we
+        // always have a sequence symmetry expansion.
         let sequence_symmetry_expansion =
             self.sequence_symmetry_expansion.get_or_insert_with(|| {
+                // Properly initializing the sequence symmetry expansion
+                // requires us to notice a subtle observation. The sequence
+                // A B A B should only be rotated a single time, not four times.
+                // We need to find the size of the "rotation class" of the
+                // sequence.
+                //
+                // We use the technique described here:
+                // https://leetcode.com/problems/rotate-string/solutions/5988868/rotate-string-by-leetcode-w5ch
                 let mut rotation_class_size = 1;
-                // https://leetcode.com/problems/rotate-string/description/
-                while rotation_class_size < self.solution_length
-                    && (0..self.solution_length).any(|i| {
-                        let reversed_sequence_symmetry =
+                loop {
+                    // If we have not yet exceeded the solution length,
+                    if rotation_class_size >= self.solution_length {
+                        break;
+                    }
+                    // And the concatenated string has not yet found a suitable
+                    // rotation class size,
+                    if (0..self.solution_length).all(|i| {
+                        let transformed_sequence_symmetry_expansion_index =
                             (rotation_class_size + i) % self.solution_length;
-                        currently_expanding_solution[reverse_canonical_sequence(i)]
-                            != currently_expanding_solution
-                                [reverse_canonical_sequence(reversed_sequence_symmetry)]
-                    })
-                {
+                        currently_expanding_solution[canonical_sequence_expansion_transformation(i)]
+                            == currently_expanding_solution
+                                [canonical_sequence_expansion_transformation(
+                                    transformed_sequence_symmetry_expansion_index,
+                                )]
+                    }) {
+                        break;
+                    }
+                    // then we increment the rotation class size and try again
                     rotation_class_size += 1;
                 }
                 SequenceSymmetryExpansion {
@@ -610,54 +655,86 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
                 }
             });
 
-        let reverse_sequence_symmetry =
+        // Helper to apply the sequence symmetry transformation
+        let sequence_symmetry_expansion_transformation =
             |i: usize| (i + sequence_symmetry_expansion.rotation_index) % self.solution_length;
 
+        // Once we've initialized all the expansions, we can now produce the
+        // expanded solution
+
+        // Combined helper to apply all transformations
+        let transform_index = |i: usize| {
+            let mut transformed_index = sequence_symmetry_expansion_transformation(i);
+            transformed_index = canonical_sequence_expansion_transformation(transformed_index);
+            transformed_index
+        };
+
+        // We reuse the buffer if it exists
         if let Some(expanded_solution) = self.expanded_solution.as_deref_mut() {
             for (i, es) in expanded_solution.iter_mut().enumerate() {
-                let mut reversified_index = reverse_sequence_symmetry(i);
-                reversified_index = reverse_canonical_sequence(reversified_index);
-                *es = &self.puzzle_def.moves[currently_expanding_solution[reversified_index]];
+                *es = &self.puzzle_def.moves[currently_expanding_solution[transform_index(i)]];
             }
         } else {
             self.expanded_solution = Some(
                 (0..self.solution_length)
                     .map(|i| {
-                        let mut reversified_index = reverse_sequence_symmetry(i);
-                        reversified_index = reverse_canonical_sequence(reversified_index);
-                        &self.puzzle_def.moves[currently_expanding_solution[reversified_index]]
+                        &self.puzzle_def.moves[currently_expanding_solution[transform_index(i)]]
                     })
                     .collect(),
             );
         }
 
+        // We are done processing this sequence symmetry rotation. Increase the
+        // rotation index.
         sequence_symmetry_expansion.rotation_index += 1;
+        // Sanity check: it's nonsensical for the rotation index to exceed
+        // the rotation class size. ie for A B C A B C the valid rotation
+        // indicies are 0, 1, and 2, and the class size is 3.
+        assert!(
+            sequence_symmetry_expansion.rotation_index
+                <= sequence_symmetry_expansion.rotation_class_size,
+        );
+        // If we have reached the end of the sequence symmetry expansion,
         if sequence_symmetry_expansion.rotation_index
-            // TODO: make this ==
-            >= sequence_symmetry_expansion.rotation_class_size
+            == sequence_symmetry_expansion.rotation_class_size
         {
+            // set it to None
             self.sequence_symmetry_expansion = None;
 
+            // and check if the currently expanding solution has a canonical
+            // sequence expansion. If it does,
             if let Some(cse) = &mut self.canonical_sequence_expansion {
+                // Iterate through every expansion interval
                 let mut i = cse.expansion_intervals.len();
                 while i != 0 {
                     let (expansion_position, expansion_length) = cse.expansion_intervals[i - 1];
+                    // And run a permutator algorithm on the expansion interval
+                    // to get the next canonical sequence expansion. If there
+                    // exists a next permutation,
                     if pandita1(
                         &mut self.canonical_sequence_expansion_transformation
                             [expansion_position..expansion_position + expansion_length],
                     ) {
+                        // Then break
                         break;
                     }
+                    // Else, reset the expansion slice
                     for j in expansion_position..expansion_position + expansion_length {
                         self.canonical_sequence_expansion_transformation[j] = j;
                     }
                     i -= 1;
                 }
+                // If we have iterated through all expansions and they all had
+                // no next permutation, we have nothing left to expand so we set
+                // both the current expanding solution and the canonical
+                // sequence expansion to None.
                 if i == 0 {
                     self.canonical_sequence_expansion = None;
                     self.currently_expanding_solution = None;
                 }
             } else {
+                // If it doesn't, we have nothing left to expand so we set the
+                // currently expanding solution to None
                 self.currently_expanding_solution = None;
             }
         }

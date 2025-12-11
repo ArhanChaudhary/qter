@@ -145,7 +145,7 @@ impl<C: SpecializedOrbitPuzzleState + Clone> OrbitPuzzleState for C {
     }
 }
 
-/// Efficently exactly hash an orbit into a u64, panicking at compile-time if
+/// Efficiently exactly hash an orbit into a u64, panicking at compile-time if
 /// not possible. This function uses a combination of SIMD lehmer coding and an
 /// efficient n-ary base hash. Uses `u16`s for const generics because usize
 /// implements From<u16>.
