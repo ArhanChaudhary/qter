@@ -1,5 +1,6 @@
 */target
 target
+media/docs/dist
 .DS_Store
 .direnv
 .ipynb_checkpoints

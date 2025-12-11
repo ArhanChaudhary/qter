@@ -53,6 +53,7 @@
               rust
               pkg-config
               packages.rob-twophase
+              packages.shiroa
 
               (gap.overrideAttrs (o: {
                 version = "4.13.1";
@@ -98,6 +99,27 @@
             mkdir -p $out/bin
             cp twophase $out/bin
           '';
+        };
+
+        packages.shiroa = pkgs.rustPlatform.buildRustPackage {
+          pname = "shiroa";
+          version = "0.3.1-rc4";
+
+          src = pkgs.fetchFromGitHub {
+            owner = "Myriad-Dreamin";
+            repo = "shiroa";
+            rev = "c35a20de53037e560a6114d22803f4aaea1bed39";
+            fetchSubmodules = true;
+            sha256 = "sha256-adrKcGLgKYExyqPk8jiINhw1ClryL0ajqmdDtbM2rC4=";
+          };
+
+          cargoHash = "sha256-uFICiSNZGho1K+9sGyokDyrSZTpg9HfJSmbatNebFjg=";
+
+          meta = {
+            description = "A simple tool for creating modern online books in pure typst.";
+            homepage = "https://github.com/Myriad-Dreamin/shiroa";
+            license = pkgs.lib.licenses.asl20;
+          };
         };
 
         robot-deps = [ packages.rob-twophase ];
