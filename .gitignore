@@ -5,6 +5,7 @@ media/docs/dist
 .direnv
 .ipynb_checkpoints
 profile.json.gz
+*.pdf
 *.FCBak
 *.step
 *.STEP
