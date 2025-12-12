@@ -11,7 +11,7 @@ use crate::{
         combinators::{Global, Peephole, RepeatUntilConvergence, push_to_pull},
         global::DeadLabelRemover,
         local::{
-            CoalesceAdds, RemoveDeadCode, RemoveUselessJumps, RepeatUntil1, RepeatUntil2,
+            CoalesceAdds, RemoveUnreachableCode, RemoveUselessJumps, RepeatUntil1, RepeatUntil2,
             RepeatUntil3, TransformSolve,
         },
     },
@@ -194,7 +194,7 @@ pub enum OptimizingCodeComponent {
 }
 
 type OneFullPass = (
-    RemoveDeadCode,
+    RemoveUnreachableCode,
     (
         Peephole<RemoveUselessJumps>,
         (

@@ -15,11 +15,11 @@ use super::OptimizingCodeComponent;
 
 /// Any non-label instructions that come immedately after an unconditional goto or halt are unreachable and can be removed
 #[derive(Default)]
-pub struct RemoveDeadCode {
+pub struct RemoveUnreachableCode {
     diverging: Option<WithSpan<OptimizingCodeComponent>>,
 }
 
-impl Rewriter for RemoveDeadCode {
+impl Rewriter for RemoveUnreachableCode {
     type Component = WithSpan<OptimizingCodeComponent>;
     type GlobalData = GlobalRegs;
     

@@ -116,7 +116,8 @@
 - Evaluate repeat instruction for examinx
 - 😎Optimizations
   - Asher's repeated move post process optimization: R U R repeated = R then U R2 repeated then R'
-  - Dead code removal with real control flow analysis
+  - Unreachable removal with real control flow analysis
+  - Dead code removal?
   - Coalesce solved-gotos to the same label
   - Coalesce adjacent labels
   - Strength reduction of `solved-goto` after a `repeat until` or `solve` that guarantees whether or not it succeeds
