@@ -22,7 +22,7 @@ fn playground() {
     let cube3_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_3X3, guard).unwrap();
     println!("{:?}", cube3_def);
     let solved = cube3_def.new_solved_state();
-    let a = apply_moves(&cube3_def, &solved, "R2 U R2 U F R2 U", 1);
+    let a = apply_moves(&cube3_def, &solved, "U D R U D", 1);
     println!(
         "{:?}",
         a.sorted_cycle_structure(
@@ -30,6 +30,7 @@ fn playground() {
             &mut HeapPuzzle::new_aux_mem(cube3_def.sorted_orbit_defs_ref())
         )
     );
+    panic!();
     // let mut result_1 = solved.clone();
     // let mut result_2 = result_1.clone();
     // let move_1 = cube3_def.find_move("B2").unwrap();
@@ -45,5 +46,4 @@ fn playground() {
     //     cube3_def.sorted_orbit_defs_ref(),
     // );
     // assert_eq!(a, solved);
-    // panic!();
 }

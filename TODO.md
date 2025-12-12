@@ -17,10 +17,8 @@
 ## CCS
 
 - solver.rs
-  - given A B A B A B A C A B in order to realize that this sequence isn't valid wrt sequence symmetry you would have to look at the first move and "mp plus one" and keep incrementing both numbers as long as the moves are equal
-    - should generalize to A B C A B C A B C D A B C
+  - 😎figure out move ordering dependence
   - F B cycle type is NOT checked!!
-  - figure out move ordering dependence
   - document
   - check for logs in test cases; tracing
   - hardcode the first solution moves in the test cases to be sure

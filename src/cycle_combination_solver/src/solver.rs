@@ -92,7 +92,6 @@ struct SequenceSymmetryExpansion {
 #[derive(Debug)]
 struct CanonicalSequenceExpansion {
     expansion_intervals: Vec<(usize, usize)>,
-    expand_ends: bool,
 }
 
 impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'id, P, T> {
@@ -154,7 +153,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
         // Therefore, the `pop_stack` cannot be called more than `push_stack`.
         let last_puzzle_state = unsafe { mutable.puzzle_state_history.last_state_unchecked() };
 
-        let admissible_prune_cost = self.pruning_tables.admissible_heuristic(last_puzzle_state);
+        let mut admissible_prune_cost = self.pruning_tables.admissible_heuristic(last_puzzle_state);
         if admissible_prune_cost > permitted_cost {
             // Note that `admissible_prune_heuristic` is impossible to be zero
             // here, so the enum instantiation is valid
@@ -215,6 +214,9 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
             } else {
                 let mut i = 0;
                 while i + entry_index < mutable.puzzle_state_history.stack_pointer() {
+                    // SAFETY: `i + 1` and `i + entry_index + 1` are
+                    // both less than or equal to `stack_pointer`, so
+                    // they are both bound
                     match unsafe {
                         mutable
                             .puzzle_state_history
@@ -239,18 +241,6 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
                 }
             }
         }
-        // if permitted_cost == 0
-        //     && entry_index < mutable.puzzle_state_history.stack_pointer()
-        //     && unsafe { mutable.puzzle_state_history.move_index_unchecked(1) }
-        //         < unsafe {
-        //             mutable
-        //                 .puzzle_state_history
-        //                 .move_index_unchecked(entry_index + 1)
-        // }
-        // {
-        //     mutable.tmp += 1;
-        //     move_index_prune_lt += 1;
-        // }
         for (move_index, move_) in self
             .puzzle_def
             .moves
@@ -274,11 +264,10 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
                         // hardcode it for optimization
                         .reverse_next_state(CanonicalFSMState::default(), move_class_index)
                 };
-                // We take advantage of the fact that the shortest sequence can
-                // never start and end with the moves in the same move class.
-                // Otherwise the end could be rotated to the start and combined
-                // together, thus contradicting that assumption
-                // TODO: document the canonical FSM stuff here
+            // We take advantage of the fact that the shortest sequence can
+            // never start and end with the moves in the same move class.
+            // Otherwise the end could be rotated to the start and combined
+            // together, thus contradicting that assumption
             } else if permitted_cost == 0
                 && unsafe {
                     self.canonical_fsm
@@ -394,8 +383,12 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
                 // overflow for the same reason.
                 return AdmissibleGoalHeuristic(child_admissible_goal_heuristic.0 - 1);
             }
-
-            // TODO: look into taking the min of all the child nodes
+            // If we never returned, we might still be able to propagate the
+            // pathmaxed value.
+            // TODO: test when approximate tables work
+            // if child_admissible_goal_heuristic.0 > admissible_prune_cost + 1 {
+            //     admissible_prune_cost = child_admissible_goal_heuristic.0 - 1;
+            // }
         }
         AdmissibleGoalHeuristic(
             // This optimizes to branchless code
@@ -618,7 +611,6 @@ impl<'id, P: PuzzleState<'id>> Iterator for SolutionsIntoIter<'id, '_, P> {
             if !expansion_intervals.is_empty() {
                 self.canonical_sequence_expansion = Some(CanonicalSequenceExpansion {
                     expansion_intervals,
-                    expand_ends: false,
                 });
             }
         }

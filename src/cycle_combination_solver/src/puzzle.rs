@@ -598,9 +598,9 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
                 _id: id,
             });
         }
-
         if let Some(&base_move_class) = move_classes.last() {
-            let last_move: &Move<P> = moves.last().unwrap();
+            #[allow(clippy::missing_panics_doc)]
+            let last_move = moves.last().unwrap();
             let base_move = &moves[base_move_class];
             result.replace_compose(
                 &last_move.puzzle_state,
@@ -608,7 +608,11 @@ impl<'id, P: PuzzleState<'id>> PuzzleDef<'id, P> {
                 sorted_orbit_defs_ref,
             );
         }
-        assert_eq!(result, solved);
+        if result != solved {
+            return Err(KSolveConversionError::InvalidMoveClass);
+        }
+        
+        
 
         Ok(PuzzleDef {
             moves: moves.into_boxed_slice(),
