@@ -14,20 +14,20 @@ use cycle_combination_solver::{
 };
 use itertools::Itertools;
 use log::info;
-use puzzle_geometry::ksolve::{KPUZZLE_3X3, KSolve};
+use puzzle_geometry::ksolve::{KPUZZLE_3X3, KPUZZLE_MEGAMINX, KSolve};
 
 #[test_log::test]
 fn playground() {
     make_guard!(guard);
-    let cube3_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_3X3, guard).unwrap();
-    println!("{:?}", cube3_def);
-    let solved = cube3_def.new_solved_state();
-    let a = apply_moves(&cube3_def, &solved, "U D R U D", 1);
+    let megaminx_def = PuzzleDef::<HeapPuzzle>::new(&KPUZZLE_MEGAMINX, guard).unwrap();
+    // println!("{:#?}", megaminx_def);
+    let solved = megaminx_def.new_solved_state();
+    let a = apply_moves(&megaminx_def, &solved, "blue2 purple2' green2 white' red2' beige blue' white2' white' white2'", 1);
     println!(
         "{:?}",
         a.sorted_cycle_structure(
-            cube3_def.sorted_orbit_defs_ref(),
-            &mut HeapPuzzle::new_aux_mem(cube3_def.sorted_orbit_defs_ref())
+            megaminx_def.sorted_orbit_defs_ref(),
+            &mut HeapPuzzle::new_aux_mem(megaminx_def.sorted_orbit_defs_ref())
         )
     );
     panic!();

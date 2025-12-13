@@ -123,7 +123,7 @@ pub static DODECAHEDRON: LazyLock<Polyhedron> = LazyLock::new(|| {
     let bottom_half = top_half
         .iter()
         .map(|v| v.transformed(&top_to_bottom))
-        .zip(["gray", "beige", "pink", "lime", "orange", "light blue"])
+        .zip(["gray", "beige", "pink", "lime", "orange", "light_blue"])
         .map(|(mut v, color)| {
             v.color = ArcIntern::from(color);
             v

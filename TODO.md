@@ -23,7 +23,6 @@
   - check for logs in test cases; tracing
   - hardcode the first solution moves in the test cases to be sure
 - dont pack bit vector for AuxMem
-- 😎replace pub(crate) with getters
 - try out a different exact hasher
   - 3x3 https://github.com/Voltara/vcube/blob/9f5bc2cce18f29437879ace825f22917f6705378/src/cube.h#L240
   - any puzzle https://github.com/cubing/twsearch/blob/main/src/cpp/index.cpp
@@ -58,12 +57,13 @@
     - For example, for a 48-symmetric state, the search begins with the symmetry marker 48-symmetric. Before taking the first move, we determine which possible moves are possible based on the symmetry state. For this state, the first possible transitions are either U or U2; all other states are reachable through symmetry. Suppose we take U as the first move, resulting in an 8-symmetric state. Then, if we continue with this 8-symmetric state, the possible move are (R, R2, R', D, D2, D'). This approach reduces the search tree size to approximately 1/48th of its original size, and eliminates the need for specialized handling of various cases.
     - microthreading
 - you NEED to account for parity constraints when calculating orbit size; address this in schreier sims
+- Generate a pruning table starting from the scramble instead of the solved state and then began the search from the solved state
 - ⭐solved state for 4x4
 - ⭐antisymmetry
 - 😎mulcmp3 and mul3 optimizations from twsearch
 - 😎PGO
+- 😎replace pub(crate) with getters
 - can we use move tables? look into at the end
-- Generate a pruning table starting from the scramble instead of the solved state and then began the search from the solved state
 - 😎use *mut u8 instead of Box<[u8]> for generic puzzle  
 
 ### Schreier Sims
