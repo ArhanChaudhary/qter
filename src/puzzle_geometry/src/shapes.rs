@@ -86,7 +86,7 @@ pub static DODECAHEDRON: LazyLock<Polyhedron> = LazyLock::new(|| {
             Point(Vector::new([[Num::from(0), φ_inv, φ]])),
             Point(Vector::new([[1, 1, 1]])),
         ],
-        color: ArcIntern::from("white"),
+        color: ArcIntern::from("U"),
     };
 
     let mut centroid = pentagon.centroid();
@@ -102,34 +102,33 @@ pub static DODECAHEDRON: LazyLock<Polyhedron> = LazyLock::new(|| {
     let up = pentagon.transformed(&derotate);
     let mk_front = &derotate * &(&derotate * &y_flip);
     let mut front = up.transformed(&mk_front);
-    front.color = ArcIntern::from("green");
+    front.color = ArcIntern::from("F");
 
     let y_rot = rotation_about(Vector::new([[0, 1, 0]]), DEG_72.clone());
     let mut right = front.transformed(&y_rot);
-    right.color = ArcIntern::from("red");
+    right.color = ArcIntern::from("R");
     let mut back_1 = right.transformed(&y_rot);
-    back_1.color = ArcIntern::from("blue");
+    back_1.color = ArcIntern::from("BR");
     let mut back_2 = back_1.transformed(&y_rot);
-    back_2.color = ArcIntern::from("yellow");
+    back_2.color = ArcIntern::from("BL");
     let mut left = back_2.transformed(&y_rot);
-    left.color = ArcIntern::from("purple");
+    left.color = ArcIntern::from("L");
 
-    println!("{:?}", y_rot - &rotation_about(Vector::new([[0, 1, 0]]), DEG_36.clone()) * &rotation_about(Vector::new([[0, 1, 0]]), DEG_36.clone()));
+    // println!("{:?}", y_rot - &rotation_about(Vector::new([[0, 1, 0]]), DEG_36.clone()) * &rotation_about(Vector::new([[0, 1, 0]]), DEG_36.clone()));
 
     let top_half = vec![up, front, right, back_1, back_2, left];
-    let top_to_bottom = &rotation_about(Vector::new([[0, 1, 0]]), DEG_36.clone())
+    let around_x = &rotation_about(Vector::new([[0, 1, 0]]), DEG_36.clone())
         * &rotation_about(Vector::new([[0, 0, 1]]), DEG_180.clone());
-    // let top_to_bottom = rotation_about(Vector::new([[0, 0, 1]]), DEG_180.clone());
     let bottom_half = top_half
         .iter()
-        .map(|v| v.transformed(&top_to_bottom))
-        .zip(["gray", "beige", "pink", "lime", "orange", "light_blue"])
+        .map(|v| v.transformed(&around_x))
+        .zip(["D", "B", "DR", "FR", "FL", "DL"])
         .map(|(mut v, color)| {
             v.color = ArcIntern::from(color);
             v
         })
         .collect::<Vec<_>>();
-
+    
     Polyhedron(top_half.into_iter().chain(bottom_half).collect())
 });
 

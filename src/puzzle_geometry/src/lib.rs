@@ -823,7 +823,14 @@ mod tests {
     use std::{cmp::Ordering, collections::HashSet, sync::Arc};
 
     use crate::{
-        DEG_36, DEG_72, DEG_90, DEG_120, DEG_180, Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError, knife::{CutSurface, PlaneCut}, ksolve::KSolveMove, num::{Num, Vector}, point_compare, shapes::{CUBE, DODECAHEDRON, TETRAHEDRON, print_shapes}, turn_compare, turn_names
+        DEG_36, DEG_72, DEG_90, DEG_120, DEG_180, Face, Point, PuzzleGeometryDefinition,
+        PuzzleGeometryError,
+        knife::{CutSurface, PlaneCut},
+        ksolve::KSolveMove,
+        num::{Num, Vector},
+        point_compare,
+        shapes::{CUBE, DODECAHEDRON, TETRAHEDRON, print_shapes},
+        turn_compare, turn_names,
     };
     use internment::ArcIntern;
     use itertools::Itertools;
@@ -1217,24 +1224,44 @@ mod tests {
         let megaminx = PuzzleGeometryDefinition {
             polyhedron: DODECAHEDRON.clone(),
             // idk if this cut depth is right but WHO CARES HAHAHAH
-            cut_surfaces: DODECAHEDRON.0.iter().map(|v| {
-                let centroid = v.centroid();
-                
-                Arc::from(PlaneCut { spot: v.centroid() * &Num::from(8) / &Num::from(9), normal: centroid, name: ArcIntern::clone(&v.color) }) as Arc::<dyn CutSurface + 'static>
-            }).collect(),
+            cut_surfaces: DODECAHEDRON
+                .0
+                .iter()
+                .map(|v| {
+                    let centroid = v.centroid();
+
+                    Arc::from(PlaneCut {
+                        spot: v.centroid() * &Num::from(8) / &Num::from(9),
+                        normal: centroid,
+                        name: ArcIntern::clone(&v.color),
+                    }) as Arc<dyn CutSurface + 'static>
+                })
+                .collect(),
             definition: Span::new(ArcIntern::from("dodecahedron"), 0, "dodecahedron".len()),
         };
+        // print_shapes(megaminx.polyhedron.0.iter());
 
         let megaminx = megaminx.geometry().unwrap();
 
         assert_eq!(megaminx.ksolve().sets.len(), 2);
-        assert_eq!(megaminx.ksolve().sets.iter().map(|v| v.piece_count.get()).collect::<HashSet<_>>(), HashSet::from([20, 30]));
+        assert_eq!(
+            megaminx
+                .ksolve()
+                .sets
+                .iter()
+                .map(|v| v.piece_count.get())
+                .collect::<HashSet<_>>(),
+            HashSet::from([20, 30])
+        );
 
+        // print_shapes(shapes);
         assert_eq!(megaminx.ksolve().moves.len(), 12 * 4);
 
         assert_eq!(
             StabilizerChain::new(&megaminx.permutation_group()).cardinality(),
-            "100669616553523347122516032313645505168688116411019768627200000000000".parse::<Int<U>>().unwrap()
+            "100669616553523347122516032313645505168688116411019768627200000000000"
+                .parse::<Int<U>>()
+                .unwrap()
         );
     }
 
