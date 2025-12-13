@@ -6,7 +6,7 @@ use std::{
 };
 use thiserror::Error;
 
-use crate::{PuzzleGeometryDefinition, knife::PlaneCut, num::Vector, shapes::CUBE};
+use crate::{PuzzleGeometryDefinition, knife::{CutSurface, PlaneCut}, num::{Num, Vector}, shapes::{CUBE, DODECAHEDRON}};
 
 /// A representation of a puzzle in the `KSolve` format. We choose to remain
 /// consistent with `KSolve` format and terminology because it is the
@@ -324,6 +324,21 @@ pub static KPUZZLE_3X3: LazyLock<KSolve> = LazyLock::new(|| {
         .unwrap()
         .ksolve(),
     )
+});
+
+pub static KPUZZLE_MEGAMINX: LazyLock<KSolve> = LazyLock::new(|| {
+    let megaminx = PuzzleGeometryDefinition {
+        polyhedron: DODECAHEDRON.clone(),
+        // idk if this cut depth is right but WHO CARES HAHAHAH
+        cut_surfaces: DODECAHEDRON.0.iter().map(|v| {
+            let centroid = v.centroid();
+        
+            Arc::from(PlaneCut { spot: v.centroid() * &Num::from(8) / &Num::from(9), normal: centroid, name: ArcIntern::clone(&v.color) }) as Arc::<dyn CutSurface + 'static>
+        }).collect(),
+        definition: Span::new(ArcIntern::from("dodecahedron"), 0, "dodecahedron".len()),
+    };
+
+    (*megaminx.geometry().unwrap().ksolve()).clone()
 });
 
 pub static KPUZZLE_4X4: LazyLock<KSolve> = LazyLock::new(|| KSolve {
