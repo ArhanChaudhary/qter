@@ -1,5 +1,5 @@
 use crate::{
-    DEG_90, Face, Point, Polyhedron, PuzzleDescriptionString,
+    DEG_36, DEG_72, DEG_90, DEG_180, Face, Point, Polyhedron, PuzzleDescriptionString,
     num::{Matrix, Num, Vector, rotate_to},
     rotation_about,
 };
@@ -74,9 +74,69 @@ pub static CUBE: LazyLock<Polyhedron> = LazyLock::new(|| {
     Polyhedron(vec![up, right, down, left, front, back])
 });
 
+pub static DODECAHEDRON: LazyLock<Polyhedron> = LazyLock::new(|| {
+    let φ = (Num::from(1) + Num::from(5).sqrt()) / Num::from(2);
+    let φ_inv = Num::from(1) / φ.clone();
+
+    let pentagon = Face {
+        points: vec![
+            Point(Vector::new([[φ_inv.clone(), φ.clone(), Num::from(0)]])),
+            Point(Vector::new([[-φ_inv.clone(), φ.clone(), Num::from(0)]])),
+            Point(Vector::new([[-1, 1, 1]])),
+            Point(Vector::new([[Num::from(0), φ_inv, φ]])),
+            Point(Vector::new([[1, 1, 1]])),
+        ],
+        color: ArcIntern::from("white"),
+    };
+
+    let mut centroid = pentagon.centroid();
+    centroid.normalize_in_place();
+    let [centroid] = centroid.into_inner();
+
+    let [x, y, z] = centroid.clone();
+
+    let rotate = Matrix::new([[1, 0, 0].map(Num::from), centroid, [x, -z, y]]);
+    let derotate = rotate.transpose();
+
+    let y_flip = rotation_about(Vector::new([[0, 1, 0]]), DEG_180.clone());
+    let up = pentagon.transformed(&derotate);
+    let mk_front = &derotate * &(&derotate * &y_flip);
+    let mut front = up.transformed(&mk_front);
+    front.color = ArcIntern::from("green");
+
+    let y_rot = rotation_about(Vector::new([[0, 1, 0]]), DEG_72.clone());
+    let mut right = front.transformed(&y_rot);
+    right.color = ArcIntern::from("red");
+    let mut back_1 = right.transformed(&y_rot);
+    back_1.color = ArcIntern::from("blue");
+    let mut back_2 = back_1.transformed(&y_rot);
+    back_2.color = ArcIntern::from("yellow");
+    let mut left = back_2.transformed(&y_rot);
+    left.color = ArcIntern::from("purple");
+
+    println!("{:?}", y_rot - &rotation_about(Vector::new([[0, 1, 0]]), DEG_36.clone()) * &rotation_about(Vector::new([[0, 1, 0]]), DEG_36.clone()));
+
+    let top_half = vec![up, front, right, back_1, back_2, left];
+    let top_to_bottom = &rotation_about(Vector::new([[0, 1, 0]]), DEG_36.clone())
+        * &rotation_about(Vector::new([[0, 0, 1]]), DEG_180.clone());
+    // let top_to_bottom = rotation_about(Vector::new([[0, 0, 1]]), DEG_180.clone());
+    let bottom_half = top_half
+        .iter()
+        .map(|v| v.transformed(&top_to_bottom))
+        .zip(["gray", "beige", "pink", "lime", "orange", "light blue"])
+        .map(|(mut v, color)| {
+            v.color = ArcIntern::from(color);
+            v
+        })
+        .collect::<Vec<_>>();
+
+    Polyhedron(top_half.into_iter().chain(bottom_half).collect())
+});
+
 pub static SHAPES: phf::Map<&'static str, &LazyLock<Polyhedron>> = phf::phf_map! {
     "c" => &CUBE,
     "t" => &TETRAHEDRON,
+    "d" => &DODECAHEDRON,
 };
 
 pub static PUZZLES: phf::Map<&'static str, PuzzleDescriptionString> = phf::phf_map! {
@@ -154,6 +214,18 @@ pub static PUZZLES: phf::Map<&'static str, PuzzleDescriptionString> = phf::phf_m
     "starminx combo" => "d f 0.23606797749979 v 0.937962370425399",
 };
 
+pub fn print_shapes<'a>(shapes: impl Iterator<Item = &'a Face>) {
+    println!("faces = [");
+    for shape in shapes {
+        print!("[");
+        for Point(vertex) in &shape.points {
+            print!("{:?},", vertex.inner()[0]);
+        }
+        print!("],");
+    }
+    println!("]");
+}
+
 #[cfg(test)]
 mod tests {
     use crate::shapes::*;
@@ -162,5 +234,6 @@ mod tests {
     fn shapes() {
         println!("{:?}", &*TETRAHEDRON);
         println!("{:?}", &*CUBE);
+        println!("{:?}", &*DODECAHEDRON);
     }
 }

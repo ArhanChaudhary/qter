@@ -1,6 +1,7 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::float_cmp)]
+#![allow(mixed_script_confusables)]
 
 use std::{
     cmp::Ordering,
@@ -61,6 +62,13 @@ static DEG_72: LazyLock<Vector<2>> = LazyLock::new(|| {
     Vector::new([[
         Num::from(5).sqrt() / Num::from(4) - fourth.clone(),
         (Num::from(2) * Num::from(5).sqrt() + Num::from(10)).sqrt() * fourth,
+    ]])
+});
+static DEG_36: LazyLock<Vector<2>> = LazyLock::new(|| {
+    let fourth = Num::from(1) / Num::from(4);
+    Vector::new([[
+        fourth.clone() * Num::from(5).sqrt() + fourth.clone(),
+        fourth * (Num::from(-2) * Num::from(5).sqrt() + Num::from(10)).sqrt(),
     ]])
 });
 
@@ -812,20 +820,23 @@ fn point_compare(a: &Vector<3>, b: &Vector<3>) -> Ordering {
 
 #[cfg(test)]
 mod tests {
-    use std::{cmp::Ordering, sync::Arc};
+    use std::{cmp::Ordering, collections::HashSet, sync::Arc};
 
     use crate::{
-        Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError,
-        knife::PlaneCut,
-        ksolve::KSolveMove,
-        num::{Num, Vector},
-        point_compare,
-        shapes::{CUBE, TETRAHEDRON},
-        turn_compare, turn_names,
+        DEG_36, DEG_72, DEG_90, DEG_120, DEG_180, Face, Point, PuzzleGeometryDefinition, PuzzleGeometryError, knife::{CutSurface, PlaneCut}, ksolve::KSolveMove, num::{Num, Vector}, point_compare, shapes::{CUBE, DODECAHEDRON, TETRAHEDRON, print_shapes}, turn_compare, turn_names
     };
     use internment::ArcIntern;
     use itertools::Itertools;
     use qter_core::{Int, Span, U, architectures::Permutation, schreier_sims::StabilizerChain};
+
+    #[test]
+    fn valid_rotators() {
+        assert_eq!(DEG_180.clone().norm(), Num::from(1));
+        assert_eq!(DEG_120.clone().norm(), Num::from(1));
+        assert_eq!(DEG_90.clone().norm(), Num::from(1));
+        assert_eq!(DEG_72.clone().norm(), Num::from(1));
+        assert_eq!(DEG_36.clone().norm(), Num::from(1));
+    }
 
     #[test]
     fn test_turn_names() {
@@ -1198,6 +1209,32 @@ mod tests {
         assert_eq!(
             StabilizerChain::new(&group).cardinality(),
             "75582720".parse::<Int<U>>().unwrap()
+        );
+    }
+
+    #[test]
+    fn megaminx() {
+        let megaminx = PuzzleGeometryDefinition {
+            polyhedron: DODECAHEDRON.clone(),
+            // idk if this cut depth is right but WHO CARES HAHAHAH
+            cut_surfaces: DODECAHEDRON.0.iter().map(|v| {
+                let centroid = v.centroid();
+                
+                Arc::from(PlaneCut { spot: v.centroid() * &Num::from(8) / &Num::from(9), normal: centroid, name: ArcIntern::clone(&v.color) }) as Arc::<dyn CutSurface + 'static>
+            }).collect(),
+            definition: Span::new(ArcIntern::from("dodecahedron"), 0, "dodecahedron".len()),
+        };
+
+        let megaminx = megaminx.geometry().unwrap();
+
+        assert_eq!(megaminx.ksolve().sets.len(), 2);
+        assert_eq!(megaminx.ksolve().sets.iter().map(|v| v.piece_count.get()).collect::<HashSet<_>>(), HashSet::from([20, 30]));
+
+        assert_eq!(megaminx.ksolve().moves.len(), 12 * 4);
+
+        assert_eq!(
+            StabilizerChain::new(&megaminx.permutation_group()).cardinality(),
+            "100669616553523347122516032313645505168688116411019768627200000000000".parse::<Int<U>>().unwrap()
         );
     }
 
