@@ -22,7 +22,6 @@
   - document
   - check for logs in test cases; tracing
   - hardcode the first solution moves in the test cases to be sure
-- use *mut u8 instead of Box<[u8]> for generic puzzle  
 - dont pack bit vector for AuxMem
 - 😎replace pub(crate) with getters
 - try out a different exact hasher
@@ -62,9 +61,10 @@
 - ⭐solved state for 4x4
 - ⭐antisymmetry
 - 😎mulcmp3 and mul3 optimizations from twsearch
-- 😎PGE
+- 😎PGO
 - can we use move tables? look into at the end
 - Generate a pruning table starting from the scramble instead of the solved state and then began the search from the solved state
+- 😎use *mut u8 instead of Box<[u8]> for generic puzzle  
 
 ### Schreier Sims
 

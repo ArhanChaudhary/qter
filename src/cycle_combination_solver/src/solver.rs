@@ -40,7 +40,7 @@ pub enum CycleStructureSolverError {
 /// The return type of the IDA* recursion function. It maintains the
 /// soft-invariant that zero means a solution has been found, hence
 /// `AdmissibleGoalHeuristic::SOLVED`.
-#[derive(PartialEq, Copy, Clone)]
+#[derive(PartialEq, Copy, Clone, Debug)]
 struct AdmissibleGoalHeuristic(u8);
 
 impl AdmissibleGoalHeuristic {
@@ -48,7 +48,7 @@ impl AdmissibleGoalHeuristic {
 }
 
 // TODO: is this worth making a const generic?
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum SearchStrategy {
     FirstSolution,
     AllSolutions,
@@ -346,11 +346,7 @@ impl<'id, P: PuzzleState<'id>, T: PruningTables<'id, P>> CycleStructureSolver<'i
             // find the first solution, we instantly terminate. No more
             // processing will occur once this returns
             if self.search_strategy == SearchStrategy::FirstSolution
-                // We cannot use `child_admissible_goal_heuristic == 0` because
-                // the following assert fails when placed:
-                // TODO: formalize why
-                // assert_eq!(mutable.found_solution(), child_admissible_goal_heuristic == 0);
-                && mutable.found_solution()
+                && child_admissible_goal_heuristic == AdmissibleGoalHeuristic::SOLVED
             {
                 // We don't care about preserving `mutable.puzzle_state_history`
                 // anymore because there is no further processing
